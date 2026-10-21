@@ -1050,6 +1050,66 @@ def r_project_changes(req: Request) -> Response:
     return Response.json(res, headers={"ETag": f'"r{res["revision"]}"'})
 
 
+@route("GET", r"/api/v2/projects/" + _NAME + "/devices/duplicates", role="viewer", summary="Likely duplicate devices (?device=<id>&min=<score>)", tags=["devices"])
+def r_device_duplicates(req: Request) -> Response:
+    from .dedupe import MergeError, find_duplicates
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    try:
+        min_score = float(req.query.get("min") or 0.5)
+    except ValueError:
+        raise ApiError(400, "min must be a number")
+    min_score = min(1.0, max(0.0, min_score))
+    limit = _int(req.query.get("limit"), 50, 1, 500)
+    try:
+        found = find_duplicates(doc, _overlay(doc, pdir, strict=False), device_id=str(req.query.get("device") or ""), min_score=min_score)
+    except MergeError as exc:
+        raise ApiError(404 if exc.code == "not_found" else 400, str(exc), exc.code)
+    return Response.json({"revision": _rev(doc), "min_score": min_score, "total": len(found), "duplicates": found[:limit]})
+
+
+def _merge_body(req: Request, pdir: Path) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    from .dedupe import MergeError, merge_plan
+
+    body = req.json()
+    survivor = str(body.get("survivor") or "")
+    dups = body.get("duplicates")
+    if not survivor or not isinstance(dups, list) or not dups or not all(isinstance(d, str) for d in dups):
+        raise ApiError(400, "survivor (id) and duplicates (list of ids) are required")
+    if len(dups) > 20:
+        raise ApiError(400, "at most 20 duplicates per merge")
+    choices = body.get("choices") or {}
+    if not isinstance(choices, dict) or not all(isinstance(v, str) for v in choices.values()):
+        raise ApiError(400, "choices must map field keys to device ids")
+    doc, _ = _load(pdir)
+    try:
+        plan = merge_plan(doc, survivor, dups, choices=choices, overlay=_overlay(doc, pdir, strict=False), author=req.username)
+    except MergeError as exc:
+        raise ApiError(404 if exc.code == "not_found" else 400, str(exc), exc.code)
+    plan["revision"] = _rev(doc)
+    return body, plan
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/devices/merge/preview", role="editor", summary="Preview a device merge (no write)", tags=["devices"], body="MergeRequest")
+def r_device_merge_preview(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    _, plan = _merge_body(req, pdir)
+    return Response.json(plan)
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/devices/merge", role="editor", summary="Merge duplicate devices into one (one revision)", tags=["devices"], body="MergeRequest")
+def r_device_merge(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    body, plan = _merge_body(req, pdir)
+    base = body.get("base_revision")
+    base_rev = plan["revision"] if base is None else _int(base, -1)
+    res = _changes(req, pdir, plan["ops"], base_rev, plan["summary"], "merge")
+    res.update({"survivor": plan["survivor"], "duplicates": plan["duplicates"], "summary": plan["summary"],
+                "warnings": plan["warnings"], "ops": plan["ops"]})
+    return Response.json(res, headers={"ETag": f'"r{res["revision"]}"'})
+
+
 @route("DELETE", r"/api/v2/projects/" + _NAME, role="admin", summary="Delete a project (?confirm=<name>)", tags=["projects"])
 def r_project_delete_v2(req: Request) -> Response:
     name = req.params["name"]
