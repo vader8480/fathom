@@ -1,0 +1,31 @@
+{
+  "id": "etc-response-mk2-4port",
+  "manufacturer": "ETC",
+  "model": "Response Mk2 Four-Port DMX Gateway",
+  "name": "Response Mk2 Four-Port DMX Gateway",
+  "kind": "dmx_node",
+  "brand": "etc",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Ethernet",
+      "dir": "in",
+      "medium": "sacn",
+      "connector": "RJ45"
+    },
+    {
+      "group": "DMX Out",
+      "dir": "out",
+      "medium": "dmx",
+      "connector": "XLR5F",
+      "count": 4
+    }
+  ],
+  "tags": [
+    "dmx gateway",
+    "sacn"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

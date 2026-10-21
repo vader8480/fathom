@@ -1,0 +1,968 @@
+[
+ {
+  "device": "wireless-mics",
+  "name": "Wireless Mics",
+  "model": "Shure ULXD2/SM58",
+  "room": "main",
+  "discipline": "audio",
+  "kind": "mic",
+  "sections": [
+   {
+    "title": "RF Out",
+    "dir": "out",
+    "medium": "rf",
+    "rows": [
+     {
+      "port": "rf-out-1",
+      "port_name": "Output 1",
+      "label": "Wireless 1",
+      "peer_device": "shure-wireless",
+      "peer_name": "Shure Wireless",
+      "peer_port": "rf-in-1",
+      "peer_port_name": "Input 1",
+      "peer_label": "Wireless 1",
+      "cable": "c-0001",
+      "tag": null,
+      "medium": "rf",
+      "source": "cable"
+     },
+     {
+      "port": "rf-out-2",
+      "port_name": "Output 2",
+      "label": "Wireless 2",
+      "peer_device": "shure-wireless",
+      "peer_name": "Shure Wireless",
+      "peer_port": "rf-in-2",
+      "peer_port_name": "Input 2",
+      "peer_label": "Wireless 2",
+      "cable": "c-0002",
+      "tag": null,
+      "medium": "rf",
+      "source": "cable"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "device": "shure-wireless",
+  "name": "Shure Wireless",
+  "model": "Shure ULX-D ULXD4D",
+  "room": "main",
+  "discipline": "audio",
+  "kind": "wireless_rx",
+  "sections": [
+   {
+    "title": "RF In",
+    "dir": "in",
+    "medium": "rf",
+    "rows": [
+     {
+      "port": "rf-in-1",
+      "port_name": "Input 1",
+      "label": "Wireless 1",
+      "peer_device": "wireless-mics",
+      "peer_name": "Wireless Mics",
+      "peer_port": "rf-out-1",
+      "peer_port_name": "Output 1",
+      "peer_label": "Wireless 1",
+      "cable": "c-0001",
+      "tag": null,
+      "medium": "rf",
+      "source": "cable"
+     },
+     {
+      "port": "rf-in-2",
+      "port_name": "Input 2",
+      "label": "Wireless 2",
+      "peer_device": "wireless-mics",
+      "peer_name": "Wireless Mics",
+      "peer_port": "rf-out-2",
+      "peer_port_name": "Output 2",
+      "peer_label": "Wireless 2",
+      "cable": "c-0002",
+      "tag": null,
+      "medium": "rf",
+      "source": "cable"
+     }
+    ]
+   },
+   {
+    "title": "Analog Out",
+    "dir": "out",
+    "medium": "analog",
+    "rows": [
+     {
+      "port": "analog-out-1",
+      "port_name": "Output 1",
+      "label": "Wireless 1",
+      "peer_device": "audio-rack-1",
+      "peer_name": "Audio Rack 1",
+      "peer_port": "analog-in-3",
+      "peer_port_name": "Input 3",
+      "peer_label": "Wireless 1",
+      "cable": "c-0003",
+      "tag": "A-001",
+      "medium": "analog",
+      "source": "cable"
+     },
+     {
+      "port": "analog-out-2",
+      "port_name": "Output 2",
+      "label": "Wireless 2",
+      "peer_device": "audio-rack-1",
+      "peer_name": "Audio Rack 1",
+      "peer_port": "analog-in-4",
+      "peer_port_name": "Input 4",
+      "peer_label": "Wireless 2",
+      "cable": "c-0004",
+      "tag": "A-002",
+      "medium": "analog",
+      "source": "cable"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "device": "stage-box-1",
+  "name": "Stage Box 1",
+  "model": "Whirlwind Unwired Stage Box",
+  "room": "main",
+  "discipline": "audio",
+  "kind": "stage_io",
+  "sections": [
+   {
+    "title": "Analog In",
+    "dir": "in",
+    "medium": "analog",
+    "rows": [
+     {
+      "port": "analog-in-1",
+      "port_name": "Input 1",
+      "label": "Keyboard",
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "analog",
+      "source": null
+     },
+     {
+      "port": "analog-in-2",
+      "port_name": "Input 2",
+      "label": "Acoustic",
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "analog",
+      "source": null
+     }
+    ]
+   },
+   {
+    "title": "Analog Out",
+    "dir": "out",
+    "medium": "analog",
+    "rows": [
+     {
+      "port": "analog-out-1",
+      "port_name": "Output 1",
+      "label": "SB1-Out 1",
+      "peer_device": "audio-rack-1",
+      "peer_name": "Audio Rack 1",
+      "peer_port": "analog-in-1",
+      "peer_port_name": "Input 1",
+      "peer_label": "SB1-Out 1",
+      "cable": "c-0005",
+      "tag": "A-003",
+      "medium": "analog",
+      "source": "cable"
+     },
+     {
+      "port": "analog-out-2",
+      "port_name": "Output 2",
+      "label": "SB1-Out 2",
+      "peer_device": "audio-rack-1",
+      "peer_name": "Audio Rack 1",
+      "peer_port": "analog-in-2",
+      "peer_port_name": "Input 2",
+      "peer_label": "SB1-Out 2",
+      "cable": "c-0006",
+      "tag": "A-004",
+      "medium": "analog",
+      "source": "cable"
+     }
+    ]
+   },
+   {
+    "title": "IEM Return",
+    "dir": "in",
+    "medium": "analog",
+    "rows": [
+     {
+      "port": "return-in-1",
+      "port_name": "Return 1",
+      "label": "Monitor Out 1",
+      "peer_device": "audio-rack-1",
+      "peer_name": "Audio Rack 1",
+      "peer_port": "analog-out-1",
+      "peer_port_name": "Output 1",
+      "peer_label": "Monitor Out 1",
+      "cable": "c-0007",
+      "tag": null,
+      "medium": "analog",
+      "source": "cable"
+     }
+    ]
+   },
+   {
+    "title": "HDMI In",
+    "dir": "in",
+    "medium": "hdmi",
+    "rows": [
+     {
+      "port": "hdmi-in-1",
+      "port_name": "Input 1",
+      "label": "Video Display",
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "hdmi",
+      "source": null
+     }
+    ]
+   },
+   {
+    "title": "HDMI Out",
+    "dir": "out",
+    "medium": "hdmi",
+    "rows": [
+     {
+      "port": "hdmi-out-1",
+      "port_name": "Output 1",
+      "label": "SB-Video-1",
+      "peer_device": "atem-mini",
+      "peer_name": "ATEM Mini",
+      "peer_port": "hdmi-in-1",
+      "peer_port_name": "Input 1",
+      "peer_label": "SB-Video-1",
+      "cable": "c-0012",
+      "tag": null,
+      "medium": "hdmi",
+      "source": "cable"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "device": "sound-board",
+  "name": "Sound Board",
+  "model": "Allen & Heath SQ-5",
+  "room": "main",
+  "discipline": "audio",
+  "kind": "console",
+  "sections": [
+   {
+    "title": "Network Out",
+    "dir": "io",
+    "medium": "snake",
+    "rows": [
+     {
+      "port": "slink",
+      "port_name": "SLink",
+      "label": "SLink",
+      "peer_device": "audio-rack-1",
+      "peer_name": "Audio Rack 1",
+      "peer_port": "dsnake",
+      "peer_port_name": "dSnake",
+      "peer_label": "dSnake",
+      "cable": "c-0008",
+      "tag": "A-005",
+      "medium": "snake",
+      "source": "cable"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "device": "audio-rack-1",
+  "name": "Audio Rack 1",
+  "model": "Allen & Heath AR84",
+  "room": "main",
+  "discipline": "audio",
+  "kind": "stage_io",
+  "sections": [
+   {
+    "title": "Analog In",
+    "dir": "in",
+    "medium": "analog",
+    "rows": [
+     {
+      "port": "analog-in-1",
+      "port_name": "Input 1",
+      "label": "SB1-Out 1",
+      "peer_device": "stage-box-1",
+      "peer_name": "Stage Box 1",
+      "peer_port": "analog-out-1",
+      "peer_port_name": "Output 1",
+      "peer_label": "SB1-Out 1",
+      "cable": "c-0005",
+      "tag": "A-003",
+      "medium": "analog",
+      "source": "cable"
+     },
+     {
+      "port": "analog-in-2",
+      "port_name": "Input 2",
+      "label": "SB1-Out 2",
+      "peer_device": "stage-box-1",
+      "peer_name": "Stage Box 1",
+      "peer_port": "analog-out-2",
+      "peer_port_name": "Output 2",
+      "peer_label": "SB1-Out 2",
+      "cable": "c-0006",
+      "tag": "A-004",
+      "medium": "analog",
+      "source": "cable"
+     },
+     {
+      "port": "analog-in-3",
+      "port_name": "Input 3",
+      "label": "Wireless 1",
+      "peer_device": "shure-wireless",
+      "peer_name": "Shure Wireless",
+      "peer_port": "analog-out-1",
+      "peer_port_name": "Output 1",
+      "peer_label": "Wireless 1",
+      "cable": "c-0003",
+      "tag": "A-001",
+      "medium": "analog",
+      "source": "cable"
+     },
+     {
+      "port": "analog-in-4",
+      "port_name": "Input 4",
+      "label": "Wireless 2",
+      "peer_device": "shure-wireless",
+      "peer_name": "Shure Wireless",
+      "peer_port": "analog-out-2",
+      "peer_port_name": "Output 2",
+      "peer_label": "Wireless 2",
+      "cable": "c-0004",
+      "tag": "A-002",
+      "medium": "analog",
+      "source": "cable"
+     },
+     {
+      "port": "analog-in-5",
+      "port_name": "Input 5",
+      "label": null,
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "analog",
+      "source": null
+     },
+     {
+      "port": "analog-in-6",
+      "port_name": "Input 6",
+      "label": null,
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "analog",
+      "source": null
+     },
+     {
+      "port": "analog-in-7",
+      "port_name": "Input 7",
+      "label": null,
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "analog",
+      "source": null
+     },
+     {
+      "port": "analog-in-8",
+      "port_name": "Input 8",
+      "label": null,
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "analog",
+      "source": null
+     }
+    ]
+   },
+   {
+    "title": "Analog Out",
+    "dir": "out",
+    "medium": "analog",
+    "rows": [
+     {
+      "port": "analog-out-1",
+      "port_name": "Output 1",
+      "label": "Monitor Out 1",
+      "peer_device": "stage-box-1",
+      "peer_name": "Stage Box 1",
+      "peer_port": "return-in-1",
+      "peer_port_name": "Return 1",
+      "peer_label": "Monitor Out 1",
+      "cable": "c-0007",
+      "tag": null,
+      "medium": "analog",
+      "source": "cable"
+     },
+     {
+      "port": "analog-out-2",
+      "port_name": "Output 2",
+      "label": "Mains",
+      "peer_device": "main-speakers",
+      "peer_name": "Main Speakers - L/R",
+      "peer_port": "analog-in-1",
+      "peer_port_name": "Input 1",
+      "peer_label": "Main L",
+      "cable": "c-0009",
+      "tag": null,
+      "medium": "analog",
+      "source": "cable"
+     },
+     {
+      "port": "analog-out-3",
+      "port_name": "Output 3",
+      "label": "Sub",
+      "peer_device": "sub-x2",
+      "peer_name": "Sub x2",
+      "peer_port": "analog-in-1",
+      "peer_port_name": "Input 1",
+      "peer_label": "Sub 1",
+      "cable": "c-0010",
+      "tag": null,
+      "medium": "analog",
+      "source": "cable"
+     },
+     {
+      "port": "analog-out-4",
+      "port_name": "Output 4",
+      "label": "Stream",
+      "peer_device": "atem-mini",
+      "peer_name": "ATEM Mini",
+      "peer_port": "analog-in-1",
+      "peer_port_name": "Mic 1",
+      "peer_label": "Stream",
+      "cable": "c-0011",
+      "tag": null,
+      "medium": "analog",
+      "source": "cable"
+     }
+    ]
+   },
+   {
+    "title": "Network In",
+    "dir": "io",
+    "medium": "snake",
+    "rows": [
+     {
+      "port": "dsnake",
+      "port_name": "dSnake",
+      "label": "dSnake",
+      "peer_device": "sound-board",
+      "peer_name": "Sound Board",
+      "peer_port": "slink",
+      "peer_port_name": "SLink",
+      "peer_label": "SLink",
+      "cable": "c-0008",
+      "tag": "A-005",
+      "medium": "snake",
+      "source": "cable"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "device": "atem-mini",
+  "name": "ATEM Mini",
+  "model": "Blackmagic Design ATEM Mini Pro",
+  "room": "main",
+  "discipline": "video",
+  "kind": "video_switcher",
+  "sections": [
+   {
+    "title": "HDMI In",
+    "dir": "in",
+    "medium": "hdmi",
+    "rows": [
+     {
+      "port": "hdmi-in-1",
+      "port_name": "Input 1",
+      "label": "SB-Video-1",
+      "peer_device": "stage-box-1",
+      "peer_name": "Stage Box 1",
+      "peer_port": "hdmi-out-1",
+      "peer_port_name": "Output 1",
+      "peer_label": "SB-Video-1",
+      "cable": "c-0012",
+      "tag": null,
+      "medium": "hdmi",
+      "source": "cable"
+     },
+     {
+      "port": "hdmi-in-2",
+      "port_name": "Input 2",
+      "label": "HDMI In 2",
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "hdmi",
+      "source": null
+     }
+    ]
+   },
+   {
+    "title": "Analog In",
+    "dir": "in",
+    "medium": "analog",
+    "rows": [
+     {
+      "port": "analog-in-1",
+      "port_name": "Mic 1",
+      "label": "Stream",
+      "peer_device": "audio-rack-1",
+      "peer_name": "Audio Rack 1",
+      "peer_port": "analog-out-4",
+      "peer_port_name": "Output 4",
+      "peer_label": "Stream",
+      "cable": "c-0011",
+      "tag": null,
+      "medium": "analog",
+      "source": "cable"
+     }
+    ]
+   },
+   {
+    "title": "HDMI Out",
+    "dir": "out",
+    "medium": "hdmi",
+    "rows": [
+     {
+      "port": "hdmi-out-1",
+      "port_name": "Output 1",
+      "label": "Program Out",
+      "peer_device": "video-converter",
+      "peer_name": "Video Converter",
+      "peer_port": "hdmi-in-1",
+      "peer_port_name": "HDMI In",
+      "peer_label": "Program In",
+      "cable": "c-0013",
+      "tag": null,
+      "medium": "hdmi",
+      "source": "cable"
+     }
+    ]
+   },
+   {
+    "title": "USB Out",
+    "dir": "out",
+    "medium": "usb",
+    "rows": [
+     {
+      "port": "usb-out-1",
+      "port_name": "USB",
+      "label": "USB Stream Out",
+      "peer_device": "restream",
+      "peer_name": "Restream",
+      "peer_port": "usb-in-1",
+      "peer_port_name": "Input 1",
+      "peer_label": "USB Stream In",
+      "cable": "c-0015",
+      "tag": null,
+      "medium": "usb",
+      "source": "cable"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "device": "main-speakers",
+  "name": "Main Speakers - L/R",
+  "model": "QSC K12.2",
+  "room": "main",
+  "discipline": "audio",
+  "kind": "speaker",
+  "sections": [
+   {
+    "title": "Analog In",
+    "dir": "in",
+    "medium": "analog",
+    "rows": [
+     {
+      "port": "analog-in-1",
+      "port_name": "Input 1",
+      "label": "Main L",
+      "peer_device": "audio-rack-1",
+      "peer_name": "Audio Rack 1",
+      "peer_port": "analog-out-2",
+      "peer_port_name": "Output 2",
+      "peer_label": "Mains",
+      "cable": "c-0009",
+      "tag": null,
+      "medium": "analog",
+      "source": "cable"
+     },
+     {
+      "port": "analog-in-2",
+      "port_name": "Input 2",
+      "label": "Main R",
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "analog",
+      "source": null
+     }
+    ]
+   },
+   {
+    "title": "Analog Out",
+    "dir": "out",
+    "medium": "analog",
+    "rows": [
+     {
+      "port": "thru-1",
+      "port_name": "Thru 1",
+      "label": "Thru",
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "analog",
+      "source": null
+     },
+     {
+      "port": "thru-2",
+      "port_name": "Thru 2",
+      "label": "Thru",
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "analog",
+      "source": null
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "device": "sub-x2",
+  "name": "Sub x2",
+  "model": "Electro-Voice E118sw 18\" Passive Subwoofer",
+  "room": "main",
+  "discipline": "audio",
+  "kind": "speaker",
+  "sections": [
+   {
+    "title": "Analog In",
+    "dir": "in",
+    "medium": "analog",
+    "rows": [
+     {
+      "port": "analog-in-1",
+      "port_name": "Input 1",
+      "label": "Sub 1",
+      "peer_device": "audio-rack-1",
+      "peer_name": "Audio Rack 1",
+      "peer_port": "analog-out-3",
+      "peer_port_name": "Output 3",
+      "peer_label": "Sub",
+      "cable": "c-0010",
+      "tag": null,
+      "medium": "analog",
+      "source": "cable"
+     },
+     {
+      "port": "analog-in-2",
+      "port_name": "Input 2",
+      "label": "Sub 2",
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "analog",
+      "source": null
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "device": "video-converter",
+  "name": "Video Converter",
+  "model": "Decimator Design MD-HX",
+  "room": "main",
+  "discipline": "video",
+  "kind": "converter",
+  "sections": [
+   {
+    "title": "HDMI In",
+    "dir": "in",
+    "medium": "hdmi",
+    "rows": [
+     {
+      "port": "hdmi-in-1",
+      "port_name": "HDMI In",
+      "label": "Program In",
+      "peer_device": "atem-mini",
+      "peer_name": "ATEM Mini",
+      "peer_port": "hdmi-out-1",
+      "peer_port_name": "Output 1",
+      "peer_label": "Program Out",
+      "cable": "c-0013",
+      "tag": null,
+      "medium": "hdmi",
+      "source": "cable"
+     }
+    ]
+   },
+   {
+    "title": "SDI In",
+    "dir": "in",
+    "medium": "sdi",
+    "rows": [
+     {
+      "port": "sdi-in-1",
+      "port_name": "SDI In",
+      "label": "SDI Input 1",
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "sdi",
+      "source": null
+     }
+    ]
+   },
+   {
+    "title": "HDMI Out",
+    "dir": "out",
+    "medium": "hdmi",
+    "rows": [
+     {
+      "port": "hdmi-out-1",
+      "port_name": "HDMI Out",
+      "label": "HDMI Thru",
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "hdmi",
+      "source": null
+     }
+    ]
+   },
+   {
+    "title": "SDI Out",
+    "dir": "out",
+    "medium": "sdi",
+    "rows": [
+     {
+      "port": "sdi-out-1",
+      "port_name": "SDI Out A",
+      "label": "SDI Program Output",
+      "peer_device": "samsung-tv-1",
+      "peer_name": "Samsung TV - 1",
+      "peer_port": "sdi-in-1",
+      "peer_port_name": "Input 1",
+      "peer_label": "TV 1",
+      "cable": "c-0014",
+      "tag": null,
+      "medium": "sdi",
+      "source": "cable"
+     },
+     {
+      "port": "sdi-out-2",
+      "port_name": "SDI Out B",
+      "label": null,
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "sdi",
+      "source": null
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "device": "samsung-tv-1",
+  "name": "Samsung TV - 1",
+  "model": "Samsung 65\" QBC Series 4K UHD Display",
+  "room": "main",
+  "discipline": "video",
+  "kind": "display",
+  "sections": [
+   {
+    "title": "SDI In",
+    "dir": "in",
+    "medium": "sdi",
+    "rows": [
+     {
+      "port": "sdi-in-1",
+      "port_name": "Input 1",
+      "label": "TV 1",
+      "peer_device": "video-converter",
+      "peer_name": "Video Converter",
+      "peer_port": "sdi-out-1",
+      "peer_port_name": "SDI Out A",
+      "peer_label": "SDI Program Output",
+      "cable": "c-0014",
+      "tag": null,
+      "medium": "sdi",
+      "source": "cable"
+     }
+    ]
+   },
+   {
+    "title": "HDMI In",
+    "dir": "in",
+    "medium": "hdmi",
+    "rows": [
+     {
+      "port": "hdmi-in-1",
+      "port_name": "HDMI 1",
+      "label": null,
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "hdmi",
+      "source": null
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "device": "restream",
+  "name": "Restream",
+  "model": "Video Stream",
+  "room": "main",
+  "discipline": "network",
+  "kind": "stream",
+  "sections": [
+   {
+    "title": "USB In",
+    "dir": "in",
+    "medium": "usb",
+    "rows": [
+     {
+      "port": "usb-in-1",
+      "port_name": "Input 1",
+      "label": "USB Stream In",
+      "peer_device": "atem-mini",
+      "peer_name": "ATEM Mini",
+      "peer_port": "usb-out-1",
+      "peer_port_name": "USB",
+      "peer_label": "USB Stream Out",
+      "cable": "c-0015",
+      "tag": null,
+      "medium": "usb",
+      "source": "cable"
+     }
+    ]
+   },
+   {
+    "title": "Network Out",
+    "dir": "out",
+    "medium": "network",
+    "rows": [
+     {
+      "port": "net-out-1",
+      "port_name": "Output 1",
+      "label": "YouTube",
+      "peer_device": null,
+      "peer_name": null,
+      "peer_port": null,
+      "peer_port_name": null,
+      "peer_label": null,
+      "cable": null,
+      "tag": null,
+      "medium": "network",
+      "source": null
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "device": "spare-ulxd4d",
+  "name": "ULXD4D (spare)",
+  "model": "Shure ULX-D ULXD4D",
+  "room": "",
+  "discipline": "audio",
+  "kind": "wireless_rx",
+  "sections": []
+ }
+]

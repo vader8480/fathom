@@ -1,0 +1,45 @@
+{
+  "id": "allen-heath-dlive-dm32",
+  "manufacturer": "Allen & Heath",
+  "model": "dLive DM32 MixRack",
+  "name": "dLive DM32 MixRack",
+  "kind": "console",
+  "brand": "allen-heath",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Mic In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 32
+    },
+    {
+      "group": "Line Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 16
+    },
+    {
+      "group": "gigaACE",
+      "dir": "io",
+      "medium": "snake",
+      "connector": "etherCON",
+      "channels": 128
+    },
+    {
+      "group": "I/O Port",
+      "dir": "io",
+      "medium": "other",
+      "count": 3
+    }
+  ],
+  "tags": [
+    "console",
+    "mixrack"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

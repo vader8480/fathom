@@ -1,0 +1,36 @@
+{
+  "id": "qsc-k12-2",
+  "manufacturer": "QSC",
+  "model": "K12.2",
+  "name": "K12.2",
+  "kind": "speaker",
+  "brand": "qsc",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Input",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR/TRS combo",
+      "count": 2
+    },
+    {
+      "group": "Thru",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M"
+    },
+    {
+      "group": "Power In",
+      "dir": "in",
+      "medium": "power",
+      "connector": "IEC C14"
+    }
+  ],
+  "tags": [
+    "powered speaker"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

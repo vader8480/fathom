@@ -1,0 +1,33 @@
+{
+  "id": "ubiquiti-usw-pro-24-poe",
+  "manufacturer": "Ubiquiti",
+  "model": "USW-Pro-24-PoE",
+  "name": "USW-Pro-24-PoE",
+  "kind": "switch",
+  "brand": "ubiquiti",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "GbE PoE",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45",
+      "count": 24
+    },
+    {
+      "group": "SFP+",
+      "dir": "io",
+      "medium": "network",
+      "connector": "SFP+",
+      "count": 2
+    }
+  ],
+  "tags": [
+    "switch",
+    "poe"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700">
+<title>Riverside Campus - Lobby</title>
+<rect width="1200" height="700" fill="#fbfaf7" />
+<g fill="none" stroke="#3b4252" stroke-width="8"><path d="M40 40 H1160 V660 H700 M560 660 H40 Z" /></g>
+<g fill="none" stroke="#3b4252" stroke-width="3"><path d="M560 660 A140 140 0 0 1 700 520" /><line x1="700" y1="660" x2="700" y2="520" /></g>
+<g fill="#e8e4da" stroke="#8a8170" stroke-width="2"><rect x="80" y="80" width="360" height="120" rx="12" /><rect x="900" y="420" width="200" height="200" /></g>
+<g fill="#cfe3f5" stroke="#5a7fa3" stroke-width="2"><circle cx="600" cy="300" r="70" /><rect x="760" y="80" width="360" height="40" /></g>
+<g font-family="Helvetica, Arial, sans-serif" font-size="22" fill="#3b4252">
+<text x="140" y="148">Welcome desk</text><text x="545" y="306">Café seating</text>
+<text x="860" y="108" font-size="18">Video wall (above doors)</text><text x="930" y="525">Coat room</text>
+<text x="560" y="690" font-size="16">Main entry</text></g>
+<g stroke="#b0b7c3" stroke-dasharray="6 6"><line x1="40" y1="360" x2="1160" y2="360" /></g>
+</svg>

@@ -1,0 +1,58 @@
+{
+  "id": "yamaha-ql5",
+  "manufacturer": "Yamaha",
+  "model": "QL5",
+  "name": "QL5",
+  "kind": "console",
+  "brand": "yamaha",
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Analog In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 32
+    },
+    {
+      "group": "Omni Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 16
+    },
+    {
+      "group": "AES Out",
+      "dir": "out",
+      "medium": "aes3",
+      "connector": "XLR3M",
+      "channels": 2
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "etherCON",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 64
+    },
+    {
+      "group": "MY Slot",
+      "dir": "io",
+      "medium": "other",
+      "count": 2
+    }
+  ],
+  "tags": [
+    "console",
+    "dante"
+  ],
+  "source_url": "https://usa.yamaha.com/products/proaudio/mixers/ql/index.html",
+  "notes": "Port counts not verified against the datasheet; please check."
+}

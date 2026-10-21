@@ -1,0 +1,21 @@
+Channel,Name,Color,Icon,Patch
+CH 1,Vox 1,Blue,Vocal,DANTE 1
+CH 2,Vox 2,Blue,Vocal,DANTE 2
+CH 3,Vox 3,Blue,Vocal,DANTE 3
+CH 4,Vox 4,Blue,Vocal,DANTE 4
+CH 5,Spare 5,Blue,Vocal,DANTE 5
+CH 6,Spare 6,Blue,Vocal,DANTE 6
+CH 7,Spare 7,Blue,Vocal,DANTE 7
+CH 8,Spare 8,Blue,Vocal,DANTE 8
+CH 9,Kick In,Red,Kick,DANTE 9
+CH 10,Kick Out,Red,Kick,DANTE 10
+CH 11,Snare Top,Red,Vocal,DANTE 11
+CH 12,Snare Bot,Red,Vocal,DANTE 12
+CH 13,Hat,Red,Vocal,DANTE 13
+CH 14,Tom 1,Red,Vocal,DANTE 14
+CH 15,Tom 2,Red,Vocal,DANTE 15
+CH 16,OH,Red,Vocal,DANTE 16
+CH 33,WL 1,Green,Wireless,DANTE 33
+CH 34,WL 2,Green,Wireless,DANTE 34
+CH 47,Playback L,Purple,Media1,OMNI 1
+CH 48,Playback R,Purple,Media1,OMNI 2

@@ -1,0 +1,5 @@
+id,name,kind,manufacturer,model,template,room,location,status,serial,asset_tag,cost,ip,mac,vlan,notes
+cam-1,Camera 1 (center),camera,Panasonic,AW-UE150,panasonic-aw-ue150,main,foh,installed,AW1-0042,RC-0101,10495,10.30.0.51,,30,
+,Wireless RX 1-4,,,,,,,,ULXD4Q-77310,RC-0010,4799,,,,re-tagged after service
+,Lobby display,display,Samsung,QB65C,samsung-qb65c,main,,planned,,,1299,10.30.0.65,AC44.F2A1.0065,30,lobby loop (phase 2)
+,Hearing loop amp,amp,Ampetronic,D7-2,,main,amp-room,planned,,,1850,,,,ADA hearing assist

@@ -1,0 +1,4 @@
+tag,from_device,from_port,to_device,to_port,medium,type,length,length_unit,color,note
+V-050,Camera 3 (wide),HDMI Out,Multiview display,HDMI In 2,hdmi,HDMI 2.0 AOC,60,ft,,spare feed to multiview
+A-090,FOH CL5,Omni Out 3,Hearing loop amp,Line In,analog,XLR3 M-F,40,m,,needs hearing loop amp first
+C-040,Room control,Relay 1,Main projector,Screen trigger,gpio,2-core,25,m,,screen down trigger

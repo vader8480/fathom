@@ -1,0 +1,42 @@
+{
+  "id": "blackmagic-web-presenter-hd",
+  "manufacturer": "Blackmagic Design",
+  "model": "Web Presenter HD",
+  "name": "Web Presenter HD",
+  "kind": "encoder",
+  "brand": "blackmagic",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "SDI In",
+      "dir": "in",
+      "medium": "sdi",
+      "connector": "BNC"
+    },
+    {
+      "group": "SDI Loop Out",
+      "dir": "out",
+      "medium": "sdi",
+      "connector": "BNC"
+    },
+    {
+      "group": "USB Webcam Out",
+      "dir": "out",
+      "medium": "usb",
+      "connector": "USB-C"
+    },
+    {
+      "group": "Ethernet",
+      "dir": "out",
+      "medium": "network",
+      "connector": "RJ45"
+    }
+  ],
+  "tags": [
+    "streaming",
+    "encoder"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

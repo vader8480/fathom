@@ -1,0 +1,647 @@
+[
+ {
+  "name": "numbered",
+  "v1": false,
+  "input": [
+   {
+    "group": "Analog In",
+    "dir": "in",
+    "medium": "analog",
+    "connector": "XLR3F",
+    "count": 3
+   }
+  ],
+  "expected": [
+   {
+    "id": "analog-in-1",
+    "name": "Analog In 1",
+    "dir": "in",
+    "medium": "analog",
+    "group": "Analog In",
+    "index": 1,
+    "origin": "template",
+    "connector": "XLR3F"
+   },
+   {
+    "id": "analog-in-2",
+    "name": "Analog In 2",
+    "dir": "in",
+    "medium": "analog",
+    "group": "Analog In",
+    "index": 2,
+    "origin": "template",
+    "connector": "XLR3F"
+   },
+   {
+    "id": "analog-in-3",
+    "name": "Analog In 3",
+    "dir": "in",
+    "medium": "analog",
+    "group": "Analog In",
+    "index": 3,
+    "origin": "template",
+    "connector": "XLR3F"
+   }
+  ]
+ },
+ {
+  "name": "named with channels",
+  "v1": false,
+  "input": [
+   {
+    "group": "AES Out",
+    "dir": "out",
+    "medium": "aes3",
+    "connector": "XLR3M",
+    "names": [
+     "1/2",
+     "3/4"
+    ],
+    "channels": 2
+   }
+  ],
+  "expected": [
+   {
+    "id": "aes-out-1-2",
+    "name": "AES Out 1/2",
+    "dir": "out",
+    "medium": "aes3",
+    "group": "AES Out",
+    "index": 1,
+    "origin": "template",
+    "connector": "XLR3M",
+    "channels": 2
+   },
+   {
+    "id": "aes-out-3-4",
+    "name": "AES Out 3/4",
+    "dir": "out",
+    "medium": "aes3",
+    "group": "AES Out",
+    "index": 2,
+    "origin": "template",
+    "connector": "XLR3M",
+    "channels": 2
+   }
+  ]
+ },
+ {
+  "name": "single with channels",
+  "v1": false,
+  "input": [
+   {
+    "group": "SLink",
+    "dir": "io",
+    "medium": "snake",
+    "connector": "etherCON",
+    "channels": 128
+   }
+  ],
+  "expected": [
+   {
+    "id": "slink",
+    "name": "SLink",
+    "dir": "io",
+    "medium": "snake",
+    "group": "SLink",
+    "index": 1,
+    "origin": "template",
+    "connector": "etherCON",
+    "channels": 128
+   }
+  ]
+ },
+ {
+  "name": "start offset (count 2) and start without count",
+  "v1": false,
+  "input": [
+   {
+    "group": "Omni Out",
+    "dir": "out",
+    "medium": "analog",
+    "count": 2,
+    "start": 9
+   },
+   {
+    "group": "GbE",
+    "dir": "io",
+    "medium": "network",
+    "start": 25
+   }
+  ],
+  "expected": [
+   {
+    "id": "omni-out-9",
+    "name": "Omni Out 9",
+    "dir": "out",
+    "medium": "analog",
+    "group": "Omni Out",
+    "index": 9,
+    "origin": "template"
+   },
+   {
+    "id": "omni-out-10",
+    "name": "Omni Out 10",
+    "dir": "out",
+    "medium": "analog",
+    "group": "Omni Out",
+    "index": 10,
+    "origin": "template"
+   },
+   {
+    "id": "gbe-25",
+    "name": "GbE 25",
+    "dir": "io",
+    "medium": "network",
+    "group": "GbE",
+    "index": 25,
+    "origin": "template"
+   }
+  ]
+ },
+ {
+  "name": "labels (shorter than count) and single label",
+  "v1": false,
+  "input": [
+   {
+    "group": "Mic In",
+    "dir": "in",
+    "medium": "analog",
+    "count": 3,
+    "labels": [
+     "Kick",
+     "Snare"
+    ]
+   },
+   {
+    "group": "Thru",
+    "dir": "out",
+    "medium": "analog",
+    "label": "Thru"
+   }
+  ],
+  "expected": [
+   {
+    "id": "mic-in-1",
+    "name": "Mic In 1",
+    "dir": "in",
+    "medium": "analog",
+    "group": "Mic In",
+    "index": 1,
+    "origin": "template",
+    "label": "Kick"
+   },
+   {
+    "id": "mic-in-2",
+    "name": "Mic In 2",
+    "dir": "in",
+    "medium": "analog",
+    "group": "Mic In",
+    "index": 2,
+    "origin": "template",
+    "label": "Snare"
+   },
+   {
+    "id": "mic-in-3",
+    "name": "Mic In 3",
+    "dir": "in",
+    "medium": "analog",
+    "group": "Mic In",
+    "index": 3,
+    "origin": "template"
+   },
+   {
+    "id": "thru",
+    "name": "Thru",
+    "dir": "out",
+    "medium": "analog",
+    "group": "Thru",
+    "index": 1,
+    "origin": "template",
+    "label": "Thru"
+   }
+  ]
+ },
+ {
+  "name": "labels fall back to group label",
+  "v1": false,
+  "input": [
+   {
+    "group": "Line Out",
+    "dir": "out",
+    "medium": "analog",
+    "count": 2,
+    "labels": [
+     "Main"
+    ],
+    "label": "Spare"
+   }
+  ],
+  "expected": [
+   {
+    "id": "line-out-1",
+    "name": "Line Out 1",
+    "dir": "out",
+    "medium": "analog",
+    "group": "Line Out",
+    "index": 1,
+    "origin": "template",
+    "label": "Main"
+   },
+   {
+    "id": "line-out-2",
+    "name": "Line Out 2",
+    "dir": "out",
+    "medium": "analog",
+    "group": "Line Out",
+    "index": 2,
+    "origin": "template",
+    "label": "Spare"
+   }
+  ]
+ },
+ {
+  "name": "dedupe -b -c",
+  "v1": false,
+  "input": [
+   {
+    "group": "Mix",
+    "dir": "out",
+    "medium": "analog",
+    "names": [
+     "A"
+    ]
+   },
+   {
+    "group": "Mix A",
+    "dir": "out",
+    "medium": "analog"
+   },
+   {
+    "group": "Mix A",
+    "dir": "in",
+    "medium": "analog"
+   }
+  ],
+  "expected": [
+   {
+    "id": "mix-a",
+    "name": "Mix A",
+    "dir": "out",
+    "medium": "analog",
+    "group": "Mix",
+    "index": 1,
+    "origin": "template"
+   },
+   {
+    "id": "mix-a-b",
+    "name": "Mix A",
+    "dir": "out",
+    "medium": "analog",
+    "group": "Mix A",
+    "index": 1,
+    "origin": "template"
+   },
+   {
+    "id": "mix-a-c",
+    "name": "Mix A",
+    "dir": "in",
+    "medium": "analog",
+    "group": "Mix A",
+    "index": 1,
+    "origin": "template"
+   }
+  ]
+ },
+ {
+  "name": "dirs per name (fixture DMX In/Out)",
+  "v1": false,
+  "input": [
+   {
+    "group": "DMX",
+    "dir": "io",
+    "medium": "dmx",
+    "connector": "XLR5F",
+    "names": [
+     "In",
+     "Out"
+    ],
+    "dirs": {
+     "In": "in",
+     "Out": "out"
+    }
+   },
+   {
+    "group": "Power",
+    "dir": "in",
+    "medium": "power",
+    "names": [
+     "In",
+     "Thru"
+    ],
+    "dirs": {
+     "Thru": "out"
+    }
+   }
+  ],
+  "expected": [
+   {
+    "id": "dmx-in",
+    "name": "DMX In",
+    "dir": "in",
+    "medium": "dmx",
+    "group": "DMX",
+    "index": 1,
+    "origin": "template",
+    "connector": "XLR5F"
+   },
+   {
+    "id": "dmx-out",
+    "name": "DMX Out",
+    "dir": "out",
+    "medium": "dmx",
+    "group": "DMX",
+    "index": 2,
+    "origin": "template",
+    "connector": "XLR5F"
+   },
+   {
+    "id": "power-in",
+    "name": "Power In",
+    "dir": "in",
+    "medium": "power",
+    "group": "Power",
+    "index": 1,
+    "origin": "template"
+   },
+   {
+    "id": "power-thru",
+    "name": "Power Thru",
+    "dir": "out",
+    "medium": "power",
+    "group": "Power",
+    "index": 2,
+    "origin": "template"
+   }
+  ]
+ },
+ {
+  "name": "channels 1 omitted, slug of punctuation",
+  "v1": false,
+  "input": [
+   {
+    "group": "Mic/Line In",
+    "dir": "in",
+    "medium": "analog",
+    "count": 2,
+    "channels": 1
+   }
+  ],
+  "expected": [
+   {
+    "id": "mic-line-in-1",
+    "name": "Mic/Line In 1",
+    "dir": "in",
+    "medium": "analog",
+    "group": "Mic/Line In",
+    "index": 1,
+    "origin": "template"
+   },
+   {
+    "id": "mic-line-in-2",
+    "name": "Mic/Line In 2",
+    "dir": "in",
+    "medium": "analog",
+    "group": "Mic/Line In",
+    "index": 2,
+    "origin": "template"
+   }
+  ]
+ },
+ {
+  "name": "v1 numbered + network rule (Appendix G neve1)",
+  "v1": true,
+  "input": [
+   {
+    "name": "Mic/line in",
+    "direction": "in",
+    "medium": "analog",
+    "count": 3
+   },
+   {
+    "name": "Dante tx",
+    "direction": "out",
+    "medium": "dante",
+    "count": 8
+   }
+  ],
+  "expected": [
+   {
+    "id": "mic-line-in-1",
+    "name": "Mic/line in 1",
+    "dir": "in",
+    "medium": "analog",
+    "group": "Mic/line in",
+    "index": 1,
+    "origin": "declared"
+   },
+   {
+    "id": "mic-line-in-2",
+    "name": "Mic/line in 2",
+    "dir": "in",
+    "medium": "analog",
+    "group": "Mic/line in",
+    "index": 2,
+    "origin": "declared"
+   },
+   {
+    "id": "mic-line-in-3",
+    "name": "Mic/line in 3",
+    "dir": "in",
+    "medium": "analog",
+    "group": "Mic/line in",
+    "index": 3,
+    "origin": "declared"
+   },
+   {
+    "id": "dante-tx",
+    "name": "Dante tx",
+    "dir": "out",
+    "medium": "dante",
+    "group": "Dante tx",
+    "index": 1,
+    "origin": "declared",
+    "channels": 8
+   }
+  ]
+ },
+ {
+  "name": "v1 labels act as names (Appendix G rio3224 AES)",
+  "v1": true,
+  "input": [
+   {
+    "name": "AES/EBU out",
+    "direction": "out",
+    "medium": "aes3",
+    "labels": [
+     "1/2",
+     "3/4",
+     "5/6",
+     "7/8"
+    ]
+   }
+  ],
+  "expected": [
+   {
+    "id": "aes-ebu-out-1-2",
+    "name": "AES/EBU out 1/2",
+    "dir": "out",
+    "medium": "aes3",
+    "group": "AES/EBU out",
+    "index": 1,
+    "origin": "declared"
+   },
+   {
+    "id": "aes-ebu-out-3-4",
+    "name": "AES/EBU out 3/4",
+    "dir": "out",
+    "medium": "aes3",
+    "group": "AES/EBU out",
+    "index": 2,
+    "origin": "declared"
+   },
+   {
+    "id": "aes-ebu-out-5-6",
+    "name": "AES/EBU out 5/6",
+    "dir": "out",
+    "medium": "aes3",
+    "group": "AES/EBU out",
+    "index": 3,
+    "origin": "declared"
+   },
+   {
+    "id": "aes-ebu-out-7-8",
+    "name": "AES/EBU out 7/8",
+    "dir": "out",
+    "medium": "aes3",
+    "group": "AES/EBU out",
+    "index": 4,
+    "origin": "declared"
+   }
+  ]
+ },
+ {
+  "name": "v1 direction bi/missing -> io; network rule for other network media; count 1 network",
+  "v1": true,
+  "input": [
+   {
+    "name": "Link",
+    "direction": "bi",
+    "medium": "analog"
+   },
+   {
+    "name": "Ctl",
+    "medium": "network"
+   },
+   {
+    "name": "AES50 A",
+    "direction": "io",
+    "medium": "aes50",
+    "count": 48
+   },
+   {
+    "name": "MADI",
+    "direction": "out",
+    "medium": "madi",
+    "count": 64
+   },
+   {
+    "name": "Snake",
+    "direction": "bi",
+    "medium": "snake",
+    "count": 1
+   }
+  ],
+  "expected": [
+   {
+    "id": "link",
+    "name": "Link",
+    "dir": "io",
+    "medium": "analog",
+    "group": "Link",
+    "index": 1,
+    "origin": "declared"
+   },
+   {
+    "id": "ctl",
+    "name": "Ctl",
+    "dir": "io",
+    "medium": "network",
+    "group": "Ctl",
+    "index": 1,
+    "origin": "declared"
+   },
+   {
+    "id": "aes50-a",
+    "name": "AES50 A",
+    "dir": "io",
+    "medium": "aes50",
+    "group": "AES50 A",
+    "index": 1,
+    "origin": "declared",
+    "channels": 48
+   },
+   {
+    "id": "madi",
+    "name": "MADI",
+    "dir": "out",
+    "medium": "madi",
+    "group": "MADI",
+    "index": 1,
+    "origin": "declared",
+    "channels": 64
+   },
+   {
+    "id": "snake",
+    "name": "Snake",
+    "dir": "io",
+    "medium": "snake",
+    "group": "Snake",
+    "index": 1,
+    "origin": "declared"
+   }
+  ]
+ },
+ {
+  "name": "v1 non-network count stays numbered (aes3 count 2)",
+  "v1": true,
+  "input": [
+   {
+    "name": "AES in",
+    "direction": "in",
+    "medium": "aes3",
+    "count": 2
+   }
+  ],
+  "expected": [
+   {
+    "id": "aes-in-1",
+    "name": "AES in 1",
+    "dir": "in",
+    "medium": "aes3",
+    "group": "AES in",
+    "index": 1,
+    "origin": "declared"
+   },
+   {
+    "id": "aes-in-2",
+    "name": "AES in 2",
+    "dir": "in",
+    "medium": "aes3",
+    "group": "AES in",
+    "index": 2,
+    "origin": "declared"
+   }
+  ]
+ }
+]

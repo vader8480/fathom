@@ -1,0 +1,63 @@
+[
+  {"name": "numbered", "v1": false,
+   "input": [{"group": "Analog In", "dir": "in", "medium": "analog", "connector": "XLR3F", "count": 3}],
+   "expected": [
+     {"id": "analog-in-1", "name": "Analog In 1", "dir": "in", "medium": "analog", "connector": "XLR3F", "group": "Analog In", "index": 1, "origin": "template"},
+     {"id": "analog-in-2", "name": "Analog In 2", "dir": "in", "medium": "analog", "connector": "XLR3F", "group": "Analog In", "index": 2, "origin": "template"},
+     {"id": "analog-in-3", "name": "Analog In 3", "dir": "in", "medium": "analog", "connector": "XLR3F", "group": "Analog In", "index": 3, "origin": "template"}]},
+  {"name": "named with channels", "v1": false,
+   "input": [{"group": "AES Out", "dir": "out", "medium": "aes3", "names": ["1/2", "3/4"], "channels": 2}],
+   "expected": [
+     {"id": "aes-out-1-2", "name": "AES Out 1/2", "dir": "out", "medium": "aes3", "group": "AES Out", "index": 1, "channels": 2, "origin": "template"},
+     {"id": "aes-out-3-4", "name": "AES Out 3/4", "dir": "out", "medium": "aes3", "group": "AES Out", "index": 2, "channels": 2, "origin": "template"}]},
+  {"name": "single, channels 1 omitted", "v1": false,
+   "input": [{"group": "USB", "dir": "io", "medium": "usb", "connector": "USB-C", "channels": 1}],
+   "expected": [
+     {"id": "usb", "name": "USB", "dir": "io", "medium": "usb", "connector": "USB-C", "group": "USB", "index": 1, "origin": "template"}]},
+  {"name": "start offset", "v1": false,
+   "input": [{"group": "Input", "dir": "in", "medium": "analog", "count": 2, "start": 9}],
+   "expected": [
+     {"id": "input-9", "name": "Input 9", "dir": "in", "medium": "analog", "group": "Input", "index": 9, "origin": "template"},
+     {"id": "input-10", "name": "Input 10", "dir": "in", "medium": "analog", "group": "Input", "index": 10, "origin": "template"}]},
+  {"name": "start without count is numbered", "v1": false,
+   "input": [{"group": "Aux", "dir": "out", "medium": "analog", "start": 5}],
+   "expected": [
+     {"id": "aux-5", "name": "Aux 5", "dir": "out", "medium": "analog", "group": "Aux", "index": 5, "origin": "template"}]},
+  {"name": "labels then label fallback", "v1": false,
+   "input": [{"group": "Analog Out", "dir": "out", "medium": "analog", "count": 3, "labels": ["Main L", "Main R"], "label": "Spare"}],
+   "expected": [
+     {"id": "analog-out-1", "name": "Analog Out 1", "dir": "out", "medium": "analog", "group": "Analog Out", "index": 1, "label": "Main L", "origin": "template"},
+     {"id": "analog-out-2", "name": "Analog Out 2", "dir": "out", "medium": "analog", "group": "Analog Out", "index": 2, "label": "Main R", "origin": "template"},
+     {"id": "analog-out-3", "name": "Analog Out 3", "dir": "out", "medium": "analog", "group": "Analog Out", "index": 3, "label": "Spare", "origin": "template"}]},
+  {"name": "dedupe across groups", "v1": false,
+   "input": [{"group": "Out", "dir": "out", "medium": "analog"}, {"group": "Out", "dir": "out", "medium": "analog"}, {"group": "Out", "dir": "out", "medium": "analog"}],
+   "expected": [
+     {"id": "out", "name": "Out", "dir": "out", "medium": "analog", "group": "Out", "index": 1, "origin": "template"},
+     {"id": "out-b", "name": "Out", "dir": "out", "medium": "analog", "group": "Out", "index": 1, "origin": "template"},
+     {"id": "out-c", "name": "Out", "dir": "out", "medium": "analog", "group": "Out", "index": 1, "origin": "template"}]},
+  {"name": "names with dirs map", "v1": false,
+   "input": [{"group": "Loop", "dir": "io", "medium": "analog", "names": ["In", "Out", "Aux"], "dirs": {"In": "in", "Out": "out"}}],
+   "expected": [
+     {"id": "loop-in", "name": "Loop In", "dir": "in", "medium": "analog", "group": "Loop", "index": 1, "origin": "template"},
+     {"id": "loop-out", "name": "Loop Out", "dir": "out", "medium": "analog", "group": "Loop", "index": 2, "origin": "template"},
+     {"id": "loop-aux", "name": "Loop Aux", "dir": "io", "medium": "analog", "group": "Loop", "index": 3, "origin": "template"}]},
+  {"name": "v1 numbered", "v1": true,
+   "input": [{"name": "Kit mics", "direction": "out", "medium": "analog", "count": 2}],
+   "expected": [
+     {"id": "kit-mics-1", "name": "Kit mics 1", "dir": "out", "medium": "analog", "group": "Kit mics", "index": 1, "origin": "declared"},
+     {"id": "kit-mics-2", "name": "Kit mics 2", "dir": "out", "medium": "analog", "group": "Kit mics", "index": 2, "origin": "declared"}]},
+  {"name": "v1 network rule", "v1": true,
+   "input": [{"name": "Dante", "direction": "bi", "medium": "dante", "count": 64}],
+   "expected": [
+     {"id": "dante", "name": "Dante", "dir": "io", "medium": "dante", "group": "Dante", "index": 1, "channels": 64, "origin": "declared"}]},
+  {"name": "v1 labels act as names", "v1": true,
+   "fields": ["id", "name", "dir", "medium", "group", "index", "origin"],
+   "input": [{"name": "Out", "direction": "out", "medium": "analog", "labels": ["Kick", "Snare"]}],
+   "expected": [
+     {"id": "out-kick", "name": "Out Kick", "dir": "out", "medium": "analog", "group": "Out", "index": 1, "origin": "declared"},
+     {"id": "out-snare", "name": "Out Snare", "dir": "out", "medium": "analog", "group": "Out", "index": 2, "origin": "declared"}]},
+  {"name": "v1 direction default io", "v1": true,
+   "input": [{"name": "Link", "medium": "analog"}],
+   "expected": [
+     {"id": "link", "name": "Link", "dir": "io", "medium": "analog", "group": "Link", "index": 1, "origin": "declared"}]}
+]

@@ -1,0 +1,35 @@
+{
+  "id": "focusrite-rednet-am2",
+  "manufacturer": "Focusrite",
+  "model": "RedNet AM2",
+  "name": "RedNet AM2",
+  "kind": "iem",
+  "brand": "focusrite",
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "RJ45",
+      "channels": 2
+    },
+    {
+      "group": "Headphones",
+      "dir": "out",
+      "medium": "iem_wired",
+      "names": [
+        "1/4\"",
+        "3.5mm"
+      ]
+    }
+  ],
+  "tags": [
+    "headphone",
+    "dante"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fathom-audio"
+dynamic = ["version"]
+description = "Know your AV system: audio, video and lighting documentation (rooms, devices, ports, cables, racks, floor plans, networks, DMX, inventory) with signal-flow maps, patch tables, schedules and a troubleshooting assistant, hosted as a small web app."
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = ["audio", "video", "lighting", "avl", "dante", "yamaha", "dmx", "signal flow", "patch", "cable schedule", "rack", "documentation"]
+classifiers = [
+  "Environment :: Web Environment",
+  "Intended Audience :: Other Audience",
+  "Programming Language :: Python :: 3",
+  "Topic :: Multimedia :: Sound/Audio",
+  "Topic :: Multimedia :: Video",
+]
+dependencies = []
+
+[project.optional-dependencies]
+serve = ["gunicorn>=21"]
+yaml = ["pyyaml>=6"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+fathom = "fathom.cli:main"
+
+[tool.setuptools]
+packages = ["fathom", "fathom.parsers", "fathom.library"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+fathom = ["static/**/*", "samples/**/*", "library/templates/*.json", "checklists/*.json"]
+"fathom.library" = ["templates/*.json"]
+
+[tool.setuptools.dynamic]
+version = { attr = "fathom.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,48 @@
+{
+  "id": "panasonic-pt-req12",
+  "manufacturer": "Panasonic",
+  "model": "PT-REQ12",
+  "name": "PT-REQ12",
+  "kind": "projector",
+  "brand": "panasonic",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "HDMI In",
+      "dir": "in",
+      "medium": "hdmi",
+      "connector": "HDMI-A"
+    },
+    {
+      "group": "DIGITAL LINK In",
+      "dir": "in",
+      "medium": "hdbaset",
+      "connector": "RJ45"
+    },
+    {
+      "group": "SDI In",
+      "dir": "in",
+      "medium": "sdi",
+      "connector": "BNC"
+    },
+    {
+      "group": "RS-232",
+      "dir": "in",
+      "medium": "rs232",
+      "connector": "DB9"
+    },
+    {
+      "group": "LAN",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45"
+    }
+  ],
+  "tags": [
+    "projector",
+    "laser"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

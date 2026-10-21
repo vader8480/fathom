@@ -1,0 +1,56 @@
+{
+  "id": "yamaha-dm7-compact",
+  "manufacturer": "Yamaha",
+  "model": "DM7 Compact",
+  "name": "DM7 Compact",
+  "kind": "console",
+  "brand": "yamaha",
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Analog In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 16
+    },
+    {
+      "group": "Omni Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 16
+    },
+    {
+      "group": "AES Out",
+      "dir": "out",
+      "medium": "aes3",
+      "connector": "XLR3M",
+      "channels": 2
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "etherCON",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 144
+    },
+    {
+      "group": "PY Slot",
+      "dir": "io",
+      "medium": "other"
+    }
+  ],
+  "tags": [
+    "console",
+    "dante"
+  ],
+  "source_url": "https://usa.yamaha.com/products/proaudio/mixers/dm7/specs.html"
+}

@@ -1,0 +1,45 @@
+{
+  "id": "focusrite-rednet-a16r-mkii",
+  "manufacturer": "Focusrite",
+  "model": "RedNet A16R MkII",
+  "name": "RedNet A16R MkII",
+  "kind": "stage_io",
+  "brand": "focusrite",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Analog In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "DB25",
+      "count": 16
+    },
+    {
+      "group": "Analog Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "DB25",
+      "count": 16
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "RJ45",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 16
+    }
+  ],
+  "tags": [
+    "interface",
+    "dante"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

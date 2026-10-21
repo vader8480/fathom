@@ -1,0 +1,3333 @@
+[
+ {
+  "name": "put new entity appends",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "put",
+    "coll": "devices",
+    "id": "d",
+    "value": {
+     "id": "d",
+     "name": "D",
+     "kind": "speaker",
+     "ports": []
+    }
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    },
+    {
+     "id": "d",
+     "name": "D",
+     "kind": "speaker",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "devices/d"
+  ]
+ },
+ {
+  "name": "put existing replaces in place",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "put",
+    "coll": "devices",
+    "id": "b",
+    "value": {
+     "id": "b",
+     "name": "B2",
+     "kind": "amp",
+     "ports": []
+    }
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B2",
+     "kind": "amp",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "devices/b"
+  ]
+ },
+ {
+  "name": "merge recursive, null deletes key",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "merge",
+    "coll": "devices",
+    "id": "a",
+    "value": {
+     "name": "A3",
+     "patch": {
+      "x": 10
+     },
+     "note": null
+    }
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A3",
+     "kind": "console",
+     "patch": {
+      "x": 10,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "devices/a"
+  ]
+ },
+ {
+  "name": "merge arrays replace wholesale",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "merge",
+    "coll": "devices",
+    "id": "a",
+    "value": {
+     "ports": [
+      {
+       "id": "p9",
+       "name": "P9",
+       "dir": "io",
+       "medium": "dante"
+      }
+     ],
+     "tags": [
+      "z"
+     ]
+    }
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "z"
+     ],
+     "ports": [
+      {
+       "id": "p9",
+       "name": "P9",
+       "dir": "io",
+       "medium": "dante"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "devices/a"
+  ]
+ },
+ {
+  "name": "merge nested null deletes nested key; creates missing object",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "merge",
+    "coll": "devices",
+    "id": "a",
+    "value": {
+     "patch": {
+      "x": null
+     },
+     "inventory": {
+      "serial": "S1"
+     }
+    }
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ],
+     "inventory": {
+      "serial": "S1"
+     }
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "devices/a"
+  ]
+ },
+ {
+  "name": "merge into missing entity is an error",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "merge",
+    "coll": "devices",
+    "id": "zz",
+    "value": {
+     "name": "Z"
+    }
+   }
+  ],
+  "expected": null,
+  "touched": null,
+  "error": "missing_entity"
+ },
+ {
+  "name": "del existing removes",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "del",
+    "coll": "cables",
+    "id": "c1"
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "cables/c1"
+  ]
+ },
+ {
+  "name": "del missing is a no-op",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "del",
+    "coll": "cables",
+    "id": "nope"
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "cables/nope"
+  ]
+ },
+ {
+  "name": "root merge into settings",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "root",
+    "key": "settings",
+    "value": {
+     "units": "imperial"
+    }
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "imperial",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "settings"
+  ]
+ },
+ {
+  "name": "root merge null deletes key",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "root",
+    "key": "settings",
+    "value": {
+     "public_url": null
+    }
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "settings"
+  ]
+ },
+ {
+  "name": "root replace flag replaces whole object",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "root",
+    "key": "meta",
+    "value": {
+     "org": "Y"
+    },
+    "replace": true
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Y"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "meta"
+  ]
+ },
+ {
+  "name": "root merge into empty media",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "root",
+    "key": "media",
+    "value": {
+     "analog": {
+      "label": "Analog · XLR/TRS"
+     }
+    }
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {
+    "analog": {
+     "label": "Analog · XLR/TRS"
+    }
+   },
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "media"
+  ]
+ },
+ {
+  "name": "batch: put room, merge device, del device, root (touched union)",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "put",
+    "coll": "rooms",
+    "id": "chapel",
+    "value": {
+     "id": "chapel",
+     "venue": "v",
+     "name": "Chapel"
+    }
+   },
+   {
+    "op": "merge",
+    "coll": "devices",
+    "id": "b",
+    "value": {
+     "room": "chapel"
+    }
+   },
+   {
+    "op": "del",
+    "coll": "devices",
+    "id": "c"
+   },
+   {
+    "op": "root",
+    "key": "settings",
+    "value": {
+     "autosave": false
+    }
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x",
+    "autosave": false
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    },
+    {
+     "id": "chapel",
+     "venue": "v",
+     "name": "Chapel"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": [],
+     "room": "chapel"
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "devices/b",
+   "devices/c",
+   "rooms/chapel",
+   "settings"
+  ]
+ },
+ {
+  "name": "put then merge same new entity in one batch",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "put",
+    "coll": "devices",
+    "id": "d",
+    "value": {
+     "id": "d",
+     "name": "D",
+     "kind": "speaker",
+     "ports": []
+    }
+   },
+   {
+    "op": "merge",
+    "coll": "devices",
+    "id": "d",
+    "value": {
+     "name": "D7"
+    }
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    },
+    {
+     "id": "d",
+     "name": "D7",
+     "kind": "speaker",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "devices/d"
+  ]
+ },
+ {
+  "name": "put then del in one batch leaves nothing",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "put",
+    "coll": "cables",
+    "id": "c2",
+    "value": {
+     "id": "c2",
+     "from": {
+      "device": "a"
+     },
+     "to": {
+      "device": "c"
+     },
+     "medium": "analog"
+    }
+   },
+   {
+    "op": "del",
+    "coll": "cables",
+    "id": "c2"
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "cables/c2"
+  ]
+ },
+ {
+  "name": "merge object onto scalar replaces it (RFC 7396)",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [
+   {
+    "op": "merge",
+    "coll": "devices",
+    "id": "a",
+    "value": {
+     "note": {
+      "text": "x"
+     }
+    }
+   }
+  ],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": {
+      "text": "x"
+     },
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": [
+   "devices/a"
+  ]
+ },
+ {
+  "name": "empty op list",
+  "doc": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "ops": [],
+  "expected": {
+   "fathom": 2,
+   "revision": 3,
+   "meta": {
+    "org": "Hillside",
+    "title": "T"
+   },
+   "settings": {
+    "default_room": "main",
+    "units": "metric",
+    "public_url": "https://x"
+   },
+   "media": {},
+   "venues": [
+    {
+     "id": "v",
+     "name": "V"
+    }
+   ],
+   "rooms": [
+    {
+     "id": "main",
+     "venue": "v",
+     "name": "Main"
+    }
+   ],
+   "systems": [],
+   "locations": [],
+   "racks": [],
+   "networks": [],
+   "devices": [
+    {
+     "id": "a",
+     "name": "A",
+     "kind": "console",
+     "note": "n",
+     "patch": {
+      "x": 1,
+      "y": 2
+     },
+     "tags": [
+      "x",
+      "y"
+     ],
+     "ports": [
+      {
+       "id": "p1",
+       "name": "P1",
+       "dir": "in",
+       "medium": "analog"
+      },
+      {
+       "id": "p2",
+       "name": "P2",
+       "dir": "out",
+       "medium": "analog"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B",
+     "kind": "pa",
+     "ports": []
+    },
+    {
+     "id": "c",
+     "name": "C",
+     "kind": "other",
+     "ports": []
+    }
+   ],
+   "cables": [
+    {
+     "id": "c1",
+     "from": {
+      "device": "a",
+      "port": "p2"
+     },
+     "to": {
+      "device": "b"
+     },
+     "medium": "analog"
+    }
+   ],
+   "bundles": [],
+   "floorplans": [],
+   "attachments": [],
+   "templates": [],
+   "imports": []
+  },
+  "touched": []
+ }
+]

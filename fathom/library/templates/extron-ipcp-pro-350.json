@@ -1,0 +1,70 @@
+{
+  "id": "extron-ipcp-pro-350",
+  "manufacturer": "Extron",
+  "model": "IPCP Pro 350",
+  "name": "IPCP Pro 350",
+  "kind": "control",
+  "brand": "extron",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "COM",
+      "dir": "io",
+      "medium": "rs422",
+      "connector": "Phoenix",
+      "names": [
+        "1"
+      ]
+    },
+    {
+      "group": "COM",
+      "dir": "io",
+      "medium": "rs232",
+      "connector": "Phoenix",
+      "count": 2,
+      "start": 2
+    },
+    {
+      "group": "IR/Serial",
+      "dir": "out",
+      "medium": "ir",
+      "connector": "Phoenix",
+      "count": 2
+    },
+    {
+      "group": "Relay",
+      "dir": "out",
+      "medium": "gpio",
+      "connector": "Phoenix",
+      "count": 4
+    },
+    {
+      "group": "Digital I/O",
+      "dir": "io",
+      "medium": "gpio",
+      "connector": "Phoenix",
+      "count": 4
+    },
+    {
+      "group": "eBUS",
+      "dir": "io",
+      "medium": "rs422",
+      "connector": "Phoenix"
+    },
+    {
+      "group": "LAN",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45",
+      "count": 3
+    }
+  ],
+  "tags": [
+    "control processor"
+  ],
+  "source_url": "https://www.extron.com/product/ipcppro350",
+  "notes": "COM 1 is RS-232/422/485; COM 2-3 are RS-232."
+}

@@ -1,0 +1,38 @@
+{
+  "id": "allen-heath-ar84",
+  "manufacturer": "Allen & Heath",
+  "model": "AR84",
+  "name": "AR84",
+  "kind": "stage_io",
+  "brand": "allen-heath",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Analog In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 8
+    },
+    {
+      "group": "Analog Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 4
+    },
+    {
+      "group": "dSnake",
+      "dir": "io",
+      "medium": "snake",
+      "connector": "etherCON",
+      "channels": 12
+    }
+  ],
+  "tags": [
+    "stagebox"
+  ],
+  "source_url": "https://www.allen-heath.com/hardware/ar84/"
+}

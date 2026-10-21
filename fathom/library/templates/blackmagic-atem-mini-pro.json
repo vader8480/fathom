@@ -1,0 +1,67 @@
+{
+  "id": "blackmagic-atem-mini-pro",
+  "manufacturer": "Blackmagic Design",
+  "model": "ATEM Mini Pro",
+  "name": "ATEM Mini Pro",
+  "kind": "video_switcher",
+  "brand": "blackmagic",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "HDMI In",
+      "dir": "in",
+      "medium": "hdmi",
+      "connector": "HDMI-A",
+      "count": 4
+    },
+    {
+      "group": "Mic In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "TRS 3.5mm",
+      "count": 2
+    },
+    {
+      "group": "HDMI Out",
+      "dir": "out",
+      "medium": "hdmi",
+      "connector": "HDMI-A"
+    },
+    {
+      "group": "USB Webcam Out",
+      "dir": "out",
+      "medium": "usb",
+      "connector": "USB-C"
+    },
+    {
+      "group": "Ethernet",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45"
+    }
+  ],
+  "checks": [
+    {
+      "id": "audio-on",
+      "symptoms": [
+        "no_audio"
+      ],
+      "when": {
+        "port_dir": "in",
+        "medium": [
+          "analog",
+          "hdmi"
+        ]
+      },
+      "text": "On the {device}'s Audio tab, make sure the **{port}** input is set to ON, not AFV (inputs default to audio-follow-video).",
+      "note": "check Audio tab"
+    }
+  ],
+  "tags": [
+    "switcher",
+    "streaming"
+  ],
+  "source_url": "https://www.blackmagicdesign.com/products/atemmini/techspecs"
+}

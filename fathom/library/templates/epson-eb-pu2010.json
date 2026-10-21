@@ -1,0 +1,49 @@
+{
+  "id": "epson-eb-pu2010",
+  "manufacturer": "Epson",
+  "model": "EB-PU2010",
+  "name": "EB-PU2010",
+  "kind": "projector",
+  "brand": "epson",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "HDMI In",
+      "dir": "in",
+      "medium": "hdmi",
+      "connector": "HDMI-A",
+      "count": 2
+    },
+    {
+      "group": "HDBaseT In",
+      "dir": "in",
+      "medium": "hdbaset",
+      "connector": "RJ45"
+    },
+    {
+      "group": "SDI In",
+      "dir": "in",
+      "medium": "sdi",
+      "connector": "BNC"
+    },
+    {
+      "group": "RS-232",
+      "dir": "in",
+      "medium": "rs232",
+      "connector": "DB9"
+    },
+    {
+      "group": "LAN",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45"
+    }
+  ],
+  "tags": [
+    "projector",
+    "laser"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

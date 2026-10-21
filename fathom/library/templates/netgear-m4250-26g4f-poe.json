@@ -1,0 +1,42 @@
+{
+  "id": "netgear-m4250-26g4f-poe",
+  "manufacturer": "NETGEAR",
+  "model": "M4250-26G4F-PoE+",
+  "name": "M4250-26G4F-PoE+",
+  "kind": "switch",
+  "brand": "netgear",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "GbE PoE+",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45",
+      "count": 24
+    },
+    {
+      "group": "GbE",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45",
+      "count": 2,
+      "start": 25
+    },
+    {
+      "group": "SFP",
+      "dir": "io",
+      "medium": "network",
+      "connector": "SFP",
+      "count": 4
+    }
+  ],
+  "tags": [
+    "switch",
+    "poe",
+    "av-line"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

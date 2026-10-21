@@ -1,0 +1,1316 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<preset version="3.0.0">
+  <name>RRC Littleton Sunday</name>
+  <description>Saved from Dante Controller 4.18 (sample data for Fathom)</description>
+  <device>
+    <captureInfo />
+    <name>FOH-CL5</name>
+    <default_name>FOH-CL5</default_name>
+    <manufacturer_name>Yamaha</manufacturer_name>
+    <model_name>CL5</model_name>
+    <friendly_name>FOH-CL5</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>Main L</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>Main R</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>Sub</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>Fill L</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>Fill R</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>Delays</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>Lobby</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>Courtyard</label></txchannel>
+    <txchannel danteId="9" mediaType="audio"><label>BCast L</label></txchannel>
+    <txchannel danteId="10" mediaType="audio"><label>BCast R</label></txchannel>
+    <txchannel danteId="11" mediaType="audio"><label>DO 1</label></txchannel>
+    <txchannel danteId="12" mediaType="audio"><label>DO 2</label></txchannel>
+    <txchannel danteId="13" mediaType="audio"><label>DO 3</label></txchannel>
+    <txchannel danteId="14" mediaType="audio"><label>DO 4</label></txchannel>
+    <txchannel danteId="15" mediaType="audio"><label>DO 5</label></txchannel>
+    <txchannel danteId="16" mediaType="audio"><label>DO 6</label></txchannel>
+    <txchannel danteId="17" mediaType="audio"><label>DO 7</label></txchannel>
+    <txchannel danteId="18" mediaType="audio"><label>DO 8</label></txchannel>
+    <txchannel danteId="19" mediaType="audio"><label>DO 9</label></txchannel>
+    <txchannel danteId="20" mediaType="audio"><label>DO 10</label></txchannel>
+    <txchannel danteId="21" mediaType="audio"><label>DO 11</label></txchannel>
+    <txchannel danteId="22" mediaType="audio"><label>DO 12</label></txchannel>
+    <txchannel danteId="23" mediaType="audio"><label>DO 13</label></txchannel>
+    <txchannel danteId="24" mediaType="audio"><label>DO 14</label></txchannel>
+    <txchannel danteId="25" mediaType="audio"><label>DO 15</label></txchannel>
+    <txchannel danteId="26" mediaType="audio"><label>DO 16</label></txchannel>
+    <txchannel danteId="27" mediaType="audio"><label>DO 17</label></txchannel>
+    <txchannel danteId="28" mediaType="audio"><label>DO 18</label></txchannel>
+    <txchannel danteId="29" mediaType="audio"><label>DO 19</label></txchannel>
+    <txchannel danteId="30" mediaType="audio"><label>DO 20</label></txchannel>
+    <txchannel danteId="31" mediaType="audio"><label>DO 21</label></txchannel>
+    <txchannel danteId="32" mediaType="audio"><label>DO 22</label></txchannel>
+    <txchannel danteId="33" mediaType="audio"><label>DO 23</label></txchannel>
+    <txchannel danteId="34" mediaType="audio"><label>DO 24</label></txchannel>
+    <txchannel danteId="35" mediaType="audio"><label>DO 25</label></txchannel>
+    <txchannel danteId="36" mediaType="audio"><label>DO 26</label></txchannel>
+    <txchannel danteId="37" mediaType="audio"><label>DO 27</label></txchannel>
+    <txchannel danteId="38" mediaType="audio"><label>DO 28</label></txchannel>
+    <txchannel danteId="39" mediaType="audio"><label>DO 29</label></txchannel>
+    <txchannel danteId="40" mediaType="audio"><label>DO 30</label></txchannel>
+    <txchannel danteId="41" mediaType="audio"><label>DO 31</label></txchannel>
+    <txchannel danteId="42" mediaType="audio"><label>DO 32</label></txchannel>
+    <txchannel danteId="43" mediaType="audio"><label>43</label></txchannel>
+    <txchannel danteId="44" mediaType="audio"><label>44</label></txchannel>
+    <txchannel danteId="45" mediaType="audio"><label>45</label></txchannel>
+    <txchannel danteId="46" mediaType="audio"><label>46</label></txchannel>
+    <txchannel danteId="47" mediaType="audio"><label>47</label></txchannel>
+    <txchannel danteId="48" mediaType="audio"><label>48</label></txchannel>
+    <txchannel danteId="49" mediaType="audio"><label>49</label></txchannel>
+    <txchannel danteId="50" mediaType="audio"><label>50</label></txchannel>
+    <txchannel danteId="51" mediaType="audio"><label>51</label></txchannel>
+    <txchannel danteId="52" mediaType="audio"><label>52</label></txchannel>
+    <txchannel danteId="53" mediaType="audio"><label>53</label></txchannel>
+    <txchannel danteId="54" mediaType="audio"><label>54</label></txchannel>
+    <txchannel danteId="55" mediaType="audio"><label>55</label></txchannel>
+    <txchannel danteId="56" mediaType="audio"><label>56</label></txchannel>
+    <txchannel danteId="57" mediaType="audio"><label>57</label></txchannel>
+    <txchannel danteId="58" mediaType="audio"><label>58</label></txchannel>
+    <txchannel danteId="59" mediaType="audio"><label>59</label></txchannel>
+    <txchannel danteId="60" mediaType="audio"><label>60</label></txchannel>
+    <txchannel danteId="61" mediaType="audio"><label>61</label></txchannel>
+    <txchannel danteId="62" mediaType="audio"><label>62</label></txchannel>
+    <txchannel danteId="63" mediaType="audio"><label>63</label></txchannel>
+    <txchannel danteId="64" mediaType="audio"><label>64</label></txchannel>
+    <rxchannel danteId="1" mediaType="audio"><label>01</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Kick In</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>02</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Kick Out</subscribed_channel></rxchannel>
+    <rxchannel danteId="3" mediaType="audio"><label>03</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Snare Top</subscribed_channel></rxchannel>
+    <rxchannel danteId="4" mediaType="audio"><label>04</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Snare Bottom</subscribed_channel></rxchannel>
+    <rxchannel danteId="5" mediaType="audio"><label>05</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Hi-Hat</subscribed_channel></rxchannel>
+    <rxchannel danteId="6" mediaType="audio"><label>06</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Rack Tom 1</subscribed_channel></rxchannel>
+    <rxchannel danteId="7" mediaType="audio"><label>07</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Rack Tom 2</subscribed_channel></rxchannel>
+    <rxchannel danteId="8" mediaType="audio"><label>08</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Floor Tom</subscribed_channel></rxchannel>
+    <rxchannel danteId="9" mediaType="audio"><label>09</label><subscribed_device>1073OPX-2</subscribed_device><subscribed_channel>OH L</subscribed_channel></rxchannel>
+    <rxchannel danteId="10" mediaType="audio"><label>10</label><subscribed_device>1073OPX-2</subscribed_device><subscribed_channel>OH R</subscribed_channel></rxchannel>
+    <rxchannel danteId="11" mediaType="audio"><label>11</label><subscribed_device>1073OPX-2</subscribed_device><subscribed_channel>Ride</subscribed_channel></rxchannel>
+    <rxchannel danteId="12" mediaType="audio"><label>12</label><subscribed_device>1073OPX-2</subscribed_device><subscribed_channel>Perc</subscribed_channel></rxchannel>
+    <rxchannel danteId="13" mediaType="audio"><label>13</label><subscribed_device>1073OPX-2</subscribed_device><subscribed_channel>Drum TB</subscribed_channel></rxchannel>
+    <rxchannel danteId="14" mediaType="audio"><label>14</label><subscribed_device>1073OPX-2</subscribed_device><subscribed_channel>Bass DI</subscribed_channel></rxchannel>
+    <rxchannel danteId="15" mediaType="audio"><label>15</label><subscribed_device>1073OPX-2</subscribed_device><subscribed_channel>Bass Amp</subscribed_channel></rxchannel>
+    <rxchannel danteId="16" mediaType="audio"><label>16</label></rxchannel>
+    <rxchannel danteId="17" mediaType="audio"><label>17</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>EG1 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="18" mediaType="audio"><label>18</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>EG1 R</subscribed_channel></rxchannel>
+    <rxchannel danteId="19" mediaType="audio"><label>19</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>EG2 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="20" mediaType="audio"><label>20</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>EG2 R</subscribed_channel></rxchannel>
+    <rxchannel danteId="21" mediaType="audio"><label>21</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys 1 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="22" mediaType="audio"><label>22</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys 1 R</subscribed_channel></rxchannel>
+    <rxchannel danteId="23" mediaType="audio"><label>23</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys 2 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="24" mediaType="audio"><label>24</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys 2 R</subscribed_channel></rxchannel>
+    <rxchannel danteId="25" mediaType="audio"><label>25</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys TB</subscribed_channel></rxchannel>
+    <rxchannel danteId="26" mediaType="audio"><label>26</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 1</subscribed_channel></rxchannel>
+    <rxchannel danteId="27" mediaType="audio"><label>27</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 2</subscribed_channel></rxchannel>
+    <rxchannel danteId="28" mediaType="audio"><label>28</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 3</subscribed_channel></rxchannel>
+    <rxchannel danteId="29" mediaType="audio"><label>29</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 4</subscribed_channel></rxchannel>
+    <rxchannel danteId="30" mediaType="audio"><label>30</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 5</subscribed_channel></rxchannel>
+    <rxchannel danteId="31" mediaType="audio"><label>31</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 6</subscribed_channel></rxchannel>
+    <rxchannel danteId="32" mediaType="audio"><label>32</label></rxchannel>
+    <rxchannel danteId="33" mediaType="audio"><label>33</label><subscribed_device>Rio1608</subscribed_device><subscribed_channel>Crowd 7</subscribed_channel></rxchannel>
+    <rxchannel danteId="34" mediaType="audio"><label>34</label><subscribed_device>Rio1608</subscribed_device><subscribed_channel>Crowd 8</subscribed_channel></rxchannel>
+    <rxchannel danteId="35" mediaType="audio"><label>35</label><subscribed_device>Rio1608</subscribed_device><subscribed_channel>Crowd 9</subscribed_channel></rxchannel>
+    <rxchannel danteId="36" mediaType="audio"><label>36</label><subscribed_device>Rio1608</subscribed_device><subscribed_channel>Crowd 10</subscribed_channel></rxchannel>
+    <rxchannel danteId="37" mediaType="audio"><label>37</label><subscribed_device>Rio1608</subscribed_device><subscribed_channel>FOH TB</subscribed_channel></rxchannel>
+    <rxchannel danteId="38" mediaType="audio"><label>38</label></rxchannel>
+    <rxchannel danteId="39" mediaType="audio"><label>39</label></rxchannel>
+    <rxchannel danteId="40" mediaType="audio"><label>40</label></rxchannel>
+    <rxchannel danteId="41" mediaType="audio"><label>41</label><subscribed_device>ULXD4Q-1</subscribed_device><subscribed_channel>WL 1</subscribed_channel></rxchannel>
+    <rxchannel danteId="42" mediaType="audio"><label>42</label><subscribed_device>ULXD4Q-1</subscribed_device><subscribed_channel>WL 2</subscribed_channel></rxchannel>
+    <rxchannel danteId="43" mediaType="audio"><label>43</label><subscribed_device>ULXD4Q-1</subscribed_device><subscribed_channel>WL 3</subscribed_channel></rxchannel>
+    <rxchannel danteId="44" mediaType="audio"><label>44</label><subscribed_device>ULXD4Q-1</subscribed_device><subscribed_channel>WL 4</subscribed_channel></rxchannel>
+    <rxchannel danteId="45" mediaType="audio"><label>45</label><subscribed_device>ULXD4Q-2</subscribed_device><subscribed_channel>WL 5</subscribed_channel></rxchannel>
+    <rxchannel danteId="46" mediaType="audio"><label>46</label><subscribed_device>ULXD4Q-2</subscribed_device><subscribed_channel>WL 6</subscribed_channel></rxchannel>
+    <rxchannel danteId="47" mediaType="audio"><label>47</label><subscribed_device>ULXD4Q-2</subscribed_device><subscribed_channel>WL 7</subscribed_channel></rxchannel>
+    <rxchannel danteId="48" mediaType="audio"><label>48</label><subscribed_device>ULXD4Q-2</subscribed_device><subscribed_channel>WL 8</subscribed_channel></rxchannel>
+    <rxchannel danteId="49" mediaType="audio"><label>49</label><subscribed_device>ULXD4Q-3</subscribed_device><subscribed_channel>WL 9</subscribed_channel></rxchannel>
+    <rxchannel danteId="50" mediaType="audio"><label>50</label><subscribed_device>ULXD4Q-3</subscribed_device><subscribed_channel>WL 10</subscribed_channel></rxchannel>
+    <rxchannel danteId="51" mediaType="audio"><label>51</label><subscribed_device>ULXD4Q-3</subscribed_device><subscribed_channel>WL 11</subscribed_channel></rxchannel>
+    <rxchannel danteId="52" mediaType="audio"><label>52</label><subscribed_device>ULXD4Q-3</subscribed_device><subscribed_channel>WL 12</subscribed_channel></rxchannel>
+    <rxchannel danteId="53" mediaType="audio"><label>53</label><subscribed_device>CG1</subscribed_device><subscribed_channel>CG1 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="54" mediaType="audio"><label>54</label><subscribed_device>CG1</subscribed_device><subscribed_channel>CG1 R</subscribed_channel></rxchannel>
+    <rxchannel danteId="55" mediaType="audio"><label>55</label><subscribed_device>CG2</subscribed_device><subscribed_channel>CG2 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="56" mediaType="audio"><label>56</label><subscribed_device>CG2</subscribed_device><subscribed_channel>CG2 R</subscribed_channel></rxchannel>
+    <rxchannel danteId="57" mediaType="audio"><label>57</label><subscribed_device>LED-PB</subscribed_device><subscribed_channel>LED L</subscribed_channel></rxchannel>
+    <rxchannel danteId="58" mediaType="audio"><label>58</label><subscribed_device>LED-PB</subscribed_device><subscribed_channel>LED R</subscribed_channel></rxchannel>
+    <rxchannel danteId="59" mediaType="audio"><label>59</label><subscribed_device>Ultrix</subscribed_device><subscribed_channel>Ultrix L</subscribed_channel></rxchannel>
+    <rxchannel danteId="60" mediaType="audio"><label>60</label><subscribed_device>Ultrix</subscribed_device><subscribed_channel>Ultrix R</subscribed_channel></rxchannel>
+    <rxchannel danteId="61" mediaType="audio"><label>61</label><subscribed_device>Ableton-PB</subscribed_device><subscribed_channel>Trax 1</subscribed_channel></rxchannel>
+    <rxchannel danteId="62" mediaType="audio"><label>62</label><subscribed_device>Ableton-PB</subscribed_device><subscribed_channel>Trax 2</subscribed_channel></rxchannel>
+    <rxchannel danteId="63" mediaType="audio"><label>63</label><subscribed_device>Ableton-PB</subscribed_device><subscribed_channel>Click</subscribed_channel></rxchannel>
+    <rxchannel danteId="64" mediaType="audio"><label>64</label><subscribed_device>Ableton-PB</subscribed_device><subscribed_channel>Guide</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>MON-QL5</name>
+    <default_name>MON-QL5</default_name>
+    <manufacturer_name>Yamaha</manufacturer_name>
+    <model_name>QL5</model_name>
+    <friendly_name>MON-QL5</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>IEM 1 L</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>IEM 1 R</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>IEM 2 L</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>IEM 2 R</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>IEM 3 L</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>IEM 3 R</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>IEM 4 L</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>IEM 4 R</label></txchannel>
+    <txchannel danteId="9" mediaType="audio"><label>IEM 5 L</label></txchannel>
+    <txchannel danteId="10" mediaType="audio"><label>IEM 5 R</label></txchannel>
+    <txchannel danteId="11" mediaType="audio"><label>IEM 6 L</label></txchannel>
+    <txchannel danteId="12" mediaType="audio"><label>IEM 6 R</label></txchannel>
+    <txchannel danteId="13" mediaType="audio"><label>PSM 1 L</label></txchannel>
+    <txchannel danteId="14" mediaType="audio"><label>PSM 1 R</label></txchannel>
+    <txchannel danteId="15" mediaType="audio"><label>PSM 2 L</label></txchannel>
+    <txchannel danteId="16" mediaType="audio"><label>PSM 2 R</label></txchannel>
+    <txchannel danteId="17" mediaType="audio"><label>PSM 3 L</label></txchannel>
+    <txchannel danteId="18" mediaType="audio"><label>PSM 3 R</label></txchannel>
+    <txchannel danteId="19" mediaType="audio"><label>PSM 4 L</label></txchannel>
+    <txchannel danteId="20" mediaType="audio"><label>PSM 4 R</label></txchannel>
+    <txchannel danteId="21" mediaType="audio"><label>Artist L</label></txchannel>
+    <txchannel danteId="22" mediaType="audio"><label>Artist R</label></txchannel>
+    <txchannel danteId="23" mediaType="audio"><label>BC Mon L</label></txchannel>
+    <txchannel danteId="24" mediaType="audio"><label>BC Mon R</label></txchannel>
+    <txchannel danteId="25" mediaType="audio"><label>25</label></txchannel>
+    <txchannel danteId="26" mediaType="audio"><label>26</label></txchannel>
+    <txchannel danteId="27" mediaType="audio"><label>27</label></txchannel>
+    <txchannel danteId="28" mediaType="audio"><label>28</label></txchannel>
+    <txchannel danteId="29" mediaType="audio"><label>29</label></txchannel>
+    <txchannel danteId="30" mediaType="audio"><label>30</label></txchannel>
+    <txchannel danteId="31" mediaType="audio"><label>31</label></txchannel>
+    <txchannel danteId="32" mediaType="audio"><label>32</label></txchannel>
+    <txchannel danteId="33" mediaType="audio"><label>33</label></txchannel>
+    <txchannel danteId="34" mediaType="audio"><label>34</label></txchannel>
+    <txchannel danteId="35" mediaType="audio"><label>35</label></txchannel>
+    <txchannel danteId="36" mediaType="audio"><label>36</label></txchannel>
+    <txchannel danteId="37" mediaType="audio"><label>37</label></txchannel>
+    <txchannel danteId="38" mediaType="audio"><label>38</label></txchannel>
+    <txchannel danteId="39" mediaType="audio"><label>39</label></txchannel>
+    <txchannel danteId="40" mediaType="audio"><label>40</label></txchannel>
+    <txchannel danteId="41" mediaType="audio"><label>41</label></txchannel>
+    <txchannel danteId="42" mediaType="audio"><label>42</label></txchannel>
+    <txchannel danteId="43" mediaType="audio"><label>43</label></txchannel>
+    <txchannel danteId="44" mediaType="audio"><label>44</label></txchannel>
+    <txchannel danteId="45" mediaType="audio"><label>45</label></txchannel>
+    <txchannel danteId="46" mediaType="audio"><label>46</label></txchannel>
+    <txchannel danteId="47" mediaType="audio"><label>47</label></txchannel>
+    <txchannel danteId="48" mediaType="audio"><label>48</label></txchannel>
+    <txchannel danteId="49" mediaType="audio"><label>49</label></txchannel>
+    <txchannel danteId="50" mediaType="audio"><label>50</label></txchannel>
+    <txchannel danteId="51" mediaType="audio"><label>51</label></txchannel>
+    <txchannel danteId="52" mediaType="audio"><label>52</label></txchannel>
+    <txchannel danteId="53" mediaType="audio"><label>53</label></txchannel>
+    <txchannel danteId="54" mediaType="audio"><label>54</label></txchannel>
+    <txchannel danteId="55" mediaType="audio"><label>55</label></txchannel>
+    <txchannel danteId="56" mediaType="audio"><label>56</label></txchannel>
+    <txchannel danteId="57" mediaType="audio"><label>57</label></txchannel>
+    <txchannel danteId="58" mediaType="audio"><label>58</label></txchannel>
+    <txchannel danteId="59" mediaType="audio"><label>59</label></txchannel>
+    <txchannel danteId="60" mediaType="audio"><label>60</label></txchannel>
+    <txchannel danteId="61" mediaType="audio"><label>61</label></txchannel>
+    <txchannel danteId="62" mediaType="audio"><label>62</label></txchannel>
+    <txchannel danteId="63" mediaType="audio"><label>63</label></txchannel>
+    <txchannel danteId="64" mediaType="audio"><label>64</label></txchannel>
+    <rxchannel danteId="1" mediaType="audio"><label>01</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>EG1 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>02</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>EG1 R</subscribed_channel></rxchannel>
+    <rxchannel danteId="3" mediaType="audio"><label>03</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>EG2 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="4" mediaType="audio"><label>04</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>EG2 R</subscribed_channel></rxchannel>
+    <rxchannel danteId="5" mediaType="audio"><label>05</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys 1 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="6" mediaType="audio"><label>06</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys 1 R</subscribed_channel></rxchannel>
+    <rxchannel danteId="7" mediaType="audio"><label>07</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys 2 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="8" mediaType="audio"><label>08</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys 2 R</subscribed_channel></rxchannel>
+    <rxchannel danteId="9" mediaType="audio"><label>09</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys TB</subscribed_channel></rxchannel>
+    <rxchannel danteId="10" mediaType="audio"><label>10</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 1</subscribed_channel></rxchannel>
+    <rxchannel danteId="11" mediaType="audio"><label>11</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 2</subscribed_channel></rxchannel>
+    <rxchannel danteId="12" mediaType="audio"><label>12</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 3</subscribed_channel></rxchannel>
+    <rxchannel danteId="13" mediaType="audio"><label>13</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 4</subscribed_channel></rxchannel>
+    <rxchannel danteId="14" mediaType="audio"><label>14</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 5</subscribed_channel></rxchannel>
+    <rxchannel danteId="15" mediaType="audio"><label>15</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 6</subscribed_channel></rxchannel>
+    <rxchannel danteId="16" mediaType="audio"><label>16</label><subscribed_device>ULXD4Q-1</subscribed_device><subscribed_channel>WL 1</subscribed_channel></rxchannel>
+    <rxchannel danteId="17" mediaType="audio"><label>17</label><subscribed_device>ULXD4Q-1</subscribed_device><subscribed_channel>WL 2</subscribed_channel></rxchannel>
+    <rxchannel danteId="18" mediaType="audio"><label>18</label><subscribed_device>ULXD4Q-1</subscribed_device><subscribed_channel>WL 3</subscribed_channel></rxchannel>
+    <rxchannel danteId="19" mediaType="audio"><label>19</label><subscribed_device>ULXD4Q-1</subscribed_device><subscribed_channel>WL 4</subscribed_channel></rxchannel>
+    <rxchannel danteId="20" mediaType="audio"><label>20</label><subscribed_device>ULXD4Q-2</subscribed_device><subscribed_channel>WL 5</subscribed_channel></rxchannel>
+    <rxchannel danteId="21" mediaType="audio"><label>21</label><subscribed_device>ULXD4Q-2</subscribed_device><subscribed_channel>WL 6</subscribed_channel></rxchannel>
+    <rxchannel danteId="22" mediaType="audio"><label>22</label><subscribed_device>ULXD4Q-2</subscribed_device><subscribed_channel>WL 7</subscribed_channel></rxchannel>
+    <rxchannel danteId="23" mediaType="audio"><label>23</label><subscribed_device>ULXD4Q-2</subscribed_device><subscribed_channel>WL 8</subscribed_channel></rxchannel>
+    <rxchannel danteId="24" mediaType="audio"><label>24</label><subscribed_device>ULXD4Q-3</subscribed_device><subscribed_channel>WL 9</subscribed_channel></rxchannel>
+    <rxchannel danteId="25" mediaType="audio"><label>25</label><subscribed_device>ULXD4Q-3</subscribed_device><subscribed_channel>WL 10</subscribed_channel></rxchannel>
+    <rxchannel danteId="26" mediaType="audio"><label>26</label><subscribed_device>ULXD4Q-3</subscribed_device><subscribed_channel>WL 11</subscribed_channel></rxchannel>
+    <rxchannel danteId="27" mediaType="audio"><label>27</label><subscribed_device>ULXD4Q-3</subscribed_device><subscribed_channel>WL 12</subscribed_channel></rxchannel>
+    <rxchannel danteId="28" mediaType="audio"><label>28</label></rxchannel>
+    <rxchannel danteId="29" mediaType="audio"><label>29</label></rxchannel>
+    <rxchannel danteId="30" mediaType="audio"><label>30</label></rxchannel>
+    <rxchannel danteId="31" mediaType="audio"><label>31</label></rxchannel>
+    <rxchannel danteId="32" mediaType="audio"><label>32</label></rxchannel>
+    <rxchannel danteId="33" mediaType="audio"><label>33</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Kick In</subscribed_channel></rxchannel>
+    <rxchannel danteId="34" mediaType="audio"><label>34</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Kick Out</subscribed_channel></rxchannel>
+    <rxchannel danteId="35" mediaType="audio"><label>35</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Snare Top</subscribed_channel></rxchannel>
+    <rxchannel danteId="36" mediaType="audio"><label>36</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Snare Bottom</subscribed_channel></rxchannel>
+    <rxchannel danteId="37" mediaType="audio"><label>37</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Hi-Hat</subscribed_channel></rxchannel>
+    <rxchannel danteId="38" mediaType="audio"><label>38</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Rack Tom 1</subscribed_channel></rxchannel>
+    <rxchannel danteId="39" mediaType="audio"><label>39</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Rack Tom 2</subscribed_channel></rxchannel>
+    <rxchannel danteId="40" mediaType="audio"><label>40</label><subscribed_device>1073OPX-1</subscribed_device><subscribed_channel>Floor Tom</subscribed_channel></rxchannel>
+    <rxchannel danteId="41" mediaType="audio"><label>41</label><subscribed_device>1073OPX-2</subscribed_device><subscribed_channel>OH L</subscribed_channel></rxchannel>
+    <rxchannel danteId="42" mediaType="audio"><label>42</label><subscribed_device>1073OPX-2</subscribed_device><subscribed_channel>OH R</subscribed_channel></rxchannel>
+    <rxchannel danteId="43" mediaType="audio"><label>43</label><subscribed_device>1073OPX-2</subscribed_device><subscribed_channel>Ride</subscribed_channel></rxchannel>
+    <rxchannel danteId="44" mediaType="audio"><label>44</label><subscribed_device>1073OPX-2</subscribed_device><subscribed_channel>Perc</subscribed_channel></rxchannel>
+    <rxchannel danteId="45" mediaType="audio"><label>45</label><subscribed_device>1073OPX-2</subscribed_device><subscribed_channel>Drum TB</subscribed_channel></rxchannel>
+    <rxchannel danteId="46" mediaType="audio"><label>46</label><subscribed_device>1073OPX-2</subscribed_device><subscribed_channel>Bass DI</subscribed_channel></rxchannel>
+    <rxchannel danteId="47" mediaType="audio"><label>47</label><subscribed_device>1073OPX-2</subscribed_device><subscribed_channel>Bass Amp</subscribed_channel></rxchannel>
+    <rxchannel danteId="48" mediaType="audio"><label>48</label></rxchannel>
+    <rxchannel danteId="49" mediaType="audio"><label>49</label><subscribed_device>Ableton-PB</subscribed_device><subscribed_channel>Trax 1</subscribed_channel></rxchannel>
+    <rxchannel danteId="50" mediaType="audio"><label>50</label><subscribed_device>Ableton-PB</subscribed_device><subscribed_channel>Trax 2</subscribed_channel></rxchannel>
+    <rxchannel danteId="51" mediaType="audio"><label>51</label></rxchannel>
+    <rxchannel danteId="52" mediaType="audio"><label>52</label></rxchannel>
+    <rxchannel danteId="53" mediaType="audio"><label>53</label></rxchannel>
+    <rxchannel danteId="54" mediaType="audio"><label>54</label></rxchannel>
+    <rxchannel danteId="55" mediaType="audio"><label>55</label></rxchannel>
+    <rxchannel danteId="56" mediaType="audio"><label>56</label></rxchannel>
+    <rxchannel danteId="57" mediaType="audio"><label>57</label></rxchannel>
+    <rxchannel danteId="58" mediaType="audio"><label>58</label></rxchannel>
+    <rxchannel danteId="59" mediaType="audio"><label>59</label></rxchannel>
+    <rxchannel danteId="60" mediaType="audio"><label>60</label></rxchannel>
+    <rxchannel danteId="61" mediaType="audio"><label>61</label></rxchannel>
+    <rxchannel danteId="62" mediaType="audio"><label>62</label></rxchannel>
+    <rxchannel danteId="63" mediaType="audio"><label>63</label></rxchannel>
+    <rxchannel danteId="64" mediaType="audio"><label>64</label></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>Rio3224</name>
+    <default_name>Rio3224</default_name>
+    <manufacturer_name>Yamaha</manufacturer_name>
+    <model_name>Rio3224-D2</model_name>
+    <friendly_name>Rio3224</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>EG1 L</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>EG1 R</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>EG2 L</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>EG2 R</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>Keys 1 L</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>Keys 1 R</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>Keys 2 L</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>Keys 2 R</label></txchannel>
+    <txchannel danteId="9" mediaType="audio"><label>Keys TB</label></txchannel>
+    <txchannel danteId="10" mediaType="audio"><label>Crowd 1</label></txchannel>
+    <txchannel danteId="11" mediaType="audio"><label>Crowd 2</label></txchannel>
+    <txchannel danteId="12" mediaType="audio"><label>Crowd 3</label></txchannel>
+    <txchannel danteId="13" mediaType="audio"><label>Crowd 4</label></txchannel>
+    <txchannel danteId="14" mediaType="audio"><label>Crowd 5</label></txchannel>
+    <txchannel danteId="15" mediaType="audio"><label>Crowd 6</label></txchannel>
+    <txchannel danteId="16" mediaType="audio"><label>16</label></txchannel>
+    <txchannel danteId="17" mediaType="audio"><label>17</label></txchannel>
+    <txchannel danteId="18" mediaType="audio"><label>18</label></txchannel>
+    <txchannel danteId="19" mediaType="audio"><label>19</label></txchannel>
+    <txchannel danteId="20" mediaType="audio"><label>20</label></txchannel>
+    <txchannel danteId="21" mediaType="audio"><label>21</label></txchannel>
+    <txchannel danteId="22" mediaType="audio"><label>22</label></txchannel>
+    <txchannel danteId="23" mediaType="audio"><label>23</label></txchannel>
+    <txchannel danteId="24" mediaType="audio"><label>24</label></txchannel>
+    <txchannel danteId="25" mediaType="audio"><label>25</label></txchannel>
+    <txchannel danteId="26" mediaType="audio"><label>26</label></txchannel>
+    <txchannel danteId="27" mediaType="audio"><label>27</label></txchannel>
+    <txchannel danteId="28" mediaType="audio"><label>28</label></txchannel>
+    <txchannel danteId="29" mediaType="audio"><label>29</label></txchannel>
+    <txchannel danteId="30" mediaType="audio"><label>30</label></txchannel>
+    <txchannel danteId="31" mediaType="audio"><label>31</label></txchannel>
+    <txchannel danteId="32" mediaType="audio"><label>32</label></txchannel>
+    <rxchannel danteId="1" mediaType="audio"><label>Lobby</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>Lobby</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>Courtyard</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>Courtyard</subscribed_channel></rxchannel>
+    <rxchannel danteId="3" mediaType="audio"><label>Out 3</label></rxchannel>
+    <rxchannel danteId="4" mediaType="audio"><label>Out 4</label></rxchannel>
+    <rxchannel danteId="5" mediaType="audio"><label>Out 5</label></rxchannel>
+    <rxchannel danteId="6" mediaType="audio"><label>Out 6</label></rxchannel>
+    <rxchannel danteId="7" mediaType="audio"><label>Out 7</label></rxchannel>
+    <rxchannel danteId="8" mediaType="audio"><label>Out 8</label></rxchannel>
+    <rxchannel danteId="9" mediaType="audio"><label>Out 9</label></rxchannel>
+    <rxchannel danteId="10" mediaType="audio"><label>Out 10</label></rxchannel>
+    <rxchannel danteId="11" mediaType="audio"><label>Out 11</label></rxchannel>
+    <rxchannel danteId="12" mediaType="audio"><label>Out 12</label></rxchannel>
+    <rxchannel danteId="13" mediaType="audio"><label>Out 13</label></rxchannel>
+    <rxchannel danteId="14" mediaType="audio"><label>Out 14</label></rxchannel>
+    <rxchannel danteId="15" mediaType="audio"><label>Out 15</label></rxchannel>
+    <rxchannel danteId="16" mediaType="audio"><label>Out 16</label></rxchannel>
+    <rxchannel danteId="17" mediaType="audio"><label>AES 1</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>Main L</subscribed_channel></rxchannel>
+    <rxchannel danteId="18" mediaType="audio"><label>AES 2</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>Main R</subscribed_channel></rxchannel>
+    <rxchannel danteId="19" mediaType="audio"><label>AES 3</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>Sub</subscribed_channel></rxchannel>
+    <rxchannel danteId="20" mediaType="audio"><label>AES 4</label></rxchannel>
+    <rxchannel danteId="21" mediaType="audio"><label>AES 5</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>Fill L</subscribed_channel></rxchannel>
+    <rxchannel danteId="22" mediaType="audio"><label>AES 6</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>Fill R</subscribed_channel></rxchannel>
+    <rxchannel danteId="23" mediaType="audio"><label>AES 7</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>Sub</subscribed_channel></rxchannel>
+    <rxchannel danteId="24" mediaType="audio"><label>AES 8</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>Delays</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>Rio1608</name>
+    <default_name>Rio1608</default_name>
+    <manufacturer_name>Yamaha</manufacturer_name>
+    <model_name>Rio1608-D2</model_name>
+    <friendly_name>Rio1608</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>Crowd 7</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>Crowd 8</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>Crowd 9</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>Crowd 10</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>FOH TB</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>06</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>07</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>08</label></txchannel>
+    <txchannel danteId="9" mediaType="audio"><label>09</label></txchannel>
+    <txchannel danteId="10" mediaType="audio"><label>10</label></txchannel>
+    <txchannel danteId="11" mediaType="audio"><label>11</label></txchannel>
+    <txchannel danteId="12" mediaType="audio"><label>12</label></txchannel>
+    <txchannel danteId="13" mediaType="audio"><label>13</label></txchannel>
+    <txchannel danteId="14" mediaType="audio"><label>14</label></txchannel>
+    <txchannel danteId="15" mediaType="audio"><label>15</label></txchannel>
+    <txchannel danteId="16" mediaType="audio"><label>16</label></txchannel>
+    <rxchannel danteId="1" mediaType="audio"><label>01</label></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>02</label></rxchannel>
+    <rxchannel danteId="3" mediaType="audio"><label>03</label></rxchannel>
+    <rxchannel danteId="4" mediaType="audio"><label>04</label></rxchannel>
+    <rxchannel danteId="5" mediaType="audio"><label>05</label></rxchannel>
+    <rxchannel danteId="6" mediaType="audio"><label>06</label></rxchannel>
+    <rxchannel danteId="7" mediaType="audio"><label>07</label></rxchannel>
+    <rxchannel danteId="8" mediaType="audio"><label>08</label></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>1073OPX-1</name>
+    <default_name>1073OPX-1</default_name>
+    <manufacturer_name>AMS Neve</manufacturer_name>
+    <model_name>1073OPX</model_name>
+    <friendly_name>1073OPX-1</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>Kick In</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>Kick Out</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>Snare Top</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>Snare Bottom</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>Hi-Hat</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>Rack Tom 1</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>Rack Tom 2</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>Floor Tom</label></txchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>1073OPX-2</name>
+    <default_name>1073OPX-2</default_name>
+    <manufacturer_name>AMS Neve</manufacturer_name>
+    <model_name>1073OPX</model_name>
+    <friendly_name>1073OPX-2</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>OH L</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>OH R</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>Ride</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>Perc</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>Drum TB</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>Bass DI</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>Bass Amp</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>08</label></txchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>1073OPX-3</name>
+    <default_name>1073OPX-3</default_name>
+    <manufacturer_name>AMS Neve</manufacturer_name>
+    <model_name>1073OPX</model_name>
+    <friendly_name>1073OPX-3</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>Studio 1</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>Studio 2</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>Studio 3</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>Studio 4</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>Studio 5</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>Studio 6</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>Studio 7</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>Studio 8</label></txchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>1073OPX-4</name>
+    <default_name>1073OPX-4</default_name>
+    <manufacturer_name>AMS Neve</manufacturer_name>
+    <model_name>1073OPX</model_name>
+    <friendly_name>1073OPX-4</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>Studio 9</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>Studio 10</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>Studio 11</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>Studio 12</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>Studio 13</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>Studio 14</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>Studio 15</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>Studio 16</label></txchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>ULXD4Q-1</name>
+    <default_name>ULXD4Q-1</default_name>
+    <manufacturer_name>Shure</manufacturer_name>
+    <model_name>ULXD4Q</model_name>
+    <friendly_name>ULXD4Q-1</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>WL 1</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>WL 2</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>WL 3</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>WL 4</label></txchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>ULXD4Q-2</name>
+    <default_name>ULXD4Q-2</default_name>
+    <manufacturer_name>Shure</manufacturer_name>
+    <model_name>ULXD4Q</model_name>
+    <friendly_name>ULXD4Q-2</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>WL 5</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>WL 6</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>WL 7</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>WL 8</label></txchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>ULXD4Q-3</name>
+    <default_name>ULXD4Q-3</default_name>
+    <manufacturer_name>Shure</manufacturer_name>
+    <model_name>ULXD4Q</model_name>
+    <friendly_name>ULXD4Q-3</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>WL 9</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>WL 10</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>WL 11</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>WL 12</label></txchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>CG1</name>
+    <default_name>CG1</default_name>
+    <manufacturer_name>Audinate</manufacturer_name>
+    <model_name>Dante Virtual Soundcard</model_name>
+    <friendly_name>CG1</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>CG1 L</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>CG1 R</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>03</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>04</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>05</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>06</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>07</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>08</label></txchannel>
+    <txchannel danteId="9" mediaType="audio"><label>09</label></txchannel>
+    <txchannel danteId="10" mediaType="audio"><label>10</label></txchannel>
+    <txchannel danteId="11" mediaType="audio"><label>11</label></txchannel>
+    <txchannel danteId="12" mediaType="audio"><label>12</label></txchannel>
+    <txchannel danteId="13" mediaType="audio"><label>13</label></txchannel>
+    <txchannel danteId="14" mediaType="audio"><label>14</label></txchannel>
+    <txchannel danteId="15" mediaType="audio"><label>15</label></txchannel>
+    <txchannel danteId="16" mediaType="audio"><label>16</label></txchannel>
+    <rxchannel danteId="1" mediaType="audio"><label>01</label></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>02</label></rxchannel>
+    <rxchannel danteId="3" mediaType="audio"><label>03</label></rxchannel>
+    <rxchannel danteId="4" mediaType="audio"><label>04</label></rxchannel>
+    <rxchannel danteId="5" mediaType="audio"><label>05</label></rxchannel>
+    <rxchannel danteId="6" mediaType="audio"><label>06</label></rxchannel>
+    <rxchannel danteId="7" mediaType="audio"><label>07</label></rxchannel>
+    <rxchannel danteId="8" mediaType="audio"><label>08</label></rxchannel>
+    <rxchannel danteId="9" mediaType="audio"><label>09</label></rxchannel>
+    <rxchannel danteId="10" mediaType="audio"><label>10</label></rxchannel>
+    <rxchannel danteId="11" mediaType="audio"><label>11</label></rxchannel>
+    <rxchannel danteId="12" mediaType="audio"><label>12</label></rxchannel>
+    <rxchannel danteId="13" mediaType="audio"><label>13</label></rxchannel>
+    <rxchannel danteId="14" mediaType="audio"><label>14</label></rxchannel>
+    <rxchannel danteId="15" mediaType="audio"><label>15</label></rxchannel>
+    <rxchannel danteId="16" mediaType="audio"><label>16</label></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>CG2</name>
+    <default_name>CG2</default_name>
+    <manufacturer_name>Audinate</manufacturer_name>
+    <model_name>Dante Virtual Soundcard</model_name>
+    <friendly_name>CG2</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>CG2 L</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>CG2 R</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>03</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>04</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>05</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>06</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>07</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>08</label></txchannel>
+    <txchannel danteId="9" mediaType="audio"><label>09</label></txchannel>
+    <txchannel danteId="10" mediaType="audio"><label>10</label></txchannel>
+    <txchannel danteId="11" mediaType="audio"><label>11</label></txchannel>
+    <txchannel danteId="12" mediaType="audio"><label>12</label></txchannel>
+    <txchannel danteId="13" mediaType="audio"><label>13</label></txchannel>
+    <txchannel danteId="14" mediaType="audio"><label>14</label></txchannel>
+    <txchannel danteId="15" mediaType="audio"><label>15</label></txchannel>
+    <txchannel danteId="16" mediaType="audio"><label>16</label></txchannel>
+    <rxchannel danteId="1" mediaType="audio"><label>01</label></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>02</label></rxchannel>
+    <rxchannel danteId="3" mediaType="audio"><label>03</label></rxchannel>
+    <rxchannel danteId="4" mediaType="audio"><label>04</label></rxchannel>
+    <rxchannel danteId="5" mediaType="audio"><label>05</label></rxchannel>
+    <rxchannel danteId="6" mediaType="audio"><label>06</label></rxchannel>
+    <rxchannel danteId="7" mediaType="audio"><label>07</label></rxchannel>
+    <rxchannel danteId="8" mediaType="audio"><label>08</label></rxchannel>
+    <rxchannel danteId="9" mediaType="audio"><label>09</label></rxchannel>
+    <rxchannel danteId="10" mediaType="audio"><label>10</label></rxchannel>
+    <rxchannel danteId="11" mediaType="audio"><label>11</label></rxchannel>
+    <rxchannel danteId="12" mediaType="audio"><label>12</label></rxchannel>
+    <rxchannel danteId="13" mediaType="audio"><label>13</label></rxchannel>
+    <rxchannel danteId="14" mediaType="audio"><label>14</label></rxchannel>
+    <rxchannel danteId="15" mediaType="audio"><label>15</label></rxchannel>
+    <rxchannel danteId="16" mediaType="audio"><label>16</label></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>LED-PB</name>
+    <default_name>LED-PB</default_name>
+    <manufacturer_name>Audinate</manufacturer_name>
+    <model_name>Dante Virtual Soundcard</model_name>
+    <friendly_name>LED-PB</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>LED L</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>LED R</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>03</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>04</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>05</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>06</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>07</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>08</label></txchannel>
+    <txchannel danteId="9" mediaType="audio"><label>09</label></txchannel>
+    <txchannel danteId="10" mediaType="audio"><label>10</label></txchannel>
+    <txchannel danteId="11" mediaType="audio"><label>11</label></txchannel>
+    <txchannel danteId="12" mediaType="audio"><label>12</label></txchannel>
+    <txchannel danteId="13" mediaType="audio"><label>13</label></txchannel>
+    <txchannel danteId="14" mediaType="audio"><label>14</label></txchannel>
+    <txchannel danteId="15" mediaType="audio"><label>15</label></txchannel>
+    <txchannel danteId="16" mediaType="audio"><label>16</label></txchannel>
+    <rxchannel danteId="1" mediaType="audio"><label>01</label></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>02</label></rxchannel>
+    <rxchannel danteId="3" mediaType="audio"><label>03</label></rxchannel>
+    <rxchannel danteId="4" mediaType="audio"><label>04</label></rxchannel>
+    <rxchannel danteId="5" mediaType="audio"><label>05</label></rxchannel>
+    <rxchannel danteId="6" mediaType="audio"><label>06</label></rxchannel>
+    <rxchannel danteId="7" mediaType="audio"><label>07</label></rxchannel>
+    <rxchannel danteId="8" mediaType="audio"><label>08</label></rxchannel>
+    <rxchannel danteId="9" mediaType="audio"><label>09</label></rxchannel>
+    <rxchannel danteId="10" mediaType="audio"><label>10</label></rxchannel>
+    <rxchannel danteId="11" mediaType="audio"><label>11</label></rxchannel>
+    <rxchannel danteId="12" mediaType="audio"><label>12</label></rxchannel>
+    <rxchannel danteId="13" mediaType="audio"><label>13</label></rxchannel>
+    <rxchannel danteId="14" mediaType="audio"><label>14</label></rxchannel>
+    <rxchannel danteId="15" mediaType="audio"><label>15</label></rxchannel>
+    <rxchannel danteId="16" mediaType="audio"><label>16</label></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>Ultrix</name>
+    <default_name>Ultrix</default_name>
+    <manufacturer_name>Ross Video</manufacturer_name>
+    <model_name>Ultrix</model_name>
+    <friendly_name>Ultrix</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>Ultrix L</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>Ultrix R</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>03</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>04</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>05</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>06</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>07</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>08</label></txchannel>
+    <txchannel danteId="9" mediaType="audio"><label>09</label></txchannel>
+    <txchannel danteId="10" mediaType="audio"><label>10</label></txchannel>
+    <txchannel danteId="11" mediaType="audio"><label>11</label></txchannel>
+    <txchannel danteId="12" mediaType="audio"><label>12</label></txchannel>
+    <txchannel danteId="13" mediaType="audio"><label>13</label></txchannel>
+    <txchannel danteId="14" mediaType="audio"><label>14</label></txchannel>
+    <txchannel danteId="15" mediaType="audio"><label>15</label></txchannel>
+    <txchannel danteId="16" mediaType="audio"><label>16</label></txchannel>
+    <rxchannel danteId="1" mediaType="audio"><label>01</label></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>02</label></rxchannel>
+    <rxchannel danteId="3" mediaType="audio"><label>03</label></rxchannel>
+    <rxchannel danteId="4" mediaType="audio"><label>04</label></rxchannel>
+    <rxchannel danteId="5" mediaType="audio"><label>05</label></rxchannel>
+    <rxchannel danteId="6" mediaType="audio"><label>06</label></rxchannel>
+    <rxchannel danteId="7" mediaType="audio"><label>07</label></rxchannel>
+    <rxchannel danteId="8" mediaType="audio"><label>08</label></rxchannel>
+    <rxchannel danteId="9" mediaType="audio"><label>09</label></rxchannel>
+    <rxchannel danteId="10" mediaType="audio"><label>10</label></rxchannel>
+    <rxchannel danteId="11" mediaType="audio"><label>11</label></rxchannel>
+    <rxchannel danteId="12" mediaType="audio"><label>12</label></rxchannel>
+    <rxchannel danteId="13" mediaType="audio"><label>13</label></rxchannel>
+    <rxchannel danteId="14" mediaType="audio"><label>14</label></rxchannel>
+    <rxchannel danteId="15" mediaType="audio"><label>15</label></rxchannel>
+    <rxchannel danteId="16" mediaType="audio"><label>16</label></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>FOH-PC</name>
+    <default_name>FOH-PC</default_name>
+    <manufacturer_name>Audinate</manufacturer_name>
+    <model_name>Dante Virtual Soundcard</model_name>
+    <friendly_name>FOH-PC</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>Waves Ret 1</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>Waves Ret 2</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>Waves Ret 3</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>Waves Ret 4</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>Waves Ret 5</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>Waves Ret 6</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>Waves Ret 7</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>Waves Ret 8</label></txchannel>
+    <txchannel danteId="9" mediaType="audio"><label>Waves Ret 9</label></txchannel>
+    <txchannel danteId="10" mediaType="audio"><label>Waves Ret 10</label></txchannel>
+    <txchannel danteId="11" mediaType="audio"><label>Waves Ret 11</label></txchannel>
+    <txchannel danteId="12" mediaType="audio"><label>Waves Ret 12</label></txchannel>
+    <txchannel danteId="13" mediaType="audio"><label>Waves Ret 13</label></txchannel>
+    <txchannel danteId="14" mediaType="audio"><label>Waves Ret 14</label></txchannel>
+    <txchannel danteId="15" mediaType="audio"><label>Waves Ret 15</label></txchannel>
+    <txchannel danteId="16" mediaType="audio"><label>Waves Ret 16</label></txchannel>
+    <txchannel danteId="17" mediaType="audio"><label>Waves Ret 17</label></txchannel>
+    <txchannel danteId="18" mediaType="audio"><label>Waves Ret 18</label></txchannel>
+    <txchannel danteId="19" mediaType="audio"><label>19</label></txchannel>
+    <txchannel danteId="20" mediaType="audio"><label>20</label></txchannel>
+    <txchannel danteId="21" mediaType="audio"><label>21</label></txchannel>
+    <txchannel danteId="22" mediaType="audio"><label>22</label></txchannel>
+    <txchannel danteId="23" mediaType="audio"><label>23</label></txchannel>
+    <txchannel danteId="24" mediaType="audio"><label>24</label></txchannel>
+    <txchannel danteId="25" mediaType="audio"><label>25</label></txchannel>
+    <txchannel danteId="26" mediaType="audio"><label>26</label></txchannel>
+    <txchannel danteId="27" mediaType="audio"><label>27</label></txchannel>
+    <txchannel danteId="28" mediaType="audio"><label>28</label></txchannel>
+    <txchannel danteId="29" mediaType="audio"><label>29</label></txchannel>
+    <txchannel danteId="30" mediaType="audio"><label>30</label></txchannel>
+    <txchannel danteId="31" mediaType="audio"><label>31</label></txchannel>
+    <txchannel danteId="32" mediaType="audio"><label>32</label></txchannel>
+    <txchannel danteId="33" mediaType="audio"><label>33</label></txchannel>
+    <txchannel danteId="34" mediaType="audio"><label>34</label></txchannel>
+    <txchannel danteId="35" mediaType="audio"><label>35</label></txchannel>
+    <txchannel danteId="36" mediaType="audio"><label>36</label></txchannel>
+    <txchannel danteId="37" mediaType="audio"><label>37</label></txchannel>
+    <txchannel danteId="38" mediaType="audio"><label>38</label></txchannel>
+    <txchannel danteId="39" mediaType="audio"><label>39</label></txchannel>
+    <txchannel danteId="40" mediaType="audio"><label>40</label></txchannel>
+    <txchannel danteId="41" mediaType="audio"><label>41</label></txchannel>
+    <txchannel danteId="42" mediaType="audio"><label>42</label></txchannel>
+    <txchannel danteId="43" mediaType="audio"><label>43</label></txchannel>
+    <txchannel danteId="44" mediaType="audio"><label>44</label></txchannel>
+    <txchannel danteId="45" mediaType="audio"><label>45</label></txchannel>
+    <txchannel danteId="46" mediaType="audio"><label>46</label></txchannel>
+    <txchannel danteId="47" mediaType="audio"><label>47</label></txchannel>
+    <txchannel danteId="48" mediaType="audio"><label>48</label></txchannel>
+    <txchannel danteId="49" mediaType="audio"><label>49</label></txchannel>
+    <txchannel danteId="50" mediaType="audio"><label>50</label></txchannel>
+    <txchannel danteId="51" mediaType="audio"><label>51</label></txchannel>
+    <txchannel danteId="52" mediaType="audio"><label>52</label></txchannel>
+    <txchannel danteId="53" mediaType="audio"><label>53</label></txchannel>
+    <txchannel danteId="54" mediaType="audio"><label>54</label></txchannel>
+    <txchannel danteId="55" mediaType="audio"><label>55</label></txchannel>
+    <txchannel danteId="56" mediaType="audio"><label>56</label></txchannel>
+    <txchannel danteId="57" mediaType="audio"><label>57</label></txchannel>
+    <txchannel danteId="58" mediaType="audio"><label>58</label></txchannel>
+    <txchannel danteId="59" mediaType="audio"><label>59</label></txchannel>
+    <txchannel danteId="60" mediaType="audio"><label>60</label></txchannel>
+    <txchannel danteId="61" mediaType="audio"><label>61</label></txchannel>
+    <txchannel danteId="62" mediaType="audio"><label>62</label></txchannel>
+    <txchannel danteId="63" mediaType="audio"><label>63</label></txchannel>
+    <txchannel danteId="64" mediaType="audio"><label>64</label></txchannel>
+    <rxchannel danteId="1" mediaType="audio"><label>Waves In 1</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 1</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>Waves In 2</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 2</subscribed_channel></rxchannel>
+    <rxchannel danteId="3" mediaType="audio"><label>Waves In 3</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 3</subscribed_channel></rxchannel>
+    <rxchannel danteId="4" mediaType="audio"><label>Waves In 4</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 4</subscribed_channel></rxchannel>
+    <rxchannel danteId="5" mediaType="audio"><label>Waves In 5</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 5</subscribed_channel></rxchannel>
+    <rxchannel danteId="6" mediaType="audio"><label>Waves In 6</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 6</subscribed_channel></rxchannel>
+    <rxchannel danteId="7" mediaType="audio"><label>Waves In 7</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 7</subscribed_channel></rxchannel>
+    <rxchannel danteId="8" mediaType="audio"><label>Waves In 8</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 8</subscribed_channel></rxchannel>
+    <rxchannel danteId="9" mediaType="audio"><label>Waves In 9</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 9</subscribed_channel></rxchannel>
+    <rxchannel danteId="10" mediaType="audio"><label>Waves In 10</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 10</subscribed_channel></rxchannel>
+    <rxchannel danteId="11" mediaType="audio"><label>Waves In 11</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 11</subscribed_channel></rxchannel>
+    <rxchannel danteId="12" mediaType="audio"><label>Waves In 12</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 12</subscribed_channel></rxchannel>
+    <rxchannel danteId="13" mediaType="audio"><label>Waves In 13</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 13</subscribed_channel></rxchannel>
+    <rxchannel danteId="14" mediaType="audio"><label>Waves In 14</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 14</subscribed_channel></rxchannel>
+    <rxchannel danteId="15" mediaType="audio"><label>Waves In 15</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 15</subscribed_channel></rxchannel>
+    <rxchannel danteId="16" mediaType="audio"><label>Waves In 16</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 16</subscribed_channel></rxchannel>
+    <rxchannel danteId="17" mediaType="audio"><label>Waves In 17</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 17</subscribed_channel></rxchannel>
+    <rxchannel danteId="18" mediaType="audio"><label>Waves In 18</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 18</subscribed_channel></rxchannel>
+    <rxchannel danteId="19" mediaType="audio"><label>19</label></rxchannel>
+    <rxchannel danteId="20" mediaType="audio"><label>20</label></rxchannel>
+    <rxchannel danteId="21" mediaType="audio"><label>21</label></rxchannel>
+    <rxchannel danteId="22" mediaType="audio"><label>22</label></rxchannel>
+    <rxchannel danteId="23" mediaType="audio"><label>23</label></rxchannel>
+    <rxchannel danteId="24" mediaType="audio"><label>24</label></rxchannel>
+    <rxchannel danteId="25" mediaType="audio"><label>25</label></rxchannel>
+    <rxchannel danteId="26" mediaType="audio"><label>26</label></rxchannel>
+    <rxchannel danteId="27" mediaType="audio"><label>27</label></rxchannel>
+    <rxchannel danteId="28" mediaType="audio"><label>28</label></rxchannel>
+    <rxchannel danteId="29" mediaType="audio"><label>29</label></rxchannel>
+    <rxchannel danteId="30" mediaType="audio"><label>30</label></rxchannel>
+    <rxchannel danteId="31" mediaType="audio"><label>31</label></rxchannel>
+    <rxchannel danteId="32" mediaType="audio"><label>32</label></rxchannel>
+    <rxchannel danteId="33" mediaType="audio"><label>33</label></rxchannel>
+    <rxchannel danteId="34" mediaType="audio"><label>34</label></rxchannel>
+    <rxchannel danteId="35" mediaType="audio"><label>35</label></rxchannel>
+    <rxchannel danteId="36" mediaType="audio"><label>36</label></rxchannel>
+    <rxchannel danteId="37" mediaType="audio"><label>37</label></rxchannel>
+    <rxchannel danteId="38" mediaType="audio"><label>38</label></rxchannel>
+    <rxchannel danteId="39" mediaType="audio"><label>39</label></rxchannel>
+    <rxchannel danteId="40" mediaType="audio"><label>40</label></rxchannel>
+    <rxchannel danteId="41" mediaType="audio"><label>41</label></rxchannel>
+    <rxchannel danteId="42" mediaType="audio"><label>42</label></rxchannel>
+    <rxchannel danteId="43" mediaType="audio"><label>43</label></rxchannel>
+    <rxchannel danteId="44" mediaType="audio"><label>44</label></rxchannel>
+    <rxchannel danteId="45" mediaType="audio"><label>45</label></rxchannel>
+    <rxchannel danteId="46" mediaType="audio"><label>46</label></rxchannel>
+    <rxchannel danteId="47" mediaType="audio"><label>47</label></rxchannel>
+    <rxchannel danteId="48" mediaType="audio"><label>48</label></rxchannel>
+    <rxchannel danteId="49" mediaType="audio"><label>49</label></rxchannel>
+    <rxchannel danteId="50" mediaType="audio"><label>50</label></rxchannel>
+    <rxchannel danteId="51" mediaType="audio"><label>51</label></rxchannel>
+    <rxchannel danteId="52" mediaType="audio"><label>52</label></rxchannel>
+    <rxchannel danteId="53" mediaType="audio"><label>53</label></rxchannel>
+    <rxchannel danteId="54" mediaType="audio"><label>54</label></rxchannel>
+    <rxchannel danteId="55" mediaType="audio"><label>55</label></rxchannel>
+    <rxchannel danteId="56" mediaType="audio"><label>56</label></rxchannel>
+    <rxchannel danteId="57" mediaType="audio"><label>57</label></rxchannel>
+    <rxchannel danteId="58" mediaType="audio"><label>58</label></rxchannel>
+    <rxchannel danteId="59" mediaType="audio"><label>59</label></rxchannel>
+    <rxchannel danteId="60" mediaType="audio"><label>60</label></rxchannel>
+    <rxchannel danteId="61" mediaType="audio"><label>61</label></rxchannel>
+    <rxchannel danteId="62" mediaType="audio"><label>62</label></rxchannel>
+    <rxchannel danteId="63" mediaType="audio"><label>63</label></rxchannel>
+    <rxchannel danteId="64" mediaType="audio"><label>64</label></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>Ableton-PB</name>
+    <default_name>Ableton-PB</default_name>
+    <manufacturer_name>Audinate</manufacturer_name>
+    <model_name>Dante Virtual Soundcard</model_name>
+    <friendly_name>Ableton-PB</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>Trax 1</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>Trax 2</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>Click</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>Guide</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>Trax 5</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>Trax 6</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>Trax 7</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>Trax 8</label></txchannel>
+    <txchannel danteId="9" mediaType="audio"><label>Trax 9</label></txchannel>
+    <txchannel danteId="10" mediaType="audio"><label>10</label></txchannel>
+    <txchannel danteId="11" mediaType="audio"><label>11</label></txchannel>
+    <txchannel danteId="12" mediaType="audio"><label>12</label></txchannel>
+    <txchannel danteId="13" mediaType="audio"><label>13</label></txchannel>
+    <txchannel danteId="14" mediaType="audio"><label>14</label></txchannel>
+    <txchannel danteId="15" mediaType="audio"><label>15</label></txchannel>
+    <txchannel danteId="16" mediaType="audio"><label>16</label></txchannel>
+    <rxchannel danteId="1" mediaType="audio"><label>01</label></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>02</label></rxchannel>
+    <rxchannel danteId="3" mediaType="audio"><label>03</label></rxchannel>
+    <rxchannel danteId="4" mediaType="audio"><label>04</label></rxchannel>
+    <rxchannel danteId="5" mediaType="audio"><label>05</label></rxchannel>
+    <rxchannel danteId="6" mediaType="audio"><label>06</label></rxchannel>
+    <rxchannel danteId="7" mediaType="audio"><label>07</label></rxchannel>
+    <rxchannel danteId="8" mediaType="audio"><label>08</label></rxchannel>
+    <rxchannel danteId="9" mediaType="audio"><label>09</label></rxchannel>
+    <rxchannel danteId="10" mediaType="audio"><label>10</label></rxchannel>
+    <rxchannel danteId="11" mediaType="audio"><label>11</label></rxchannel>
+    <rxchannel danteId="12" mediaType="audio"><label>12</label></rxchannel>
+    <rxchannel danteId="13" mediaType="audio"><label>13</label></rxchannel>
+    <rxchannel danteId="14" mediaType="audio"><label>14</label></rxchannel>
+    <rxchannel danteId="15" mediaType="audio"><label>15</label></rxchannel>
+    <rxchannel danteId="16" mediaType="audio"><label>16</label></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>ProTools-PC</name>
+    <default_name>ProTools-PC</default_name>
+    <manufacturer_name>Audinate</manufacturer_name>
+    <model_name>Dante Virtual Soundcard</model_name>
+    <friendly_name>ProTools-PC</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>01</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>02</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>03</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>04</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>05</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>06</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>07</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>08</label></txchannel>
+    <txchannel danteId="9" mediaType="audio"><label>09</label></txchannel>
+    <txchannel danteId="10" mediaType="audio"><label>10</label></txchannel>
+    <txchannel danteId="11" mediaType="audio"><label>11</label></txchannel>
+    <txchannel danteId="12" mediaType="audio"><label>12</label></txchannel>
+    <txchannel danteId="13" mediaType="audio"><label>13</label></txchannel>
+    <txchannel danteId="14" mediaType="audio"><label>14</label></txchannel>
+    <txchannel danteId="15" mediaType="audio"><label>15</label></txchannel>
+    <txchannel danteId="16" mediaType="audio"><label>16</label></txchannel>
+    <txchannel danteId="17" mediaType="audio"><label>17</label></txchannel>
+    <txchannel danteId="18" mediaType="audio"><label>18</label></txchannel>
+    <txchannel danteId="19" mediaType="audio"><label>19</label></txchannel>
+    <txchannel danteId="20" mediaType="audio"><label>20</label></txchannel>
+    <txchannel danteId="21" mediaType="audio"><label>21</label></txchannel>
+    <txchannel danteId="22" mediaType="audio"><label>22</label></txchannel>
+    <txchannel danteId="23" mediaType="audio"><label>23</label></txchannel>
+    <txchannel danteId="24" mediaType="audio"><label>24</label></txchannel>
+    <txchannel danteId="25" mediaType="audio"><label>25</label></txchannel>
+    <txchannel danteId="26" mediaType="audio"><label>26</label></txchannel>
+    <txchannel danteId="27" mediaType="audio"><label>27</label></txchannel>
+    <txchannel danteId="28" mediaType="audio"><label>28</label></txchannel>
+    <txchannel danteId="29" mediaType="audio"><label>29</label></txchannel>
+    <txchannel danteId="30" mediaType="audio"><label>30</label></txchannel>
+    <txchannel danteId="31" mediaType="audio"><label>31</label></txchannel>
+    <txchannel danteId="32" mediaType="audio"><label>32</label></txchannel>
+    <rxchannel danteId="1" mediaType="audio"><label>BCast L</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>BCast L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>BCast R</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>BCast R</subscribed_channel></rxchannel>
+    <rxchannel danteId="3" mediaType="audio"><label>03</label></rxchannel>
+    <rxchannel danteId="4" mediaType="audio"><label>04</label></rxchannel>
+    <rxchannel danteId="5" mediaType="audio"><label>05</label></rxchannel>
+    <rxchannel danteId="6" mediaType="audio"><label>06</label></rxchannel>
+    <rxchannel danteId="7" mediaType="audio"><label>07</label></rxchannel>
+    <rxchannel danteId="8" mediaType="audio"><label>08</label></rxchannel>
+    <rxchannel danteId="9" mediaType="audio"><label>09</label></rxchannel>
+    <rxchannel danteId="10" mediaType="audio"><label>10</label></rxchannel>
+    <rxchannel danteId="11" mediaType="audio"><label>11</label></rxchannel>
+    <rxchannel danteId="12" mediaType="audio"><label>12</label></rxchannel>
+    <rxchannel danteId="13" mediaType="audio"><label>13</label></rxchannel>
+    <rxchannel danteId="14" mediaType="audio"><label>14</label></rxchannel>
+    <rxchannel danteId="15" mediaType="audio"><label>15</label></rxchannel>
+    <rxchannel danteId="16" mediaType="audio"><label>16</label></rxchannel>
+    <rxchannel danteId="17" mediaType="audio"><label>17</label></rxchannel>
+    <rxchannel danteId="18" mediaType="audio"><label>18</label></rxchannel>
+    <rxchannel danteId="19" mediaType="audio"><label>19</label></rxchannel>
+    <rxchannel danteId="20" mediaType="audio"><label>20</label></rxchannel>
+    <rxchannel danteId="21" mediaType="audio"><label>21</label></rxchannel>
+    <rxchannel danteId="22" mediaType="audio"><label>22</label></rxchannel>
+    <rxchannel danteId="23" mediaType="audio"><label>23</label></rxchannel>
+    <rxchannel danteId="24" mediaType="audio"><label>24</label></rxchannel>
+    <rxchannel danteId="25" mediaType="audio"><label>25</label></rxchannel>
+    <rxchannel danteId="26" mediaType="audio"><label>26</label></rxchannel>
+    <rxchannel danteId="27" mediaType="audio"><label>27</label></rxchannel>
+    <rxchannel danteId="28" mediaType="audio"><label>28</label></rxchannel>
+    <rxchannel danteId="29" mediaType="audio"><label>29</label></rxchannel>
+    <rxchannel danteId="30" mediaType="audio"><label>30</label></rxchannel>
+    <rxchannel danteId="31" mediaType="audio"><label>31</label></rxchannel>
+    <rxchannel danteId="32" mediaType="audio"><label>32</label></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>Rec1-PC</name>
+    <default_name>Rec1-PC</default_name>
+    <manufacturer_name>Audinate</manufacturer_name>
+    <model_name>Dante Virtual Soundcard</model_name>
+    <friendly_name>Rec1-PC</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>01</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>02</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>03</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>04</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>05</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>06</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>07</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>08</label></txchannel>
+    <txchannel danteId="9" mediaType="audio"><label>09</label></txchannel>
+    <txchannel danteId="10" mediaType="audio"><label>10</label></txchannel>
+    <txchannel danteId="11" mediaType="audio"><label>11</label></txchannel>
+    <txchannel danteId="12" mediaType="audio"><label>12</label></txchannel>
+    <txchannel danteId="13" mediaType="audio"><label>13</label></txchannel>
+    <txchannel danteId="14" mediaType="audio"><label>14</label></txchannel>
+    <txchannel danteId="15" mediaType="audio"><label>15</label></txchannel>
+    <txchannel danteId="16" mediaType="audio"><label>16</label></txchannel>
+    <txchannel danteId="17" mediaType="audio"><label>17</label></txchannel>
+    <txchannel danteId="18" mediaType="audio"><label>18</label></txchannel>
+    <txchannel danteId="19" mediaType="audio"><label>19</label></txchannel>
+    <txchannel danteId="20" mediaType="audio"><label>20</label></txchannel>
+    <txchannel danteId="21" mediaType="audio"><label>21</label></txchannel>
+    <txchannel danteId="22" mediaType="audio"><label>22</label></txchannel>
+    <txchannel danteId="23" mediaType="audio"><label>23</label></txchannel>
+    <txchannel danteId="24" mediaType="audio"><label>24</label></txchannel>
+    <txchannel danteId="25" mediaType="audio"><label>25</label></txchannel>
+    <txchannel danteId="26" mediaType="audio"><label>26</label></txchannel>
+    <txchannel danteId="27" mediaType="audio"><label>27</label></txchannel>
+    <txchannel danteId="28" mediaType="audio"><label>28</label></txchannel>
+    <txchannel danteId="29" mediaType="audio"><label>29</label></txchannel>
+    <txchannel danteId="30" mediaType="audio"><label>30</label></txchannel>
+    <txchannel danteId="31" mediaType="audio"><label>31</label></txchannel>
+    <txchannel danteId="32" mediaType="audio"><label>32</label></txchannel>
+    <rxchannel danteId="1" mediaType="audio"><label>01</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 1</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>02</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 2</subscribed_channel></rxchannel>
+    <rxchannel danteId="3" mediaType="audio"><label>03</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 3</subscribed_channel></rxchannel>
+    <rxchannel danteId="4" mediaType="audio"><label>04</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 4</subscribed_channel></rxchannel>
+    <rxchannel danteId="5" mediaType="audio"><label>05</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 5</subscribed_channel></rxchannel>
+    <rxchannel danteId="6" mediaType="audio"><label>06</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 6</subscribed_channel></rxchannel>
+    <rxchannel danteId="7" mediaType="audio"><label>07</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 7</subscribed_channel></rxchannel>
+    <rxchannel danteId="8" mediaType="audio"><label>08</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 8</subscribed_channel></rxchannel>
+    <rxchannel danteId="9" mediaType="audio"><label>09</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 9</subscribed_channel></rxchannel>
+    <rxchannel danteId="10" mediaType="audio"><label>10</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 10</subscribed_channel></rxchannel>
+    <rxchannel danteId="11" mediaType="audio"><label>11</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 11</subscribed_channel></rxchannel>
+    <rxchannel danteId="12" mediaType="audio"><label>12</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 12</subscribed_channel></rxchannel>
+    <rxchannel danteId="13" mediaType="audio"><label>13</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 13</subscribed_channel></rxchannel>
+    <rxchannel danteId="14" mediaType="audio"><label>14</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 14</subscribed_channel></rxchannel>
+    <rxchannel danteId="15" mediaType="audio"><label>15</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 15</subscribed_channel></rxchannel>
+    <rxchannel danteId="16" mediaType="audio"><label>16</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 16</subscribed_channel></rxchannel>
+    <rxchannel danteId="17" mediaType="audio"><label>17</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 17</subscribed_channel></rxchannel>
+    <rxchannel danteId="18" mediaType="audio"><label>18</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 18</subscribed_channel></rxchannel>
+    <rxchannel danteId="19" mediaType="audio"><label>19</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 19</subscribed_channel></rxchannel>
+    <rxchannel danteId="20" mediaType="audio"><label>20</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 20</subscribed_channel></rxchannel>
+    <rxchannel danteId="21" mediaType="audio"><label>21</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 21</subscribed_channel></rxchannel>
+    <rxchannel danteId="22" mediaType="audio"><label>22</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 22</subscribed_channel></rxchannel>
+    <rxchannel danteId="23" mediaType="audio"><label>23</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 23</subscribed_channel></rxchannel>
+    <rxchannel danteId="24" mediaType="audio"><label>24</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 24</subscribed_channel></rxchannel>
+    <rxchannel danteId="25" mediaType="audio"><label>25</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 25</subscribed_channel></rxchannel>
+    <rxchannel danteId="26" mediaType="audio"><label>26</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 26</subscribed_channel></rxchannel>
+    <rxchannel danteId="27" mediaType="audio"><label>27</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 27</subscribed_channel></rxchannel>
+    <rxchannel danteId="28" mediaType="audio"><label>28</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 28</subscribed_channel></rxchannel>
+    <rxchannel danteId="29" mediaType="audio"><label>29</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 29</subscribed_channel></rxchannel>
+    <rxchannel danteId="30" mediaType="audio"><label>30</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 30</subscribed_channel></rxchannel>
+    <rxchannel danteId="31" mediaType="audio"><label>31</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 31</subscribed_channel></rxchannel>
+    <rxchannel danteId="32" mediaType="audio"><label>32</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>DO 32</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>Rec2-PC</name>
+    <default_name>Rec2-PC</default_name>
+    <manufacturer_name>Audinate</manufacturer_name>
+    <model_name>Dante Virtual Soundcard</model_name>
+    <friendly_name>Rec2-PC</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>01</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>02</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>03</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>04</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>05</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>06</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>07</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>08</label></txchannel>
+    <txchannel danteId="9" mediaType="audio"><label>09</label></txchannel>
+    <txchannel danteId="10" mediaType="audio"><label>10</label></txchannel>
+    <txchannel danteId="11" mediaType="audio"><label>11</label></txchannel>
+    <txchannel danteId="12" mediaType="audio"><label>12</label></txchannel>
+    <txchannel danteId="13" mediaType="audio"><label>13</label></txchannel>
+    <txchannel danteId="14" mediaType="audio"><label>14</label></txchannel>
+    <txchannel danteId="15" mediaType="audio"><label>15</label></txchannel>
+    <txchannel danteId="16" mediaType="audio"><label>16</label></txchannel>
+    <txchannel danteId="17" mediaType="audio"><label>17</label></txchannel>
+    <txchannel danteId="18" mediaType="audio"><label>18</label></txchannel>
+    <txchannel danteId="19" mediaType="audio"><label>19</label></txchannel>
+    <txchannel danteId="20" mediaType="audio"><label>20</label></txchannel>
+    <txchannel danteId="21" mediaType="audio"><label>21</label></txchannel>
+    <txchannel danteId="22" mediaType="audio"><label>22</label></txchannel>
+    <txchannel danteId="23" mediaType="audio"><label>23</label></txchannel>
+    <txchannel danteId="24" mediaType="audio"><label>24</label></txchannel>
+    <txchannel danteId="25" mediaType="audio"><label>25</label></txchannel>
+    <txchannel danteId="26" mediaType="audio"><label>26</label></txchannel>
+    <txchannel danteId="27" mediaType="audio"><label>27</label></txchannel>
+    <txchannel danteId="28" mediaType="audio"><label>28</label></txchannel>
+    <txchannel danteId="29" mediaType="audio"><label>29</label></txchannel>
+    <txchannel danteId="30" mediaType="audio"><label>30</label></txchannel>
+    <txchannel danteId="31" mediaType="audio"><label>31</label></txchannel>
+    <txchannel danteId="32" mediaType="audio"><label>32</label></txchannel>
+    <rxchannel danteId="1" mediaType="audio"><label>01</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>EG1 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>02</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>EG1 R</subscribed_channel></rxchannel>
+    <rxchannel danteId="3" mediaType="audio"><label>03</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>EG2 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="4" mediaType="audio"><label>04</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>EG2 R</subscribed_channel></rxchannel>
+    <rxchannel danteId="5" mediaType="audio"><label>05</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys 1 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="6" mediaType="audio"><label>06</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys 1 R</subscribed_channel></rxchannel>
+    <rxchannel danteId="7" mediaType="audio"><label>07</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys 2 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="8" mediaType="audio"><label>08</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys 2 R</subscribed_channel></rxchannel>
+    <rxchannel danteId="9" mediaType="audio"><label>09</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Keys TB</subscribed_channel></rxchannel>
+    <rxchannel danteId="10" mediaType="audio"><label>10</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 1</subscribed_channel></rxchannel>
+    <rxchannel danteId="11" mediaType="audio"><label>11</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 2</subscribed_channel></rxchannel>
+    <rxchannel danteId="12" mediaType="audio"><label>12</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 3</subscribed_channel></rxchannel>
+    <rxchannel danteId="13" mediaType="audio"><label>13</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 4</subscribed_channel></rxchannel>
+    <rxchannel danteId="14" mediaType="audio"><label>14</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 5</subscribed_channel></rxchannel>
+    <rxchannel danteId="15" mediaType="audio"><label>15</label><subscribed_device>Rio3224</subscribed_device><subscribed_channel>Crowd 6</subscribed_channel></rxchannel>
+    <rxchannel danteId="16" mediaType="audio"><label>16</label></rxchannel>
+    <rxchannel danteId="17" mediaType="audio"><label>17</label></rxchannel>
+    <rxchannel danteId="18" mediaType="audio"><label>18</label></rxchannel>
+    <rxchannel danteId="19" mediaType="audio"><label>19</label></rxchannel>
+    <rxchannel danteId="20" mediaType="audio"><label>20</label></rxchannel>
+    <rxchannel danteId="21" mediaType="audio"><label>21</label></rxchannel>
+    <rxchannel danteId="22" mediaType="audio"><label>22</label></rxchannel>
+    <rxchannel danteId="23" mediaType="audio"><label>23</label></rxchannel>
+    <rxchannel danteId="24" mediaType="audio"><label>24</label></rxchannel>
+    <rxchannel danteId="25" mediaType="audio"><label>25</label></rxchannel>
+    <rxchannel danteId="26" mediaType="audio"><label>26</label></rxchannel>
+    <rxchannel danteId="27" mediaType="audio"><label>27</label></rxchannel>
+    <rxchannel danteId="28" mediaType="audio"><label>28</label></rxchannel>
+    <rxchannel danteId="29" mediaType="audio"><label>29</label></rxchannel>
+    <rxchannel danteId="30" mediaType="audio"><label>30</label></rxchannel>
+    <rxchannel danteId="31" mediaType="audio"><label>31</label></rxchannel>
+    <rxchannel danteId="32" mediaType="audio"><label>32</label></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>AM2-1</name>
+    <default_name>AM2-1</default_name>
+    <manufacturer_name>Focusrite</manufacturer_name>
+    <model_name>RedNet AM2</model_name>
+    <friendly_name>AM2-1</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <rxchannel danteId="1" mediaType="audio"><label>L</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>IEM 1 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>R</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>IEM 1 R</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>AM2-2</name>
+    <default_name>AM2-2</default_name>
+    <manufacturer_name>Focusrite</manufacturer_name>
+    <model_name>RedNet AM2</model_name>
+    <friendly_name>AM2-2</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <rxchannel danteId="1" mediaType="audio"><label>L</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>IEM 2 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>R</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>IEM 2 R</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>AM2-3</name>
+    <default_name>AM2-3</default_name>
+    <manufacturer_name>Focusrite</manufacturer_name>
+    <model_name>RedNet AM2</model_name>
+    <friendly_name>AM2-3</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <rxchannel danteId="1" mediaType="audio"><label>L</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>IEM 3 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>R</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>IEM 3 R</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>AM2-4</name>
+    <default_name>AM2-4</default_name>
+    <manufacturer_name>Focusrite</manufacturer_name>
+    <model_name>RedNet AM2</model_name>
+    <friendly_name>AM2-4</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <rxchannel danteId="1" mediaType="audio"><label>L</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>IEM 4 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>R</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>IEM 4 R</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>AM2-5</name>
+    <default_name>AM2-5</default_name>
+    <manufacturer_name>Focusrite</manufacturer_name>
+    <model_name>RedNet AM2</model_name>
+    <friendly_name>AM2-5</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <rxchannel danteId="1" mediaType="audio"><label>L</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>IEM 5 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>R</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>IEM 5 R</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>AM2-6</name>
+    <default_name>AM2-6</default_name>
+    <manufacturer_name>Focusrite</manufacturer_name>
+    <model_name>RedNet AM2</model_name>
+    <friendly_name>AM2-6</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <rxchannel danteId="1" mediaType="audio"><label>L</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>IEM 6 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>R</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>IEM 6 R</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>AM2-BC</name>
+    <default_name>AM2-BC</default_name>
+    <manufacturer_name>Focusrite</manufacturer_name>
+    <model_name>RedNet AM2</model_name>
+    <friendly_name>AM2-BC</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <rxchannel danteId="1" mediaType="audio"><label>L</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>BC Mon L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>R</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>BC Mon R</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>AM2-Artist</name>
+    <default_name>AM2-Artist</default_name>
+    <manufacturer_name>Focusrite</manufacturer_name>
+    <model_name>RedNet AM2</model_name>
+    <friendly_name>AM2-Artist</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <rxchannel danteId="1" mediaType="audio"><label>L</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>Artist L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>R</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>Artist R</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>PSM-1</name>
+    <default_name>PSM-1</default_name>
+    <manufacturer_name>Shure</manufacturer_name>
+    <model_name>Axient Digital PSM</model_name>
+    <friendly_name>PSM-1</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <rxchannel danteId="1" mediaType="audio"><label>L</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>PSM 1 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>R</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>PSM 1 R</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>PSM-2</name>
+    <default_name>PSM-2</default_name>
+    <manufacturer_name>Shure</manufacturer_name>
+    <model_name>Axient Digital PSM</model_name>
+    <friendly_name>PSM-2</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <rxchannel danteId="1" mediaType="audio"><label>L</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>PSM 2 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>R</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>PSM 2 R</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>PSM-3</name>
+    <default_name>PSM-3</default_name>
+    <manufacturer_name>Shure</manufacturer_name>
+    <model_name>Axient Digital PSM</model_name>
+    <friendly_name>PSM-3</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <rxchannel danteId="1" mediaType="audio"><label>L</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>PSM 3 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>R</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>PSM 3 R</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>PSM-4</name>
+    <default_name>PSM-4</default_name>
+    <manufacturer_name>Shure</manufacturer_name>
+    <model_name>Axient Digital PSM</model_name>
+    <friendly_name>PSM-4</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <rxchannel danteId="1" mediaType="audio"><label>L</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>PSM 4 L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>R</label><subscribed_device>MON-QL5</subscribed_device><subscribed_channel>PSM 4 R</subscribed_channel></rxchannel>
+  </device>
+  <device>
+    <captureInfo />
+    <name>X32-Rack</name>
+    <default_name>X32-Rack</default_name>
+    <manufacturer_name>Behringer</manufacturer_name>
+    <model_name>X32 Rack (X-DANTE)</model_name>
+    <friendly_name>X32-Rack</friendly_name>
+    <samplerate>48000</samplerate>
+    <encoding>24</encoding>
+    <unicast_latency>1000</unicast_latency>
+    <txchannel danteId="1" mediaType="audio"><label>01</label></txchannel>
+    <txchannel danteId="2" mediaType="audio"><label>02</label></txchannel>
+    <txchannel danteId="3" mediaType="audio"><label>03</label></txchannel>
+    <txchannel danteId="4" mediaType="audio"><label>04</label></txchannel>
+    <txchannel danteId="5" mediaType="audio"><label>05</label></txchannel>
+    <txchannel danteId="6" mediaType="audio"><label>06</label></txchannel>
+    <txchannel danteId="7" mediaType="audio"><label>07</label></txchannel>
+    <txchannel danteId="8" mediaType="audio"><label>08</label></txchannel>
+    <txchannel danteId="9" mediaType="audio"><label>09</label></txchannel>
+    <txchannel danteId="10" mediaType="audio"><label>10</label></txchannel>
+    <txchannel danteId="11" mediaType="audio"><label>11</label></txchannel>
+    <txchannel danteId="12" mediaType="audio"><label>12</label></txchannel>
+    <txchannel danteId="13" mediaType="audio"><label>13</label></txchannel>
+    <txchannel danteId="14" mediaType="audio"><label>14</label></txchannel>
+    <txchannel danteId="15" mediaType="audio"><label>15</label></txchannel>
+    <txchannel danteId="16" mediaType="audio"><label>16</label></txchannel>
+    <txchannel danteId="17" mediaType="audio"><label>17</label></txchannel>
+    <txchannel danteId="18" mediaType="audio"><label>18</label></txchannel>
+    <txchannel danteId="19" mediaType="audio"><label>19</label></txchannel>
+    <txchannel danteId="20" mediaType="audio"><label>20</label></txchannel>
+    <txchannel danteId="21" mediaType="audio"><label>21</label></txchannel>
+    <txchannel danteId="22" mediaType="audio"><label>22</label></txchannel>
+    <txchannel danteId="23" mediaType="audio"><label>23</label></txchannel>
+    <txchannel danteId="24" mediaType="audio"><label>24</label></txchannel>
+    <txchannel danteId="25" mediaType="audio"><label>25</label></txchannel>
+    <txchannel danteId="26" mediaType="audio"><label>26</label></txchannel>
+    <txchannel danteId="27" mediaType="audio"><label>27</label></txchannel>
+    <txchannel danteId="28" mediaType="audio"><label>28</label></txchannel>
+    <txchannel danteId="29" mediaType="audio"><label>29</label></txchannel>
+    <txchannel danteId="30" mediaType="audio"><label>30</label></txchannel>
+    <txchannel danteId="31" mediaType="audio"><label>31</label></txchannel>
+    <txchannel danteId="32" mediaType="audio"><label>32</label></txchannel>
+    <rxchannel danteId="1" mediaType="audio"><label>01</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>BCast L</subscribed_channel></rxchannel>
+    <rxchannel danteId="2" mediaType="audio"><label>02</label><subscribed_device>FOH-CL5</subscribed_device><subscribed_channel>BCast R</subscribed_channel></rxchannel>
+    <rxchannel danteId="3" mediaType="audio"><label>03</label><subscribed_device>1073OPX-3</subscribed_device><subscribed_channel>Studio 1</subscribed_channel></rxchannel>
+    <rxchannel danteId="4" mediaType="audio"><label>04</label><subscribed_device>1073OPX-3</subscribed_device><subscribed_channel>Studio 2</subscribed_channel></rxchannel>
+    <rxchannel danteId="5" mediaType="audio"><label>05</label><subscribed_device>1073OPX-3</subscribed_device><subscribed_channel>Studio 3</subscribed_channel></rxchannel>
+    <rxchannel danteId="6" mediaType="audio"><label>06</label><subscribed_device>1073OPX-3</subscribed_device><subscribed_channel>Studio 4</subscribed_channel></rxchannel>
+    <rxchannel danteId="7" mediaType="audio"><label>07</label><subscribed_device>1073OPX-3</subscribed_device><subscribed_channel>Studio 5</subscribed_channel></rxchannel>
+    <rxchannel danteId="8" mediaType="audio"><label>08</label><subscribed_device>1073OPX-3</subscribed_device><subscribed_channel>Studio 6</subscribed_channel></rxchannel>
+    <rxchannel danteId="9" mediaType="audio"><label>09</label><subscribed_device>1073OPX-3</subscribed_device><subscribed_channel>Studio 7</subscribed_channel></rxchannel>
+    <rxchannel danteId="10" mediaType="audio"><label>10</label><subscribed_device>1073OPX-3</subscribed_device><subscribed_channel>Studio 8</subscribed_channel></rxchannel>
+    <rxchannel danteId="11" mediaType="audio"><label>11</label><subscribed_device>1073OPX-4</subscribed_device><subscribed_channel>Studio 9</subscribed_channel></rxchannel>
+    <rxchannel danteId="12" mediaType="audio"><label>12</label><subscribed_device>1073OPX-4</subscribed_device><subscribed_channel>Studio 10</subscribed_channel></rxchannel>
+    <rxchannel danteId="13" mediaType="audio"><label>13</label><subscribed_device>1073OPX-4</subscribed_device><subscribed_channel>Studio 11</subscribed_channel></rxchannel>
+    <rxchannel danteId="14" mediaType="audio"><label>14</label><subscribed_device>1073OPX-4</subscribed_device><subscribed_channel>Studio 12</subscribed_channel></rxchannel>
+    <rxchannel danteId="15" mediaType="audio"><label>15</label><subscribed_device>1073OPX-4</subscribed_device><subscribed_channel>Studio 13</subscribed_channel></rxchannel>
+    <rxchannel danteId="16" mediaType="audio"><label>16</label><subscribed_device>1073OPX-4</subscribed_device><subscribed_channel>Studio 14</subscribed_channel></rxchannel>
+    <rxchannel danteId="17" mediaType="audio"><label>17</label><subscribed_device>1073OPX-4</subscribed_device><subscribed_channel>Studio 15</subscribed_channel></rxchannel>
+    <rxchannel danteId="18" mediaType="audio"><label>18</label><subscribed_device>1073OPX-4</subscribed_device><subscribed_channel>Studio 16</subscribed_channel></rxchannel>
+    <rxchannel danteId="19" mediaType="audio"><label>19</label></rxchannel>
+    <rxchannel danteId="20" mediaType="audio"><label>20</label></rxchannel>
+    <rxchannel danteId="21" mediaType="audio"><label>21</label></rxchannel>
+    <rxchannel danteId="22" mediaType="audio"><label>22</label></rxchannel>
+    <rxchannel danteId="23" mediaType="audio"><label>23</label></rxchannel>
+    <rxchannel danteId="24" mediaType="audio"><label>24</label></rxchannel>
+    <rxchannel danteId="25" mediaType="audio"><label>25</label></rxchannel>
+    <rxchannel danteId="26" mediaType="audio"><label>26</label></rxchannel>
+    <rxchannel danteId="27" mediaType="audio"><label>27</label></rxchannel>
+    <rxchannel danteId="28" mediaType="audio"><label>28</label></rxchannel>
+    <rxchannel danteId="29" mediaType="audio"><label>29</label></rxchannel>
+    <rxchannel danteId="30" mediaType="audio"><label>30</label></rxchannel>
+    <rxchannel danteId="31" mediaType="audio"><label>31</label></rxchannel>
+    <rxchannel danteId="32" mediaType="audio"><label>32</label></rxchannel>
+  </device>
+</preset>

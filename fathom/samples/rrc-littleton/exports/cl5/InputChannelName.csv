@@ -1,0 +1,75 @@
+CL5 Input Channel Name
+CH,NAME,COLOR,ICON
+# Normal format · exported from CL Editor V5
+CH 1,Kick In,Red,Kick
+CH 2,Kick Out,Red,Kick
+CH 3,Snare Top,Red,Snare
+CH 4,Snare Bottom,Red,Snare
+CH 5,Hi-Hat,Red,Hi-Hat
+CH 6,Rack Tom 1,Red,Tom
+CH 7,Rack Tom 2,Red,Tom
+CH 8,Floor Tom,Red,Tom
+CH 9,OH L,Red,Drumkit
+CH 10,OH R,Red,Drumkit
+CH 11,Ride,Red,Drumkit
+CH 12,Perc,Red,Perc.
+CH 13,Drum TB,Off,Dynamic
+CH 14,Bass DI,Blue,E.Bass
+CH 15,Bass Amp,Blue,BassAmp
+CH 16,,Off,Blank
+CH 17,EG1 L,Green,E.Guitar
+CH 18,EG1 R,Green,E.Guitar
+CH 19,EG2 L,Green,E.Guitar
+CH 20,EG2 R,Green,E.Guitar
+CH 21,Keys 1 L,Yellow,Keyboard
+CH 22,Keys 1 R,Yellow,Keyboard
+CH 23,Keys 2 L,Yellow,Keyboard
+CH 24,Keys 2 R,Yellow,Keyboard
+CH 25,Keys TB,Off,Dynamic
+CH 26,Crowd 1,Cyan,Audience
+CH 27,Crowd 2,Cyan,Audience
+CH 28,Crowd 3,Cyan,Audience
+CH 29,Crowd 4,Cyan,Audience
+CH 30,Crowd 5,Cyan,Audience
+CH 31,Crowd 6,Cyan,Audience
+CH 32,,Off,Blank
+CH 33,Crowd 7,Cyan,Audience
+CH 34,Crowd 8,Cyan,Audience
+CH 35,Crowd 9,Cyan,Audience
+CH 36,Crowd 10,Cyan,Audience
+CH 37,FOH TB,Off,Dynamic
+CH 38,,Off,Blank
+CH 39,,Off,Blank
+CH 40,,Off,Blank
+CH 41,Lead Vox,Magenta,Wireless
+CH 42,Vox 2,Magenta,Wireless
+CH 43,Vox 3,Magenta,Wireless
+CH 44,Vox 4,Magenta,Wireless
+CH 45,Vox 5,Magenta,Wireless
+CH 46,Vox 6,Magenta,Wireless
+CH 47,Vox 7,Magenta,Wireless
+CH 48,Vox 8,Magenta,Wireless
+CH 49,Vox 9,Magenta,Wireless
+CH 50,Vox 10,Magenta,Wireless
+CH 51,Vox 11,Magenta,Wireless
+CH 52,Vox 12,Magenta,Wireless
+CH 53,CG 1 L,Purple,Video
+CH 54,CG 1 R,Purple,Video
+CH 55,CG 2 L,Purple,Video
+CH 56,CG 2 R,Purple,Video
+CH 57,LED L,Purple,Video
+CH 58,LED R,Purple,Video
+CH 59,Ultrix L,Purple,Video
+CH 60,Ultrix R,Purple,Video
+CH 61,Trax 1,Orange,Media2
+CH 62,Trax 2,Orange,Media2
+CH 63,Click,Orange,Media2
+CH 64,Guide,Orange,Media2
+ST IN 1,Click Ret,Orange,Media2
+ST IN 2,,Off,Blank
+ST IN 3,,Off,Blank
+ST IN 4,,Off,Blank
+ST IN 5,,Off,Blank
+ST IN 6,,Off,Blank
+ST IN 7,,Off,Blank
+ST IN 8,,Off,Blank

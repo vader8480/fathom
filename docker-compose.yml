@@ -1,0 +1,41 @@
+services:
+  fathom:
+    build:
+      context: .
+      args:
+        WITH_PDF_TOOLS: "true"   # poppler-utils for PDF floor plans ("false" to skip)
+        WITH_CHROMIUM: "false"   # "true" adds Chromium for server-side PDF / PNG exports
+    image: fathom
+    container_name: fathom
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - fathom-data:/data
+    environment:
+      # Logins. Either in-memory admins here, or users created with
+      #   docker exec -it fathom fathom user add <name> --role editor
+      # FATHOM_AUTH: "tech:change-me"
+      # Keep the read-only viewer (/p/<project>) and build downloads public while the editor needs a login.
+      # FATHOM_PUBLIC_VIEW: "1"
+      # Base URL encoded in device QR codes (no trailing slash).
+      # FATHOM_PUBLIC_URL: "https://av.example.org"
+      FATHOM_MAX_UPLOAD_MB: "50"
+      # FATHOM_MAX_JSON_MB: "20"
+      # Optional OpenAI-compatible LLM bridge for assistant notes (the deterministic answer never needs it).
+      # FATHOM_LLM_URL: "https://api.openai.com/v1"
+      # FATHOM_LLM_MODEL: "gpt-4o-mini"
+      # FATHOM_LLM_API_KEY: "sk-..."
+      # FATHOM_LLM_TIMEOUT: "20"
+      # FATHOM_LLM_MAX_CONTEXT: "24000"
+      # Extension directories (importer plugins, equipment templates, assistant checklists).
+      # FATHOM_PLUGINS: "/data/plugins"
+      # FATHOM_LIBRARY: "/data/library-ext"
+      # FATHOM_CHECKLISTS: "/data/checklists"
+      # Floor-plan converters: custom PDF rasterizer, ODA File Converter for DWG.
+      # FATHOM_PDF_RASTERIZER: "pdftoppm -f {page} -l {page} -r {dpi} -png -singlefile {in} {out}"
+      # FATHOM_ODA: "/opt/oda/ODAFileConverter"
+      # FATHOM_ODA_XVFB: "1"
+
+volumes:
+  fathom-data:

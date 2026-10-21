@@ -1,0 +1,66 @@
+[
+ {
+  "input": "Mic/Line In",
+  "expected": "mic-line-in"
+ },
+ {
+  "input": "  Hello  World ",
+  "expected": "hello-world"
+ },
+ {
+  "input": "ATEM Mini Pro",
+  "expected": "atem-mini-pro"
+ },
+ {
+  "input": "Main Speakers - L/R",
+  "expected": "main-speakers-l-r"
+ },
+ {
+  "input": "",
+  "expected": "item"
+ },
+ {
+  "input": "---",
+  "expected": "item"
+ },
+ {
+  "input": "Ünïcode",
+  "expected": "n-code"
+ },
+ {
+  "input": "a__b..c",
+  "expected": "a-b-c"
+ },
+ {
+  "input": "Sub x2",
+  "expected": "sub-x2"
+ },
+ {
+  "input": "E118sw 18\" Passive",
+  "expected": "e118sw-18-passive"
+ },
+ {
+  "input": "123",
+  "expected": "123"
+ },
+ {
+  "input": "x",
+  "expected": "x"
+ },
+ {
+  "input": "UPPER_case-Mixed.42",
+  "expected": "upper-case-mixed-42"
+ },
+ {
+  "input": "Kit mics",
+  "expected": "kit-mics"
+ },
+ {
+  "input": "AES Out 1/2",
+  "expected": "aes-out-1-2"
+ },
+ {
+  "input": "!!!",
+  "expected": "item"
+ }
+]

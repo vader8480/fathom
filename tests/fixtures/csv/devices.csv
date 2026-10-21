@@ -1,0 +1,3 @@
+name,kind,manufacturer,model,room,serial,ip,notes
+ATEM Mini,video_switcher,Blackmagic Design,ATEM Mini Pro,main,ATEM-123,10.20.0.40,
+Lobby TV,display,Samsung,QB65C,main,LOB-1,10.20.0.77,new screen

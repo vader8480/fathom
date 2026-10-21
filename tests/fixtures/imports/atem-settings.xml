@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Profile majorVersion="1" minorVersion="5" product="ATEM Mini Pro"><MixEffectBlocks/><Settings><Inputs><Input id="1" shortName="CAM1" longName="Pulpit Camera" externalPortType="HDMI"/><Input id="2" shortName="CAM2" longName="Wide Camera" externalPortType="HDMI"/><Input id="1000" shortName="BARS" longName="Color Bars" externalPortType="Internal"/></Inputs></Settings></Profile>

@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "kinds": {
+    "stage_io": [
+      {"id": "output-up", "symptoms": ["no_audio", "dropout"], "when": {"port_dir": "out"}, "text": "Confirm the **{port}** output is up on {device}{feeds}.", "note": "check output level"},
+      {"id": "input-gain", "symptoms": ["no_audio", "noise"], "when": {"port_dir": "in"}, "text": "Check the head-amp gain, +48V and pad for **{port}** on {device}."},
+      {"id": "link-lights", "symptoms": ["no_audio", "dropout", "no_network"], "when": {"medium": ["dante", "snake", "aes50", "avb", "network"]}, "text": "Check the link/sync lights on {device}'s **{port}** port."},
+      {"id": "clock-lock", "symptoms": ["dropout", "noise"], "when": {"medium": ["dante", "snake", "aes50", "avb", "madi", "aes3"]}, "text": "Check that {device} is locked to the console's clock (sync indicator steady, no sample-rate mismatch)."}
+    ],
+    "console": [
+      {"id": "channel-routing", "symptoms": ["no_audio"], "when": {"port_dir": "out"}, "text": "On {device}, check that the bus feeding **{port}** is unmuted, its fader is up and the channels are assigned to it."},
+      {"id": "input-patch", "symptoms": ["no_audio"], "when": {"port_dir": "in"}, "text": "On {device}, confirm **{port}** is patched to the channel you expect and the channel is unmuted."},
+      {"id": "scene-recall", "symptoms": ["no_audio", "feedback", "general"], "when": {}, "text": "Check whether a recent scene or show recall on {device} changed the patch, mutes or bus sends.", "note": "check scene recall"},
+      {"id": "feedback-gain", "symptoms": ["feedback"], "when": {}, "text": "On {device}, pull down the channel or bus that rings, then check mic placement and monitor levels before raising it again."}
+    ],
+    "video_switcher": [
+      {"id": "program-meter", "symptoms": ["no_audio"], "when": {"port_dir": "out", "medium": ["usb", "hdmi", "sdi", "network"]}, "text": "Check levels on the {device}'s Program meter before it reaches {next_device}."},
+      {"id": "program-source", "symptoms": ["no_video", "wrong_source"], "when": {"port_dir": "out"}, "text": "Make sure the right source is on Program on {device} and **{port}** is set to Program, not Preview or Multiview."},
+      {"id": "input-format", "symptoms": ["no_video", "flicker"], "when": {"port_dir": "in"}, "text": "Check that the source on **{port}** matches {device}'s video format (resolution and frame rate)."},
+      {"id": "embedded-audio", "symptoms": ["no_audio"], "when": {"port_dir": "in", "medium": ["hdmi", "sdi"]}, "text": "If you rely on embedded audio from **{port}**, check the source actually sends audio on it and {device} has that input on or AFV.", "note": "check embedded audio"}
+    ],
+    "stream": [
+      {"id": "stream-source", "symptoms": ["no_audio", "no_video"], "when": {"port_dir": "in"}, "text": "In the streaming software for {device}, confirm the input is **{port}** and its audio is not muted."},
+      {"id": "stream-health", "symptoms": ["no_audio", "no_video", "dropout", "latency"], "when": {}, "text": "Check the stream health and preview on {device}; if the preview is fine, the problem is after the encoder (platform or network)."}
+    ],
+    "speaker": [
+      {"id": "amp-power", "symptoms": ["no_audio", "no_power"], "when": {}, "text": "Check that {device} (or its amplifier) is powered and its input level is up."},
+      {"id": "speaker-thru", "symptoms": ["no_audio"], "when": {"port_dir": "out"}, "text": "If **{port}** links to another speaker, check the thru cable and that {device} is powered so it passes the signal on."},
+      {"id": "speaker-protect", "symptoms": ["noise", "dropout"], "when": {}, "text": "Check {device} for limit or protect indicators and listen for a damaged driver."}
+    ],
+    "fixture": [
+      {"id": "dmx-address", "symptoms": ["lighting_no_response"], "when": {}, "text": "Check {device}'s DMX address and mode match the patch, and that the DMX signal LED is lit."},
+      {"id": "fixture-power", "symptoms": ["lighting_no_response", "no_power"], "when": {}, "text": "Check {device} has power (display lit) and the power link from the previous fixture is seated."},
+      {"id": "fixture-thru", "symptoms": ["lighting_no_response", "flicker"], "when": {"port_dir": "out"}, "text": "Check the DMX thru from {device} **{port}** to {next_device}; one bad fixture in the chain can stop everything after it."}
+    ],
+    "source": [
+      {"id": "source-output", "symptoms": ["no_audio", "noise", "dropout"], "when": {"port_dir": "out"}, "text": "Check that {device} is playing and its **{port}** output level is up (not muted, volume not at zero).", "note": "check source level"},
+      {"id": "source-power", "symptoms": ["no_audio", "no_video", "no_power"], "when": {}, "text": "Make sure {device} is powered on and not asleep or in standby."}
+    ],
+    "mic": [
+      {"id": "mic-mute", "symptoms": ["no_audio", "dropout"], "when": {}, "text": "Check the mute switch, batteries and capsule on {device}.", "note": "check mic mute and batteries"},
+      {"id": "mic-phantom", "symptoms": ["no_audio", "noise"], "when": {"port_dir": "out", "medium": ["analog"]}, "text": "If {device} is a condenser, make sure +48V phantom power is on for the input it feeds on {next_device}."}
+    ],
+    "computer": [
+      {"id": "computer-output-device", "symptoms": ["no_audio", "no_video"], "when": {"port_dir": "out"}, "text": "On {device}, check the selected audio/video output is **{port}** and the system volume is up.", "note": "check output device"},
+      {"id": "computer-app", "symptoms": ["no_audio", "no_video", "dropout", "latency"], "when": {}, "text": "Check the playback or capture software on {device} is running and pointed at the right interface; restart it if it stalled."}
+    ],
+    "iem": [
+      {"id": "iem-rf", "symptoms": ["no_audio", "dropout", "noise"], "when": {}, "text": "Check {device}'s transmitter and bodypack are on the same frequency (group/channel) and the RF output is not muted."},
+      {"id": "iem-input", "symptoms": ["no_audio"], "when": {"port_dir": "in"}, "text": "Check the input level on {device} **{port}** and that the mix feeding it on the console is up.", "note": "check IEM input"}
+    ],
+    "pa": [
+      {"id": "pa-power", "symptoms": ["no_audio", "no_power"], "when": {}, "text": "Check that {device} is powered, not in protect or limit, and its input level is up."},
+      {"id": "pa-input-select", "symptoms": ["no_audio"], "when": {"port_dir": "in"}, "text": "Check that {device} is listening to **{port}** (analog vs network input selection).", "note": "check input select"}
+    ],
+    "network": [
+      {"id": "net-link", "symptoms": ["no_network", "no_audio", "no_video", "dropout"], "when": {}, "text": "Check the link light on {device} **{port}** and that the port is enabled and on the right VLAN."},
+      {"id": "net-poe", "symptoms": ["no_network", "no_power"], "when": {}, "text": "Check {device} is powered and, for PoE devices, that the switch port supplies PoE."}
+    ],
+    "video": [
+      {"id": "video-format", "symptoms": ["no_video", "flicker"], "when": {}, "text": "Check that {device} and **{port}** agree on resolution and frame rate."},
+      {"id": "video-signal-present", "symptoms": ["no_video", "no_audio"], "when": {"port_dir": "in"}, "text": "Check the signal-present indicator on {device} for **{port}**."}
+    ],
+    "other": [
+      {"id": "other-power", "symptoms": ["no_power", "no_audio", "no_video", "no_network"], "when": {}, "text": "Check that {device} is powered and its indicators look normal."},
+      {"id": "other-status", "symptoms": ["*"], "when": {}, "text": "Check {device}'s front panel or software for a fault or status message on **{port}**."}
+    ],
+    "wireless_rx": [
+      {"id": "rx-rf-link", "symptoms": ["no_audio", "dropout", "noise"], "when": {"port_dir": "in"}, "text": "On {device}, check the RF meters for **{port}** and that the transmitter is on the same frequency."},
+      {"id": "rx-output-level", "symptoms": ["no_audio"], "when": {"port_dir": "out"}, "text": "Check {device}'s output level for **{port}** (mic/line switch, attenuation) and that the output is not muted.", "note": "check receiver output"}
+    ],
+    "processor": [
+      {"id": "dsp-routing", "symptoms": ["no_audio"], "when": {"port_dir": "out"}, "text": "In {device}'s DSP design, check the signal path to **{port}** (mutes, gains, matrix crosspoints) is active.", "note": "check DSP routing"},
+      {"id": "dsp-input-meter", "symptoms": ["no_audio", "noise"], "when": {"port_dir": "in"}, "text": "Check the input meter for **{port}** in {device}'s software; no meter means the problem is upstream."}
+    ],
+    "amp": [
+      {"id": "amp-protect", "symptoms": ["no_audio", "no_power", "noise"], "when": {}, "text": "Check {device} is powered, not in protect or thermal shutdown, and its channel is unmuted."},
+      {"id": "amp-input", "symptoms": ["no_audio"], "when": {"port_dir": "in"}, "text": "Check that {device} uses **{port}** as the input for that channel and its attenuator is up.", "note": "check amp input"}
+    ],
+    "recorder": [
+      {"id": "rec-input", "symptoms": ["no_audio"], "when": {"port_dir": "in"}, "text": "On {device}, check **{port}** is armed or enabled and its meter moves.", "note": "check record input"},
+      {"id": "rec-storage", "symptoms": ["no_audio", "dropout"], "when": {}, "text": "Check {device} has free storage and is actually recording (timer running)."}
+    ],
+    "intercom": [
+      {"id": "com-channel", "symptoms": ["no_audio", "noise"], "when": {}, "text": "Check the intercom channel on {device} is assigned and its talk/listen keys are on."},
+      {"id": "com-power", "symptoms": ["no_audio", "no_power"], "when": {}, "text": "Check that the intercom line powering {device} is live (power supply or main station on)."}
+    ],
+    "camera": [
+      {"id": "cam-output-format", "symptoms": ["no_video", "flicker"], "when": {"port_dir": "out"}, "text": "Check {device}'s output format on **{port}** matches the switcher or router input."},
+      {"id": "cam-power", "symptoms": ["no_video", "no_power"], "when": {}, "text": "Check {device} is powered (PoE or DC) and not in standby."}
+    ],
+    "video_source": [
+      {"id": "playback", "symptoms": ["no_video", "no_audio"], "when": {"port_dir": "out"}, "text": "Check that {device} is actually playing and **{port}** is its active output.", "note": "check playback"},
+      {"id": "vs-format", "symptoms": ["no_video", "flicker"], "when": {"port_dir": "out"}, "text": "Check {device}'s output resolution and frame rate on **{port}**."}
+    ],
+    "video_router": [
+      {"id": "crosspoint", "symptoms": ["no_video", "wrong_source", "no_audio"], "when": {"port_dir": "out"}, "text": "On {device}, check the crosspoint routed to **{port}** and that the output is not locked to another source.", "note": "check router crosspoint"},
+      {"id": "router-input", "symptoms": ["no_video", "flicker"], "when": {"port_dir": "in"}, "text": "Check {device} sees signal on **{port}** (input status in the router software)."}
+    ],
+    "converter": [
+      {"id": "conv-power", "symptoms": ["no_video", "no_audio", "no_power"], "when": {}, "text": "Check {device} is powered (status LED lit)."},
+      {"id": "conv-format", "symptoms": ["no_video", "flicker"], "when": {"port_dir": "in"}, "text": "Check that {device} supports the format arriving on **{port}** and its switches or settings match.", "note": "check converter format"}
+    ],
+    "encoder": [
+      {"id": "enc-input", "symptoms": ["no_audio", "no_video"], "when": {"port_dir": "in"}, "text": "In {device}, check the active input is **{port}** and its audio is enabled.", "note": "check encoder input"},
+      {"id": "enc-network", "symptoms": ["no_video", "dropout", "no_network", "latency"], "when": {}, "text": "Check {device}'s network uplink and stream key / destination settings."}
+    ],
+    "display": [
+      {"id": "disp-input", "symptoms": ["no_video", "wrong_source"], "when": {"port_dir": "in"}, "text": "Check {device} is set to input **{port}** (use the remote's Source or Input button).", "note": "check display input"},
+      {"id": "disp-power", "symptoms": ["no_video", "no_power"], "when": {}, "text": "Check {device} is powered on and not in sleep or eco mode."}
+    ],
+    "projector": [
+      {"id": "proj-input", "symptoms": ["no_video", "wrong_source"], "when": {"port_dir": "in"}, "text": "Check {device} is on input **{port}** and the shutter / AV mute is open.", "note": "check projector input"},
+      {"id": "proj-lamp", "symptoms": ["no_video", "no_power", "flicker"], "when": {}, "text": "Check {device}'s lamp or laser status and its error LEDs."}
+    ],
+    "lighting_console": [
+      {"id": "lc-output", "symptoms": ["lighting_no_response"], "when": {"port_dir": "out"}, "text": "On {device}, check the output for **{port}** is enabled and mapped to the right universe.", "note": "check console output"},
+      {"id": "lc-blackout", "symptoms": ["lighting_no_response"], "when": {}, "text": "Check {device} is not in blackout, the grand master is up and the right show file is loaded."}
+    ],
+    "dmx_node": [
+      {"id": "node-universe", "symptoms": ["lighting_no_response", "flicker"], "when": {"port_dir": "out"}, "text": "Check {device} maps the right universe to **{port}** and its port LED shows data.", "note": "check node universe"},
+      {"id": "node-input", "symptoms": ["lighting_no_response"], "when": {"port_dir": "in"}, "text": "Check {device} receives data on **{port}** (sACN / Art-Net / DMX input LED)."}
+    ],
+    "dimmer": [
+      {"id": "dim-input", "symptoms": ["lighting_no_response"], "when": {}, "text": "Check {device} receives DMX (data LED) and its start address matches the patch."},
+      {"id": "dim-breaker", "symptoms": ["lighting_no_response", "no_power"], "when": {}, "text": "Check the breaker or module for that circuit on {device} is on and not tripped."}
+    ],
+    "switch": [
+      {"id": "sw-port", "symptoms": ["no_network", "no_audio", "no_video", "dropout"], "when": {}, "text": "Check the switch port for **{port}** on {device} is up, on the right VLAN and not error-disabled.", "note": "check switch port"},
+      {"id": "sw-multicast", "symptoms": ["dropout", "no_audio", "no_video", "latency"], "when": {"medium": ["dante", "aes67", "avb", "ndi", "st2110", "network", "qlan", "sacn"]}, "text": "Check IGMP snooping, QoS and EEE settings on {device} for Dante / AV-over-IP traffic."}
+    ],
+    "control": [
+      {"id": "ctl-program", "symptoms": ["general", "no_video", "no_audio", "wrong_source", "no_network"], "when": {}, "text": "Check {device} is online and its program is running (reboot it if the touch panels show offline)."},
+      {"id": "ctl-port", "symptoms": ["general", "no_video", "wrong_source"], "when": {"port_dir": ["out", "io"]}, "text": "Check the control cable from {device} **{port}** and the controlled device's settings (baud rate, IP address, IR code)."}
+    ],
+    "touch_panel": [
+      {"id": "tp-connected", "symptoms": ["no_network", "general"], "when": {}, "text": "Check {device} shows connected to its control processor (not offline)."},
+      {"id": "tp-retry", "symptoms": ["general", "wrong_source", "no_video", "no_audio"], "when": {}, "text": "Try the action again from {device}'s main page; if nothing happens, reboot the panel."}
+    ],
+    "power": [
+      {"id": "pdu-outlet", "symptoms": ["no_power"], "when": {"port_dir": "out"}, "text": "Check outlet **{port}** on {device} is switched on and its breaker is not tripped.", "note": "check outlet"},
+      {"id": "ups-status", "symptoms": ["no_power"], "when": {}, "text": "Check {device}'s input power and status display (on battery, overload, fault)."}
+    ],
+    "patch_panel": [
+      {"id": "panel-reseat", "symptoms": ["no_audio", "no_video", "no_network", "noise", "dropout"], "when": {}, "text": "Re-seat the patch at {device} **{port}** and check the front and rear terminations.", "note": "check patch panel"},
+      {"id": "panel-label", "symptoms": ["no_audio", "no_video", "no_network", "wrong_source", "general"], "when": {}, "text": "Confirm {device} **{port}** goes where its label says (tone or test the run)."}
+    ]
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "id": "crestron-cp4n",
+  "manufacturer": "Crestron",
+  "model": "CP4-N",
+  "name": "CP4-N",
+  "kind": "control",
+  "brand": "crestron",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "COM",
+      "dir": "io",
+      "medium": "rs232",
+      "connector": "DB9",
+      "count": 2
+    },
+    {
+      "group": "IR/Serial",
+      "dir": "out",
+      "medium": "ir",
+      "connector": "Phoenix",
+      "count": 8
+    },
+    {
+      "group": "Relay",
+      "dir": "out",
+      "medium": "gpio",
+      "connector": "Phoenix",
+      "count": 8
+    },
+    {
+      "group": "Versiport",
+      "dir": "io",
+      "medium": "gpio",
+      "connector": "Phoenix",
+      "count": 8
+    },
+    {
+      "group": "Cresnet",
+      "dir": "io",
+      "medium": "rs422",
+      "connector": "Phoenix"
+    },
+    {
+      "group": "LAN",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45"
+    },
+    {
+      "group": "Control Subnet",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45"
+    }
+  ],
+  "tags": [
+    "control processor"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

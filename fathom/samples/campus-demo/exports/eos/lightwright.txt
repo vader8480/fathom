@@ -1,0 +1,5 @@
+Channel	Dimmer	Universe	Instrument Type	Position	Unit Number	Purpose	Color	Mode	Footprint
+1	1	1	Source Four LED Lustr X8	FOH Truss	1	Front wash SL	N/C	Direct	10
+2	11	1	Source Four LED Lustr X8	FOH Truss	2	Front wash C	N/C	Direct	10
+11	101	1	Maverick Storm 2 Profile	1st Electric	1	Specials		Standard	39
+21	1	2	MAC Aura PXL	Upstage pipe	1	Back wash		Mode 3	18

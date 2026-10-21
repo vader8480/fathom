@@ -1,0 +1,59 @@
+{
+  "id": "panasonic-aw-ue150",
+  "manufacturer": "Panasonic",
+  "model": "AW-UE150",
+  "name": "AW-UE150",
+  "kind": "camera",
+  "brand": "panasonic",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "SDI Out",
+      "dir": "out",
+      "medium": "sdi",
+      "connector": "BNC",
+      "names": [
+        "12G",
+        "3G"
+      ]
+    },
+    {
+      "group": "HDMI Out",
+      "dir": "out",
+      "medium": "hdmi",
+      "connector": "HDMI-A"
+    },
+    {
+      "group": "Network",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45"
+    },
+    {
+      "group": "Genlock In",
+      "dir": "in",
+      "medium": "sync",
+      "connector": "BNC"
+    },
+    {
+      "group": "Audio In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 2
+    },
+    {
+      "group": "RS-422",
+      "dir": "io",
+      "medium": "rs422",
+      "connector": "RJ45"
+    }
+  ],
+  "tags": [
+    "ptz",
+    "camera"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

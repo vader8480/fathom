@@ -1,0 +1,72 @@
+{
+  "id": "yamaha-cl5",
+  "manufacturer": "Yamaha",
+  "model": "CL5",
+  "name": "CL5",
+  "kind": "console",
+  "brand": "yamaha",
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Omni In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 8
+    },
+    {
+      "group": "Omni Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 8
+    },
+    {
+      "group": "AES Out",
+      "dir": "out",
+      "medium": "aes3",
+      "connector": "XLR3M",
+      "channels": 2
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "etherCON",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 64
+    },
+    {
+      "group": "MY Slot",
+      "dir": "io",
+      "medium": "other",
+      "count": 3
+    },
+    {
+      "group": "Word Clock",
+      "dir": "io",
+      "medium": "sync",
+      "connector": "BNC",
+      "names": [
+        "In",
+        "Out"
+      ],
+      "dirs": {
+        "In": "in",
+        "Out": "out"
+      }
+    }
+  ],
+  "tags": [
+    "console",
+    "dante"
+  ],
+  "source_url": "https://usa.yamaha.com/products/proaudio/mixers/cl/index.html",
+  "notes": "Port counts not verified against the datasheet; please check."
+}

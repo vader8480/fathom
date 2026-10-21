@@ -1,0 +1,46 @@
+{
+  "id": "decimator-md-hx",
+  "manufacturer": "Decimator Design",
+  "model": "MD-HX",
+  "name": "MD-HX",
+  "kind": "converter",
+  "brand": "decimator",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "HDMI In",
+      "dir": "in",
+      "medium": "hdmi",
+      "connector": "HDMI-A"
+    },
+    {
+      "group": "SDI In",
+      "dir": "in",
+      "medium": "sdi",
+      "connector": "BNC"
+    },
+    {
+      "group": "SDI Out",
+      "dir": "out",
+      "medium": "sdi",
+      "connector": "BNC",
+      "names": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "group": "HDMI Out",
+      "dir": "out",
+      "medium": "hdmi",
+      "connector": "HDMI-A"
+    }
+  ],
+  "tags": [
+    "converter",
+    "scaler"
+  ],
+  "source_url": "https://decimator.com/Products/MiniConverters/MD-HX/MD-HX.html"
+}

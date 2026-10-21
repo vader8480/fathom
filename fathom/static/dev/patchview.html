@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en" data-harness="patchview">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fathom · Patch view harness</title>
+<link rel="stylesheet" href="../css/patchview.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #0b1020; color: #e6eaf4; }
+  body { height: 100vh; height: 100dvh; min-height: -webkit-fill-available; display: flex; flex-direction: column;
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+  .h-bar { display: flex; align-items: center; gap: 12px; padding: 6px 12px; padding-top: max(6px, env(safe-area-inset-top));
+    border-bottom: 1px solid rgba(255,255,255,.09); background: #111828; font-size: 12px; color: #8e97ab; }
+  .h-bar strong { color: #e6eaf4; }
+  .h-bar a { color: #8ea2ff; text-decoration: none; }
+  .h-main { flex: 1 1 auto; display: flex; min-height: 0; }
+  #pv-host { flex: 1 1 auto; min-width: 0; }
+  .h-side { width: 260px; border-left: 1px solid rgba(255,255,255,.09); background: #111828; overflow: auto; font-size: 11.5px; }
+  .h-side h2 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #8e97ab; margin: 10px 12px 4px; }
+  #pv-harness-log { list-style: none; margin: 0; padding: 0 12px 12px; color: #b9c2d6; }
+  #pv-harness-log li { padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.05); word-break: break-word; }
+  #pv-harness-toasts { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; flex-direction: column;
+    gap: 6px; z-index: 50; pointer-events: none; }
+  .h-toast { padding: 8px 14px; border-radius: 8px; background: #1a2238; border: 1px solid rgba(255,255,255,.14); font-size: 12.5px; }
+  .h-err { border-color: #f06aa8; } .h-warn { border-color: #ff9548; } .h-ok { border-color: #2fd4b4; }
+  @media (max-width: 1099px) { .h-side { display: none; } }
+</style>
+</head>
+<body>
+  <div class="h-bar">
+    <strong>Patch view harness</strong>
+    <span>Fixture: <a href="?">sunday-demo</a> · <a href="?overlay=1">+ overlay</a> · <a href="?devices=150&amp;cables=600">150 / 600</a> · <a href="?readonly=1">read-only</a> · <a href="?room=">shared inventory</a></span>
+  </div>
+  <div class="h-main">
+    <div id="pv-host"></div>
+    <aside class="h-side" aria-label="Harness log"><h2>Log</h2><ul id="pv-harness-log"></ul></aside>
+  </div>
+  <div id="fathom-live" class="pv-sr" aria-live="polite"></div>
+  <div id="pv-harness-toasts"></div>
+  <script type="module" src="fixture-gen.js"></script>
+</body>
+</html>

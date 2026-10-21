@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2080" height="1580" viewBox="0 0 2080 1580">
+<g fill="none" stroke="#c8cfdd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" font-family="Helvetica, Arial, sans-serif">
+<g data-layer="WALLS">
+<polygon points="40,1540 2040,1540 2040,40 40,40"/>
+<line x1="240" y1="340" x2="1840" y2="340"/>
+<path d="M 840 340 A 200 200 0 0 0 1240 340"/>
+<path d="M 1240 1240 A 200 200 0 0 0 840 1240"/>
+<text x="940" y="240" font-size="60" stroke="none" fill="#c8cfdd">STAGE</text>
+<text x="990" y="1380" font-size="40" stroke="none" fill="#c8cfdd"><tspan x="990" y="1380">FOH</tspan><tspan x="990" y="1430">Booth</tspan></text>
+</g>
+<g data-layer="SEATS">
+<circle cx="540" cy="1040" r="25"/>
+<circle cx="640" cy="1040" r="25"/>
+</g>
+</g></svg>

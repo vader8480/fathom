@@ -1,0 +1,50 @@
+{
+  "id": "yamaha-rio1608-d2",
+  "manufacturer": "Yamaha",
+  "model": "Rio1608-D2",
+  "name": "Rio1608-D2",
+  "kind": "stage_io",
+  "brand": "yamaha",
+  "ru": 3,
+  "width": "full",
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Analog In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 16
+    },
+    {
+      "group": "Analog Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 8
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "etherCON",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 16
+    }
+  ],
+  "dante_channels": {
+    "tx": 16,
+    "rx": 8
+  },
+  "tags": [
+    "stagebox",
+    "dante"
+  ],
+  "source_url": "https://usa.yamaha.com/products/proaudio/interfaces/r_series_adda_2/specs.html"
+}

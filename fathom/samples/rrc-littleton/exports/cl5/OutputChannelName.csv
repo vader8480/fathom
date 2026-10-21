@@ -1,0 +1,13 @@
+CL5 Output Channel Name
+CH,NAME,COLOR,ICON
+# Normal format
+MIX 13,BCast L,Purple,Blank
+MIX 14,BCast R,Purple,Blank
+MIX 15,Lobby,Orange,Blank
+MIX 16,Courtyard,Orange,Blank
+MATRIX 1,Sub,Red,Blank
+MATRIX 2,Fill L,Green,Blank
+MATRIX 3,Fill R,Green,Blank
+MATRIX 4,Delays,Green,Blank
+ST L,Main L,Blue,Blank
+ST R,Main R,Blue,Blank

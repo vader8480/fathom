@@ -1,0 +1,110 @@
+PROTOCOL PREAMBLE:
+Version: 2.3
+
+VIDEOHUB DEVICE:
+Device present: true
+Model name: Blackmagic Videohub 20x20 12G
+Friendly name: Broadcast Router
+Unique ID: 7C2E0D021714
+Video inputs: 20
+Video processing units: 0
+Video outputs: 20
+Video monitoring outputs: 0
+Serial ports: 0
+
+INPUT LABELS:
+0 CAM 1
+1 CAM 2
+2 CAM 3
+3 CAM 4
+4 Input 5
+5 Input 6
+6 Input 7
+7 Input 8
+8 Input 9
+9 Input 10
+10 Input 11
+11 Input 12
+12 Input 13
+13 Input 14
+14 Input 15
+15 Input 16
+16 Input 17
+17 Input 18
+18 Input 19
+19 Input 20
+
+OUTPUT LABELS:
+0 Program
+1 Output 2
+2 Output 3
+3 Output 4
+4 Output 5
+5 Output 6
+6 Output 7
+7 Output 8
+8 Output 9
+9 Output 10
+10 Output 11
+11 Output 12
+12 Output 13
+13 Output 14
+14 Output 15
+15 Output 16
+16 Output 17
+17 Output 18
+18 Output 19
+19 Output 20
+
+VIDEO OUTPUT ROUTING:
+0 0
+1 3
+2 6
+3 9
+4 12
+5 15
+6 18
+7 1
+8 4
+9 7
+10 10
+11 13
+12 16
+13 19
+14 2
+15 5
+16 8
+17 11
+18 14
+19 17
+
+VIDEO OUTPUT LOCKS:
+0 U
+1 U
+2 U
+3 U
+4 U
+5 U
+6 U
+7 U
+8 U
+9 U
+10 U
+11 U
+12 U
+13 U
+14 U
+15 U
+16 U
+17 U
+18 U
+19 U
+
+SOME FUTURE BLOCK:
+whatever: 1
+
+CONFIGURATION:
+Take Mode: true
+
+END PRELUDE:
+

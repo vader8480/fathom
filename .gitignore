@@ -1,0 +1,18 @@
+# data (projects, uploads, builds) never belongs in the repo
+data/
+.fathom/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# editors / OS
+.DS_Store
+.idea/
+*.swp

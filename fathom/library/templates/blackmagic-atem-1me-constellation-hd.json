@@ -1,0 +1,73 @@
+{
+  "id": "blackmagic-atem-1me-constellation-hd",
+  "manufacturer": "Blackmagic Design",
+  "model": "ATEM 1 M/E Constellation HD",
+  "name": "ATEM 1 M/E Constellation HD",
+  "kind": "video_switcher",
+  "brand": "blackmagic",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "SDI In",
+      "dir": "in",
+      "medium": "sdi",
+      "connector": "BNC",
+      "count": 10
+    },
+    {
+      "group": "SDI Out",
+      "dir": "out",
+      "medium": "sdi",
+      "connector": "BNC",
+      "count": 6
+    },
+    {
+      "group": "Multiview Out",
+      "dir": "out",
+      "medium": "sdi",
+      "connector": "BNC"
+    },
+    {
+      "group": "Audio In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "TRS 1/4\"",
+      "names": [
+        "1",
+        "2"
+      ]
+    },
+    {
+      "group": "Talkback",
+      "dir": "io",
+      "medium": "intercom",
+      "connector": "XLR5F"
+    },
+    {
+      "group": "Reference In",
+      "dir": "in",
+      "medium": "sync",
+      "connector": "BNC"
+    },
+    {
+      "group": "Ethernet",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45"
+    },
+    {
+      "group": "USB Webcam Out",
+      "dir": "out",
+      "medium": "usb",
+      "connector": "USB-C"
+    }
+  ],
+  "tags": [
+    "switcher",
+    "sdi"
+  ],
+  "source_url": "https://www.blackmagicdesign.com/products/atemconstellation/techspecs"
+}

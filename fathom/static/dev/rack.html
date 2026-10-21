@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fathom harness · Rack elevations</title>
+<link rel="stylesheet" href="../css/plan.css">
+<style>
+:root{--bg:#0b1020;--panel:#111828;--border:rgba(255,255,255,.09);--text:#e6eaf4;--muted:#8e97ab;--accent:#8ea2ff;--ok:#2fd4b4;--warn:#ff9548;--err:#f06aa8}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;height:100vh;height:100dvh;background:var(--bg);color:var(--text);font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{display:grid;grid-template-rows:auto 1fr auto;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.h-top{display:flex;gap:10px;align-items:center;padding:6px 12px;background:var(--panel);border-bottom:1px solid var(--border)}
+.h-top b{color:var(--accent);letter-spacing:1.2px;text-transform:uppercase;font-size:11px}
+.h-top span{color:var(--muted);font-size:12px}
+.h-top button{font:inherit;color:var(--text);background:#161d2e;border:1px solid var(--border);border-radius:6px;padding:4px 10px;min-height:30px}
+#h-main{min-height:0;overflow:hidden}
+
+@media (pointer: coarse){.h-top button{min-height:44px;min-width:44px}}
+.h-foot{max-height:90px;overflow:auto;border-top:1px solid var(--border);background:var(--panel);font:11px ui-monospace,Menlo,monospace;color:var(--muted)}
+.h-foot ul{margin:0;padding:4px 12px;list-style:none}
+#h-toasts{position:fixed;right:12px;bottom:100px;display:grid;gap:6px;z-index:50}
+.h-toast{background:#1b2338;border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:6px;padding:8px 12px;max-width:380px}
+.h-warn{border-left-color:var(--warn)}.h-err{border-left-color:var(--err)}.h-ok{border-left-color:var(--ok)}
+</style>
+</head>
+<body data-harness="rack">
+<header class="h-top"><b>Fathom</b><strong>Rack elevations harness</strong><span id="h-status">loading…</span>
+<button type="button" id="h-undo" aria-label="Undo">Undo</button><button type="button" id="h-redo" aria-label="Redo">Redo</button></header>
+<main id="h-main"></main>
+<footer class="h-foot" aria-label="Harness log"><ul id="h-log"></ul></footer>
+<div id="h-toasts" aria-live="polite"></div>
+<div id="fathom-live" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"></div>
+<script type="module" src="plans/harness.js"></script>
+</body>
+</html>

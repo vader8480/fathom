@@ -1,0 +1,62 @@
+{
+  "id": "shure-ad4q",
+  "manufacturer": "Shure",
+  "model": "Axient Digital AD4Q",
+  "name": "Axient Digital AD4Q",
+  "kind": "wireless_rx",
+  "brand": "shure",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Antenna",
+      "dir": "in",
+      "medium": "rf",
+      "connector": "BNC",
+      "names": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "group": "Analog Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 4
+    },
+    {
+      "group": "AES3 Out",
+      "dir": "out",
+      "medium": "aes3",
+      "connector": "XLR3M",
+      "count": 2,
+      "channels": 2
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "RJ45",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 4
+    },
+    {
+      "group": "Network",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45"
+    }
+  ],
+  "tags": [
+    "wireless",
+    "dante"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

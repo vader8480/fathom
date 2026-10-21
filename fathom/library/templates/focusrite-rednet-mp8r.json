@@ -1,0 +1,39 @@
+{
+  "id": "focusrite-rednet-mp8r",
+  "manufacturer": "Focusrite",
+  "model": "RedNet MP8R",
+  "name": "RedNet MP8R",
+  "kind": "stage_io",
+  "brand": "focusrite",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Mic In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 8
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "RJ45",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 8
+    }
+  ],
+  "tags": [
+    "stagebox",
+    "dante",
+    "preamp"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

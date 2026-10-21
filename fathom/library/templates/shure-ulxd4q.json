@@ -1,0 +1,60 @@
+{
+  "id": "shure-ulxd4q",
+  "manufacturer": "Shure",
+  "model": "ULXD4Q",
+  "name": "ULXD4Q",
+  "kind": "wireless_rx",
+  "brand": "shure",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Antenna",
+      "dir": "in",
+      "medium": "rf",
+      "connector": "BNC",
+      "names": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "group": "Analog Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 4
+    },
+    {
+      "group": "Mix Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "TRS 1/4\""
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "RJ45",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 4
+    },
+    {
+      "group": "Network",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45"
+    }
+  ],
+  "tags": [
+    "wireless",
+    "dante"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

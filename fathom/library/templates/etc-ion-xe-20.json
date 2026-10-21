@@ -1,0 +1,38 @@
+{
+  "id": "etc-ion-xe-20",
+  "manufacturer": "ETC",
+  "model": "Ion Xe 20",
+  "name": "Ion Xe 20",
+  "kind": "lighting_console",
+  "brand": "etc",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "DMX Out",
+      "dir": "out",
+      "medium": "rdm",
+      "connector": "XLR5F",
+      "count": 4
+    },
+    {
+      "group": "Ethernet",
+      "dir": "io",
+      "medium": "sacn",
+      "connector": "RJ45",
+      "count": 2
+    },
+    {
+      "group": "Contact Closure",
+      "dir": "in",
+      "medium": "gpio",
+      "connector": "DB25"
+    }
+  ],
+  "tags": [
+    "lighting console",
+    "eos family"
+  ],
+  "source_url": "https://www.etcconnect.com/Products/Consoles/Eos-Family/Ion-Xe/"
+}

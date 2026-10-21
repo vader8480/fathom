@@ -1,0 +1,53 @@
+{
+  "id": "behringer-wing",
+  "manufacturer": "Behringer",
+  "model": "Wing",
+  "name": "Wing",
+  "kind": "console",
+  "brand": "behringer",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Mic In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 8
+    },
+    {
+      "group": "XLR Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 8
+    },
+    {
+      "group": "AES50",
+      "dir": "io",
+      "medium": "aes50",
+      "connector": "etherCON",
+      "names": [
+        "A",
+        "B",
+        "C"
+      ],
+      "channels": 48
+    },
+    {
+      "group": "StageConnect",
+      "dir": "io",
+      "medium": "other"
+    },
+    {
+      "group": "Card Slot",
+      "dir": "io",
+      "medium": "other"
+    }
+  ],
+  "tags": [
+    "console"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

@@ -1,0 +1,48 @@
+Room,Device,Section,Dir,Port,Label,Peer device,Peer port,Cable,Medium,Source
+main,Wireless Mics,RF Out,out,Wireless 1,Wireless 1,Shure Wireless,Wireless 1,,rf,cable
+main,Wireless Mics,RF Out,out,Wireless 2,Wireless 2,Shure Wireless,Wireless 2,,rf,cable
+main,Shure Wireless,RF In,in,Wireless 1,Wireless 1,Wireless Mics,Wireless 1,,rf,cable
+main,Shure Wireless,RF In,in,Wireless 2,Wireless 2,Wireless Mics,Wireless 2,,rf,cable
+main,Shure Wireless,Analog Out,out,Wireless 1,Wireless 1,Audio Rack 1,Wireless 1,A-001,analog,cable
+main,Shure Wireless,Analog Out,out,Wireless 2,Wireless 2,Audio Rack 1,Wireless 2,A-002,analog,cable
+main,Stage Box 1,Analog In,in,Keyboard,Keyboard,,,,analog,
+main,Stage Box 1,Analog In,in,Acoustic,Acoustic,,,,analog,
+main,Stage Box 1,Analog Out,out,SB1-Out 1,SB1-Out 1,Audio Rack 1,SB1-Out 1,A-003,analog,cable
+main,Stage Box 1,Analog Out,out,SB1-Out 2,SB1-Out 2,Audio Rack 1,SB1-Out 2,A-004,analog,cable
+main,Stage Box 1,IEM Return,in,Monitor Out 1,Monitor Out 1,Audio Rack 1,Monitor Out 1,,analog,cable
+main,Stage Box 1,HDMI In,in,Video Display,Video Display,,,,hdmi,
+main,Stage Box 1,HDMI Out,out,SB-Video-1,SB-Video-1,ATEM Mini,SB-Video-1,,hdmi,cable
+main,Sound Board,Network Out,io,SLink,SLink,Audio Rack 1,dSnake,A-005,snake,cable
+main,Audio Rack 1,Analog In,in,SB1-Out 1,SB1-Out 1,Stage Box 1,SB1-Out 1,A-003,analog,cable
+main,Audio Rack 1,Analog In,in,SB1-Out 2,SB1-Out 2,Stage Box 1,SB1-Out 2,A-004,analog,cable
+main,Audio Rack 1,Analog In,in,Wireless 1,Wireless 1,Shure Wireless,Wireless 1,A-001,analog,cable
+main,Audio Rack 1,Analog In,in,Wireless 2,Wireless 2,Shure Wireless,Wireless 2,A-002,analog,cable
+main,Audio Rack 1,Analog In,in,Input 5,,,,,analog,
+main,Audio Rack 1,Analog In,in,Input 6,,,,,analog,
+main,Audio Rack 1,Analog In,in,Input 7,,,,,analog,
+main,Audio Rack 1,Analog In,in,Input 8,,,,,analog,
+main,Audio Rack 1,Analog Out,out,Monitor Out 1,Monitor Out 1,Stage Box 1,Monitor Out 1,,analog,cable
+main,Audio Rack 1,Analog Out,out,Mains,Mains,Main Speakers - L/R,Main L,,analog,cable
+main,Audio Rack 1,Analog Out,out,Sub,Sub,Sub x2,Sub 1,,analog,cable
+main,Audio Rack 1,Analog Out,out,Stream,Stream,ATEM Mini,Stream,,analog,cable
+main,Audio Rack 1,Network In,io,dSnake,dSnake,Sound Board,SLink,A-005,snake,cable
+main,ATEM Mini,HDMI In,in,SB-Video-1,SB-Video-1,Stage Box 1,SB-Video-1,,hdmi,cable
+main,ATEM Mini,HDMI In,in,HDMI In 2,HDMI In 2,,,,hdmi,
+main,ATEM Mini,Analog In,in,Stream,Stream,Audio Rack 1,Stream,,analog,cable
+main,ATEM Mini,HDMI Out,out,Program Out,Program Out,Video Converter,Program In,,hdmi,cable
+main,ATEM Mini,USB Out,out,USB Stream Out,USB Stream Out,Restream,USB Stream In,,usb,cable
+main,Main Speakers - L/R,Analog In,in,Main L,Main L,Audio Rack 1,Mains,,analog,cable
+main,Main Speakers - L/R,Analog In,in,Main R,Main R,,,,analog,
+main,Main Speakers - L/R,Analog Out,out,Thru,Thru,,,,analog,
+main,Main Speakers - L/R,Analog Out,out,Thru,Thru,,,,analog,
+main,Sub x2,Analog In,in,Sub 1,Sub 1,Audio Rack 1,Sub,,analog,cable
+main,Sub x2,Analog In,in,Sub 2,Sub 2,,,,analog,
+main,Video Converter,HDMI In,in,Program In,Program In,ATEM Mini,Program Out,,hdmi,cable
+main,Video Converter,SDI In,in,SDI Input 1,SDI Input 1,,,,sdi,
+main,Video Converter,HDMI Out,out,HDMI Thru,HDMI Thru,,,,hdmi,
+main,Video Converter,SDI Out,out,SDI Program Output,SDI Program Output,Samsung TV - 1,TV 1,,sdi,cable
+main,Video Converter,SDI Out,out,SDI Out B,,,,,sdi,
+main,Samsung TV - 1,SDI In,in,TV 1,TV 1,Video Converter,SDI Program Output,,sdi,cable
+main,Samsung TV - 1,HDMI In,in,HDMI 1,,,,,hdmi,
+main,Restream,USB In,in,USB Stream In,USB Stream In,ATEM Mini,USB Stream Out,,usb,cable
+main,Restream,Network Out,out,YouTube,YouTube,,,,network,

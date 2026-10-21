@@ -1,0 +1,238 @@
+/* Fathom patch view (W3). Knox-style node editor on the Fathom dark palette (FR-UX-08).
+   Geometry here must match patchview-core.js GEOM: cardW 248, headerH 56, rowH 22 (COARSE_ROW_H 36 on coarse
+   pointers, i.e. 32 px row boxes), pad 8, dotR 5. patchview.js also sets --pv-row inline from the layout geometry. */
+
+.pv-root {
+  --pv-bg: var(--bg, #0b1020);
+  --pv-panel: var(--panel, #111828);
+  --pv-border: var(--border, rgba(255, 255, 255, .09));
+  --pv-text: var(--text, #e6eaf4);
+  --pv-muted: var(--muted, #8e97ab);
+  --pv-accent: var(--accent, #8ea2ff);
+  --pv-ok: var(--ok, #2fd4b4);
+  --pv-err: var(--err, #f06aa8);
+  --pv-row: 22px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 320px;
+  color: var(--pv-text);
+  background: var(--pv-bg);
+  font: 13px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+.pv-root *, .pv-root *::before, .pv-root *::after { box-sizing: border-box; }
+.pv-root [hidden] { display: none !important; }
+.pv-sr {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ---------------------------------------------------------------- toolbar */
+.pv-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  padding: 8px 10px; background: var(--pv-panel); border-bottom: 1px solid var(--pv-border);
+  padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right));
+}
+.pv-tgroup, .pv-chips { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.pv-btn, .pv-chip {
+  appearance: none; -webkit-appearance: none; font: inherit; font-size: 12.5px; color: var(--pv-text);
+  background: rgba(255, 255, 255, .04); border: 1px solid var(--pv-border); border-radius: 8px;
+  min-height: 32px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  white-space: nowrap;
+}
+.pv-btn:hover:not(:disabled), .pv-chip:hover { background: rgba(255, 255, 255, .08); }
+.pv-btn:disabled { opacity: .4; cursor: default; }
+.pv-btn.pv-icon { min-width: 32px; justify-content: center; padding: 0 6px; font-size: 15px; }
+.pv-btn.pv-primary { background: rgba(142, 162, 255, .16); border-color: rgba(142, 162, 255, .45); color: #dfe5ff; }
+.pv-btn.pv-toggle[aria-pressed="true"] { border-color: rgba(142, 162, 255, .55); background: rgba(142, 162, 255, .14); }
+.pv-btn.pv-toggle[aria-pressed="false"] { color: var(--pv-muted); }
+.pv-zoomlabel { min-width: 44px; text-align: center; color: var(--pv-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pv-chip { border-radius: 999px; font-size: 12px; color: var(--pv-muted); }
+.pv-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c, #9aa3b5); }
+.pv-chip[aria-pressed="true"] { color: var(--pv-text); border-color: var(--c, var(--pv-accent)); background: rgba(255, 255, 255, .07); }
+.pv-chip-st[aria-pressed="true"] { border-color: var(--pv-accent); }
+.pv-search input {
+  font: inherit; font-size: 16px; color: var(--pv-text); background: var(--pv-bg);
+  border: 1px solid var(--pv-border); border-radius: 8px; height: 32px; width: 170px; padding: 0 10px;
+}
+.pv-btn:focus-visible, .pv-chip:focus-visible, .pv-search input:focus-visible, .pv-mi:focus-visible,
+.pv-more:focus-visible { outline: 2px solid var(--pv-accent); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- canvas */
+.pv-viewport {
+  position: relative; flex: 1 1 auto; overflow: hidden; outline: none;
+  touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  background-color: #090d1a;
+  background-image: radial-gradient(rgba(255, 255, 255, .09) 1px, transparent 1.3px);
+  background-size: 22px 22px;
+}
+.pv-viewport:focus-visible { box-shadow: inset 0 0 0 2px rgba(142, 162, 255, .5); }
+.pv-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.pv-wires { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.pv-cards { position: absolute; left: 0; top: 0; }
+.pv-wire { stroke-linecap: round; fill: none; }
+.pv-wire-ext { opacity: .5; }
+.pv-wire-planned { opacity: .7; }
+.pv-wire.pv-sel, .pv-wire.pv-hov { filter: drop-shadow(0 0 3px rgba(255, 255, 255, .35)); }
+.pv-wire.pv-moving { opacity: .2; }
+.pv-temp { stroke: var(--pv-accent); stroke-width: 2; stroke-dasharray: 6 4; fill: none; }
+.pv-route { stroke-width: 1.2; stroke-dasharray: 1.5 5; stroke-linecap: round; opacity: .55; }
+.pv-route-lbl { fill: var(--pv-muted); font-size: 10px; text-anchor: middle; paint-order: stroke; stroke: #090d1a; stroke-width: 3px; }
+
+.pv-badge {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border-radius: 10px; border: 1px solid var(--pv-border); background: rgba(17, 24, 40, .92);
+  font-size: 12.5px; color: var(--pv-text); pointer-events: none;
+}
+.pv-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pv-accent); }
+.pv-hint {
+  position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom));
+  padding: 7px 14px; border-radius: 999px; border: 1px solid var(--pv-border); background: rgba(17, 24, 40, .92);
+  font-size: 12.5px; color: var(--pv-text); pointer-events: none;
+}
+.pv-hint::before { content: "\2725"; margin-right: 8px; color: var(--pv-muted); }
+.pv-empty {
+  position: absolute; top: 45%; left: 0; right: 0; text-align: center; color: var(--pv-muted); pointer-events: none;
+}
+.pv-box {
+  position: absolute; left: 0; top: 0; border: 1px dashed var(--pv-accent); background: rgba(142, 162, 255, .08);
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- cards */
+.pv-card {
+  position: absolute; left: 0; top: 0; background: var(--pv-panel); border: 1px solid rgba(255, 255, 255, .11);
+  border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); outline: none;
+}
+.pv-card.pv-planned { border-style: dashed; border-color: rgba(255, 255, 255, .28); }
+.pv-card.pv-auto { border-style: dotted; border-color: rgba(255, 255, 255, .28); }
+.pv-card.pv-ext { opacity: .5; }
+.pv-card.pv-dim { opacity: .25; }
+.pv-card.pv-selected { box-shadow: 0 0 0 2px var(--pv-accent), 0 8px 24px rgba(0, 0, 0, .35); }
+.pv-card:focus-visible { box-shadow: 0 0 0 2px var(--pv-accent), 0 0 0 5px rgba(142, 162, 255, .3); }
+.pv-card.pv-dragging { box-shadow: 0 0 0 2px var(--pv-accent), 0 16px 36px rgba(0, 0, 0, .5); z-index: 5; }
+.pv-head { position: absolute; left: 0; right: 0; top: 0; height: 56px; padding: 7px 12px 0; overflow: hidden; }
+.pv-headrow { display: flex; align-items: center; gap: 5px; height: 17px; }
+.pv-pill {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .07em; padding: 1px 7px; border-radius: 5px; border: 1px solid;
+  line-height: 13px;
+}
+.pv-brand { font-size: 9px; font-weight: 800; letter-spacing: .04em; padding: 1px 5px; border-radius: 4px; line-height: 13px; }
+.pv-tag {
+  font-size: 9.5px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--pv-border); color: var(--pv-muted);
+  line-height: 13px;
+}
+.pv-tag-planned { color: #fcd34d; border-color: rgba(252, 211, 77, .4); }
+.pv-tag-spare { color: #93c5fd; border-color: rgba(147, 197, 253, .4); }
+.pv-tag-retired { color: var(--pv-err); border-color: rgba(240, 106, 168, .4); }
+.pv-title {
+  margin-top: 4px; font-size: 13.5px; font-weight: 650; color: var(--pv-text); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; line-height: 17px;
+}
+.pv-count { color: var(--pv-muted); font-weight: 500; }
+.pv-model { font-size: 11.5px; color: var(--pv-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 14px; }
+.pv-room { position: absolute; right: 10px; top: 7px; font-size: 10px; color: var(--pv-accent); }
+.pv-portsbox {
+  position: absolute; left: 8px; right: 8px; border-radius: 9px; background: rgba(255, 255, 255, .018);
+  border: 1px solid rgba(255, 255, 255, .06);
+}
+
+.pv-port, .pv-more {
+  position: absolute; height: calc(var(--pv-row) - 4px); margin-top: 2px; display: flex; align-items: center; gap: 4px;
+  padding: 0 6px; font-size: 11px; color: var(--pv-text); border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 6px; background: rgba(255, 255, 255, .03); outline: none; white-space: nowrap;
+}
+.pv-port.pv-left, .pv-more-left { left: 14px; width: 106px; }
+.pv-port.pv-right, .pv-more-right { left: 128px; width: 106px; justify-content: flex-end; }
+.pv-port.pv-both, .pv-more-io { left: 14px; width: 220px; }
+.pv-idx { color: var(--pv-muted); font-variant-numeric: tabular-nums; flex: none; }
+.pv-glyph { color: var(--pv-muted); flex: none; font-size: 10px; }
+.pv-lbl { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.pv-port.pv-right .pv-lbl { text-align: right; }
+.pv-lbl.pv-ov { font-style: italic; color: #b9c2d6; }
+.pv-dot {
+  position: absolute; top: 50%; width: 10px; height: 10px; margin-top: -6px; border-radius: 50%;
+  border: 2px solid var(--c, #9aa3b5); background: #0b1020;
+}
+/* card border is 1px: centres the dot on the card's outer edge (= wire anchor x) */
+.pv-dot-l { left: -20px; }
+.pv-dot-r { right: -18px; }
+.pv-port.pv-conn .pv-dot { background: var(--c, #9aa3b5); }
+.pv-port:focus-visible { box-shadow: 0 0 0 2px var(--pv-accent); }
+.pv-port.pv-selected { border-color: var(--pv-accent); background: rgba(142, 162, 255, .12); }
+.pv-more {
+  font: inherit; font-size: 11px; color: var(--pv-accent); border-style: dashed; cursor: pointer; justify-content: center;
+}
+.pv-iohead {
+  position: absolute; left: 16px; height: 18px; line-height: 18px; font-size: 9.5px; font-weight: 700;
+  letter-spacing: .08em; color: var(--pv-muted);
+}
+
+/* connecting (drag a wire or keyboard connect): incompatible dims, compatible glows */
+.pv-connecting .pv-port { opacity: .3; }
+.pv-connecting .pv-port.pv-ok { opacity: 1; border-color: rgba(47, 212, 180, .55); }
+.pv-connecting .pv-port.pv-ok .pv-dot { box-shadow: 0 0 0 3px rgba(47, 212, 180, .35), 0 0 10px rgba(47, 212, 180, .6); }
+.pv-connecting .pv-port.pv-hover, .pv-connecting .pv-port.pv-kbtarget {
+  background: rgba(47, 212, 180, .18); border-color: var(--pv-ok); box-shadow: 0 0 0 2px var(--pv-ok);
+}
+
+/* highlight API (assistant chips, trace) */
+.pv-hl-on .pv-card:not(.pv-hl) { opacity: .2; }
+.pv-hl-on .pv-wire:not(.pv-hl) { opacity: .1; }
+.pv-hl-on .pv-wire.pv-hl { filter: drop-shadow(0 0 4px rgba(255, 255, 255, .45)); }
+.pv-hl-on.pv-hl-ports .pv-card.pv-hl .pv-port:not(.pv-hl) { opacity: .4; }
+.pv-port.pv-hl { border-color: rgba(255, 255, 255, .45); }
+
+/* ---------------------------------------------------------------- rename & menu */
+.pv-rename {
+  position: absolute; z-index: 20; transform: translateY(-50%); height: 34px; font: inherit; font-size: 16px;
+  color: var(--pv-text); background: var(--pv-bg); border: 1px solid var(--pv-accent); border-radius: 8px;
+  padding: 0 10px; box-shadow: 0 6px 20px rgba(0, 0, 0, .5); outline: none;
+}
+.pv-menu {
+  position: absolute; z-index: 30; min-width: 210px; padding: 5px; background: var(--pv-panel);
+  border: 1px solid rgba(255, 255, 255, .14); border-radius: 10px; box-shadow: 0 14px 40px rgba(0, 0, 0, .55);
+}
+.pv-mi {
+  display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; color: var(--pv-text);
+  background: none; border: 0; border-radius: 6px; min-height: 34px; padding: 0 10px; cursor: pointer;
+}
+.pv-mi:hover, .pv-mi:focus { background: rgba(142, 162, 255, .14); }
+.pv-mi-danger { color: var(--pv-err); }
+.pv-addport { display: flex; flex-direction: column; gap: 8px; padding: 6px; min-width: 240px; }
+.pv-addport-title { font-weight: 600; font-size: 12.5px; }
+.pv-addport label { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; color: var(--pv-muted); }
+.pv-addport input, .pv-addport select {
+  font: inherit; font-size: 16px; color: var(--pv-text); background: var(--pv-bg); border: 1px solid var(--pv-border);
+  border-radius: 7px; height: 34px; padding: 0 8px;
+}
+.pv-addport-row { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* ---------------------------------------------------------------- read-only */
+.pv-ro .pv-port .pv-dot { cursor: default; }
+
+/* ---------------------------------------------------------------- touch (FR-MOB-02, §6.11 item 8) */
+@media (pointer: coarse) {
+  .pv-root { --pv-row: 36px; }
+  .pv-root .pv-toolbar button, .pv-root .pv-menu button, .pv-root .pv-btn, .pv-root .pv-chip {
+    min-height: 44px; min-width: 44px; flex-shrink: 0; justify-content: center;
+  }
+  .pv-search input { height: 44px; min-width: 44px; }
+  .pv-root .pv-mi { min-height: 44px; justify-content: flex-start; }
+  .pv-port, .pv-more { font-size: 12px; }
+  .pv-dot::after { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; }
+  .pv-addport input, .pv-addport select { height: 44px; }
+}
+@media (hover: none) {
+  .pv-btn:hover:not(:disabled), .pv-chip:hover { background: rgba(255, 255, 255, .04); }
+}
+@media (max-width: 699px) {
+  .pv-toolbar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .pv-btxt { display: none; }
+  .pv-search input { width: 130px; }
+  .pv-hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pv-root *, .pv-root *::before, .pv-root *::after { transition: none !important; animation: none !important; }
+}

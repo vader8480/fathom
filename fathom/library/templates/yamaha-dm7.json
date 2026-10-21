@@ -1,0 +1,99 @@
+{
+  "id": "yamaha-dm7",
+  "manufacturer": "Yamaha",
+  "model": "DM7",
+  "name": "DM7",
+  "kind": "console",
+  "brand": "yamaha",
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Analog In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 32
+    },
+    {
+      "group": "Omni Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 16
+    },
+    {
+      "group": "AES In",
+      "dir": "in",
+      "medium": "aes3",
+      "connector": "XLR3F",
+      "count": 2,
+      "channels": 2
+    },
+    {
+      "group": "AES Out",
+      "dir": "out",
+      "medium": "aes3",
+      "connector": "XLR3M",
+      "count": 2,
+      "channels": 2
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "etherCON",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 144
+    },
+    {
+      "group": "PY Slot",
+      "dir": "io",
+      "medium": "other"
+    },
+    {
+      "group": "Word Clock",
+      "dir": "io",
+      "medium": "sync",
+      "connector": "BNC",
+      "names": [
+        "In",
+        "Out"
+      ],
+      "dirs": {
+        "In": "in",
+        "Out": "out"
+      }
+    },
+    {
+      "group": "GPI In",
+      "dir": "in",
+      "medium": "gpio",
+      "connector": "DB25",
+      "count": 5
+    },
+    {
+      "group": "GPI Out",
+      "dir": "out",
+      "medium": "gpio",
+      "connector": "DB25",
+      "count": 5
+    },
+    {
+      "group": "TC In",
+      "dir": "in",
+      "medium": "timecode",
+      "connector": "XLR3F"
+    }
+  ],
+  "tags": [
+    "console",
+    "dante"
+  ],
+  "source_url": "https://usa.yamaha.com/products/proaudio/mixers/dm7/specs.html"
+}

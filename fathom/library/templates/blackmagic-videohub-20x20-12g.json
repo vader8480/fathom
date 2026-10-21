@@ -1,0 +1,38 @@
+{
+  "id": "blackmagic-videohub-20x20-12g",
+  "manufacturer": "Blackmagic Design",
+  "model": "Videohub 20x20 12G",
+  "name": "Videohub 20x20 12G",
+  "kind": "video_router",
+  "brand": "blackmagic",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "SDI In",
+      "dir": "in",
+      "medium": "sdi",
+      "connector": "BNC",
+      "count": 20
+    },
+    {
+      "group": "SDI Out",
+      "dir": "out",
+      "medium": "sdi",
+      "connector": "BNC",
+      "count": 20
+    },
+    {
+      "group": "Ethernet",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45"
+    }
+  ],
+  "tags": [
+    "router",
+    "sdi"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SuperRackSession name="RRC Sunday" application="SuperRack SoundGrid" version="14.0">
+  <Inventory><IODevice name="DVS FOH-PC" model="Dante Virtual Soundcard"/></Inventory>
+  <Racks>
+    <Rack index="1" name="Kick In" input="DVS 1" output="DVS 1">
+      <Plugin name="C6" />
+      <Plugin name="F6" />
+      <Plugin name="SSL E-Channel" />
+    </Rack>
+    <Rack index="2" name="Kick Out" input="DVS 2" output="DVS 2">
+      <Plugin name="Scheps Omni Channel" />
+      <Plugin name="Smack Attack" />
+    </Rack>
+    <Rack index="3" name="Snare Top" input="DVS 3" output="DVS 3">
+      <Plugin name="SSL E-Channel" />
+      <Plugin name="CLA-76" />
+    </Rack>
+    <Rack index="4" name="Snare Bot" input="DVS 4" output="DVS 4">
+      <Plugin name="F6" />
+      <Plugin name="Smack Attack" />
+    </Rack>
+    <Rack index="5" name="Hi-Hat" input="DVS 5" output="DVS 5">
+      <Plugin name="F6" />
+    </Rack>
+    <Rack index="6" name="Toms" input="DVS 6" output="DVS 6">
+      <Plugin name="F6" />
+      <Plugin name="C6" />
+      <Plugin name="Smack Attack" />
+    </Rack>
+    <Rack index="7" name="OH" input="DVS 7" output="DVS 7">
+      <Plugin name="Scheps 73" />
+      <Plugin name="SSL G-Master Buss Compressor" />
+    </Rack>
+    <Rack index="8" name="Bass DI" input="DVS 8" output="DVS 8">
+      <Plugin name="Scheps Omni Channel" />
+      <Plugin name="CLA-76" />
+      <Plugin name="Bass Rider" />
+    </Rack>
+    <Rack index="9" name="Bass Amp" input="DVS 9" output="DVS 9">
+      <Plugin name="F6" />
+      <Plugin name="CLA-2A" />
+    </Rack>
+    <Rack index="10" name="EG1" input="DVS 10" output="DVS 10">
+      <Plugin name="Scheps Omni Channel" />
+      <Plugin name="F6" />
+    </Rack>
+    <Rack index="11" name="EG2" input="DVS 11" output="DVS 11">
+      <Plugin name="Scheps Omni Channel" />
+      <Plugin name="F6" />
+    </Rack>
+    <Rack index="12" name="Keys 1" input="DVS 12" output="DVS 12">
+      <Plugin name="F6" />
+      <Plugin name="C4" />
+    </Rack>
+    <Rack index="13" name="Keys 2" input="DVS 13" output="DVS 13">
+      <Plugin name="F6" />
+      <Plugin name="C4" />
+    </Rack>
+    <Rack index="14" name="Lead Vox" input="DVS 14" output="DVS 14">
+      <Plugin name="Scheps Omni Channel" />
+      <Plugin name="CLA-2A" />
+      <Plugin name="F6" />
+      <Plugin name="C6" />
+      <Plugin name="Vocal Rider" />
+    </Rack>
+    <Rack index="15" name="Vox 2" input="DVS 15" output="DVS 15">
+      <Plugin name="SSL E-Channel" />
+      <Plugin name="CLA-2A" />
+      <Plugin name="F6" />
+    </Rack>
+    <Rack index="16" name="Vox 3" input="DVS 16" output="DVS 16">
+      <Plugin name="SSL E-Channel" />
+      <Plugin name="CLA-2A" />
+      <Plugin name="F6" />
+    </Rack>
+    <Rack index="17" name="Vox 4" input="DVS 17" output="DVS 17">
+      <Plugin name="SSL E-Channel" />
+      <Plugin name="CLA-2A" />
+      <Plugin name="F6" />
+    </Rack>
+    <Rack index="18" name="Crowd" input="DVS 18" output="DVS 18">
+      <Plugin name="F6" />
+      <Plugin name="C6" />
+      <Plugin name="WNS Noise Suppressor" />
+    </Rack>
+  </Racks>
+</SuperRackSession>

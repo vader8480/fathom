@@ -1,0 +1,23 @@
+{
+  "id": "shure-sm58",
+  "manufacturer": "Shure",
+  "model": "SM58",
+  "name": "SM58",
+  "kind": "mic",
+  "brand": "shure",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Mic Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M"
+    }
+  ],
+  "tags": [
+    "dynamic",
+    "vocal"
+  ]
+}

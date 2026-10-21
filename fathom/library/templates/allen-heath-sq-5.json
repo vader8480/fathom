@@ -1,0 +1,84 @@
+{
+  "id": "allen-heath-sq-5",
+  "manufacturer": "Allen & Heath",
+  "model": "SQ-5",
+  "name": "SQ-5",
+  "kind": "console",
+  "brand": "allen-heath",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Mic In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 16
+    },
+    {
+      "group": "Talkback In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F"
+    },
+    {
+      "group": "ST In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "TRS 1/4\"",
+      "names": [
+        "ST1 L",
+        "ST1 R",
+        "ST2 L",
+        "ST2 R"
+      ]
+    },
+    {
+      "group": "XLR Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 12
+    },
+    {
+      "group": "Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "TRS 1/4\"",
+      "names": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "group": "AES Out",
+      "dir": "out",
+      "medium": "aes3",
+      "connector": "XLR3M",
+      "channels": 2
+    },
+    {
+      "group": "SLink",
+      "dir": "io",
+      "medium": "snake",
+      "connector": "etherCON",
+      "channels": 128
+    },
+    {
+      "group": "I/O Port",
+      "dir": "io",
+      "medium": "other"
+    },
+    {
+      "group": "USB",
+      "dir": "io",
+      "medium": "usb",
+      "connector": "USB-B"
+    }
+  ],
+  "tags": [
+    "console"
+  ],
+  "source_url": "https://www.allen-heath.com/hardware/sq/sq-5/"
+}

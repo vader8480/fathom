@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Profile majorVersion="1" minorVersion="5" product="ATEM 1 M/E Constellation HD">
+  <Settings>
+    <Inputs>
+      <Input id="1" shortName="CAM1" longName="Camera 1 center" externalPortType="SDI"/>
+      <Input id="2" shortName="CAM2" longName="Camera 2 left" externalPortType="SDI"/>
+      <Input id="3" shortName="CAM3" longName="Camera 3 wide" externalPortType="SDI"/>
+      <Input id="4" shortName="LYRC" longName="Lyrics" externalPortType="SDI"/>
+      <Input id="1000" shortName="BARS" longName="Color Bars" externalPortType="Internal"/>
+    </Inputs>
+  </Settings>
+</Profile>

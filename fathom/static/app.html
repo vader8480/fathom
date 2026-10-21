@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fathom">
+<title>Fathom</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="favicon.ico">
+<link rel="stylesheet" href="static/css/app.css">
+</head>
+<body data-fathom-app>
+<div id="app" class="app">
+  <header id="app-top" class="app-top">
+    <span class="app-brand">Fathom</span>
+    <label class="sr-only" for="app-project">Project</label>
+    <select id="app-project" aria-label="Project"></select>
+    <label class="sr-only" for="app-room">Room</label>
+    <select id="app-room" aria-label="Room"></select>
+    <nav id="app-views" class="app-views" aria-label="Views"></nav>
+    <button id="app-undo" class="icon ghost app-hide-narrow" type="button" aria-label="Undo" title="Undo (Cmd/Ctrl+Z)">&#8630;</button>
+    <button id="app-redo" class="icon ghost app-hide-narrow" type="button" aria-label="Redo" title="Redo (Shift+Cmd/Ctrl+Z)">&#8631;</button>
+    <button id="app-search" class="icon ghost" type="button" aria-label="Search" title="Search (Cmd/Ctrl+K)">&#9906;</button>
+    <button id="app-assistant-btn" class="ghost" type="button" aria-label="Assistant" title="Assistant (Cmd/Ctrl+J)">Helper</button>
+    <button id="app-save" class="app-save" type="button" data-state="idle" title="Save now (Cmd/Ctrl+S)">&nbsp;</button>
+    <button id="app-user" class="icon ghost" type="button" aria-label="User menu" aria-haspopup="menu">&#9679;</button>
+  </header>
+  <div id="app-banner" class="app-banner" role="status"></div>
+  <div id="app-body" class="app-body">
+    <main id="app-main" class="app-main" tabindex="-1"><div class="app-loading">Loading…</div></main>
+    <aside id="app-inspector" class="app-inspector" aria-label="Inspector"></aside>
+  </div>
+  <nav id="app-tabbar" class="app-tabbar" aria-label="Views"></nav>
+</div>
+<aside id="app-assistant" class="app-assistant" aria-label="Assistant" aria-hidden="true"></aside>
+<div id="app-toasts" class="app-toasts" aria-live="polite"></div>
+<div id="app-dialog"></div>
+<div id="fathom-live" class="sr-only" aria-live="polite"></div>
+<script type="module" src="static/js/app.js"></script>
+</body>
+</html>

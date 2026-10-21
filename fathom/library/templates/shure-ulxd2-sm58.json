@@ -1,0 +1,22 @@
+{
+  "id": "shure-ulxd2-sm58",
+  "manufacturer": "Shure",
+  "model": "ULXD2/SM58",
+  "name": "ULXD2/SM58",
+  "kind": "mic",
+  "brand": "shure",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "RF Out",
+      "dir": "out",
+      "medium": "rf"
+    }
+  ],
+  "tags": [
+    "wireless",
+    "handheld"
+  ]
+}

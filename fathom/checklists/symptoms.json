@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "symptoms": {
+    "no_audio":   {"discipline": "audio",    "phrases": ["no audio", "no sound", "silent", "can't hear", "cant hear", "cannot hear", "muted", "nothing coming through", "dead mic", "mic not working", "no signal"]},
+    "noise":      {"discipline": "audio",    "phrases": ["hum", "buzz", "noise", "crackle", "static", "hiss", "distortion", "distorted"]},
+    "feedback":   {"discipline": "audio",    "phrases": ["feedback", "ringing", "squeal", "howl"]},
+    "dropout":    {"discipline": "audio",    "phrases": ["dropout", "drops out", "dropping out", "cutting out", "cuts out", "intermittent", "glitch"]},
+    "latency":    {"discipline": "audio",    "phrases": ["latency", "lip sync", "out of sync", "delayed", "echo"]},
+    "no_video":   {"discipline": "video",    "phrases": ["no video", "no picture", "black screen", "blank screen", "no image", "blue screen", "no input", "no signal on the screen", "black", "is black", "went black", "goes black", "gone black", "blank", "is blank"]},
+    "flicker":    {"discipline": "video",    "phrases": ["flicker", "flickering", "flashing", "sparkles", "snow"]},
+    "wrong_source": {"discipline": "video",  "phrases": ["wrong source", "wrong input", "wrong camera", "wrong picture"]},
+    "lighting_no_response": {"discipline": "lighting", "phrases": ["not responding", "lights not working", "fixture not responding", "no dmx", "lights won't", "stuck on", "not changing"]},
+    "no_network": {"discipline": "network",  "phrases": ["offline", "not on the network", "can't see", "cannot see", "not discovered", "no link", "no connection", "disconnected"]},
+    "no_power":   {"discipline": "power",    "phrases": ["no power", "won't turn on", "wont turn on", "not powering", "tripped", "dead"]}
+  },
+  "discipline_words": {
+    "audio": ["audio", "sound", "mic", "mics", "microphone", "speaker", "speakers", "mix", "vocal", "vocals"],
+    "video": ["video", "picture", "screen", "image", "display", "camera"],
+    "lighting": ["light", "lights", "lighting", "dmx", "fixture", "fixtures", "dimmer"],
+    "network": ["network", "ip", "ethernet", "wifi"],
+    "power": ["power", "breaker", "outlet"]
+  },
+  "positive": ["fine", "works", "working", "is ok", "is okay", "okay", "good", "great", "no problem", "no problems"],
+  "stopwords": ["the", "a", "an", "is", "are", "was", "has", "have", "had", "but", "and", "on", "in", "of", "to", "from", "my", "our", "it", "its", "it's", "no", "not", "there", "this", "that", "we", "i", "for", "with", "at", "any", "all", "now"]
+}

@@ -1,0 +1,57 @@
+{
+  "id": "l-acoustics-la12x",
+  "manufacturer": "L-Acoustics",
+  "model": "LA12X",
+  "name": "LA12X",
+  "kind": "amp",
+  "brand": "l-acoustics",
+  "ru": 2,
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Analog In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 4
+    },
+    {
+      "group": "Link Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 4
+    },
+    {
+      "group": "AES In",
+      "dir": "in",
+      "medium": "aes3",
+      "connector": "XLR3F",
+      "names": [
+        "1/2",
+        "3/4"
+      ],
+      "channels": 2
+    },
+    {
+      "group": "AVB",
+      "dir": "io",
+      "medium": "avb",
+      "connector": "etherCON"
+    },
+    {
+      "group": "Speaker Out",
+      "dir": "out",
+      "medium": "speaker",
+      "connector": "NL4",
+      "count": 4
+    }
+  ],
+  "tags": [
+    "amplifier",
+    "avb"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

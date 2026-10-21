@@ -1,0 +1,38 @@
+{
+  "id": "etc-eos-apex-10",
+  "manufacturer": "ETC",
+  "model": "Eos Apex 10",
+  "name": "Eos Apex 10",
+  "kind": "lighting_console",
+  "brand": "etc",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Ethernet",
+      "dir": "io",
+      "medium": "sacn",
+      "connector": "etherCON",
+      "count": 4
+    },
+    {
+      "group": "SFP+",
+      "dir": "io",
+      "medium": "network",
+      "connector": "SFP+",
+      "count": 2
+    },
+    {
+      "group": "I/O Garage",
+      "dir": "io",
+      "medium": "other",
+      "count": 4
+    }
+  ],
+  "tags": [
+    "lighting console",
+    "eos family"
+  ],
+  "source_url": "https://www.etcconnect.com/Products/Consoles/Eos-Family/Eos-Apex/"
+}

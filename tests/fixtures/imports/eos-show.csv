@@ -1,0 +1,36 @@
+START_TARGETS
+TARGET_TYPE,TARGET_ID
+Cue,1
+END_TARGETS
+START_FIXTURES
+FIXTURE_TYPE_NAME,PARAMETER_NAME,PARAMETER_ADDRESS_OFFSET
+Source Four LED,Intensity,0
+Source Four LED,Red,1
+Source Four LED,Green,2
+Source Four LED,Blue,3
+Source Four LED,Amber,4
+Source Four LED,White,5
+Source Four LED,Strobe,6
+Source Four LED,Fan,7
+Mac Aura,Param 1,0
+Mac Aura,Param 2,1
+Mac Aura,Param 3,2
+Mac Aura,Param 4,3
+Mac Aura,Param 5,4
+Mac Aura,Param 6,5
+Mac Aura,Param 7,6
+Mac Aura,Param 8,7
+Mac Aura,Param 9,8
+Mac Aura,Param 10,9
+Mac Aura,Param 11,10
+Mac Aura,Param 12,11
+Mac Aura,Param 13,12
+Mac Aura,Param 14,13
+END_FIXTURES
+START_CHANNELS
+CHANNEL,FIXTURE_TYPE,ADDRESS,LABEL,PROPORTION,CURVE
+1,Source Four LED,101,Front L,100,
+2,Source Four LED,1/9,Front R,100,
+3,Mac Aura,2.1,Wash 1,100,
+4,Mac Aura,1025,Wash 2,100,
+END_CHANNELS

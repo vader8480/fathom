@@ -1,0 +1,60 @@
+{
+  "id": "chauvet-maverick-storm-2-profile",
+  "manufacturer": "Chauvet Professional",
+  "model": "Maverick Storm 2 Profile",
+  "name": "Maverick Storm 2 Profile",
+  "kind": "fixture",
+  "brand": "chauvet",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "DMX",
+      "dir": "in",
+      "medium": "dmx",
+      "connector": "XLR5",
+      "names": [
+        "In",
+        "Out"
+      ],
+      "dirs": {
+        "In": "in",
+        "Out": "out"
+      }
+    },
+    {
+      "group": "Ethernet",
+      "dir": "in",
+      "medium": "sacn",
+      "connector": "etherCON",
+      "names": [
+        "In",
+        "Out"
+      ],
+      "dirs": {
+        "In": "in",
+        "Out": "out"
+      }
+    },
+    {
+      "group": "Power",
+      "dir": "in",
+      "medium": "power",
+      "connector": "powerCON TRUE1",
+      "names": [
+        "In",
+        "Out"
+      ],
+      "dirs": {
+        "In": "in",
+        "Out": "out"
+      }
+    }
+  ],
+  "tags": [
+    "moving light",
+    "ip65"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

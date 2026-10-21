@@ -1,0 +1,41 @@
+START_TARGETS
+TARGET_TYPE,TARGET_TYPE_AS_TEXT,TARGET_LIST_NUMBER,TARGET_ID,LABEL
+1,Cue,1,1,Walk in
+END_TARGETS
+START_FIXTURES
+FIXTURE_TYPE_NAME,PARAMETER_TYPE_AS_TEXT,PARAMETER_ADDRESS_OFFSET
+Source Four LED Lustr X8 Direct,Intensity,0
+Source Four LED Lustr X8 Direct,Strobe,9
+Maverick Storm 2 Profile Standard,Intensity,0
+Maverick Storm 2 Profile Standard,Control,38
+MAC Aura PXL Mode 3,Intensity,0
+MAC Aura PXL Mode 3,Zoom,17
+Chauvet COLORado 1 Solo,Intensity,0
+Chauvet COLORado 1 Solo,Strobe,7
+Dimmer,Intensity,0
+END_FIXTURES
+START_CHANNELS
+CHANNEL,PART,FIXTURE_TYPE,ADDRESS,LABEL,PROPORTION,CURVE
+1,1,Source Four LED Lustr X8 Direct,1,Front light 1,100,
+2,1,Source Four LED Lustr X8 Direct,11,Front light 2,100,
+3,1,Source Four LED Lustr X8 Direct,21,Front light 3,100,
+4,1,Source Four LED Lustr X8 Direct,31,Front light 4,100,
+11,1,Maverick Storm 2 Profile Standard,101,Mover 1,100,
+12,1,Maverick Storm 2 Profile Standard,141,Mover 2,100,
+21,1,MAC Aura PXL Mode 3,2/1,Stage wash 1,100,
+22,1,MAC Aura PXL Mode 3,2/21,Stage wash 2,100,
+31,1,Chauvet COLORado 1 Solo,1025,Cyc 1,100,
+32,1,Chauvet COLORado 1 Solo,1033,Cyc 2,100,
+33,1,Chauvet COLORado 1 Solo,1041,Cyc 3,100,
+34,1,Chauvet COLORado 1 Solo,1049,Cyc 4,100,
+35,1,Chauvet COLORado 1 Solo,1057,Cyc 5,100,
+36,1,Chauvet COLORado 1 Solo,1065,Cyc 6,100,
+37,1,Chauvet COLORado 1 Solo,1073,Cyc 7,100,
+38,1,Chauvet COLORado 1 Solo,1081,Cyc 8,100,
+41,1,Dimmer,3.101,House 1,100,2
+42,1,Dimmer,3.102,House 2,100,2
+43,1,Dimmer,3.103,House 3,100,2
+44,1,Dimmer,3.104,House 4,100,2
+45,1,Dimmer,3.105,House 5,100,2
+46,1,Dimmer,3.106,House 6,100,2
+END_CHANNELS

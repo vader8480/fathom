@@ -1,0 +1,46 @@
+{
+  "id": "martin-mac-aura-pxl",
+  "manufacturer": "Martin",
+  "model": "MAC Aura PXL",
+  "name": "MAC Aura PXL",
+  "kind": "fixture",
+  "brand": "martin",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "DMX",
+      "dir": "in",
+      "medium": "dmx",
+      "connector": "XLR5",
+      "names": [
+        "In",
+        "Thru"
+      ],
+      "dirs": {
+        "In": "in",
+        "Thru": "out"
+      }
+    },
+    {
+      "group": "Power",
+      "dir": "in",
+      "medium": "power",
+      "connector": "powerCON TRUE1",
+      "names": [
+        "In",
+        "Thru"
+      ],
+      "dirs": {
+        "In": "in",
+        "Thru": "out"
+      }
+    }
+  ],
+  "tags": [
+    "moving light",
+    "wash"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

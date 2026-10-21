@@ -1,0 +1,68 @@
+{
+  "id": "midas-m32",
+  "manufacturer": "Midas",
+  "model": "M32",
+  "name": "M32",
+  "kind": "console",
+  "brand": "midas",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Mic In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 32
+    },
+    {
+      "group": "XLR Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 16
+    },
+    {
+      "group": "Aux In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "TRS 1/4\"",
+      "count": 6
+    },
+    {
+      "group": "Aux Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "TRS 1/4\"",
+      "count": 6
+    },
+    {
+      "group": "AES50",
+      "dir": "io",
+      "medium": "aes50",
+      "connector": "etherCON",
+      "names": [
+        "A",
+        "B"
+      ],
+      "channels": 48
+    },
+    {
+      "group": "AES Out",
+      "dir": "out",
+      "medium": "aes3",
+      "connector": "XLR3M",
+      "channels": 2
+    },
+    {
+      "group": "Card Slot",
+      "dir": "io",
+      "medium": "other"
+    }
+  ],
+  "tags": [
+    "console"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

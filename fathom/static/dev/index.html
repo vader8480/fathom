@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fathom dev harnesses</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>
+.wrap{max-width:760px;margin:0 auto;padding:24px 16px calc(24px + env(safe-area-inset-bottom,0px))}
+h1{font-size:13px;letter-spacing:1.8px;text-transform:uppercase;color:var(--accent)}
+ul{list-style:none;padding:0}
+li{border:1px solid var(--border);border-radius:10px;margin:8px 0;padding:12px 14px;background:var(--panel)}
+li a{font-weight:600;font-size:15px}
+li p{margin:4px 0 0;color:var(--muted)}
+li .alt{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Fathom dev harnesses</h1>
+  <p class="muted">Each page mounts one module on the canonical fixture (<code>fixture-v2.json</code>) with a fake ctx. Add <code>?smoke=1</code> for the smoke-test marker.</p>
+  <ul>
+    <li><a href="patchview.html">Patch view</a> <span class="muted">(W3)</span>
+      <p>Node editor: cards, port-to-port wires, drag, re-patch, pan/zoom.</p>
+      <div class="alt"><a class="chip" href="patchview.html?devices=150&amp;cables=600">150 devices / 600 cables</a><a class="chip" href="patchview.html?readonly=1">read-only</a></div></li>
+    <li><a href="patchtable.html">Patch table</a> <span class="muted">(W5)</span>
+      <p>Editable per-device inputs / outputs, Patch…, labels, CSV, print.</p>
+      <div class="alt"><a class="chip" href="patchtable.html?readonly=1">read-only</a><a class="chip" href="patchtable.html?room=*">all rooms</a><a class="chip" href="patchtable.html?smoke=1">smoke</a></div></li>
+    <li><a href="floorplan.html">Floor plan</a> <span class="muted">(W4)</span><p>Markers, calibrate, measure, layers.</p></li>
+    <li><a href="rack.html">Racks</a> <span class="muted">(W4)</span><p>Front / rear elevations, drag to RU, collisions.</p></li>
+    <li><a href="schedules.html">Schedules &amp; inventory</a> <span class="muted">(W4)</span><p>Cable, IP, DMX, BOM, labels; inventory table.</p></li>
+  </ul>
+  <h1>App and viewer</h1>
+  <ul>
+    <li><a href="../../">App shell</a><p>The full SPA (needs the server API).</p>
+      <div class="alt"><a class="chip" href="../../#/sunday-demo/main/table">sunday-demo · table</a><a class="chip" href="../../?debug_missing_view=racks#/sunday-demo/main/racks">missing-view error card</a></div></li>
+    <li><a href="../../p/sunday-demo">Viewer: sunday-demo map</a>
+      <div class="alt"><a class="chip" href="../../p/sunday-demo/rooms">rooms</a><a class="chip" href="../../p/sunday-demo/d/atem-mini">device page</a><a class="chip" href="../../p/sunday-demo/r/main/patch">patch page</a></div></li>
+    <li><a href="../../login">Login page</a></li>
+  </ul>
+</div>
+</body>
+</html>

@@ -1,0 +1,68 @@
+{
+  "id": "qsc-core-110f",
+  "manufacturer": "QSC",
+  "model": "Core 110f",
+  "name": "Core 110f",
+  "kind": "processor",
+  "brand": "qsc",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Mic/Line In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "Phoenix",
+      "count": 8
+    },
+    {
+      "group": "Line Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "Phoenix",
+      "count": 8
+    },
+    {
+      "group": "Flex I/O",
+      "dir": "io",
+      "medium": "analog",
+      "connector": "Phoenix",
+      "count": 8
+    },
+    {
+      "group": "LAN",
+      "dir": "io",
+      "medium": "qlan",
+      "connector": "RJ45",
+      "names": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "group": "USB",
+      "dir": "io",
+      "medium": "usb",
+      "connector": "USB-B"
+    },
+    {
+      "group": "GPIO",
+      "dir": "io",
+      "medium": "gpio",
+      "connector": "DB25"
+    },
+    {
+      "group": "RS-232",
+      "dir": "io",
+      "medium": "rs232",
+      "connector": "Phoenix"
+    }
+  ],
+  "tags": [
+    "dsp",
+    "q-sys"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

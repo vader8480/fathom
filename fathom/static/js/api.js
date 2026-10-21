@@ -1,0 +1,353 @@
+// Fathom API client (§5) and the change queue (§6.3): batches ops, posts
+// them with base_revision, handles rebases, conflicts and offline queueing.
+
+import { touchedRefs } from './model-core.js';
+
+export class ApiError extends Error {
+  constructor(message, status, code, details) {
+    super(message || ('HTTP ' + status));
+    this.name = 'ApiError';
+    this.status = status || 0;
+    this.code = code || '';
+    this.details = details || {};
+  }
+}
+
+function qs(params) {
+  if (!params) return '';
+  const parts = [];
+  Object.keys(params).forEach(function (k) {
+    const v = params[k];
+    if (v === undefined || v === null || v === '') return;
+    const vals = Array.isArray(v) ? [v.join(',')] : [v];
+    vals.forEach(function (x) { parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(String(x))); });
+  });
+  return parts.length ? '?' + parts.join('&') : '';
+}
+
+function enc(s) {
+  return encodeURIComponent(String(s));
+}
+
+export function createApi(opts) {
+  opts = opts || {};
+  const base = opts.base || '';
+  const fetchImpl = opts.fetchImpl || (typeof fetch !== 'undefined' ? fetch.bind(typeof window !== 'undefined' ? window : globalThis) : null);
+
+  function url(path, params) {
+    return base + path + qs(params);
+  }
+
+  function request(method, path, body, extra) {
+    extra = extra || {};
+    const headers = { 'X-Fathom': '1', 'Accept': 'application/json' };
+    let payload;
+    if (body instanceof (typeof FormData !== 'undefined' ? FormData : function () {})) {
+      payload = body;
+    } else if (body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      payload = JSON.stringify(body);
+    }
+    if (extra.headers) Object.keys(extra.headers).forEach(function (k) { headers[k] = extra.headers[k]; });
+    if (!fetchImpl) return Promise.reject(new ApiError('No fetch available', 0, 'offline'));
+    return fetchImpl(url(path, extra.params), { method: method, headers: headers, body: payload, credentials: 'same-origin' }).then(function (res) {
+      if (res.status === 204) return { data: null, res: res };
+      const ct = (res.headers && res.headers.get && res.headers.get('Content-Type')) || '';
+      const isJson = ct.indexOf('json') >= 0;
+      const p = isJson ? res.json().catch(function () { return null; }) : res.text();
+      return p.then(function (data) {
+        if (!res.ok) {
+          const d = isJson && data ? data : {};
+          throw new ApiError(d.error || (typeof data === 'string' && data ? data.slice(0, 200) : 'HTTP ' + res.status), res.status, d.code || '', d.details || {});
+        }
+        return { data: data, res: res };
+      });
+    }, function (err) {
+      throw new ApiError((err && err.message) || 'Network error', 0, 'offline');
+    });
+  }
+  function get(path, params) { return request('GET', path, undefined, { params: params }).then(function (r) { return r.data; }); }
+  function send(method, path, body, params) { return request(method, path, body, { params: params }).then(function (r) { return r.data; }); }
+  function proj(name) { return 'api/v2/projects/' + enc(name); }
+
+  return {
+    base: base,
+    url: url,
+    request: request,
+    meta: function () { return get('api/v2/meta'); },
+    session: function () { return get('api/v2/session'); },
+    login: function (username, password) { return send('POST', 'api/v2/session', { username: username, password: password }); },
+    logout: function () { return send('DELETE', 'api/v2/session'); },
+    listProjects: function () { return get('api/v2/projects'); },
+    createProject: function (o) { return send('POST', 'api/v2/projects', { name: o.name, template: o.template || 'blank', org: o.org || '' }); },
+    deleteProject: function (name) { return send('DELETE', proj(name), undefined, { confirm: name }); },
+    getProject: function (name) {
+      return request('GET', proj(name)).then(function (r) {
+        const d = r.data || {};
+        const h = r.res && r.res.headers;
+        return {
+          name: d.name || name, doc: d.doc, revision: d.revision, problems: d.problems || [], role: d.role || 'admin',
+          migrated_from: d.migrated_from || null,
+          etag: (h && h.get && h.get('ETag')) || ('"r' + d.revision + '"'),
+          offline: !!(h && h.get && h.get('X-Fathom-Offline')),
+        };
+      });
+    },
+    putProject: function (name, doc, baseRevision, summary) {
+      return request('PUT', proj(name), { doc: doc, base_revision: baseRevision, summary: summary || '' }, { headers: { 'If-Match': '"r' + baseRevision + '"' } }).then(function (r) { return r.data; });
+    },
+    postChanges: function (name, baseRevision, ops, summary) { return send('POST', proj(name) + '/changes', { base_revision: baseRevision, ops: ops, summary: summary || '' }); },
+    overlay: function (name) { return get(proj(name) + '/overlay'); },
+    offlineManifest: function (name) { return get(proj(name) + '/offline-manifest'); },
+    history: function (name, o) { o = o || {}; return get(proj(name) + '/history', { limit: o.limit, before: o.before }); },
+    historyDoc: function (name, rev) { return get(proj(name) + '/history/' + enc(rev)); },
+    historyDiff: function (name, rev, against) { return get(proj(name) + '/history/' + enc(rev) + '/diff', { against: against }); },
+    restore: function (name, rev, baseRevision) { return send('POST', proj(name) + '/history/' + enc(rev) + '/restore', { base_revision: baseRevision }); },
+    upload: function (name, target, files, params) {
+      const fd = new FormData();
+      Array.prototype.forEach.call(files || [], function (f) { fd.append('file', f, f.name); });
+      return send('POST', proj(name) + '/' + target, fd, params);
+    },
+    importPreview: function (name, files, params) {
+      const fd = new FormData();
+      Array.prototype.forEach.call(files || [], function (f) { fd.append('file', f, f.name); });
+      return send('POST', proj(name) + '/imports/preview', fd, params);
+    },
+    deleteImport: function (name, id, deleteFiles) { return send('DELETE', proj(name) + '/imports/' + enc(id), undefined, { delete_files: deleteFiles ? 1 : '' }); },
+    inspectImport: function (name, id) { return get(proj(name) + '/imports/' + enc(id) + '/inspect'); },
+    schedule: function (name, kind, params) { return get(proj(name) + '/schedules/' + enc(kind), params); },
+    scheduleUrl: function (name, kind, params) { return url(proj(name) + '/schedules/' + enc(kind), params); },
+    tagPreview: function (name, scope, pattern) { return get(proj(name) + '/cables/tag-preview', { scope: scope, pattern: pattern }); },
+    trace: function (name, params) { return get(proj(name) + '/trace', params); },
+    search: function (name, q, o) { o = o || {}; return get(proj(name) + '/search', { q: q, limit: o.limit, kinds: o.kinds }); },
+    ask: function (name, payload) { return send('POST', proj(name) + '/assistant', payload); },
+    qrUrl: function (name, device) { return url(proj(name) + '/qr/' + enc(device) + '.svg'); },
+    rackSvgUrl: function (name, rack, face) { return url(proj(name) + '/racks/' + enc(rack) + '.svg', { face: face }); },
+    floorplanImageUrl: function (name, fp, hide) { return url(proj(name) + '/floorplans/' + enc(fp) + '/image', { hide: hide }); },
+    fileUrl: function (name, att) { return url(proj(name) + '/files/' + enc(att.id) + '/' + enc(att.name || 'file')); },
+    deleteFile: function (name, attId) { return send('DELETE', proj(name) + '/files/' + enc(attId)); },
+    builds: function (name) { return get(proj(name) + '/builds'); },
+    build: function (name, o) { return send('POST', proj(name) + '/builds', o || {}); },
+    deleteBuild: function (name, run) { return send('DELETE', proj(name) + '/builds/' + enc(run)); },
+    library: function (params) { return get('api/v2/library', params); },
+    template: function (id, project) { return get('api/v2/library/' + enc(id), { project: project }); },
+    saveTemplate: function (t, override) { return send('POST', 'api/v2/library', t, { override: override ? 1 : '' }); },
+    deleteTemplate: function (id) { return send('DELETE', 'api/v2/library/' + enc(id)); },
+    users: function () { return get('api/v2/users'); },
+    createUser: function (u) { return send('POST', 'api/v2/users', u); },
+    updateUser: function (username, patch) { return send('PATCH', 'api/v2/users/' + enc(username), patch); },
+    deleteUser: function (username) { return send('DELETE', 'api/v2/users/' + enc(username)); },
+    changePassword: function (old, nw) { return send('POST', 'api/v2/users/me/password', { old: old, new: nw }); },
+    shares: function (name) { return get(proj(name) + '/shares'); },
+    createShare: function (name, o) { return send('POST', proj(name) + '/shares', o || {}); },
+    deleteShare: function (name, token) { return send('DELETE', proj(name) + '/shares/' + enc(token)); },
+  };
+}
+
+// ------------------------------------------------------------ change queue
+
+const BACKOFF = [1000, 2000, 5000, 10000, 30000];
+
+function makeEvent(type, detail) {
+  const e = new Event(type);
+  try { e.detail = detail; } catch (err) { Object.defineProperty(e, 'detail', { value: detail }); }
+  return e;
+}
+
+function summarize(labels) {
+  const uniq = [];
+  labels.forEach(function (l) { if (l && uniq.indexOf(l) < 0) uniq.push(l); });
+  if (!uniq.length) return '';
+  if (uniq.length === 1) return uniq[0];
+  return uniq.slice(0, 3).join('; ') + (uniq.length > 3 ? ' (+' + (uniq.length - 3) + ')' : '');
+}
+
+export class ChangeQueue extends EventTarget {
+  constructor(o) {
+    super();
+    o = o || {};
+    this.api = o.api;
+    this.project = o.project;
+    this.store = o.store;
+    this.debounceMs = o.debounceMs === undefined ? 600 : o.debounceMs;
+    this.maxBatch = o.maxBatch || 200;
+    this.storage = o.storage === undefined ? null : o.storage;
+    this.autosave = o.autosave === undefined ? true : !!o.autosave;
+    this._items = [];
+    this._timer = null;
+    this._retry = 0;
+    this._inflight = null;
+    this._paused = false;
+    this._conflict = null;
+    this._state = 'idle';
+    this._error = '';
+    this._restored = this._load();
+  }
+  get key() { return 'fathom.pending.' + this.project; }
+  get pending() {
+    let n = 0;
+    this._items.forEach(function (it) { n += it.ops.length; });
+    return n;
+  }
+  get state() { return this._state; }
+  get conflict() { return this._conflict; }
+  // Ops restored from storage at construction; the shell re-applies them on the fresh doc.
+  takeRestored() {
+    const r = this._restored || [];
+    this._restored = null;
+    if (r.length) {
+      this._items = r.slice();
+      this._persist();
+    }
+    let ops = [];
+    r.forEach(function (it) { ops = ops.concat(it.ops); });
+    return ops;
+  }
+  _load() {
+    if (!this.storage) return [];
+    try {
+      const raw = this.storage.getItem(this.key);
+      if (!raw) return [];
+      const v = JSON.parse(raw);
+      const items = Array.isArray(v) ? v : (v && Array.isArray(v.items) ? v.items : (v && Array.isArray(v.ops) ? [{ ops: v.ops, label: v.label || 'Offline edits' }] : []));
+      return items.filter(function (it) { return it && Array.isArray(it.ops) && it.ops.length; });
+    } catch (err) {
+      return [];
+    }
+  }
+  _persist() {
+    if (!this.storage) return;
+    try {
+      if (this._items.length) this.storage.setItem(this.key, JSON.stringify({ project: this.project, items: this._items }));
+      else this.storage.removeItem(this.key);
+    } catch (err) { /* storage full or disabled */ }
+  }
+  _emit(state, extra) {
+    this._state = state;
+    const detail = Object.assign({ state: state, pending: this.pending, revision: this.store ? this.store.revision : null, error: this._error || undefined, conflicts: this._conflict ? this._conflict.conflicts : undefined }, extra || {});
+    this.dispatchEvent(makeEvent('state', detail));
+    if (this.store && this.store.emit) this.store.emit('saving', detail);
+  }
+  setAutosave(b) {
+    this.autosave = !!b;
+    if (this.autosave && this._items.length) this._schedule(this.debounceMs);
+  }
+  enqueue(ops, label) {
+    if (!ops || !ops.length) return;
+    this._items.push({ ops: ops, label: label || '' });
+    this._persist();
+    if (this._paused) { this._emit(this._conflict ? 'conflict' : this._state); return; }
+    this._emit(this._state === 'offline' ? 'offline' : 'pending');
+    if (this.autosave) this._schedule(this.debounceMs);
+  }
+  _schedule(ms) {
+    const self = this;
+    if (this._timer) clearTimeout(this._timer);
+    this._timer = setTimeout(function () { self._timer = null; self.flush(); }, ms);
+  }
+  _takeBatch() {
+    const ops = [];
+    const labels = [];
+    let n = 0;
+    while (n < this._items.length) {
+      const it = this._items[n];
+      if (ops.length && ops.length + it.ops.length > this.maxBatch) break;
+      for (const op of it.ops) ops.push(op);
+      labels.push(it.label);
+      n++;
+    }
+    return { ops: ops, labels: labels, count: n };
+  }
+  flush() {
+    const self = this;
+    if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+    if (this._inflight) return this._inflight.then(function () { return self._items.length && !self._paused ? self.flush() : null; });
+    if (this._paused || !this._items.length) {
+      if (!this._items.length && !this._paused && this._state !== 'saved') this._emit('saved');
+      return Promise.resolve(null);
+    }
+    const batch = this._takeBatch();
+    const base = this.store ? this.store.revision : 0;
+    this._emit('saving');
+    this._inflight = this.api.postChanges(this.project, base, batch.ops, summarize(batch.labels)).then(function (res) {
+      self._inflight = null;
+      self._retry = 0;
+      self._error = '';
+      self._items.splice(0, batch.count);
+      self._persist();
+      if (self.store) self.store.setRevision(res.revision);
+      if (res.problems && res.problems.length) self.dispatchEvent(makeEvent('problems', res.problems));
+      if (res.rebased) {
+        self.dispatchEvent(makeEvent('rebased', res));
+        return self.resync().then(function () { return self._items.length ? self.flush() : (self._emit('saved'), null); });
+      }
+      if (self._items.length) return self.flush();
+      self._emit('saved');
+      return res;
+    }, function (err) {
+      self._inflight = null;
+      if (err && err.status === 409 && err.code !== 'v2_required') {
+        self._paused = true;
+        self._conflict = { conflicts: (err.details && err.details.conflicts) || [], by: (err.details && err.details.by) || [], revision: err.details && err.details.revision, message: err.message };
+        self._error = err.message;
+        self._emit('conflict');
+        return null;
+      }
+      if (!err || err.status === 0 || err.status >= 500 || err.status === 429) {
+        const delay = BACKOFF[Math.min(self._retry, BACKOFF.length - 1)];
+        self._retry++;
+        self._error = (err && err.message) || 'offline';
+        self._emit(err && err.status ? 'error' : 'offline', { retryIn: delay });
+        self._schedule(delay);
+        return null;
+      }
+      // validation / permission errors: drop this batch so the queue does not wedge
+      self._items.splice(0, batch.count);
+      self._persist();
+      self._error = err.message;
+      self._emit('error', { problems: err.details && err.details.problems, dropped: batch.ops.length });
+      self.dispatchEvent(makeEvent('dropped', { error: err, ops: batch.ops }));
+      return self.resync().catch(function () { return null; });
+    });
+    return this._inflight;
+  }
+  // Reload the doc from the server and re-apply the still-pending local ops on it.
+  resync() {
+    const self = this;
+    if (!this.api || !this.store) return Promise.resolve(null);
+    return this.api.getProject(this.project).then(function (p) {
+      self.store.replaceDoc(p.doc, p.revision, 'load');
+      let ops = [];
+      self._items.forEach(function (it) { ops = ops.concat(it.ops); });
+      if (ops.length) {
+        try { self.store.applyRemote(ops, 'pending'); } catch (err) { self._items = []; self._persist(); }
+      }
+      return p;
+    });
+  }
+  resolveConflict(mode) {
+    const self = this;
+    const conflict = this._conflict || { conflicts: [] };
+    this._paused = false;
+    this._conflict = null;
+    this._error = '';
+    if (mode === 'keep') {
+      return this.api.getProject(this.project).then(function (p) {
+        const pend = [];
+        self._items.forEach(function (it) { pend.push(it); });
+        self.store.replaceDoc(p.doc, p.revision, 'load');
+        let ops = [];
+        pend.forEach(function (it) { ops = ops.concat(it.ops); });
+        try { if (ops.length) self.store.applyRemote(ops, 'pending'); } catch (err) { /* keep anyway, server decides */ }
+        return self.flush();
+      });
+    }
+    const bad = {};
+    (conflict.conflicts || []).forEach(function (r) { bad[r] = true; });
+    this._items = this._items.map(function (it) {
+      return { label: it.label, ops: it.ops.filter(function (op) { return !bad[touchedRefs([op])[0]]; }) };
+    }).filter(function (it) { return it.ops.length; });
+    this._persist();
+    return this.resync().then(function () { return self._items.length ? self.flush() : (self._emit('saved'), null); });
+  }
+}

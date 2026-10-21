@@ -1,0 +1,40 @@
+{
+  "id": "etc-sensor3-48",
+  "manufacturer": "ETC",
+  "model": "Sensor3 48-module rack",
+  "name": "Sensor3 48-module rack",
+  "kind": "dimmer",
+  "brand": "etc",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "DMX In",
+      "dir": "in",
+      "medium": "dmx",
+      "connector": "XLR5F",
+      "names": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "group": "Ethernet",
+      "dir": "in",
+      "medium": "sacn",
+      "connector": "RJ45"
+    },
+    {
+      "group": "Dimmer Out",
+      "dir": "out",
+      "medium": "power",
+      "connector": "terminal",
+      "count": 48
+    }
+  ],
+  "tags": [
+    "dimmer rack"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

@@ -1,0 +1,59 @@
+{
+  "id": "shure-p10t",
+  "manufacturer": "Shure",
+  "model": "PSM1000 P10T",
+  "name": "PSM1000 P10T",
+  "kind": "iem",
+  "brand": "shure",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Audio In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR/TRS combo",
+      "names": [
+        "Ch1 L",
+        "Ch1 R",
+        "Ch2 L",
+        "Ch2 R"
+      ]
+    },
+    {
+      "group": "Loop Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "TRS 1/4\"",
+      "names": [
+        "Ch1 L",
+        "Ch1 R",
+        "Ch2 L",
+        "Ch2 R"
+      ]
+    },
+    {
+      "group": "RF Out",
+      "dir": "out",
+      "medium": "iem_wireless",
+      "connector": "BNC",
+      "names": [
+        "Ch1",
+        "Ch2"
+      ]
+    },
+    {
+      "group": "Network",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45"
+    }
+  ],
+  "tags": [
+    "iem",
+    "wireless"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

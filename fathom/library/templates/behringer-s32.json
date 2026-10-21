@@ -1,0 +1,43 @@
+{
+  "id": "behringer-s32",
+  "manufacturer": "Behringer",
+  "model": "S32",
+  "name": "S32",
+  "kind": "stage_io",
+  "brand": "behringer",
+  "ru": 3,
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Mic In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 32
+    },
+    {
+      "group": "XLR Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 16
+    },
+    {
+      "group": "AES50",
+      "dir": "io",
+      "medium": "aes50",
+      "connector": "etherCON",
+      "names": [
+        "A",
+        "B"
+      ],
+      "channels": 48
+    }
+  ],
+  "tags": [
+    "stagebox"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

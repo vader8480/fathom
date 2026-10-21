@@ -1,0 +1,45 @@
+{
+  "id": "powersoft-x8",
+  "manufacturer": "Powersoft",
+  "model": "X8",
+  "name": "X8",
+  "kind": "amp",
+  "brand": "powersoft",
+  "ru": 2,
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Analog In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 8
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "etherCON",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 8
+    },
+    {
+      "group": "Speaker Out",
+      "dir": "out",
+      "medium": "speaker",
+      "connector": "NL4",
+      "count": 8
+    }
+  ],
+  "tags": [
+    "amplifier",
+    "dante"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

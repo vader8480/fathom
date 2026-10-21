@@ -1,0 +1,48 @@
+{
+  "id": "sony-srg-x400",
+  "manufacturer": "Sony",
+  "model": "SRG-X400",
+  "name": "SRG-X400",
+  "kind": "camera",
+  "brand": "sony",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "HDMI Out",
+      "dir": "out",
+      "medium": "hdmi",
+      "connector": "HDMI-A"
+    },
+    {
+      "group": "SDI Out",
+      "dir": "out",
+      "medium": "sdi",
+      "connector": "BNC"
+    },
+    {
+      "group": "Network",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45"
+    },
+    {
+      "group": "RS-232/422",
+      "dir": "io",
+      "medium": "rs422",
+      "connector": "RJ45"
+    },
+    {
+      "group": "Audio In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "TRS 3.5mm"
+    }
+  ],
+  "tags": [
+    "ptz",
+    "camera"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

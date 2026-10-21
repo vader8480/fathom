@@ -1,0 +1,1306 @@
+{
+  "kinds": {
+    "source": {
+      "label": "Sources",
+      "discipline": "audio",
+      "color": "#2fd4b4",
+      "side": "left",
+      "routing": "none",
+      "legacy": "source"
+    },
+    "stage_io": {
+      "label": "Stage I/O",
+      "discipline": "audio",
+      "color": "#4ea8ff",
+      "side": "left",
+      "routing": "matrix",
+      "legacy": "stage_io"
+    },
+    "computer": {
+      "label": "Computers",
+      "discipline": "audio",
+      "color": "#a98bff",
+      "side": "left",
+      "routing": "matrix",
+      "legacy": "computer"
+    },
+    "console": {
+      "label": "Consoles",
+      "discipline": "audio",
+      "color": "#7c5cff",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "console"
+    },
+    "iem": {
+      "label": "IEM gear",
+      "discipline": "audio",
+      "color": "#f06aa8",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "iem"
+    },
+    "pa": {
+      "label": "PA · amps, speakers",
+      "discipline": "audio",
+      "color": "#ff9548",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "pa"
+    },
+    "network": {
+      "label": "Network",
+      "discipline": "network",
+      "color": "#7b86ff",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "network"
+    },
+    "video": {
+      "label": "Video",
+      "discipline": "video",
+      "color": "#c084fc",
+      "side": "left",
+      "routing": "matrix",
+      "legacy": "video"
+    },
+    "other": {
+      "label": "Other",
+      "discipline": "other",
+      "color": "#9aa3b5",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "other"
+    },
+    "mic": {
+      "label": "Microphones",
+      "discipline": "audio",
+      "color": "#2fd4b4",
+      "side": "left",
+      "routing": "none",
+      "legacy": "source"
+    },
+    "wireless_rx": {
+      "label": "Wireless receivers",
+      "discipline": "audio",
+      "color": "#38bdf8",
+      "side": "left",
+      "routing": "matrix",
+      "legacy": "stage_io"
+    },
+    "processor": {
+      "label": "Processors · DSP",
+      "discipline": "audio",
+      "color": "#60a5fa",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "console"
+    },
+    "amp": {
+      "label": "Amplifiers",
+      "discipline": "audio",
+      "color": "#fb923c",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "pa"
+    },
+    "speaker": {
+      "label": "Loudspeakers",
+      "discipline": "audio",
+      "color": "#fdba74",
+      "side": "right",
+      "routing": "passthrough",
+      "legacy": "pa"
+    },
+    "recorder": {
+      "label": "Recorders",
+      "discipline": "audio",
+      "color": "#a78bfa",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "computer"
+    },
+    "intercom": {
+      "label": "Intercom",
+      "discipline": "audio",
+      "color": "#f472b6",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "other"
+    },
+    "camera": {
+      "label": "Cameras",
+      "discipline": "video",
+      "color": "#34d399",
+      "side": "left",
+      "routing": "matrix",
+      "legacy": "video"
+    },
+    "video_source": {
+      "label": "Playback · media servers",
+      "discipline": "video",
+      "color": "#2dd4bf",
+      "side": "left",
+      "routing": "matrix",
+      "legacy": "video"
+    },
+    "video_switcher": {
+      "label": "Video switchers",
+      "discipline": "video",
+      "color": "#22c55e",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "console"
+    },
+    "video_router": {
+      "label": "Video routers",
+      "discipline": "video",
+      "color": "#10b981",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "console"
+    },
+    "converter": {
+      "label": "Converters · extenders",
+      "discipline": "video",
+      "color": "#86efac",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "video"
+    },
+    "encoder": {
+      "label": "Encoders · streaming",
+      "discipline": "video",
+      "color": "#4ade80",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "computer"
+    },
+    "stream": {
+      "label": "Stream destinations",
+      "discipline": "network",
+      "color": "#fb923c",
+      "side": "right",
+      "routing": "none",
+      "legacy": "pa"
+    },
+    "display": {
+      "label": "Displays",
+      "discipline": "video",
+      "color": "#a3e635",
+      "side": "right",
+      "routing": "passthrough",
+      "legacy": "pa"
+    },
+    "projector": {
+      "label": "Projectors",
+      "discipline": "video",
+      "color": "#bef264",
+      "side": "right",
+      "routing": "none",
+      "legacy": "pa"
+    },
+    "lighting_console": {
+      "label": "Lighting consoles",
+      "discipline": "lighting",
+      "color": "#fbbf24",
+      "side": "left",
+      "routing": "matrix",
+      "legacy": "console"
+    },
+    "dmx_node": {
+      "label": "DMX nodes · splitters",
+      "discipline": "lighting",
+      "color": "#f59e0b",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "stage_io"
+    },
+    "dimmer": {
+      "label": "Dimmers · relays",
+      "discipline": "lighting",
+      "color": "#eab308",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "pa"
+    },
+    "fixture": {
+      "label": "Lighting fixtures",
+      "discipline": "lighting",
+      "color": "#fde047",
+      "side": "right",
+      "routing": "passthrough",
+      "legacy": "pa"
+    },
+    "switch": {
+      "label": "Network switches",
+      "discipline": "network",
+      "color": "#fb923c",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "network"
+    },
+    "control": {
+      "label": "Control processors",
+      "discipline": "control",
+      "color": "#c084fc",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "other"
+    },
+    "touch_panel": {
+      "label": "Touch panels",
+      "discipline": "control",
+      "color": "#d8b4fe",
+      "side": "left",
+      "routing": "none",
+      "legacy": "source"
+    },
+    "power": {
+      "label": "Power · UPS · PDU",
+      "discipline": "power",
+      "color": "#f87171",
+      "side": "right",
+      "routing": "matrix",
+      "legacy": "other"
+    },
+    "patch_panel": {
+      "label": "Patch panels · wall plates",
+      "discipline": "other",
+      "color": "#94a3b8",
+      "side": "right",
+      "routing": "passthrough",
+      "legacy": "stage_io"
+    }
+  },
+  "media": {
+    "dante": {
+      "label": "Dante · Cat6",
+      "color": "#7b86ff",
+      "dash": "",
+      "width": 1.6,
+      "arrow": false,
+      "discipline": "audio",
+      "carries": [
+        "audio",
+        "network"
+      ],
+      "ip": true,
+      "connector": "etherCON",
+      "short": "DANTE"
+    },
+    "analog": {
+      "label": "Analog · XLR",
+      "color": "#aab3c5",
+      "dash": "",
+      "width": 1.4,
+      "arrow": true,
+      "discipline": "audio",
+      "carries": [
+        "audio"
+      ],
+      "ip": false,
+      "connector": "XLR3",
+      "short": "XLR"
+    },
+    "aes3": {
+      "label": "AES3 · 110 Ω",
+      "color": "#2dd4ee",
+      "dash": "7 4",
+      "width": 1.5,
+      "arrow": true,
+      "discipline": "audio",
+      "carries": [
+        "audio"
+      ],
+      "ip": false,
+      "connector": "XLR3",
+      "short": "AES"
+    },
+    "aes50": {
+      "label": "AES50 · Cat5e",
+      "color": "#5ac8fa",
+      "dash": "2 4",
+      "width": 1.6,
+      "arrow": false,
+      "discipline": "audio",
+      "carries": [
+        "audio",
+        "control"
+      ],
+      "ip": false,
+      "connector": "etherCON",
+      "short": "AES50"
+    },
+    "madi": {
+      "label": "MADI",
+      "color": "#fbbf24",
+      "dash": "10 4",
+      "width": 1.5,
+      "arrow": true,
+      "discipline": "audio",
+      "carries": [
+        "audio"
+      ],
+      "ip": false,
+      "connector": "BNC",
+      "short": "MADI"
+    },
+    "avb": {
+      "label": "AVB / Milan",
+      "color": "#34d399",
+      "dash": "6 3 2 3",
+      "width": 1.5,
+      "arrow": false,
+      "discipline": "audio",
+      "carries": [
+        "audio",
+        "network"
+      ],
+      "ip": true,
+      "connector": "etherCON",
+      "short": "AVB"
+    },
+    "speaker": {
+      "label": "Speaker · NL4/NL8",
+      "color": "#ff9548",
+      "dash": "",
+      "width": 1.8,
+      "arrow": true,
+      "discipline": "audio",
+      "carries": [
+        "audio"
+      ],
+      "ip": false,
+      "connector": "NL4",
+      "short": "SPK"
+    },
+    "iem_wired": {
+      "label": "Wired IEM",
+      "color": "#f472b6",
+      "dash": "1.5 4",
+      "width": 1.6,
+      "arrow": true,
+      "discipline": "audio",
+      "carries": [
+        "audio"
+      ],
+      "ip": false,
+      "connector": "TRS 1/4\"",
+      "short": "IEM"
+    },
+    "iem_wireless": {
+      "label": "Wireless IEM",
+      "color": "#e879f9",
+      "dash": "1.5 6",
+      "width": 1.6,
+      "arrow": true,
+      "discipline": "audio",
+      "carries": [
+        "audio"
+      ],
+      "ip": false,
+      "connector": "RF",
+      "short": "IEM"
+    },
+    "rf": {
+      "label": "RF · wireless mic",
+      "color": "#f0abfc",
+      "dash": "1.5 6",
+      "width": 1.6,
+      "arrow": true,
+      "discipline": "audio",
+      "carries": [
+        "audio"
+      ],
+      "ip": false,
+      "connector": "BNC",
+      "short": "RF"
+    },
+    "usb": {
+      "label": "USB",
+      "color": "#cbd5e1",
+      "dash": "4 3",
+      "width": 1.2,
+      "arrow": true,
+      "discipline": "other",
+      "carries": [
+        "audio",
+        "video",
+        "control"
+      ],
+      "ip": false,
+      "connector": "USB-C",
+      "short": "USB"
+    },
+    "video": {
+      "label": "SDI / HDMI",
+      "color": "#c084fc",
+      "dash": "",
+      "width": 1.2,
+      "arrow": true,
+      "discipline": "video",
+      "carries": [
+        "video",
+        "audio"
+      ],
+      "ip": false,
+      "connector": "BNC",
+      "short": "VID"
+    },
+    "network": {
+      "label": "Control · IP",
+      "color": "#94a3b8",
+      "dash": "3 3",
+      "width": 1.0,
+      "arrow": false,
+      "discipline": "network",
+      "carries": [
+        "network",
+        "control",
+        "audio",
+        "video",
+        "lighting"
+      ],
+      "ip": true,
+      "connector": "RJ45",
+      "short": "CAT"
+    },
+    "other": {
+      "label": "Other",
+      "color": "#9aa3b5",
+      "dash": "",
+      "width": 1.2,
+      "arrow": true,
+      "discipline": "other",
+      "carries": [
+        "audio",
+        "video",
+        "lighting",
+        "control",
+        "network",
+        "power"
+      ],
+      "ip": false,
+      "connector": "",
+      "short": "OTH"
+    },
+    "aes67": {
+      "label": "AES67 · IP audio",
+      "color": "#818cf8",
+      "dash": "",
+      "width": 1.6,
+      "arrow": false,
+      "discipline": "audio",
+      "carries": [
+        "audio",
+        "network"
+      ],
+      "ip": true,
+      "connector": "RJ45",
+      "short": "AES67"
+    },
+    "qlan": {
+      "label": "Q-LAN",
+      "color": "#60a5fa",
+      "dash": "",
+      "width": 1.6,
+      "arrow": false,
+      "discipline": "audio",
+      "carries": [
+        "audio",
+        "video",
+        "control",
+        "network"
+      ],
+      "ip": true,
+      "connector": "RJ45",
+      "short": "QLAN"
+    },
+    "snake": {
+      "label": "Digital snake · Cat5e",
+      "color": "#38bdf8",
+      "dash": "2 3",
+      "width": 1.6,
+      "arrow": false,
+      "discipline": "audio",
+      "carries": [
+        "audio",
+        "control"
+      ],
+      "ip": false,
+      "connector": "etherCON",
+      "short": "SNAKE"
+    },
+    "adat": {
+      "label": "ADAT · optical",
+      "color": "#67e8f9",
+      "dash": "1 3",
+      "width": 1.4,
+      "arrow": true,
+      "discipline": "audio",
+      "carries": [
+        "audio"
+      ],
+      "ip": false,
+      "connector": "TOSLINK",
+      "short": "ADAT"
+    },
+    "speaker_70v": {
+      "label": "70/100 V line",
+      "color": "#fdba74",
+      "dash": "8 3",
+      "width": 1.6,
+      "arrow": true,
+      "discipline": "audio",
+      "carries": [
+        "audio"
+      ],
+      "ip": false,
+      "connector": "terminal",
+      "short": "70V"
+    },
+    "intercom": {
+      "label": "Intercom · XLR",
+      "color": "#fb7185",
+      "dash": "5 2 1 2",
+      "width": 1.4,
+      "arrow": false,
+      "discipline": "audio",
+      "carries": [
+        "audio",
+        "control"
+      ],
+      "ip": false,
+      "connector": "XLR3",
+      "short": "COM"
+    },
+    "sdi": {
+      "label": "SDI · 75 Ω BNC",
+      "color": "#facc15",
+      "dash": "",
+      "width": 1.6,
+      "arrow": true,
+      "discipline": "video",
+      "carries": [
+        "video",
+        "audio"
+      ],
+      "ip": false,
+      "connector": "BNC",
+      "short": "SDI"
+    },
+    "hdmi": {
+      "label": "HDMI",
+      "color": "#f59e0b",
+      "dash": "",
+      "width": 1.6,
+      "arrow": true,
+      "discipline": "video",
+      "carries": [
+        "video",
+        "audio"
+      ],
+      "ip": false,
+      "connector": "HDMI-A",
+      "short": "HDMI"
+    },
+    "displayport": {
+      "label": "DisplayPort",
+      "color": "#fda4af",
+      "dash": "",
+      "width": 1.4,
+      "arrow": true,
+      "discipline": "video",
+      "carries": [
+        "video",
+        "audio"
+      ],
+      "ip": false,
+      "connector": "DP",
+      "short": "DP"
+    },
+    "hdbaset": {
+      "label": "HDBaseT · Cat6",
+      "color": "#fcd34d",
+      "dash": "5 2",
+      "width": 1.6,
+      "arrow": true,
+      "discipline": "video",
+      "carries": [
+        "video",
+        "audio",
+        "control"
+      ],
+      "ip": false,
+      "connector": "RJ45",
+      "short": "HDBT"
+    },
+    "fiber": {
+      "label": "Fiber",
+      "color": "#22d3ee",
+      "dash": "12 3",
+      "width": 1.6,
+      "arrow": false,
+      "discipline": "other",
+      "carries": [
+        "audio",
+        "video",
+        "network",
+        "control",
+        "lighting"
+      ],
+      "ip": false,
+      "connector": "LC",
+      "short": "FIB"
+    },
+    "ndi": {
+      "label": "NDI · IP video",
+      "color": "#a3e635",
+      "dash": "4 2",
+      "width": 1.4,
+      "arrow": false,
+      "discipline": "video",
+      "carries": [
+        "video",
+        "audio",
+        "network"
+      ],
+      "ip": true,
+      "connector": "RJ45",
+      "short": "NDI"
+    },
+    "st2110": {
+      "label": "SMPTE ST 2110",
+      "color": "#84cc16",
+      "dash": "4 2 1 2",
+      "width": 1.4,
+      "arrow": false,
+      "discipline": "video",
+      "carries": [
+        "video",
+        "audio",
+        "network"
+      ],
+      "ip": true,
+      "connector": "SFP",
+      "short": "2110"
+    },
+    "dmx": {
+      "label": "DMX512 · XLR5",
+      "color": "#fde047",
+      "dash": "",
+      "width": 1.6,
+      "arrow": true,
+      "discipline": "lighting",
+      "carries": [
+        "lighting"
+      ],
+      "ip": false,
+      "connector": "XLR5",
+      "short": "DMX"
+    },
+    "rdm": {
+      "label": "DMX + RDM",
+      "color": "#fef08a",
+      "dash": "6 2",
+      "width": 1.6,
+      "arrow": false,
+      "discipline": "lighting",
+      "carries": [
+        "lighting",
+        "control"
+      ],
+      "ip": false,
+      "connector": "XLR5",
+      "short": "RDM"
+    },
+    "sacn": {
+      "label": "sACN (E1.31)",
+      "color": "#fbbf24",
+      "dash": "3 2",
+      "width": 1.4,
+      "arrow": true,
+      "discipline": "lighting",
+      "carries": [
+        "lighting",
+        "network"
+      ],
+      "ip": true,
+      "connector": "RJ45",
+      "short": "SACN"
+    },
+    "artnet": {
+      "label": "Art-Net",
+      "color": "#f59e0b",
+      "dash": "3 2 1 2",
+      "width": 1.4,
+      "arrow": true,
+      "discipline": "lighting",
+      "carries": [
+        "lighting",
+        "network"
+      ],
+      "ip": true,
+      "connector": "RJ45",
+      "short": "ARTN"
+    },
+    "rs232": {
+      "label": "RS-232 · serial",
+      "color": "#c4b5fd",
+      "dash": "2 2",
+      "width": 1.0,
+      "arrow": true,
+      "discipline": "control",
+      "carries": [
+        "control"
+      ],
+      "ip": false,
+      "connector": "DB9",
+      "short": "232"
+    },
+    "rs422": {
+      "label": "RS-422/485",
+      "color": "#a78bfa",
+      "dash": "2 2",
+      "width": 1.0,
+      "arrow": false,
+      "discipline": "control",
+      "carries": [
+        "control"
+      ],
+      "ip": false,
+      "connector": "Phoenix",
+      "short": "422"
+    },
+    "ir": {
+      "label": "IR emitter",
+      "color": "#ddd6fe",
+      "dash": "1 3",
+      "width": 1.0,
+      "arrow": true,
+      "discipline": "control",
+      "carries": [
+        "control"
+      ],
+      "ip": false,
+      "connector": "TS 3.5mm",
+      "short": "IR"
+    },
+    "gpio": {
+      "label": "GPIO · contact closure",
+      "color": "#e9d5ff",
+      "dash": "1 2",
+      "width": 1.0,
+      "arrow": true,
+      "discipline": "control",
+      "carries": [
+        "control"
+      ],
+      "ip": false,
+      "connector": "Phoenix",
+      "short": "GPIO"
+    },
+    "osc": {
+      "label": "OSC · IP control",
+      "color": "#d8b4fe",
+      "dash": "3 3",
+      "width": 1.0,
+      "arrow": true,
+      "discipline": "control",
+      "carries": [
+        "control",
+        "network"
+      ],
+      "ip": true,
+      "connector": "RJ45",
+      "short": "OSC"
+    },
+    "midi": {
+      "label": "MIDI",
+      "color": "#f0abfc",
+      "dash": "2 3",
+      "width": 1.0,
+      "arrow": true,
+      "discipline": "control",
+      "carries": [
+        "control"
+      ],
+      "ip": false,
+      "connector": "DIN5",
+      "short": "MIDI"
+    },
+    "timecode": {
+      "label": "Timecode (LTC)",
+      "color": "#f5d0fe",
+      "dash": "1 2",
+      "width": 1.0,
+      "arrow": true,
+      "discipline": "control",
+      "carries": [
+        "control"
+      ],
+      "ip": false,
+      "connector": "XLR3",
+      "short": "LTC"
+    },
+    "sync": {
+      "label": "Sync · word clock / genlock",
+      "color": "#94a3b8",
+      "dash": "1 4",
+      "width": 1.0,
+      "arrow": true,
+      "discipline": "other",
+      "carries": [
+        "control"
+      ],
+      "ip": false,
+      "connector": "BNC",
+      "short": "SYNC"
+    },
+    "power": {
+      "label": "Power · mains",
+      "color": "#f87171",
+      "dash": "",
+      "width": 2.0,
+      "arrow": true,
+      "discipline": "power",
+      "carries": [
+        "power"
+      ],
+      "ip": false,
+      "connector": "IEC C13",
+      "short": "PWR"
+    },
+    "power_dc": {
+      "label": "DC power",
+      "color": "#fca5a5",
+      "dash": "",
+      "width": 1.4,
+      "arrow": true,
+      "discipline": "power",
+      "carries": [
+        "power"
+      ],
+      "ip": false,
+      "connector": "barrel",
+      "short": "DC"
+    }
+  },
+  "disciplines": {
+    "audio": {
+      "label": "Audio",
+      "color": "#4ea8ff",
+      "letter": "A"
+    },
+    "video": {
+      "label": "Video",
+      "color": "#34d399",
+      "letter": "V"
+    },
+    "lighting": {
+      "label": "Lighting",
+      "color": "#fbbf24",
+      "letter": "L"
+    },
+    "network": {
+      "label": "Network",
+      "color": "#fb923c",
+      "letter": "N"
+    },
+    "control": {
+      "label": "Control",
+      "color": "#c084fc",
+      "letter": "C"
+    },
+    "power": {
+      "label": "Power",
+      "color": "#f87171",
+      "letter": "P"
+    },
+    "other": {
+      "label": "Other",
+      "color": "#9aa3b5",
+      "letter": "X"
+    }
+  },
+  "brands": {
+    "yamaha": {
+      "text": "YAMAHA",
+      "bg": "#1a1a1a",
+      "fg": "#ffffff",
+      "style": "wordmark"
+    },
+    "shure": {
+      "text": "SHURE",
+      "bg": "#f3f4f6",
+      "fg": "#111111",
+      "style": "bold-italic"
+    },
+    "focusrite": {
+      "text": "Focusrite",
+      "bg": "#f3f4f6",
+      "fg": "#c2410c",
+      "style": "serif"
+    },
+    "neve": {
+      "text": "N",
+      "bg": "#d7263d",
+      "fg": "#ffffff",
+      "style": "mono"
+    },
+    "ross": {
+      "text": "ROSS",
+      "bg": "#f3f4f6",
+      "fg": "#c01830",
+      "style": "bold"
+    },
+    "genelec": {
+      "text": "GENELEC",
+      "bg": "#ffffff",
+      "fg": "#0b6e4f",
+      "style": "bold"
+    },
+    "waves": {
+      "text": "W",
+      "bg": "#111111",
+      "fg": "#ffffff",
+      "style": "mono"
+    },
+    "ableton": {
+      "text": "▮▮▮",
+      "bg": "#f3f4f6",
+      "fg": "#111111",
+      "style": "mono"
+    },
+    "avid": {
+      "text": "AVID",
+      "bg": "#7c3aed",
+      "fg": "#ffffff",
+      "style": "bold"
+    },
+    "l-acoustics": {
+      "text": "L-A",
+      "bg": "#f3f4f6",
+      "fg": "#111111",
+      "style": "mono"
+    },
+    "lectrosonics": {
+      "text": "LECTRO",
+      "bg": "#1f2937",
+      "fg": "#e5e7eb",
+      "style": "bold"
+    },
+    "behringer": {
+      "text": "BEHRINGER",
+      "bg": "#1f2937",
+      "fg": "#facc15",
+      "style": "bold"
+    },
+    "midas": {
+      "text": "MIDAS",
+      "bg": "#1f2937",
+      "fg": "#e5e7eb",
+      "style": "bold"
+    },
+    "sennheiser": {
+      "text": "SENNHEISER",
+      "bg": "#111111",
+      "fg": "#ffffff",
+      "style": "bold"
+    },
+    "allen-heath": {
+      "text": "A&H",
+      "bg": "#111111",
+      "fg": "#ffffff",
+      "style": "bold"
+    },
+    "digico": {
+      "text": "DiGiCo",
+      "bg": "#111111",
+      "fg": "#ffffff",
+      "style": "bold"
+    },
+    "qsc": {
+      "text": "QSC",
+      "bg": "#111111",
+      "fg": "#60a5fa",
+      "style": "bold"
+    },
+    "powersoft": {
+      "text": "POWERSOFT",
+      "bg": "#111111",
+      "fg": "#ffffff",
+      "style": "bold"
+    },
+    "d&b": {
+      "text": "d&b",
+      "bg": "#f3f4f6",
+      "fg": "#111111",
+      "style": "bold"
+    },
+    "meyer": {
+      "text": "MEYER",
+      "bg": "#f3f4f6",
+      "fg": "#111111",
+      "style": "bold"
+    },
+    "audinate": {
+      "text": "Dante",
+      "bg": "#1d4ed8",
+      "fg": "#ffffff",
+      "style": "bold"
+    },
+    "blackmagic": {
+      "text": "BMD",
+      "bg": "#111111",
+      "fg": "#f59e0b",
+      "style": "bold"
+    },
+    "apple": {
+      "text": "",
+      "bg": "#f3f4f6",
+      "fg": "#111111",
+      "style": "mono"
+    },
+    "microsoft": {
+      "text": "MS",
+      "bg": "#f3f4f6",
+      "fg": "#111111",
+      "style": "bold"
+    },
+    "ma": {
+      "text": "MA",
+      "bg": "#111111",
+      "fg": "#f5c518",
+      "style": "bold"
+    },
+    "etc": {
+      "text": "ETC",
+      "bg": "#111111",
+      "fg": "#ffffff",
+      "style": "bold"
+    },
+    "chauvet": {
+      "text": "CHAUVET",
+      "bg": "#111111",
+      "fg": "#e5e7eb",
+      "style": "bold"
+    },
+    "martin": {
+      "text": "MARTIN",
+      "bg": "#111111",
+      "fg": "#ef4444",
+      "style": "bold"
+    },
+    "panasonic": {
+      "text": "Panasonic",
+      "bg": "#f3f4f6",
+      "fg": "#1d4ed8",
+      "style": "serif"
+    },
+    "sony": {
+      "text": "SONY",
+      "bg": "#111111",
+      "fg": "#ffffff",
+      "style": "bold"
+    },
+    "epson": {
+      "text": "EPSON",
+      "bg": "#f3f4f6",
+      "fg": "#1e3a8a",
+      "style": "bold"
+    },
+    "samsung": {
+      "text": "SAMSUNG",
+      "bg": "#1e3a8a",
+      "fg": "#ffffff",
+      "style": "bold"
+    },
+    "extron": {
+      "text": "EXTRON",
+      "bg": "#111111",
+      "fg": "#ffffff",
+      "style": "bold"
+    },
+    "crestron": {
+      "text": "CRESTRON",
+      "bg": "#111111",
+      "fg": "#93c5fd",
+      "style": "bold"
+    },
+    "cisco": {
+      "text": "CISCO",
+      "bg": "#f3f4f6",
+      "fg": "#0369a1",
+      "style": "bold"
+    },
+    "netgear": {
+      "text": "NETGEAR",
+      "bg": "#111111",
+      "fg": "#a78bfa",
+      "style": "bold"
+    },
+    "ubiquiti": {
+      "text": "UBNT",
+      "bg": "#f3f4f6",
+      "fg": "#0ea5e9",
+      "style": "bold"
+    },
+    "decimator": {
+      "text": "DECIMATOR",
+      "bg": "#111111",
+      "fg": "#f97316",
+      "style": "bold"
+    },
+    "whirlwind": {
+      "text": "WHIRLWIND",
+      "bg": "#111111",
+      "fg": "#e5e7eb",
+      "style": "bold"
+    },
+    "electro-voice": {
+      "text": "EV",
+      "bg": "#111111",
+      "fg": "#ef4444",
+      "style": "bold"
+    }
+  },
+  "connectors": [
+    "XLR3F",
+    "XLR3M",
+    "XLR5F",
+    "XLR5M",
+    "XLR/TRS combo",
+    "TRS 1/4\"",
+    "TS 1/4\"",
+    "TRS 3.5mm",
+    "TS 3.5mm",
+    "RCA",
+    "BNC",
+    "HD-BNC",
+    "NL2",
+    "NL4",
+    "NL8",
+    "terminal",
+    "Phoenix",
+    "etherCON",
+    "RJ45",
+    "SFP",
+    "SFP+",
+    "LC",
+    "SC",
+    "ST",
+    "opticalCON",
+    "TOSLINK",
+    "HDMI-A",
+    "HDMI-mini",
+    "HDMI-micro",
+    "DP",
+    "mini DP",
+    "USB-A",
+    "USB-B",
+    "USB-C",
+    "DB9",
+    "DB15",
+    "DB25",
+    "DIN5",
+    "IEC C13",
+    "IEC C14",
+    "IEC C19",
+    "IEC C20",
+    "powerCON",
+    "powerCON TRUE1",
+    "Edison 5-15",
+    "Edison 5-20",
+    "Schuko",
+    "L5-20",
+    "Socapex 19",
+    "barrel",
+    "F-type",
+    "TNC",
+    "DVI",
+    "VGA"
+  ],
+  "statuses": [
+    "installed",
+    "planned",
+    "spare",
+    "retired"
+  ],
+  "room_kinds": [
+    "auditorium",
+    "sanctuary",
+    "chapel",
+    "theatre",
+    "studio",
+    "control_room",
+    "broadcast",
+    "classroom",
+    "conference",
+    "lobby",
+    "outdoor",
+    "rack_room",
+    "storage",
+    "other"
+  ],
+  "port_dirs": [
+    "in",
+    "out",
+    "io"
+  ],
+  "location_kinds": [
+    "booth",
+    "stage",
+    "rack_room",
+    "storage",
+    "catwalk",
+    "closet",
+    "other"
+  ],
+  "interface_roles": [
+    "primary",
+    "secondary",
+    "control",
+    "management",
+    "media"
+  ],
+  "network_protocols": [
+    "dante",
+    "aes67",
+    "avb",
+    "ndi",
+    "st2110",
+    "sacn",
+    "artnet",
+    "qlan",
+    "control",
+    "management",
+    "other"
+  ],
+  "dmx_protocols": [
+    "dmx",
+    "sacn",
+    "artnet"
+  ],
+  "routing_modes": [
+    "matrix",
+    "passthrough",
+    "none",
+    "explicit"
+  ],
+  "symptoms": [
+    "no_audio",
+    "no_video",
+    "noise",
+    "feedback",
+    "dropout",
+    "latency",
+    "no_power",
+    "no_network",
+    "lighting_no_response",
+    "flicker",
+    "wrong_source",
+    "general"
+  ]
+}

@@ -1,0 +1,14 @@
+.git
+.gitignore
+data
+.fathom
+docs
+tests
+**/__pycache__
+*.egg-info
+build
+dist
+.venv
+.pytest_cache
+.DS_Store
+docker-compose.yml

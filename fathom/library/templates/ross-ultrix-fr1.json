@@ -1,0 +1,39 @@
+{
+  "id": "ross-ultrix-fr1",
+  "manufacturer": "Ross Video",
+  "model": "Ultrix-FR1",
+  "name": "Ultrix-FR1",
+  "kind": "video_router",
+  "brand": "ross",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "SDI In",
+      "dir": "in",
+      "medium": "sdi",
+      "connector": "BNC",
+      "count": 16
+    },
+    {
+      "group": "SDI Out",
+      "dir": "out",
+      "medium": "sdi",
+      "connector": "BNC",
+      "count": 16
+    },
+    {
+      "group": "Ethernet",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45"
+    }
+  ],
+  "tags": [
+    "router",
+    "sdi"
+  ],
+  "notes": "Frame is software/licence configurable; adjust port counts. Port counts not verified against the datasheet; please check."
+}

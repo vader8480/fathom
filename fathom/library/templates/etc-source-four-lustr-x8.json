@@ -1,0 +1,46 @@
+{
+  "id": "etc-source-four-lustr-x8",
+  "manufacturer": "ETC",
+  "model": "Source Four LED Series 3 Lustr X8",
+  "name": "Source Four LED Series 3 Lustr X8",
+  "kind": "fixture",
+  "brand": "etc",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "DMX",
+      "dir": "in",
+      "medium": "dmx",
+      "connector": "XLR5",
+      "names": [
+        "In",
+        "Thru"
+      ],
+      "dirs": {
+        "In": "in",
+        "Thru": "out"
+      }
+    },
+    {
+      "group": "Power",
+      "dir": "in",
+      "medium": "power",
+      "connector": "powerCON TRUE1",
+      "names": [
+        "In",
+        "Thru"
+      ],
+      "dirs": {
+        "In": "in",
+        "Thru": "out"
+      }
+    }
+  ],
+  "tags": [
+    "ellipsoidal",
+    "led"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

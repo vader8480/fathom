@@ -1,0 +1,31 @@
+{
+  "id": "generic-pdu-8",
+  "manufacturer": "Generic",
+  "model": "PDU 8-outlet",
+  "name": "PDU 8-outlet",
+  "kind": "power",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Power In",
+      "dir": "in",
+      "medium": "power",
+      "connector": "IEC C14"
+    },
+    {
+      "group": "Outlet",
+      "dir": "out",
+      "medium": "power",
+      "connector": "IEC C13",
+      "count": 8
+    }
+  ],
+  "tags": [
+    "generic",
+    "pdu"
+  ],
+  "notes": "Generic template."
+}

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "checks": [
+    {"id": "power", "symptoms": ["*"], "text": "Make sure every device on the path is powered and not in standby."},
+    {"id": "recent-change", "symptoms": ["*"], "text": "Ask what changed since it last worked (a re-patch, a new scene or show file, a firmware update)."},
+    {"id": "swap-test", "symptoms": ["no_audio", "no_video", "noise", "dropout"], "text": "Swap in a known-good cable or source to isolate the fault."}
+  ]
+}

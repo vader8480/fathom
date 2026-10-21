@@ -1,0 +1,31 @@
+{
+  "id": "ma-grandma3-light",
+  "manufacturer": "MA Lighting",
+  "model": "grandMA3 light",
+  "name": "grandMA3 light",
+  "kind": "lighting_console",
+  "brand": "ma",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "DMX Out",
+      "dir": "out",
+      "medium": "rdm",
+      "connector": "XLR5F",
+      "count": 4
+    },
+    {
+      "group": "Ethernet",
+      "dir": "io",
+      "medium": "network",
+      "connector": "etherCON",
+      "count": 3
+    }
+  ],
+  "tags": [
+    "lighting console"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

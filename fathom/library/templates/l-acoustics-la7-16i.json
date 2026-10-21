@@ -1,0 +1,62 @@
+{
+  "id": "l-acoustics-la7-16i",
+  "manufacturer": "L-Acoustics",
+  "model": "LA7.16i",
+  "name": "LA7.16i",
+  "kind": "amp",
+  "brand": "l-acoustics",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Network",
+      "dir": "io",
+      "medium": "avb",
+      "connector": "etherCON",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 16
+    },
+    {
+      "group": "AES/Analog Aux In",
+      "dir": "in",
+      "medium": "aes3",
+      "connector": "terminal",
+      "channels": 2
+    },
+    {
+      "group": "Speaker Out",
+      "dir": "out",
+      "medium": "speaker",
+      "connector": "terminal",
+      "names": [
+        "1/2",
+        "3/4",
+        "5/6",
+        "7/8",
+        "9/10",
+        "11/12",
+        "13/14",
+        "15/16"
+      ],
+      "channels": 2
+    },
+    {
+      "group": "GPIO",
+      "dir": "io",
+      "medium": "gpio",
+      "connector": "terminal",
+      "count": 3
+    }
+  ],
+  "tags": [
+    "amplifier",
+    "avb",
+    "milan"
+  ],
+  "source_url": "https://www.l-acoustics.com/products/la7-16i/"
+}

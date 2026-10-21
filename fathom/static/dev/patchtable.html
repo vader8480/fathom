@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Harness · Patch table</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>
+body{display:flex;flex-direction:column;height:100vh;height:100dvh}
+.h-bar{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--panel);flex-wrap:wrap}
+.h-bar b{letter-spacing:1.4px;text-transform:uppercase;font-size:11px;color:var(--accent)}
+.h-main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px}
+.h-main>#harness{min-height:0;display:flex;flex-direction:column;overflow:auto}
+.h-main>#harness-inspector{border-left:1px solid var(--border);overflow:auto;background:var(--panel)}
+@media (max-width:900px){.h-main{grid-template-columns:1fr}.h-main>#harness-inspector{display:none}}
+</style>
+</head>
+<body data-fathom-harness="patchtable">
+<div class="h-bar">
+  <b>Harness</b><span>patchtable.js on fixture-v2.json</span>
+  <button id="harness-undo" type="button" class="small">Undo</button>
+  <button id="harness-redo" type="button" class="small">Redo</button>
+  <span id="harness-status" class="muted" role="status"></span>
+  <span class="grow"></span>
+  <a class="chip" href="index.html">All harnesses</a>
+</div>
+<div class="h-main">
+  <div id="harness" class="app-view"><div class="app-loading">Loading…</div></div>
+  <aside id="harness-inspector" class="app-inspector" style="display:block" aria-label="Inspector"></aside>
+</div>
+<div id="app-toasts" class="app-toasts" aria-live="polite"></div>
+<div id="app-dialog"></div>
+<div id="fathom-live" class="sr-only" aria-live="polite"></div>
+<script type="module" src="../js/app.js"></script>
+</body>
+</html>

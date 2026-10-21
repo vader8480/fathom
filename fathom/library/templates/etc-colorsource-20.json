@@ -1,0 +1,29 @@
+{
+  "id": "etc-colorsource-20",
+  "manufacturer": "ETC",
+  "model": "ColorSource 20",
+  "name": "ColorSource 20",
+  "kind": "lighting_console",
+  "brand": "etc",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "DMX Out",
+      "dir": "out",
+      "medium": "dmx",
+      "connector": "XLR5F"
+    },
+    {
+      "group": "Ethernet",
+      "dir": "io",
+      "medium": "sacn",
+      "connector": "RJ45"
+    }
+  ],
+  "tags": [
+    "lighting console"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

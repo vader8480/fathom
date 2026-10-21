@@ -1,0 +1,43 @@
+{
+  "id": "samsung-qb65c",
+  "manufacturer": "Samsung",
+  "model": "QB65C (QBC series 65\")",
+  "name": "QB65C",
+  "kind": "display",
+  "brand": "samsung",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "HDMI In",
+      "dir": "in",
+      "medium": "hdmi",
+      "connector": "HDMI-A",
+      "count": 2
+    },
+    {
+      "group": "RS-232",
+      "dir": "in",
+      "medium": "rs232",
+      "connector": "TRS 3.5mm"
+    },
+    {
+      "group": "LAN",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45"
+    },
+    {
+      "group": "USB",
+      "dir": "in",
+      "medium": "usb",
+      "connector": "USB-A"
+    }
+  ],
+  "tags": [
+    "display",
+    "4k"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

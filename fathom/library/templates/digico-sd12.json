@@ -1,0 +1,58 @@
+{
+  "id": "digico-sd12",
+  "manufacturer": "DiGiCo",
+  "model": "SD12",
+  "name": "SD12",
+  "kind": "console",
+  "brand": "digico",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Mic In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 8
+    },
+    {
+      "group": "Line Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 8
+    },
+    {
+      "group": "AES In",
+      "dir": "in",
+      "medium": "aes3",
+      "connector": "XLR3F",
+      "count": 2,
+      "channels": 2
+    },
+    {
+      "group": "AES Out",
+      "dir": "out",
+      "medium": "aes3",
+      "connector": "XLR3M",
+      "count": 2,
+      "channels": 2
+    },
+    {
+      "group": "MADI",
+      "dir": "io",
+      "medium": "madi",
+      "connector": "BNC",
+      "names": [
+        "A",
+        "B"
+      ],
+      "channels": 64
+    }
+  ],
+  "tags": [
+    "console"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

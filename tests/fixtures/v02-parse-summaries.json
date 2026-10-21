@@ -1,0 +1,135 @@
+{
+ "cl5": {
+  "kind": "yamaha",
+  "summary": {
+   "kind": "yamaha",
+   "model": "CL5",
+   "inputs": 72,
+   "named_inputs": 60,
+   "patched_inputs": 60,
+   "patch_by_bus": {
+    "DANTE": 59,
+    "PB": 1
+   },
+   "buses_named": 10,
+   "output_patches": 46,
+   "files": {
+    "names": [
+     "InputChannelName.csv",
+     "OutputChannelName.csv"
+    ],
+    "input_patch": [
+     "InputPatch.csv"
+    ],
+    "output_patch": [
+     "OutputPatch.csv"
+    ]
+   },
+   "notes": []
+  }
+ },
+ "dante/rrc-littleton-preset.xml": {
+  "kind": "dante",
+  "summary": {
+   "kind": "dante",
+   "preset": "RRC Littleton Sunday",
+   "devices": 33,
+   "device_list": [
+    "FOH-CL5 (Yamaha CL5)",
+    "MON-QL5 (Yamaha QL5)",
+    "Rio3224 (Yamaha Rio3224-D2)",
+    "Rio1608 (Yamaha Rio1608-D2)",
+    "1073OPX-1 (AMS Neve 1073OPX)",
+    "1073OPX-2 (AMS Neve 1073OPX)",
+    "1073OPX-3 (AMS Neve 1073OPX)",
+    "1073OPX-4 (AMS Neve 1073OPX)",
+    "ULXD4Q-1 (Shure ULXD4Q)",
+    "ULXD4Q-2 (Shure ULXD4Q)",
+    "ULXD4Q-3 (Shure ULXD4Q)",
+    "CG1 (Audinate Dante Virtual Soundcard)",
+    "CG2 (Audinate Dante Virtual Soundcard)",
+    "LED-PB (Audinate Dante Virtual Soundcard)",
+    "Ultrix (Ross Video Ultrix)",
+    "FOH-PC (Audinate Dante Virtual Soundcard)",
+    "Ableton-PB (Audinate Dante Virtual Soundcard)",
+    "ProTools-PC (Audinate Dante Virtual Soundcard)",
+    "Rec1-PC (Audinate Dante Virtual Soundcard)",
+    "Rec2-PC (Audinate Dante Virtual Soundcard)",
+    "AM2-1 (Focusrite RedNet AM2)",
+    "AM2-2 (Focusrite RedNet AM2)",
+    "AM2-3 (Focusrite RedNet AM2)",
+    "AM2-4 (Focusrite RedNet AM2)",
+    "AM2-5 (Focusrite RedNet AM2)",
+    "AM2-6 (Focusrite RedNet AM2)",
+    "AM2-BC (Focusrite RedNet AM2)",
+    "AM2-Artist (Focusrite RedNet AM2)",
+    "PSM-1 (Shure Axient Digital PSM)",
+    "PSM-2 (Shure Axient Digital PSM)",
+    "PSM-3 (Shure Axient Digital PSM)",
+    "PSM-4 (Shure Axient Digital PSM)",
+    "X32-Rack (Behringer X32 Rack (X-DANTE))"
+   ],
+   "tx_channels": 492,
+   "rx_channels": 456,
+   "subscriptions": 221,
+   "unresolved_tx": [],
+   "notes": []
+  }
+ },
+ "waves/superrack-racks.csv": {
+  "kind": "waves",
+  "summary": {
+   "kind": "waves",
+   "app": "SuperRack SoundGrid",
+   "session": "",
+   "racks": 18,
+   "plugins": 13,
+   "plugin_list": [
+    "C6",
+    "F6",
+    "SSL E-Channel",
+    "Scheps Omni Channel",
+    "Smack Attack",
+    "CLA-76",
+    "Scheps 73",
+    "SSL G-Master Buss Compressor",
+    "Bass Rider",
+    "CLA-2A",
+    "C4",
+    "Vocal Rider",
+    "WNS Noise Suppressor"
+   ],
+   "io_devices": [],
+   "notes": []
+  }
+ },
+ "waves/superrack-session.xml": {
+  "kind": "waves",
+  "summary": {
+   "kind": "waves",
+   "app": "SuperRack",
+   "session": "RRC Sunday",
+   "racks": 18,
+   "plugins": 13,
+   "plugin_list": [
+    "C6",
+    "F6",
+    "SSL E-Channel",
+    "Scheps Omni Channel",
+    "Smack Attack",
+    "CLA-76",
+    "Scheps 73",
+    "SSL G-Master Buss Compressor",
+    "Bass Rider",
+    "CLA-2A",
+    "C4",
+    "Vocal Rider",
+    "WNS Noise Suppressor"
+   ],
+   "io_devices": [
+    "DVS FOH-PC"
+   ],
+   "notes": []
+  }
+ }
+}

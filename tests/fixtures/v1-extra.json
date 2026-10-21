@@ -1,0 +1,148 @@
+{
+ "fathom": 1,
+ "meta": {
+  "org": "T1 Test Church",
+  "system": "Audio system",
+  "title": "T1 extra fixture"
+ },
+ "spine": {
+  "label": "Dante network",
+  "show": true
+ },
+ "groups": [
+  {
+   "id": "A",
+   "label": "Wired inputs",
+   "side": "left"
+  },
+  {
+   "id": "E",
+   "label": "Mix",
+   "side": "right"
+  },
+  {
+   "id": "G",
+   "label": "PA & zones",
+   "side": "right"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "mics",
+   "label": "Mics",
+   "kind": "source",
+   "group": "A",
+   "column": "sources",
+   "count": 4
+  },
+  {
+   "id": "box",
+   "label": "Stage box",
+   "kind": "stage_io",
+   "group": "A",
+   "column": "stage_io",
+   "dante": true,
+   "dante_name": "BOX-1",
+   "ports": [
+    {
+     "name": "Mic in",
+     "direction": "in",
+     "medium": "analog",
+     "count": 8
+    },
+    {
+     "name": "Dante",
+     "direction": "bi",
+     "medium": "dante",
+     "count": 16
+    }
+   ]
+  },
+  {
+   "id": "desk",
+   "label": "Desk",
+   "kind": "console",
+   "group": "E",
+   "column": "mix",
+   "dante": true
+  },
+  {
+   "id": "amp",
+   "label": "Amp",
+   "kind": "pa",
+   "group": "G",
+   "column": "amps",
+   "ports": [
+    {
+     "name": "AES in",
+     "direction": "in",
+     "medium": "aes3",
+     "labels": [
+      "A",
+      "B"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "spk",
+   "label": "Speakers",
+   "kind": "pa",
+   "group": "G",
+   "column": "outputs",
+   "count": 2
+  },
+  {
+   "id": "desk-2",
+   "ref": "desk",
+   "label": "Desk",
+   "sub": "outputs",
+   "kind": "console",
+   "group": "G",
+   "column": "mix"
+  }
+ ],
+ "links": [
+  {
+   "from": "mics",
+   "to": "box",
+   "medium": "analog",
+   "count": 4,
+   "to_port": "in 1-4"
+  },
+  {
+   "from": "box",
+   "to": "desk",
+   "medium": "dante",
+   "bidirectional": true,
+   "label": "Dante"
+  },
+  {
+   "from": "desk-2",
+   "to": "amp",
+   "medium": "aes3",
+   "count": 2,
+   "from_port": "AES out 1/2",
+   "to_port": "AES in A"
+  },
+  {
+   "from": "amp",
+   "to": "spk",
+   "medium": "speaker",
+   "count": 2,
+   "from_port": "out 1-2",
+   "to_port": "L, R"
+  },
+  {
+   "from": "desk-2",
+   "to": "spk",
+   "medium": "analog",
+   "from_port": "Mix 5",
+   "note": "fill"
+  }
+ ],
+ "options": {
+  "auto_dante_nodes": false,
+  "auto_sources": false
+ }
+}

@@ -1,0 +1,69 @@
+{
+  "id": "yamaha-tf-rack",
+  "manufacturer": "Yamaha",
+  "model": "TF-Rack",
+  "name": "TF-Rack",
+  "kind": "console",
+  "brand": "yamaha",
+  "ru": 3,
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Analog In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR/TRS combo",
+      "count": 16
+    },
+    {
+      "group": "ST In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "RCA",
+      "names": [
+        "L",
+        "R"
+      ]
+    },
+    {
+      "group": "Omni Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 8
+    },
+    {
+      "group": "Omni Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "TRS 1/4\"",
+      "count": 8,
+      "start": 9
+    },
+    {
+      "group": "NY64-D",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "etherCON",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 64
+    },
+    {
+      "group": "USB",
+      "dir": "io",
+      "medium": "usb",
+      "connector": "USB-B"
+    }
+  ],
+  "tags": [
+    "console",
+    "dante"
+  ],
+  "source_url": "https://usa.yamaha.com/products/proaudio/mixers/tf/specs.html"
+}

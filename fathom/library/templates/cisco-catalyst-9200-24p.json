@@ -1,0 +1,39 @@
+{
+  "id": "cisco-catalyst-9200-24p",
+  "manufacturer": "Cisco",
+  "model": "Catalyst 9200-24P",
+  "name": "Catalyst 9200-24P",
+  "kind": "switch",
+  "brand": "cisco",
+  "ru": 1,
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "GbE PoE+",
+      "dir": "io",
+      "medium": "network",
+      "connector": "RJ45",
+      "count": 24
+    },
+    {
+      "group": "SFP Uplink",
+      "dir": "io",
+      "medium": "network",
+      "connector": "SFP",
+      "count": 4
+    },
+    {
+      "group": "Console",
+      "dir": "io",
+      "medium": "rs232",
+      "connector": "RJ45"
+    }
+  ],
+  "tags": [
+    "switch",
+    "poe"
+  ],
+  "notes": "Port counts not verified against the datasheet; please check."
+}

@@ -1,0 +1,36 @@
+{
+  "id": "generic-dmx-splitter-6",
+  "manufacturer": "Generic",
+  "model": "DMX splitter 6-way",
+  "name": "DMX splitter 6-way",
+  "kind": "dmx_node",
+  "cost": null,
+  "currency": "USD",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "DMX In",
+      "dir": "in",
+      "medium": "dmx",
+      "connector": "XLR5M"
+    },
+    {
+      "group": "DMX Thru",
+      "dir": "out",
+      "medium": "dmx",
+      "connector": "XLR5F"
+    },
+    {
+      "group": "DMX Out",
+      "dir": "out",
+      "medium": "dmx",
+      "connector": "XLR5F",
+      "count": 6
+    }
+  ],
+  "tags": [
+    "generic",
+    "splitter"
+  ],
+  "notes": "Generic template."
+}
