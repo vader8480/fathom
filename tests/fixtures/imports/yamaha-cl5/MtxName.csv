@@ -1,0 +1,13 @@
+[Information]
+CL5
+V4.1
+[MtxName]
+MATRIX,NAME,COLOR,ICON,
+_01,FrontFil,Purple,Wedge,
+_02,Org wire,Orange,In-Ear,
+_03,EG2 IEM,Orange,In-Ear,
+_04,Translat,Cyan,Blank,
+_05,,Cyan,Audience,
+_06,Hallways,Cyan,Audience,
+_07,Stream L,Red,Mixer,
+_08,Stream R,Red,Mixer,
