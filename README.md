@@ -74,6 +74,9 @@ Without installing: `python -m fathom serve` from this folder.
 | `FATHOM_LIBRARY` | extra equipment-template directories (`*.json`) |
 | `FATHOM_CHECKLISTS` | extra assistant checklist directories |
 | `FATHOM_LLM_URL`, `FATHOM_LLM_MODEL`, `FATHOM_LLM_API_KEY`, `FATHOM_LLM_TIMEOUT`, `FATHOM_LLM_MAX_CONTEXT` | optional OpenAI-compatible endpoint that rewords assistant answers (the answer itself is always computed locally) |
+| `FATHOM_UNIFI_URL`, `FATHOM_UNIFI_SITE`, `FATHOM_UNIFI_API_KEY` (or `FATHOM_UNIFI_USER` / `FATHOM_UNIFI_PASSWORD`), `FATHOM_UNIFI_VERIFY_TLS` | server-wide defaults for the UniFi discovery probe; per-project settings in Discovery › Sources take precedence |
+| `FATHOM_DISCOVERY_INTERFACE`, `FATHOM_DISCOVERY_INTERFACE_IP` | interface the LLDP listener / mDNS browser bind to (default: all) |
+| `FATHOM_DISCOVERY_FIXTURES` | directory of recorded probe payloads to replay instead of touching the network (tests, demos) |
 
 Put it behind your reverse proxy with TLS for anything beyond a trusted LAN.
 The app binds `0.0.0.0:8080` in the container; the dev server binds
@@ -130,6 +133,38 @@ Imports never overwrite what you typed: their results form an **overlay**
 (routes, labels, addresses, DMX rows, auto devices) shown in italics, which
 you can keep or promote.
 
+### Network discovery
+
+The **Discovery** view looks at the network the server is on and reports
+what it finds as findings you promote by hand. It is strictly passive and
+on demand: nothing runs unless you press *Run*, a run lasts for the window
+you set (60 s by default, 5 minutes at most), there is no scheduler, no
+background listener and nothing is ever written to a device. Sources:
+
+| Source | What it does on the wire | What it yields |
+| --- | --- | --- |
+| **UniFi controller** | read-only HTTPS calls to the controller you configure (API key or local read-only admin) | switches, APs, their port tables and LLDP neighbours, every client with MAC / IP / VLAN / switch port, the VLAN list |
+| **mDNS / Dante** | standard multicast DNS-SD queries for `_netaudio-*` (Dante), Blackmagic, Shure, HTTP/SSH services; never a unicast packet to a device | Dante device names, primary / secondary addresses, manufacturer and model, hostnames |
+| **LLDP / CDP** | listens for frames the switches announce anyway (raw socket, `CAP_NET_RAW`) | which switch and port this host is plugged into, switch model, management IP, VLAN |
+| **ARP / neighbour table** | reads the host's own neighbour cache (`ip neigh`, `/proc/net/arp`, `arp -a`) | MAC ↔ IP pairs with vendor from the bundled OUI list |
+
+Findings are correlated into one entity per device (by MAC, then IP within
+the run, then Dante name / hostname / serial), matched against the devices
+you already have (*Merge into …*), and switch port tables become proposed
+connections in cable-schedule form with a confidence (LLDP + client table
+high, a single MAC on a port medium, several MACs on a port flagged as an
+uplink or an unmanaged switch). The latest run also feeds the overlay like
+any import, so discovered devices and links show up in italics until you
+promote or ignore them. The mDNS probe needs `pip install
+"fathom-audio[discovery]"` (`zeroconf`); the other three are standard
+library only. In Docker the mDNS / LLDP / ARP probes only see the AV
+network with `network_mode: host` (and `NET_RAW` for LLDP); see
+`docker-compose.yml`. Settings live per project (Discovery › Sources);
+secrets are kept in `projects/<name>/discovery-secrets.json`, never in the
+project file or its history. `FATHOM_UNIFI_URL` / `FATHOM_UNIFI_API_KEY` (or
+`_USER` / `_PASSWORD`), `FATHOM_UNIFI_SITE`, `FATHOM_UNIFI_VERIFY_TLS` and
+`FATHOM_DISCOVERY_INTERFACE` provide server-wide defaults.
+
 ## CLI
 
 ```text
@@ -167,6 +202,8 @@ $FATHOM_DATA/
   projects/<name>/project.json               the model (schema 2, with "revision")
   projects/<name>/project.v1.json            the original 0.2 file, kept once after migration
   projects/<name>/exports/<kind>/...         copies of imported exports
+  projects/<name>/exports/discovery/<run>/   discovery runs (raw probe payloads, findings)
+  projects/<name>/discovery-secrets.json     UniFi credentials (mode 0600; excluded from the project file)
   projects/<name>/files/<att-id>/<file>      photos, documents, floor-plan sources and renders
   projects/<name>/history/                   index.jsonl, ops/<rev>.json, snap/<rev>.json
   builds/<name>/<YYYY-MM-DD_HHMMSS>_<slug>/  build packages (below)
@@ -238,8 +275,9 @@ Module map: `vocab.py` (kinds, media, disciplines), `schema.py` (model v2,
 migration, ops, validation), `project.py` / `history.py` / `users.py`
 (storage, revisions, logins), `plugins.py` + `parsers/` (importers),
 `merge.py` (0.2 merge + import overlay), `library/` (templates),
-`presets.py` (generic device type presets),
-`floorplan.py` (DXF / Draw.io / PDF / SVG), `cables.py`, `network.py`,
+`presets.py` (generic device type presets), `jobs.py` (in-process job
+runner), `discovery/` (passive network discovery: probes, correlation,
+topology, settings), `floorplan.py` (DXF / Draw.io / PDF / SVG), `cables.py`, `network.py`,
 `bom.py`, `qr.py`, `racks.py`, `dmx.py`, `patch.py`, `trace.py`, `search.py`,
 `assistant.py` / `llm.py`, `layout.py` / `render_html.py` / `render_svg.py`
 (maps and viewer pages), `export.py` (builds), `server.py` (WSGI app),
@@ -256,7 +294,8 @@ migration, ops, validation), `project.py` / `history.py` / `users.py`
 - Waves session files (`.sprk`) are undocumented; the CSV fallback is the
   reliable path. The console CSV carries names, colours and patching, not
   gain, sends or inserts.
-- Imports read files you export; there is no live discovery (Dante mDNS,
-  Videohub TCP, sACN, SNMP).
+- Network discovery is passive and on demand (UniFi, mDNS / Dante, LLDP /
+  CDP, ARP). There is no monitoring, no scheduled scan and no active probing
+  (SNMP, Videohub TCP, sACN, Q-SYS); those are still import-from-dump paths.
 - Port counts of templates marked "not verified" come from general
   knowledge; check them against the datasheet.
