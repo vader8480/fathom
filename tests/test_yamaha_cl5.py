@@ -8,14 +8,16 @@ export's routing guide (resolved tables, Section 6) and its anomaly list
 
 from __future__ import annotations
 
+import json
+import shutil
 import sys
 import unittest
 from pathlib import Path
 
 try:
-    from _helpers import call, fixture_path, get_app, install_rrc, jbody, requires, temp_data_dir, upload
+    from _helpers import call, fixture_path, get_app, install_campus, install_rrc, jbody, read_json, requires, temp_data_dir, uniq, upload
 except ImportError:  # pragma: no cover
-    from tests._helpers import call, fixture_path, get_app, install_rrc, jbody, requires, temp_data_dir, upload
+    from tests._helpers import call, fixture_path, get_app, install_campus, install_rrc, jbody, read_json, requires, temp_data_dir, uniq, upload
 
 HERE = Path(__file__).resolve().parent
 if str(HERE.parent) not in sys.path:
@@ -328,6 +330,39 @@ class ApiFlow(unittest.TestCase):
         self.assertTrue(any(r["port"].startswith("SLOT1 9 ← DIR CH 67") for r in outs))
         ins = [r for r in ov["patch_rows"] if r.get("source") == "console" and r.get("dir") == "in"]
         self.assertFalse(any("FX " in r["port"] for r in ins), "FX returns are internal, not patch-sheet inputs")
+
+
+class BuildAppendix(unittest.TestCase):
+    """The HTML report build renders the CL5 racks, DCAs and warnings as appendix tables."""
+
+    def test_campus_build_has_console_appendix(self):
+        export = requires("export")
+        requires("export:build_doc")
+        with temp_data_dir() as data:
+            pdir = install_campus(data, "campus")
+            dest = pdir / "exports" / "yamaha" / "cl5"
+            dest.mkdir(parents=True)
+            for f in FILES:
+                shutil.copy(str(CL5 / f), str(dest / f))
+            doc = read_json(pdir / "project.json")
+            doc["imports"].append({"id": "imp-cl5", "kind": "yamaha", "path": "exports/yamaha/cl5", "room": "main", "device": "foh-cl5", "label": "CL5 console export"})
+            (pdir / "project.json").write_text(json.dumps(doc, indent=2, ensure_ascii=False), encoding="utf-8")
+            run = Path(export.build_doc(str(pdir), run_dir=data / "runs" / uniq("campus"), base_url="http://localhost:8080"))
+            html = (run / "rooms" / "main" / "index.html").read_text(encoding="utf-8")
+        for needle in ("Console racks", "Console DCAs", "Console warnings", "Console buses", "Console output patch"):
+            self.assertIn(needle, html, "appendix section %s" % needle)
+        for cell in ("PRFX 6A", "INS CH 17", "GEQ 7A", "ST IN 1 L"):
+            self.assertIn('<td class="mono">%s</td>' % cell, html, "rack table cell %s" % cell)
+        for text in ("OK closed insert loop", "FX send/return"):
+            self.assertIn("<td>%s</td>" % text, html, text)
+        for dca in ("CHOIR", "VOX", "DCA16"):
+            self.assertIn("<td>%s</td>" % dca, html, "DCA name %s" % dca)
+        self.assertIn("DANTE 13 is patched to 2 input channels", html)
+        self.assertIn("MATRIX 5, MONO", html)
+        self.assertIn("Insert 1", html, "console buses table shows insert columns when the export has them")
+        self.assertIn("DANTE 63, OMNI 7, PRFX 1A (via insert send)", html)
+        self.assertIn("DANTE 10", html)
+        self.assertIn("names only, membership is not in the export", html)
 
 
 if __name__ == "__main__":
