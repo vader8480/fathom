@@ -936,9 +936,16 @@ def _builtin_ids() -> set:
     try:
         from .library import load_library
 
-        return {k for k, v in load_library().items() if (v or {}).get("source", "builtin") in ("builtin", "extension")}
+        return {k for k, v in load_library().items() if (v or {}).get("source", "builtin") in ("builtin", "extension", "preset")}
     except Exception:
         return set()
+
+
+@route("GET", "/api/v2/presets", role="viewer", summary="Built-in device type presets (generic gear with default ports)", tags=["library"])
+def r_presets(req: Request) -> Response:
+    from .presets import as_dict
+
+    return Response.json(as_dict())
 
 
 @route("POST", "/api/v2/library", role="editor", summary="Save a global custom template", tags=["library"], body="Template")

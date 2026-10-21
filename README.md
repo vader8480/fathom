@@ -100,6 +100,17 @@ shows what changes.
   fixtures, switches, control processors …) with real port lists. Add your
   own globally (`<data>/library/*.json`), per project, or from a directory
   (`FATHOM_LIBRARY`). `fathom library list -q rio`.
+- **Device type presets**: *Add gear* opens on a searchable, grouped list of
+  27 generic device types — UPS, PDU, copper and fibre patch panels, 24- and
+  48-port switches, router/firewall, access point, server, NAS, KVM, media
+  converter, Dante/AES67 interface, stagebox, audio console, amplifier, DSP,
+  wireless mic receiver, IEM transmitter, video switcher, projector, display,
+  camera, encoder/decoder, lighting console, dimmer/relay pack, DMX node —
+  each with default ports and rack units. Picking one pre-fills a form (name,
+  kind, manufacturer, model, RU, port counts) you can edit before creating.
+  The same presets are `Generic` templates in the library (`generic-ups`,
+  `generic-switch-24`, …) and work as a `kind` in device CSV imports
+  (`ups`, `pdu`, `network switch`, `access point` …). `GET /api/v2/presets`.
 
 ## Inputs
 
@@ -111,7 +122,7 @@ shows what changes.
 | **ETC Eos / USITT / Lightwright** | Eos `File › Export › CSV`; USITT ASCII `.asc`; Lightwright / Vectorworks instrument schedule (tab or comma text) | channel, universe/address, fixture type, footprint, position, purpose; matched to fixtures, the rest appear as overlay fixtures you can promote |
 | **Blackmagic Videohub** | text captured from the router on TCP 9990 (`nc <ip> 9990 > dump.txt`) | input/output labels and routing |
 | **ATEM settings** | ATEM Software Control `File › Save As` (`.xml`) | input names as port labels |
-| **Device / cable CSV** | any spreadsheet (headers like `name, kind, model, room, serial, ip` or `from_device, from_port, to_device, to_port, tag, type, length`) | one-shot: previewed as changes, then applied; the cable schedule CSV re-imports the same way |
+| **Device / cable CSV** | any spreadsheet (headers like `name, kind, model, room, serial, ip` or `from_device, from_port, to_device, to_port, tag, type, length`) | one-shot: previewed as changes, then applied; the cable schedule CSV re-imports the same way. `kind` takes a vocabulary kind or a device type preset (`ups`, `pdu`, `network switch`, `copper patch panel`, `router`, `access point`, `server`, `nas`, `kvm`, `stagebox`, `dsp` …), which also brings the preset's ports |
 | **Floor plans** | PNG, JPG, SVG, PDF, Draw.io (`.drawio`, compressed or not), DXF (ASCII) | DXF layers and units, Draw.io shapes and edges; DWG needs DXF/PDF/SVG export or `FATHOM_ODA` |
 
 Imports never overwrite what you typed: their results form an **overlay**
@@ -226,6 +237,7 @@ Module map: `vocab.py` (kinds, media, disciplines), `schema.py` (model v2,
 migration, ops, validation), `project.py` / `history.py` / `users.py`
 (storage, revisions, logins), `plugins.py` + `parsers/` (importers),
 `merge.py` (0.2 merge + import overlay), `library/` (templates),
+`presets.py` (generic device type presets),
 `floorplan.py` (DXF / Draw.io / PDF / SVG), `cables.py`, `network.py`,
 `bom.py`, `qr.py`, `racks.py`, `dmx.py`, `patch.py`, `trace.py`, `search.py`,
 `assistant.py` / `llm.py`, `layout.py` / `render_html.py` / `render_svg.py`

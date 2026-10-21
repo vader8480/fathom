@@ -148,6 +148,33 @@ a{color:var(--accent)}
 .pick-list li.group{cursor:default;color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;background:rgba(255,255,255,.02);min-height:28px;padding:4px 10px}
 .pick-list .sub{color:var(--muted);font-size:12px;margin-left:auto;text-align:right}
 .pick-list .warn{color:var(--warn);font-size:11px}
+/* Add gear dialog: Presets | Library tabs, preset list and the pre-filled create form */
+.pf-tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin:-4px 0 10px}
+.pf-tab{background:transparent;border:0;border-bottom:2px solid transparent;border-radius:0;color:var(--muted);padding:8px 14px;font-size:13px;margin-bottom:-1px}
+.pf-tab:hover{border-color:transparent;color:var(--text)}
+.pf-tab.on{color:var(--text);border-bottom-color:var(--accent)}
+.pf-root [hidden],.app-dialog footer button[hidden]{display:none!important}
+.pf-list{margin-top:8px}
+.pf-item{flex:1;min-width:0}
+.pf-ports{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-head{display:flex;gap:10px;align-items:flex-start;margin-bottom:12px}
+.pf-title{flex:1;min-width:0;padding-top:3px}
+.pf-desc{font-size:12px;margin-top:2px}
+.pf-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+.pf-field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.pf-field label{font-size:12px;color:var(--muted)}
+.pf-field input,.pf-field select{width:100%;min-width:0}
+.pf-section{display:flex;align-items:baseline;gap:10px;margin:14px 0 6px;flex-wrap:wrap}
+.pf-section h4{margin:0;font-size:13px}
+.pf-section .muted{font-size:12px}
+.pf-portlist{border:1px solid var(--border);border-radius:8px;max-height:34vh;overflow:auto}
+.pf-port{display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid rgba(255,255,255,.05)}
+.pf-port:last-child{border-bottom:0}
+.pf-port-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-port-meta{font-size:12px;white-space:nowrap}
+.pf-port input{width:76px;text-align:right;flex:none}
+.pf-hint{font-size:12px;margin:10px 0 0}
+@media (max-width:699px){.pf-fields{grid-template-columns:1fr}.pf-port-meta{display:none}.pf-list{max-height:46vh}.pf-portlist{max-height:30vh}.pf-tab{flex:1;text-align:center}}
 .search-input{width:100%}
 
 /* palette */

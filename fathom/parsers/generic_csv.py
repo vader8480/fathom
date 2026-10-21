@@ -249,6 +249,16 @@ def _device_values(row: Dict[str, str], lk: _Lookup, existing: Optional[Dict[str
     for k in ("name", "kind", "manufacturer", "model", "template", "location", "system", "status", "code"):
         if row.get(k):
             v[k] = row[k]
+    if v.get("kind"):
+        # A preset id / label / alias in the kind column ("ups", "patch panel", "access point") resolves to the
+        # preset's vocabulary kind and, for a new device without an explicit template, to the preset's ports.
+        from ..presets import resolve_kind
+
+        kind, preset_id = resolve_kind(v["kind"])
+        if kind:
+            v["kind"] = kind
+        if preset_id and existing is None and not v.get("template"):
+            v["template"] = preset_id
     if row.get("room"):
         v["room"] = lk.room(row["room"])
     if row.get("notes"):
