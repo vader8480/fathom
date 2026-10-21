@@ -55,7 +55,8 @@ export function mountImports(el, ctx) {
   const store = ctx.store;
   const root = h('div', { class: 'adm' });
   el.appendChild(root);
-  const importers = ((ctx.meta && ctx.meta.importers) || []).slice();
+  // discovery runs are started from the Discovery view, not uploaded here
+  const importers = ((ctx.meta && ctx.meta.importers) || []).filter(function (imp) { return imp.mode !== 'discovery'; });
 
   function deviceSelect() {
     return h('select', { 'aria-label': 'Device' }, [h('option', { value: '' }, 'Auto-detect device')].concat((store.doc.devices || []).map(function (d) { return h('option', { value: d.id }, d.name || d.id); })));

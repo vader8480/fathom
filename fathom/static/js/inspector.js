@@ -487,6 +487,12 @@ export function mountInspector(el, ctx) {
         s.addEventListener('change', function () { if (s.value) it[key] = s.value; else delete it[key]; send('Edit ' + key + ' \u00b7 ' + d.name); });
         rows.push(fieldRow(label, s));
       }
+      if (it.source === 'discovery') {
+        rows.push(h('div', { class: 'muted', style: { fontSize: '11.5px' } }, [
+          h('span', { class: 'badge-discovered', style: { marginLeft: 0 }, title: 'Filled in by network discovery' }, 'discovered'),
+          it.last_seen ? ' last seen ' + String(it.last_seen).replace('T', ' ').replace('Z', ' UTC') : '',
+        ]));
+      }
       txt('Id', 'id');
       pick('Role', 'role', ['primary', 'secondary', 'control', 'management', 'media'].map(function (x) { return [x, x]; }));
       txt('IP', 'ip', { inputmode: 'decimal', placeholder: '10.0.0.10' });

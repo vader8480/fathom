@@ -64,6 +64,12 @@ def _ensure_builtins() -> None:
         from . import parsers  # noqa: F401  (registers the built-ins)
     except Exception as exc:  # pragma: no cover - would be a packaging bug
         _ERRORS.append(f"fathom.parsers: {exc}")
+    try:
+        from . import discovery
+
+        discovery.register()
+    except Exception as exc:  # pragma: no cover - would be a packaging bug
+        _ERRORS.append(f"fathom.discovery: {exc}")
 
 
 def register_importer(imp: Importer) -> None:
