@@ -91,8 +91,8 @@ SHELL_ASSETS = [
     "static/js/app.js", "static/js/api.js", "static/js/model-core.js", "static/js/inspector.js", "static/js/assistant-ui.js",
     "static/js/patchtable.js", "static/js/patchtable-core.js", "static/js/patchview.js", "static/js/patchview-core.js",
     "static/js/floorplan.js", "static/js/floorplan-core.js", "static/js/rack.js", "static/js/rack-core.js",
-    "static/js/schedules.js", "static/js/inventory.js", "static/js/views-admin.js", "static/icons/icon-192.png",
-    "manifest.webmanifest",
+    "static/js/schedules.js", "static/js/inventory.js", "static/js/views-admin.js", "static/js/views-sop.js", "static/css/sop.css",
+    "static/icons/icon-192.png", "manifest.webmanifest",
 ]
 SCHEDULE_KINDS = ("patch", "cables", "ip", "dmx", "bom", "inventory", "racks", "labels")
 _STATUS_TEXT = {
@@ -1235,6 +1235,376 @@ def _share_project(token: str) -> str:
                 return ""
             return n
     return ""
+
+
+# ---- SOP pages (§4.3.15, §5.15)
+
+_SLUG = r"(?P<slug>[a-z0-9][a-z0-9-]{0,79})"
+_PAGE_FIELDS = ("slug", "title", "parent", "order", "kind", "body", "summary", "tags", "rooms", "devices", "attachments", "status",
+                "owner", "review_due")
+
+
+def _pages(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [p for p in doc.get("pages") or [] if isinstance(p, dict) and p.get("id") and p.get("slug")]
+
+
+def _page_by_slug(doc: Dict[str, Any], slug: str) -> Dict[str, Any]:
+    p = next((x for x in _pages(doc) if x.get("slug") == slug), None)
+    if p is None:
+        raise ApiError(404, f"page '{slug}' not found", "page_missing")
+    return p
+
+
+def _page_order_key(p: Dict[str, Any]) -> Tuple[int, str]:
+    o = p.get("order")
+    return (int(o) if isinstance(o, int) and not isinstance(o, bool) else 10 ** 6, str(p.get("title") or "").casefold())
+
+
+def _page_children(doc: Dict[str, Any], parent: Optional[str]) -> List[Dict[str, Any]]:
+    return sorted([p for p in _pages(doc) if (p.get("parent") or None) == (parent or None)], key=_page_order_key)
+
+
+def _page_refs(p: Dict[str, Any]) -> Dict[str, List[str]]:
+    """Explicit links plus references found in the body (union, in order)."""
+    from .markdown import find_refs
+
+    found = find_refs(str(p.get("body") or ""))
+    out: Dict[str, List[str]] = {}
+    for key in ("devices", "rooms", "pages", "attachments"):
+        seen: List[str] = []
+        for v in list(p.get(key) or []) + list(found.get(key) or []):
+            if isinstance(v, str) and v and v not in seen:
+                seen.append(v)
+        out[key] = seen
+    return out
+
+
+def _page_resolver(project: str, doc: Dict[str, Any]) -> Callable[[str, str], Optional[Dict[str, Any]]]:
+    devs = {d.get("id"): d for d in doc.get("devices") or [] if isinstance(d, dict)}
+    rooms = {r.get("id"): r for r in doc.get("rooms") or [] if isinstance(r, dict)}
+    pages = {p.get("slug"): p for p in _pages(doc)}
+    atts = {a.get("id"): a for a in doc.get("attachments") or [] if isinstance(a, dict)}
+    proj = quote(project)
+
+    def resolve(kind: str, ref: str) -> Optional[Dict[str, Any]]:
+        if kind == "device" and ref in devs:
+            return {"href": f"p/{proj}/d/{quote(ref)}", "label": str(devs[ref].get("name") or ref)}
+        if kind == "room" and ref in rooms:
+            return {"href": f"p/{proj}/r/{quote(ref)}", "label": str(rooms[ref].get("name") or ref)}
+        if kind == "page" and ref in pages:
+            return {"href": f"#/{proj}/*/sop?page={quote(ref)}", "label": str(pages[ref].get("title") or ref)}
+        if kind == "attachment" and ref in atts:
+            a = atts[ref]
+            return {"href": f"api/v2/projects/{proj}/files/{quote(ref)}/{quote(Path(str(a.get('file') or a.get('name') or 'file')).name)}",
+                    "label": str(a.get("name") or ref)}
+        return None
+
+    return resolve
+
+
+def _page_summary(doc: Dict[str, Any], p: Dict[str, Any]) -> Dict[str, Any]:
+    from .markdown import plain_text
+
+    kids = sum(1 for x in _pages(doc) if (x.get("parent") or None) == p["id"])
+    return {k: p.get(k) for k in ("id", "slug", "title", "parent", "order", "kind", "status", "tags", "rooms", "devices", "updated",
+                                   "updated_by", "review_due")} | {
+        "summary": str(p.get("summary") or plain_text(str(p.get("body") or ""), 160)), "children": kids}
+
+
+def _page_payload(project: str, doc: Dict[str, Any], page: Dict[str, Any], revision: int) -> Dict[str, Any]:
+    from .markdown import render
+
+    rendered = render(str(page.get("body") or ""), _page_resolver(project, doc))
+    refs = _page_refs(page)
+    devs = {d.get("id"): d for d in doc.get("devices") or [] if isinstance(d, dict)}
+    rooms = {r.get("id"): r for r in doc.get("rooms") or [] if isinstance(r, dict)}
+    by_slug = {p.get("slug"): p for p in _pages(doc)}
+    by_id = {p["id"]: p for p in _pages(doc)}
+    me = page["id"]
+    backlinks = [{"slug": p["slug"], "title": p.get("title") or p["slug"]} for p in _pages(doc)
+                 if p["id"] != me and page["slug"] in _page_refs(p)["pages"]]
+    sibs = _page_children(doc, page.get("parent") or None)
+    pos = next((i for i, s in enumerate(sibs) if s["id"] == me), -1)
+    nav = lambda s: {"slug": s["slug"], "title": s.get("title") or s["slug"]} if s is not None else None  # noqa: E731
+    crumbs: List[Dict[str, Any]] = []
+    cur = by_id.get(page.get("parent") or "")
+    guard = 0
+    while cur is not None and guard < 50:
+        crumbs.insert(0, nav(cur))
+        cur = by_id.get(cur.get("parent") or "")
+        guard += 1
+    return {
+        "page": page,
+        "html": rendered["html"], "toc": rendered["toc"], "tasks": rendered["tasks"], "missing": rendered["missing"],
+        "links": {
+            "devices": [{"id": d, "name": str(devs[d].get("name") or d), "room": devs[d].get("room") or "", "kind": devs[d].get("kind") or ""}
+                        for d in refs["devices"] if d in devs],
+            "rooms": [{"id": r, "name": str(rooms[r].get("name") or r)} for r in refs["rooms"] if r in rooms],
+            "pages": [nav(by_slug[s]) for s in refs["pages"] if s in by_slug],
+        },
+        "backlinks": backlinks,
+        "breadcrumbs": crumbs,
+        "children": [nav(c) for c in _page_children(doc, me)],
+        "prev": nav(sibs[pos - 1]) if pos > 0 else None,
+        "next": nav(sibs[pos + 1]) if 0 <= pos < len(sibs) - 1 else None,
+        "revision": revision,
+    }
+
+
+def _clean_page_input(body: Dict[str, Any], cur: Optional[Dict[str, Any]], doc: Dict[str, Any], slug: str) -> Dict[str, Any]:
+    from .schema import PAGE_KINDS, PAGE_STATUSES, SLUG_RE
+
+    page: Dict[str, Any] = dict(cur or {})
+    for k in _PAGE_FIELDS:
+        if k in body:
+            page[k] = body[k]
+    page["slug"] = str(page.get("slug") or slug).strip().lower()
+    if not SLUG_RE.match(page["slug"]):
+        raise ApiError(400, "slug must be lowercase letters, digits and dashes", "bad_slug")
+    title = str(page.get("title") or "").strip()
+    if not title:
+        raise ApiError(400, "title is required", "missing_field")
+    page["title"] = title
+    if page.get("kind") not in (None, "", *PAGE_KINDS):
+        raise ApiError(400, f"kind must be one of {', '.join(PAGE_KINDS)}", "bad_enum")
+    if page.get("status") not in (None, "", *PAGE_STATUSES):
+        raise ApiError(400, f"status must be one of {', '.join(PAGE_STATUSES)}", "bad_enum")
+    if page.get("body") is not None and not isinstance(page.get("body"), str):
+        raise ApiError(400, "body must be a string", "bad_type")
+    for k in ("tags", "rooms", "devices", "attachments"):
+        v = page.get(k)
+        if v is None or v == "":
+            page.pop(k, None)
+        elif isinstance(v, list) and all(isinstance(x, str) for x in v):
+            page[k] = [x.strip() for x in v if x.strip()]
+        elif isinstance(v, str):
+            page[k] = [x.strip() for x in v.split(",") if x.strip()]
+        else:
+            raise ApiError(400, f"{k} must be a list of ids", "bad_type")
+    if page.get("parent") in ("", None):
+        page.pop("parent", None)
+    elif page.get("parent") == page.get("id"):
+        raise ApiError(400, "a page cannot be its own parent", "page_cycle")
+    else:
+        by_id = {p["id"]: p for p in _pages(doc)}
+        if page["parent"] not in by_id:
+            raise ApiError(400, f"parent page '{page['parent']}' does not exist", "dangling_ref")
+        node, seen = by_id.get(page["parent"]), set()
+        while node is not None:
+            if node["id"] == page.get("id") or node["id"] in seen:
+                raise ApiError(400, "moving the page under its own descendant would make a loop", "page_cycle")
+            seen.add(node["id"])
+            node = by_id.get(node.get("parent") or "")
+    taken = next((p for p in _pages(doc) if p.get("slug") == page["slug"] and p["id"] != page.get("id")), None)
+    if taken is not None:
+        raise ApiError(409, f"slug '{page['slug']}' is already used by '{taken.get('title')}'", "duplicate_slug")
+    for k in ("order",):
+        if page.get(k) in ("", None):
+            page.pop(k, None)
+        else:
+            page[k] = _int(page.get(k), 0)
+    for k in ("summary", "owner", "review_due", "kind", "status"):
+        if page.get(k) in ("", None):
+            page.pop(k, None)
+        else:
+            page[k] = str(page[k]).strip()
+    return page
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/pages", role="viewer", summary="SOP pages (tree summaries; ?device= / ?room= list backlinks)", tags=["pages"])
+def r_pages(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    dev, room, status, kind = (req.query.get(k) or "" for k in ("device", "room", "status", "kind"))
+    out = []
+    for p in sorted(_pages(doc), key=lambda x: (str(x.get("parent") or ""),) + _page_order_key(x)):
+        if status and (p.get("status") or "published") != status:
+            continue
+        if kind and (p.get("kind") or "sop") != kind:
+            continue
+        if dev or room:
+            refs = _page_refs(p)
+            if dev and dev not in refs["devices"]:
+                continue
+            if room and room not in refs["rooms"]:
+                continue
+        out.append(_page_summary(doc, p))
+    return Response.json({"pages": out, "revision": _rev(doc)})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/pages/preview", role="editor", summary="Render Markdown without saving", tags=["pages"], body="PagePreview")
+def r_pages_preview(req: Request) -> Response:
+    from .markdown import render
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    body = req.json()
+    text = body.get("body")
+    if not isinstance(text, str):
+        raise ApiError(400, "body must be a string")
+    if len(text) > 1_000_000:
+        raise ApiError(413, "page body larger than 1 MB", "too_large")
+    return Response.json(render(text, _page_resolver(pdir.name, doc)))
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/pages/" + _SLUG, role="viewer", summary="A page with rendered HTML, TOC, links and backlinks", tags=["pages"])
+def r_page_get(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    page = _page_by_slug(doc, req.params["slug"])
+    return Response.json(_page_payload(pdir.name, doc, page, _rev(doc)))
+
+
+@route("PUT", r"/api/v2/projects/" + _NAME + "/pages/" + _SLUG, role="editor", summary="Create or update a page", tags=["pages"], body="Page")
+def r_page_put(req: Request) -> Response:
+    from .history import utc_now
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    body = req.json()
+    slug = req.params["slug"]
+    cur = next((p for p in _pages(doc) if p.get("slug") == slug), None)
+    page = _clean_page_input(body, cur, doc, slug)
+    now = utc_now()
+    if cur is None:
+        page["id"] = "pg-" + secrets.token_hex(4)
+        page["created"] = now
+        if req.username and not page.get("owner"):
+            page["owner"] = req.username
+        if not page.get("status"):
+            page["status"] = "draft"
+        if not page.get("kind"):
+            page["kind"] = "sop"
+        if page.get("order") is None:
+            sibs = _page_children(doc, page.get("parent") or None)
+            page["order"] = (max([int(s.get("order") or 0) for s in sibs] or [0]) + 1)
+    page["updated"] = now
+    if req.username:
+        page["updated_by"] = req.username
+    ops = [{"op": "put", "coll": "pages", "id": page["id"], "value": page}]
+    label = ("New SOP " if cur is None else "Edit SOP ") + page["title"]
+    base = body.get("base_revision")
+    res = _changes(req, pdir, ops, _int(base, -1), label, "pages") if base is not None else _server_ops(req, pdir, ops, label, "pages")
+    return Response.json({"page": page, "revision": res["revision"], "problems": res.get("problems") or []}, 201 if cur is None else 200,
+                         headers={"ETag": f'"r{res["revision"]}"'})
+
+
+@route("DELETE", r"/api/v2/projects/" + _NAME + "/pages/" + _SLUG, role="editor", summary="Delete a page (archived instead when it has children)", tags=["pages"])
+def r_page_delete(req: Request) -> Response:
+    from .history import utc_now
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    page = _page_by_slug(doc, req.params["slug"])
+    kids = _page_children(doc, page["id"])
+    if kids and page.get("status") != "archived":
+        ops = [{"op": "merge", "coll": "pages", "id": page["id"], "value": {"status": "archived", "updated": utc_now(), "updated_by": req.username or None}}]
+        res = _server_ops(req, pdir, ops, f"Archive SOP {page.get('title')}", "pages")
+        return Response.json({"archived": True, "children": [k["slug"] for k in kids], "revision": res["revision"]})
+    ops = [{"op": "del", "coll": "pages", "id": page["id"]}]
+    res = _server_ops(req, pdir, ops, f"Delete SOP {page.get('title')}", "pages")
+    return Response.json({"archived": False, "revision": res["revision"]})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/pages/" + _SLUG + "/move", role="editor", summary="Reparent / reorder a page ({parent, before})", tags=["pages"], body="PageMove")
+def r_page_move(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    page = _page_by_slug(doc, req.params["slug"])
+    body = req.json()
+    parent = body.get("parent", page.get("parent")) or None
+    if parent == page["id"]:
+        raise ApiError(400, "a page cannot be its own parent", "page_cycle")
+    by_id = {p["id"]: p for p in _pages(doc)}
+    if parent is not None:
+        if parent not in by_id:
+            raise ApiError(400, f"parent page '{parent}' does not exist", "dangling_ref")
+        node, seen = by_id[parent], set()
+        while node is not None:
+            if node["id"] == page["id"] or node["id"] in seen:
+                raise ApiError(400, "moving the page under its own descendant would make a loop", "page_cycle")
+            seen.add(node["id"])
+            node = by_id.get(node.get("parent") or "")
+    sibs = [s for s in _page_children(doc, parent) if s["id"] != page["id"]]
+    before = body.get("before")
+    idx = next((i for i, s in enumerate(sibs) if s.get("slug") == before or s.get("id") == before), len(sibs)) if before else len(sibs)
+    if body.get("order") is not None and not before:
+        idx = max(0, min(len(sibs), _int(body.get("order"), len(sibs) + 1) - 1))
+    sibs.insert(idx, page)
+    ops: List[Dict[str, Any]] = []
+    for i, s in enumerate(sibs, start=1):
+        patch: Dict[str, Any] = {}
+        if s.get("order") != i:
+            patch["order"] = i
+        if s["id"] == page["id"] and (page.get("parent") or None) != parent:
+            patch["parent"] = parent
+        if patch:
+            ops.append({"op": "merge", "coll": "pages", "id": s["id"], "value": patch})
+    if not ops:
+        return Response.json({"revision": _rev(doc), "moved": False})
+    res = _server_ops(req, pdir, ops, f"Move SOP {page.get('title')}", "pages")
+    return Response.json({"revision": res["revision"], "moved": True})
+
+
+def _page_versions(pdir: Path, page_id: str) -> List[Dict[str, Any]]:
+    from .history import list_revisions
+
+    ref = f"pages/{page_id}"
+    return [{"revision": e["revision"], "time": e.get("time"), "author": e.get("author") or "", "summary": e.get("summary") or "",
+             "source": e.get("source") or ""} for e in list_revisions(pdir, limit=None) if ref in (e.get("touched") or [])]
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/pages/" + _SLUG + "/versions", role="viewer", summary="Revisions that changed this page (newest first)", tags=["pages"])
+def r_page_versions(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    page = _page_by_slug(doc, req.params["slug"])
+    limit = _int(req.query.get("limit"), 50, 1, 500)
+    return Response.json({"versions": _page_versions(pdir, page["id"])[:limit], "revision": _rev(doc)})
+
+
+def _page_at(pdir: Path, page: Dict[str, Any], rev: int) -> Dict[str, Any]:
+    old = _revision_doc(pdir, rev)
+    hit = next((p for p in old.get("pages") or [] if isinstance(p, dict) and p.get("id") == page["id"]), None)
+    if hit is None:
+        raise ApiError(404, f"the page did not exist at revision {rev}", "history_missing")
+    return hit
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/pages/" + _SLUG + r"/versions/(?P<rev>\d+)", role="viewer", summary="The page as it was at a revision, rendered", tags=["pages"])
+def r_page_version(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    page = _page_by_slug(doc, req.params["slug"])
+    rev = int(req.params["rev"])
+    old = _page_at(pdir, page, rev)
+    out = _page_payload(pdir.name, doc, old, rev)
+    out["current_revision"] = _rev(doc)
+    return Response.json(out)
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/pages/" + _SLUG + r"/restore/(?P<rev>\d+)", role="editor", summary="Restore this page's content from a revision (new revision)", tags=["pages"], body="Restore")
+def r_page_restore(req: Request) -> Response:
+    from .history import utc_now
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    page = _page_by_slug(doc, req.params["slug"])
+    rev = int(req.params["rev"])
+    old = dict(_page_at(pdir, page, rev))
+    old["id"] = page["id"]
+    old["slug"] = page["slug"]
+    if old.get("parent") and old["parent"] not in {p["id"] for p in _pages(doc)}:
+        old.pop("parent", None)
+    old["updated"] = utc_now()
+    if req.username:
+        old["updated_by"] = req.username
+    ops = [{"op": "put", "coll": "pages", "id": page["id"], "value": old}]
+    body = req.json() if req.body().strip() else {}
+    base = body.get("base_revision")
+    label = f"Restore SOP {old.get('title')} from r{rev}"
+    res = _changes(req, pdir, ops, _int(base, -1), label, "pages") if base is not None else _server_ops(req, pdir, ops, label, "pages")
+    return Response.json({"page": old, "revision": res["revision"], "problems": res.get("problems") or []})
 
 
 # ---- imports

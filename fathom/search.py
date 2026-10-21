@@ -2,7 +2,7 @@
 
 Ranking per field: exact (100) > prefix (80) > token (60) > substring (40) >
 fuzzy, edit distance 1 on tokens of ≥ 4 chars (25). Ties: kind order
-device, port, cable, interface, room, rack, floorplan, attachment, then title.
+device, port, cable, interface, room, rack, floorplan, attachment, page, then title.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 Doc = Dict[str, Any]
 
-KIND_ORDER: Tuple[str, ...] = ("device", "port", "cable", "interface", "room", "rack", "floorplan", "attachment")
+KIND_ORDER: Tuple[str, ...] = ("device", "port", "cable", "interface", "room", "rack", "floorplan", "attachment", "page")
 _TOKEN_RE = re.compile(r"[^a-z0-9]+")
 
 
@@ -154,7 +154,27 @@ def build_index(doc: Doc, overlay: Optional[Dict[str, Any]] = None) -> SearchInd
             dev = byid.get(a.get("device") or "")
             ix.add("attachment", a["id"], str(a.get("name") or a["id"]), _join(a.get("kind"), (dev or {}).get("name")),
                    (dev or {}).get("room") or "", a.get("device") or None, None, [("name", a.get("name")), ("note", a.get("note"))])
+    _add_pages(ix, doc, room_name)
     return ix
+
+
+def _add_pages(ix: SearchIndex, doc: Doc, room_name: Any) -> None:
+    """SOP pages: title, slug, tags, summary, headings and the body text (hit id = slug)."""
+    try:
+        from .markdown import headings, plain_text
+    except ImportError:  # pragma: no cover
+        return
+    for p in doc.get("pages") or []:
+        if not isinstance(p, dict) or not p.get("id") or not p.get("slug"):
+            continue
+        body = str(p.get("body") or "")
+        fields: List[Tuple[str, Any]] = [("title", p.get("title")), ("slug", p.get("slug")), ("summary", p.get("summary"))]
+        fields += [("tag", t) for t in p.get("tags") or []]
+        fields += [("heading", h) for h in headings(body)]
+        fields.append(("body", plain_text(body)))
+        rooms = [r for r in p.get("rooms") or [] if isinstance(r, str)]
+        sub = _join((p.get("kind") or "sop").replace("_", " "), room_name(rooms[0]) if rooms else "", "draft" if p.get("status") == "draft" else "")
+        ix.add("page", str(p["slug"]), str(p.get("title") or p["slug"]), sub, rooms[0] if rooms else "", None, None, fields)
 
 
 def _add_iface(ix: SearchIndex, d: Dict[str, Any], itf: Dict[str, Any]) -> None:

@@ -102,7 +102,7 @@ def _components() -> Dict[str, Any]:
             "before": {"type": ["string", "null"]}}},
         "Problem": problem,
         "Hit": {"type": "object", "properties": {
-            "kind": {"type": "string", "enum": ["device", "port", "cable", "interface", "room", "rack", "floorplan", "attachment"]},
+            "kind": {"type": "string", "enum": ["device", "port", "cable", "interface", "room", "rack", "floorplan", "attachment", "page"]},
             "id": {"type": "string"}, "device": {"type": ["string", "null"]}, "port": {"type": ["string", "null"]}, "title": {"type": "string"},
             "subtitle": {"type": "string"}, "room": {"type": "string"}, "score": {"type": "number"}, "match": {"type": "string"}}},
         "Answer": {"type": "object", "properties": {
@@ -133,6 +133,16 @@ def _components() -> Dict[str, Any]:
         "BackupCreate": {"type": "object", "properties": {"include_builds": {"type": "boolean"}, "label": {"type": "string"}}},
         "BackupRestore": {"type": "object", "required": ["confirm"], "properties": {"confirm": {"type": "string", "description": "the backup name"}}},
         "Template": obj, "V1Project": obj,
+        "Page": {"type": "object", "required": ["title"], "properties": {
+            "slug": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,79}$"}, "title": {"type": "string"}, "parent": {"type": ["string", "null"]},
+            "order": {"type": "integer"}, "kind": {"type": "string", "enum": ["sop", "troubleshooting", "checklist", "reference"]},
+            "body": {"type": "string", "description": "Markdown (see fathom/markdown.py)"}, "summary": {"type": "string"},
+            "tags": {"type": "array", "items": {"type": "string"}}, "rooms": {"type": "array", "items": {"type": "string"}},
+            "devices": {"type": "array", "items": {"type": "string"}}, "attachments": {"type": "array", "items": {"type": "string"}},
+            "status": {"type": "string", "enum": ["draft", "published", "archived"]}, "owner": {"type": "string"},
+            "review_due": {"type": "string"}, "base_revision": {"type": "integer"}}},
+        "PagePreview": {"type": "object", "required": ["body"], "properties": {"body": {"type": "string"}}},
+        "PageMove": {"type": "object", "properties": {"parent": {"type": ["string", "null"]}, "before": {"type": ["string", "null"]}, "order": {"type": "integer"}}},
     }
     return schemas
 
