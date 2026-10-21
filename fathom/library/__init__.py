@@ -168,12 +168,22 @@ def _read_dir(d: Path, source: str, into: Dict[str, Dict[str, Any]]) -> None:
                 into[item["id"]] = item
 
 
+def _preset_templates() -> Dict[str, Dict[str, Any]]:
+    """Generic device type presets (``fathom.presets``) as templates; the lowest-precedence source."""
+    try:
+        from ..presets import as_templates
+
+        return {k: t for k, t in as_templates().items() if not validate_template(t)}
+    except Exception:
+        return {}
+
+
 def load_library(refresh: bool = False) -> Dict[str, Dict[str, Any]]:
-    """id → template (built-in + extension + global custom), later sources override."""
+    """id → template (presets + built-in + extension + global custom), later sources override."""
     dirs = _dirs()
     sig = _signature(dirs)
     if refresh or _cache["sig"] != sig:
-        lib: Dict[str, Dict[str, Any]] = {}
+        lib: Dict[str, Dict[str, Any]] = _preset_templates()
         for d, src in dirs:
             _read_dir(d, src, lib)
         _cache["lib"] = dict(sorted(lib.items()))

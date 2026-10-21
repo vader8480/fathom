@@ -294,19 +294,44 @@ def _vocab() -> Tuple[Dict[str, Any], Dict[str, Any], Tuple[str, ...]]:
     return KINDS, MEDIA, STATUSES
 
 
-def kind_key(text: str) -> str:
-    """``'Video switcher'`` / ``'video-switcher'`` → ``'video_switcher'`` when that is a known kind, else ``''``."""
+def kind_and_preset(text: str) -> Tuple[str, Optional[str]]:
+    """``(kind, preset_id)`` for a kind cell: vocab key or label → ``(key, None)``; a device type preset id / label /
+    alias (``ups``, ``network switch``, ``access point``) → the preset's kind and id; unknown → ``("", None)``."""
     kinds = _vocab()[0]
     t = (text or "").strip()
     if t in kinds:
-        return t
+        return t, None
     k = re.sub(r"[^a-z0-9]+", "_", t.lower()).strip("_")
     if k in kinds:
-        return k
+        return k, None
     for key, meta in kinds.items():
         if _norm(meta.get("label", "")) in (_norm(t), _norm(t) + "s"):
-            return key
-    return ""
+            return key, None
+    from ..presets import resolve_kind
+
+    return resolve_kind(t)
+
+
+def kind_key(text: str) -> str:
+    """``'Video switcher'`` / ``'video-switcher'`` → ``'video_switcher'``, ``'ups'`` → ``'power'`` (preset); unknown → ``''``."""
+    return kind_and_preset(text)[0]
+
+
+def kind_choices() -> List[str]:
+    """Accepted ``kind`` cells for the column guide and error messages: vocab kinds, then each preset id with its aliases."""
+    kinds = _vocab()[0]
+    out = sorted(kinds)
+    try:
+        from ..presets import PRESETS, resolve_kind
+    except Exception:  # pragma: no cover
+        return out
+    for p in PRESETS:
+        out.append(p["id"])
+        for a in [p["label"]] + list(p.get("aliases") or []):
+            key = a.strip().lower()
+            if resolve_kind(a)[1] == p["id"] and key not in out:
+                out.append(key)
+    return out
 
 
 def _unknown(what: str, value: str, choices: List[str]) -> str:
@@ -369,7 +394,7 @@ def _validate_device(row: Dict[str, str], n: int, lk: "_Lookup", errs: _Errors, 
         else:
             seen[key] = n
     if row.get("kind") and not kind_key(row["kind"]):
-        errs.add(n, "kind", row["kind"], _unknown("kind", row["kind"], sorted(kinds)))
+        errs.add(n, "kind", row["kind"], _unknown("kind", row["kind"], kind_choices()))
     if row.get("status") and row["status"].strip().lower() not in statuses:
         errs.add(n, "status", row["status"], "status must be one of " + ", ".join(statuses))
     if row.get("room") and lk.rooms and lk.room(row["room"]) not in lk.rooms:
@@ -427,7 +452,12 @@ def _device_values(row: Dict[str, str], lk: _Lookup, existing: Optional[Dict[str
         if row.get(k):
             v[k] = row[k]
     if v.get("kind"):
-        v["kind"] = kind_key(v["kind"]) or v["kind"]
+        kind, preset_id = kind_and_preset(v["kind"])
+        if kind:
+            v["kind"] = kind
+        # a preset alias ("ups", "network switch") also brings the preset's ports to a new device without a template
+        if preset_id and existing is None and not v.get("template"):
+            v["template"] = preset_id
     if v.get("status"):
         v["status"] = v["status"].strip().lower()
     if row.get("room"):
@@ -698,7 +728,8 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
         "label": "Devices",
         "columns": [
             ("name", True, "Device name; an existing device with this name is updated, otherwise one is created"),
-            ("kind", False, "Device kind; blank = other"),
+            ("kind", False, "Device kind (console, switch, …) or a device type preset — ups, pdu, network switch, copper patch panel, "
+                            "router, access point, server, nas, kvm, stagebox, dsp … — which also gives a new device the preset's ports and rack units; blank = other"),
             ("manufacturer", False, "e.g. Yamaha"),
             ("model", False, "e.g. CL5"),
             ("template", False, "Equipment library id (e.g. yamaha-cl5) to create the device with its real ports"),
@@ -746,7 +777,7 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
 
 def _allowed(key: str) -> List[str]:
     kinds, media, statuses = _vocab()
-    return {"kind": sorted(kinds), "medium": sorted(media), "status": list(statuses), "face": ["front", "rear"],
+    return {"kind": kind_choices(), "medium": sorted(media), "status": list(statuses), "face": ["front", "rear"],
             "length_unit": ["m", "ft", "in", "cm"]}.get(key, [])
 
 

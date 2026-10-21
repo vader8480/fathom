@@ -435,7 +435,7 @@ class GenericCsv(unittest.TestCase):
                 "Good Box,stage_io,Installed,10.0.0.1,001d.c10a.2b3c,20,,,,main,,,\n"
                 "\n"
                 ",console,,,,,,,,,,,\n"
-                "Bad Kind,mixer,maybe,10.0.0.300,zz:zz,5000,0,600,4,Basement,15/01/2026,abc,\n"
+                "Bad Kind,laser,maybe,10.0.0.300,zz:zz,5000,0,600,4,Basement,15/01/2026,abc,\n"
                 "good box,console,,,,,,,,,,,\n"
                 "Overflow,fixture,,,,,1,510,8,,,,,extra\n"
                 "Video Switch,Video switcher,,,,,,,,,,,\n")
@@ -450,8 +450,9 @@ class GenericCsv(unittest.TestCase):
         bad = by_row[5]
         for col in ("kind", "status", "ip", "mac", "vlan", "universe", "address", "room", "purchase_date", "cost"):
             self.assertIn(col, bad, "row 5 flags %s" % col)
-        self.assertIn("mixer", bad["kind"]["value"])
+        self.assertIn("laser", bad["kind"]["value"])
         self.assertIn("console", bad["kind"]["message"], "message lists the valid kinds")
+        self.assertIn("ups", bad["kind"]["message"], "… and the device type preset aliases")
         self.assertIn("Main", bad["room"]["message"], "message lists the project rooms")
         self.assertIn("duplicate of row 2", by_row[6]["name"]["message"], "names compare case-insensitively")
         self.assertIn("past 512", by_row[7]["footprint"]["message"])
