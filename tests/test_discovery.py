@@ -653,7 +653,7 @@ class DiscoveryApi(unittest.TestCase):
 
             # promote: one new switch, one new device, merge RIO-SR, two cables, the guest network; ignore the phone
             body = {"entities": [by_mac[AV_CORE]["id"], by_mac["00:60:74:12:34:56"]["id"]], "merge": {by_mac[RIO_SR]["id"]: "rio-sr"},
-                    "connections": [conn_p2["id"], conn_p4["id"]], "networks": [guest["id"]], "ignore": {"entities": [iphone["id"]]}, "room": "theatre"}
+                    "connections": [conn_p2["id"], conn_p4["id"]], "networks": [guest["id"]], "ignore": {"entities": [iphone["id"]]}, "room": "chapel"}
             st, _, b = self.req("POST", base + "/discovery/runs/" + rid + "/findings/promote", body)
             self.assertEqual(st, 200, b)
             res = jbody(b)
@@ -662,7 +662,7 @@ class DiscoveryApi(unittest.TestCase):
             doc = jbody(b)["doc"] if "doc" in jbody(b) else jbody(b)
             devs = {d["id"]: d for d in doc["devices"]}
             self.assertIn("av-core", devs)
-            self.assertEqual(devs["av-core"]["room"], "theatre")
+            self.assertEqual(devs["av-core"]["room"], "chapel")
             self.assertIn("discovered", devs["av-core"].get("tags", []))
             self.assertEqual(devs["av-core"]["interfaces"][0]["source"], "discovery")
             self.assertNotIn("_switch_mac", devs["av-core"]["interfaces"][0])
