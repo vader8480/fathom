@@ -403,6 +403,8 @@ def merge_console(project: Project, data: ConsoleData, node_id: str, dante: Opti
         project.appendix.setdefault("console_racks", []).extend([dict(r, console=node.label) for r in racks])
     if dcas:
         project.appendix.setdefault("console_dcas", []).extend([dict(d, console=node.label) for d in dcas])
+    if data.warnings:
+        project.appendix.setdefault("console_warnings", []).extend([{"console": node.label, "warning": w} for w in data.warnings])
     project.notes.extend(f"yamaha: {n}" for n in data.notes)
     project.notes.extend(f"yamaha: warning: {w}" for w in data.warnings)
     node.detail.setdefault("_console_data", data)  # for auto sources (not serialised)
