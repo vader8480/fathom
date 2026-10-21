@@ -117,6 +117,7 @@ export function createApi(opts) {
       return send('POST', proj(name) + '/imports/preview', fd, params);
     },
     deleteImport: function (name, id, deleteFiles) { return send('DELETE', proj(name) + '/imports/' + enc(id), undefined, { delete_files: deleteFiles ? 1 : '' }); },
+    importTemplateUrl: function (name, kind, table) { return url(proj(name) + '/imports/templates/' + enc(kind) + '/' + enc(table) + '.csv'); },
     inspectImport: function (name, id) { return get(proj(name) + '/imports/' + enc(id) + '/inspect'); },
     schedule: function (name, kind, params) { return get(proj(name) + '/schedules/' + enc(kind), params); },
     scheduleUrl: function (name, kind, params) { return url(proj(name) + '/schedules/' + enc(kind), params); },

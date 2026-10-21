@@ -1,0 +1,2 @@
+# Real console exports are kept byte-for-byte (CRLF, trailing commas).
+tests/fixtures/imports/yamaha-cl5/*.csv -text

@@ -1,0 +1,21 @@
+[Information]
+CL5
+V4.1
+[StName]
+ST,NAME,COLOR,ICON,
+_01,Hall,Blue,Effector,
+_02,Hall,Blue,Effector,
+_03,Room,Blue,Effector,
+_04,Room,Blue,Effector,
+_05,Plate,Blue,Effector,
+_06,Plate,Blue,Effector,
+_07,DrumVerb,Blue,Effector,
+_08,DrumVerb,Blue,Effector,
+_09,band Veb,Blue,Effector,
+_10,band Veb,Blue,Effector,
+_11,S_DELAY,Blue,Effector,
+_12,S_DELY,Blue,Effector,
+_13,L_DELAY,Blue,Effector,
+_14,L_DELAY,Blue,Effector,
+_15,Echo,Blue,Effector,
+_16,Echo,Blue,Effector,

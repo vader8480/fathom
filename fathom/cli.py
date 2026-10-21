@@ -272,6 +272,9 @@ def cmd_inspect(a: argparse.Namespace) -> None:
     elif kind == "eos":
         for f in result.fixtures[:200]:  # type: ignore[attr-defined]
             print(f"    ch {f['channel']:>5}  {f['universe']}/{f['address']:<3}  {f.get('type', ''):28} {f.get('label', '')}")
+    elif kind == "magicq":
+        for f in result.heads[:200]:  # type: ignore[attr-defined]
+            print(f"    head {f['head']:>5}  {f['universe']}-{f['address']:03d}  {f.get('type', ''):28} {f.get('label', '')}")
     elif kind == "videohub":
         for o, i in sorted(result.routing.items()):  # type: ignore[attr-defined]
             print(f"    out {o + 1:2} {result.output_labels.get(o, ''):14} ← in {i + 1:2} {result.input_labels.get(i, '')}")  # type: ignore[attr-defined]

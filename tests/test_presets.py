@@ -229,6 +229,7 @@ class PresetCsvKind(unittest.TestCase):
 
     def test_kind_column_accepts_presets(self):
         p = self.preview("name,kind,room\nRack UPS,ups,main\nEdge,Router / firewall,main\nPlain switch,switch,main\nOdd,laser,main\n")
+        self.assertIn("errors", p)
         puts = {o["value"]["name"]: o["value"] for o in p["ops"] if o["op"] == "put"}
         ups = puts["Rack UPS"]
         self.assertEqual((ups["kind"], ups["template"]), ("power", "generic-ups"))
@@ -239,7 +240,11 @@ class PresetCsvKind(unittest.TestCase):
         self.assertEqual(plain["kind"], "switch")
         self.assertNotIn("template", plain, "a vocabulary kind stays a plain device")
         self.assertEqual(plain["ports"], [])
-        self.assertEqual(puts["Odd"]["kind"], "laser", "unknown kinds are preserved (FR-VOC-07)")
+        self.assertNotIn("Odd", puts, "an unknown kind is a row error (FR-IMP-12)")
+        err = [e for e in p["errors"] if e["column"] == "kind"][0]
+        self.assertEqual(err["value"], "laser")
+        self.assertIn("ups", err["message"], "preset aliases are offered as valid kinds")
+        self.assertEqual(p["summary"]["create"], 3)
 
     def test_explicit_template_column_wins(self):
         p = self.preview("name,kind,template\nFOH UPS,ups,generic-pdu-8\n")
