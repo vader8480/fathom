@@ -109,9 +109,10 @@ shows what changes.
 | **Dante Controller** | `File › Save Preset` (`.xml`); Receive-tab "Copy Entire Table"; Device Info tab copy | devices, channel labels, every subscription (routes); Primary / Secondary Address → IP schedule |
 | **Waves racks** | SuperRack / MultiRack session or a CSV `rack,input,output,plugins,notes` | racks, I/O, plugin chains |
 | **ETC Eos / USITT / Lightwright** | Eos `File › Export › CSV`; USITT ASCII `.asc`; Lightwright / Vectorworks instrument schedule (tab or comma text) | channel, universe/address, fixture type, footprint, position, purpose; matched to fixtures, the rest appear as overlay fixtures you can promote |
+| **ChamSys MagicQ** | Patch › View Heads › File › Print Window › Create CSV (any columns), or older versions Patch › View Chans › EXPORT HEADS (`Headno, Headname, Dmxno, Headtype, …`) | head number, name, head type (manufacturer/model), universe/DMX (`1-001`, `u/a`, absolute), mode, gel, channel count, XYZ; matched to fixtures, the rest appear as overlay fixtures. `.shw` show files are refused with export instructions |
 | **Blackmagic Videohub** | text captured from the router on TCP 9990 (`nc <ip> 9990 > dump.txt`) | input/output labels and routing |
 | **ATEM settings** | ATEM Software Control `File › Save As` (`.xml`) | input names as port labels |
-| **Device / cable CSV** | any spreadsheet (headers like `name, kind, model, room, serial, ip` or `from_device, from_port, to_device, to_port, tag, type, length`) | one-shot: previewed as changes, then applied; the cable schedule CSV re-imports the same way |
+| **Device / cable CSV** | any spreadsheet (headers like `name, kind, model, room, serial, ip` or `from_device, from_port, to_device, to_port, tag, type, length`) | one-shot: previewed as changes, then applied; the cable schedule CSV re-imports the same way. The Imports view offers **Devices / Cables templates** to download, fill in and re-upload; every row is validated (kind, status, medium, IP, MAC, VLAN, DMX range, dates, rooms, duplicates) and bad rows are listed by row and column and skipped |
 | **Floor plans** | PNG, JPG, SVG, PDF, Draw.io (`.drawio`, compressed or not), DXF (ASCII) | DXF layers and units, Draw.io shapes and edges; DWG needs DXF/PDF/SVG export or `FATHOM_ODA` |
 
 Imports never overwrite what you typed: their results form an **overlay**
@@ -123,7 +124,7 @@ you can keep or promote.
 ```text
 fathom serve [--host H] [--port N] [--data DIR] [--open]
 fathom new <name> [--template blank|rrc-littleton|campus-demo] [--org O]
-fathom import <project> <file|folder>... [--kind auto|yamaha|dante|waves|eos|videohub|csv|atem] [--node ID] [--room R] [--apply]
+fathom import <project> <file|folder>... [--kind auto|yamaha|dante|waves|eos|magicq|videohub|csv|atem] [--node ID] [--room R] [--apply]
 fathom inspect <file|folder> [--kind K] [--json]
 fathom build <project> [--pdf] [--png] [--open] [--out DIR] [--state all|planned|as_built] [--rooms a,b] [--base-url URL]
 fathom trace <project> <from> [<to>] [--discipline D] [--up]     cards (v0.2) or dev:port

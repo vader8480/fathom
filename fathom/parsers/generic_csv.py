@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import copy
 import csv
+import difflib
 import hashlib
 import io
 import ipaddress
@@ -308,6 +309,16 @@ def kind_key(text: str) -> str:
     return ""
 
 
+def _unknown(what: str, value: str, choices: List[str]) -> str:
+    """``unknown kind; did you mean 'switch'?`` or, with no close match, the full list."""
+    low = re.sub(r"[^a-z0-9]+", "_", (value or "").lower()).strip("_")
+    hits = [w for w in reversed(low.split("_")) if w in choices]
+    hits += [h for h in difflib.get_close_matches(low, choices, n=2, cutoff=0.6) if h not in hits]
+    if hits:
+        return f"unknown {what}; did you mean {' or '.join(repr(h) for h in hits[:2])}?"
+    return f"unknown {what}; use one of " + ", ".join(choices)
+
+
 def _rows(res: CsvTable) -> List[Tuple[int, Dict[str, str]]]:
     lines = res.lines if len(res.lines) == len(res.rows) else list(range(2, len(res.rows) + 2))
     return list(zip(lines, res.rows))
@@ -358,7 +369,7 @@ def _validate_device(row: Dict[str, str], n: int, lk: "_Lookup", errs: _Errors, 
         else:
             seen[key] = n
     if row.get("kind") and not kind_key(row["kind"]):
-        errs.add(n, "kind", row["kind"], "unknown kind; use one of " + ", ".join(sorted(kinds)))
+        errs.add(n, "kind", row["kind"], _unknown("kind", row["kind"], sorted(kinds)))
     if row.get("status") and row["status"].strip().lower() not in statuses:
         errs.add(n, "status", row["status"], "status must be one of " + ", ".join(statuses))
     if row.get("room") and lk.rooms and lk.room(row["room"]) not in lk.rooms:
@@ -401,7 +412,7 @@ def _validate_cable(row: Dict[str, str], n: int, existing: bool, errs: _Errors, 
         else:
             seen[tag] = n
     if row.get("medium") and _medium_key(row["medium"]) not in media:
-        errs.add(n, "medium", row["medium"], "unknown medium; use one of " + ", ".join(sorted(media)))
+        errs.add(n, "medium", row["medium"], _unknown("medium", row["medium"], sorted(media)))
     if row.get("status") and row["status"].strip().lower() not in statuses:
         errs.add(n, "status", row["status"], "status must be one of " + ", ".join(statuses))
     _int_in(row, "channels", 1, None, n, errs, "channels")
@@ -687,7 +698,7 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
         "label": "Devices",
         "columns": [
             ("name", True, "Device name; an existing device with this name is updated, otherwise one is created"),
-            ("kind", False, "console, stage_io, mic, speaker, amp, fixture, display, camera, switch … (see the Kinds list)"),
+            ("kind", False, "Device kind; blank = other"),
             ("manufacturer", False, "e.g. Yamaha"),
             ("model", False, "e.g. CL5"),
             ("template", False, "Equipment library id (e.g. yamaha-cl5) to create the device with its real ports"),
@@ -719,7 +730,7 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
             ("from_port", False, "Port name or id; created on the device when missing"),
             ("to_device", True, "Device name or id the cable ends at"),
             ("to_port", False, "Port name or id; created on the device when missing"),
-            ("medium", False, "analog, aes3, dante, network, sdi, hdmi, dmx, speaker, power … (see the Media list)"),
+            ("medium", False, "Signal type; blank = taken from the port"),
             ("type", False, "Cable product, e.g. Cat6A"),
             ("length", False, "Number, optionally with a unit (10, 3.5 m, 25ft)"),
             ("length_unit", False, "m (default), ft, in or cm"),
@@ -733,10 +744,24 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
 }
 
 
+def _allowed(key: str) -> List[str]:
+    kinds, media, statuses = _vocab()
+    return {"kind": sorted(kinds), "medium": sorted(media), "status": list(statuses), "face": ["front", "rear"],
+            "length_unit": ["m", "ft", "in", "cm"]}.get(key, [])
+
+
 def template_info() -> List[Dict[str, Any]]:
-    """Template metadata for ``/api/v2/meta`` (name, label, columns with required + help)."""
-    return [{"name": name, "label": spec["label"], "columns": [{"key": c, "required": req, "help": hlp} for c, req, hlp in spec["columns"]]}
-            for name, spec in TEMPLATES.items()]
+    """Template metadata for ``/api/v2/meta``: name, label, columns (key, required, help, allowed values)."""
+    out = []
+    for name, spec in TEMPLATES.items():
+        cols = []
+        for c, req, hlp in spec["columns"]:
+            col: Dict[str, Any] = {"key": c, "required": req, "help": hlp}
+            if _allowed(c):
+                col["allowed"] = _allowed(c)
+            cols.append(col)
+        out.append({"name": name, "label": spec["label"], "columns": cols})
+    return out
 
 
 def _room_name(doc: Optional[Dict[str, Any]]) -> str:

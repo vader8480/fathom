@@ -80,7 +80,7 @@ export function mountImports(el, ctx) {
         h('div', { class: 'imp-guide-title' }, t.label || t.name),
         h('dl', null, (t.columns || []).reduce(function (acc, c) {
           acc.push(h('dt', { class: 'mono' }, [c.key, c.required ? h('span', { class: 'imp-req', title: 'required' }, ' *') : null]));
-          acc.push(h('dd', null, c.help || ''));
+          acc.push(h('dd', null, [c.help || '', (c.allowed || []).length ? h('div', { class: 'imp-allowed mono' }, c.allowed.join(' \u00b7 ')) : null]));
           return acc;
         }, [])),
       ]);
@@ -177,7 +177,7 @@ export function mountImports(el, ctx) {
         ctx.toast(msg(e), 'err');
       });
     });
-    el = h('div', { class: 'adm-card', 'data-importer': imp.kind }, [
+    el = h('div', { class: 'adm-card' + ((imp.templates || []).length ? ' has-tpl' : ''), 'data-importer': imp.kind }, [
       h('h4', null, imp.label || imp.kind),
       h('div', { class: 'help' }, imp.help || ''),
       templateBox(imp),

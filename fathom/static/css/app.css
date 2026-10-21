@@ -281,6 +281,7 @@ a{color:var(--accent)}
 .adm-card h4{margin:0 0 4px;font-size:13px}
 .adm-card .help{color:var(--muted);font-size:12px;margin-bottom:8px}
 .adm-card{min-width:0}
+@media (min-width:700px){.adm-card.has-tpl{grid-column:span 2}}
 .adm-card.wide{grid-column:1/-1}
 .adm-card input[type=file]{max-width:100%;width:100%;font-size:12px}
 a.btn{display:inline-flex;align-items:center;gap:4px;text-decoration:none;color:var(--text);background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;min-height:30px}
@@ -295,6 +296,7 @@ a.btn.small{padding:2px 9px;font-size:12px;min-height:26px}
 .imp-guide dt{color:var(--text)}
 .imp-guide dd{margin:0;color:var(--muted)}
 .imp-req{color:var(--err)}
+.imp-allowed{font-size:11px;color:var(--text);opacity:.8;margin-top:1px}
 .imp-out{margin-top:8px}
 .imp-sum{margin-bottom:6px}
 .imp-chip-err{color:var(--err);border-color:var(--err)}
