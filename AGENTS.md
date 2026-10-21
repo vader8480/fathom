@@ -47,7 +47,7 @@ with `pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
  changes need only a reload. The editor UI is at `/` (there is no `/ui`).
 - **Backend tests:**
   `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -q`
-  (238 tests, about 30 s, all pass with one skip). Without `FATHOM_CHROME`
+  (251 tests, about 30 s, all pass with one skip). Without `FATHOM_CHROME`
   the headless-Chrome smoke suite picks up `/usr/local/bin/google-chrome`, a
   desktop wrapper that pins `--remote-debugging-port=9222`; its parallel runs
   then time out (~57 failures, 15 min). Single suite:
