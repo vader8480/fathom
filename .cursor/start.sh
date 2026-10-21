@@ -5,6 +5,10 @@ cd "$(dirname "$0")/.."
 
 port="${FATHOM_PORT:-8080}"
 session="fathom-server"
+# /usr/local/bin/google-chrome on Cloud Agent images is a desktop wrapper that pins
+# --remote-debugging-port=9222 and a shared profile, so headless runs collide with it.
+chrome=""
+[ -x /usr/bin/google-chrome-stable ] && chrome=/usr/bin/google-chrome-stable
 tmux_conf=()
 [ -f /exec-daemon/tmux.portal.conf ] && tmux_conf=(-f /exec-daemon/tmux.portal.conf)
 
@@ -20,7 +24,7 @@ fi
 
 tmux "${tmux_conf[@]}" kill-session -t "=${session}" 2>/dev/null || true
 tmux "${tmux_conf[@]}" new-session -d -s "${session}" -c "$PWD" \
-  "bash -lc '.venv/bin/fathom serve --host 0.0.0.0 --port ${port} 2>&1 | tee /tmp/fathom-server.log'"
+  "bash -lc '${chrome:+FATHOM_CHROME=$chrome }.venv/bin/fathom serve --host 0.0.0.0 --port ${port} 2>&1 | tee /tmp/fathom-server.log'"
 
 for _ in $(seq 1 60); do
   if curl -fsS "http://127.0.0.1:${port}/healthz" >/dev/null 2>&1; then

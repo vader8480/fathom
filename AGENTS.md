@@ -31,8 +31,12 @@ The environment (`.cursor/environment.json`) creates `.venv` with
  `/tmp/cursor/start-user/start-user.log`. After changing Python files,
  `tmux kill-session -t fathom-server && bash .cursor/start.sh`; JS/CSS
  changes need only a reload. The editor UI is at `/` (there is no `/ui`).
-- **Backend tests:** `.venv/bin/python -m unittest discover -s tests -q`
-  (about 45 s, all should pass with one skip). Single suite:
+- **Backend tests:**
+  `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -q`
+  (238 tests, about 30 s, all pass with one skip). Without `FATHOM_CHROME`
+  the headless-Chrome smoke suite picks up `/usr/local/bin/google-chrome`, a
+  desktop wrapper that pins `--remote-debugging-port=9222`; its parallel runs
+  then time out (~57 failures, 15 min). Single suite:
   `.venv/bin/python -m unittest tests.test_backup -v`.
 - **Frontend tests:** `node --test tests/js/*.test.mjs` (pass the files; the
   bare directory form fails on recent Node).
