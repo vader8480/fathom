@@ -1079,6 +1079,9 @@ body.sop-pub{font-size:17px;line-height:1.5}
 .sop-pub .chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--text);text-decoration:none;font:inherit}
 .sop-pub .sop-topbar button,.sop-pub .sop-topbar a.btn{min-height:44px;min-width:44px;padding:0 14px;border:1px solid var(--border);border-radius:8px;background:var(--panel-2);color:var(--text);font:inherit;font-size:15px;text-decoration:none;display:inline-flex;align-items:center;cursor:pointer}
 .sop-pub .sop-topbar{padding-top:var(--sat)}
+.sop-pub .sop-back{text-decoration:none}
+.sop-pub .md h1,.sop-pub .md h2,.sop-pub .md h3,.sop-pub .md h4{text-transform:none;letter-spacing:0;color:var(--text)}
+.sop-pub .sop-head h1{font-size:26px;margin:0 0 6px}
 .sop-pub .sop-applies{top:calc(48px + var(--sat))}
 .sop-pub .sop-applies span.chip{opacity:.9}
 .sop-pub .sop-index h1{font-size:26px;margin:14px 0 2px}
@@ -1094,6 +1097,7 @@ body.sop-pub{font-size:17px;line-height:1.5}
   .sop-pub .sop-applies{position:static;border:0;padding-left:0}
   body.sop-pub{font-size:12pt}
   .sop-pub .sop-head h1{font-size:20pt}
+  .sop-pub .md,.sop-pub .md h1,.sop-pub .md h2,.sop-pub .md h3,.sop-pub .md h4,.sop-pub .sop-head h1{color:#000}
   .sop-pub .md .md-task-label input[type=checkbox]{border-color:#000;background:#fff}
   .sop-pub .md a.md-ref{border-color:#999;background:#fff;color:#000}
 }
@@ -1103,6 +1107,7 @@ SOP_REPORT_CSS = """
 .sop-report-page{break-before:page;page-break-before:always;padding-top:6px}
 .sop-report-page:first-of-type{break-before:auto;page-break-before:auto}
 .sop-report-page h3{font-size:20px;margin:0 0 4px}
+.sop-report-page .md h1,.sop-report-page .md h2,.sop-report-page .md h3,.sop-report-page .md h4{text-transform:none;letter-spacing:0;color:var(--text)}
 .sop-report-page .sop-report-sub{color:var(--muted);font-size:13px;margin:0 0 12px}
 .sop-report-page .md{font-size:14px;line-height:1.5;max-width:820px}
 .sop-report-page .md .md-task-label{min-height:0;padding:3px 0;cursor:default}
@@ -1111,7 +1116,8 @@ SOP_REPORT_CSS = """
 .sop-report-page .md img{max-width:420px;cursor:default}
 .sop-report-toc li{margin:3px 0}
 @media print{
-  .sop-report-page .md{color:#000}
+  .sop-report-page .md,.sop-report-page .md h1,.sop-report-page .md h2,.sop-report-page .md h3,.sop-report-page .md h4,.sop-report-page .md strong{color:#000}
+  .sop-report-page .md h2{border-color:#999}
   .sop-report-page .md .md-task-label input[type=checkbox]{border-color:#000;background:#fff}
   .sop-report-page .md a.md-ref{border-color:#999;background:#fff;color:#000}
   .sop-report-page .md .md-callout{background:#fff;border-color:#999}
