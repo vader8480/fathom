@@ -22,6 +22,8 @@ from .yamaha import ConsoleData, parse_yamaha
 KINDS = ("yamaha", "dante", "waves")
 LEGACY_KINDS = KINDS
 
+_CONSOLE_SECTION_RE = re.compile(r"^\[(?:Information|[A-Za-z]*(?:Name|Patch))\]\s*$", re.I | re.M)
+
 
 def detect_kind(path: Path) -> str:
     """Guess which export a file / folder is. Returns yamaha | dante | waves | unknown."""
@@ -40,6 +42,8 @@ def detect_kind(path: Path) -> str:
         return "waves"
     head = head_bytes.decode("utf-8", errors="ignore").lstrip().lstrip("\ufeff")
     low = head.lower()
+    if _CONSOLE_SECTION_RE.match(head):
+        return "yamaha"  # console CSV export: [Information] / model / firmware / [Section]
     if head.startswith("<"):
         if "<preset" in low or "txchannel" in low or "rxchannel" in low or "subscribed_device" in low:
             return "dante"

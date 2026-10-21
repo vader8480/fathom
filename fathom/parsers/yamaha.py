@@ -1,16 +1,32 @@
 """Yamaha CL / QL series CSV exports (console SAVE/LOAD → CSV, or CL/QL Editor
 File → CSV File Export).
 
-The export is a *folder* of CSV files: channel names (with color and icon),
-input patching, output patching and other patching (output port / rack). Two
-notations exist, "Normal" (V4.1: ``DANTE 1``, ``OMNI 3``, ``SLOT1 5``,
-``MIX 1``, ``MATRIX 2``, ``STEREO L``) and "Short" (V4.0: ``DNT 1``, ``SL1 5``,
-``MX 1``, ``MT 2``, ``STL``). Both are accepted, as are the documented
-synonyms (``Dante 1``, ``AD 3``, ``Mix Channel 1`` ...). Hand-made CSVs with a
-header row such as ``Channel, Name, Color, Icon, Patch`` work too.
+The export is a *folder* of CSV files. A real console export (CL5 V4.1 and
+friends) writes one file per section, each starting with four header lines
+(``[Information]``, model, firmware, ``[SectionName]``) followed by a column
+header row; data rows end with a trailing comma::
 
-Nothing here depends on exact file names or column order: each file is
-classified by content (channel labels, port names, color / icon words).
+    [InName]        _01 … _72          name / color / icon of mono input channels
+    [StName]        _01 … _16          stereo inputs as L/R halves (_01/_02 = ST IN 1 L/R)
+    [MixName]       _01 … _24          Mix buses
+    [MtxName]       _01 … _08          Matrix buses
+    [StMonoName]    _01 … _03          Stereo L, Stereo R, Mono
+    [DCAName]       _01 … _16          DCA names (no membership in the export)
+    [InPatch]       CH n / STEREO INPUT nL / INS CH n / INS2 CH n  ← source or insert return
+    [OutPatch]      INS MIX n / INS MATRIX n / INS STEREO L / INS MONO  ← insert return
+    [PortRackPatch] DANTE n / OMNI n / SLOT1 n / REC n / GEQ nA / FX nA / PRFX nA ← console signal
+
+``DANTE n`` in InPatch is a Dante *receive* channel; the same text in the
+left column of PortRackPatch is a Dante *transmit* channel. They are kept in
+separate namespaces (``dante_input_map`` vs ``dante_output_map``). Bus → port
+patching comes from PortRackPatch; OutPatch only holds bus insert returns.
+
+Two notations exist, "Normal" (``DANTE 1``, ``OMNI 3``, ``SLOT1 5``, ``MIX 1``,
+``MATRIX 2``, ``STEREO L``) and "Short" (V4.0: ``DNT 1``, ``SL1 5``, ``MX 1``,
+``MT 2``, ``STL``). Both are accepted, as are the documented synonyms
+(``Dante 1``, ``AD 3``, ``Mix Channel 1`` ...). Files without the section
+header (Editor exports, hand-made CSVs with ``Channel, Name, Color, Icon,
+Patch`` columns) are classified by content instead.
 """
 
 from __future__ import annotations
@@ -129,32 +145,55 @@ _PORT_PATTERNS: List[Tuple[re.Pattern, str]] = [
     (re.compile(r"^MONO(?:\s*\(?C\)?)?$"), "MONO"),
     (re.compile(r"^(?:MONITOR|MON)\s*(L|R|C)$"), "MONITOR"),
     (re.compile(r"^(?:CUE(?:\s*A)?)\s*(L|R)$|^CUE\s*B\s*(L|R)$|^CUE\s*B(L|R)$"), "CUE"),
-    (re.compile(r"^(?:INS2?\s*CH|IC2?|INSERT[12]?\s*INPUT\s*CHANNEL)\s*(\d+)$"), "INS"),
-    (re.compile(r"^(?:INS2?\s*MIX|IM2?|INSERT[12]?\s*MIX\s*CHANNEL)\s*(\d+)$"), "INS"),
-    (re.compile(r"^(?:INS2?\s*MATRIX|IMT2?)\s*(\d+)$"), "INS"),
-    (re.compile(r"^(?:INS2?\s*STEREO|ISTL2?|ISTR2?|INS2?\s*MONO|IMONO)"), "INS"),
-    (re.compile(r"^(?:DIR\s*CH|DI|DIRECT\s*(?:INPUT\s*)?CHANNEL)\s*(\d+)$"), "DIRECT"),
+    (re.compile(r"^(?:REC(?:ORDER)?(?:\s*OUT(?:PUT)?)?)\s*(\d+)$"), "REC"),
     (re.compile(r"^(?:CAS|CASCADE)\b"), "CASCADE"),
     (re.compile(r"^(?:SUR\s*MONITOR|SMON|MONITOR\s*MATRIX|MMT)\b"), "MONITOR"),
     (re.compile(r"^(?:TALKBACK|TB)$"), "TALKBACK"),
     (re.compile(r"^OSC(?:ILLATOR)?$"), "OSC"),
 ]
 
+# Insert send / return points (``INS`` = insert 1, ``INS2`` = insert 2) and direct outs.
+_INS_RE = re.compile(
+    r"^INS(?:ERT)?\s*(?P<ins>[12])?\s+(?:"
+    r"(?:CH|INPUT\s*CHANNEL)\s*(?P<ch>\d+)"
+    r"|MIX(?:\s*CHANNEL)?\s*(?P<mix>\d+)"
+    r"|MATRIX(?:\s*CHANNEL)?\s*(?P<mtx>\d+)"
+    r"|(?:STEREO(?:\s*OUTPUT)?|ST)\s*(?P<st>L|R|LEFT|RIGHT)"
+    r"|(?P<mono>MONO(?:\s*\(?C\)?)?)"
+    r")$"
+)
+_INS_SHORT_RE = re.compile(
+    r"^(?:IC(?P<ins_c>2)?\s*(?P<ch>\d+)|IM(?P<ins_m>2)?\s*(?P<mix>\d+)|IMT(?P<ins_t>2)?\s*(?P<mtx>\d+)"
+    r"|IST(?P<st>L|R)(?P<ins_s>2)?|(?P<mono>IMONO)(?P<ins_o>2)?)$"
+)
+_DIRECT_RE = re.compile(r"^(?:DIR\s*CH|DI|DIRECT\s*(?:INPUT\s*)?CHANNEL)\s*(\d+)$")
+
+#: output connectors of the console itself (as opposed to internal racks / buses)
+PHYSICAL_OUTPUT_BUSES = ("DANTE", "OMNI", "SLOT", "REC")
+RACK_BUSES = ("GEQ", "FX", "PRFX")
+_BUS_KIND = {"MIX": "mix", "MATRIX": "matrix", "STEREO": "stereo", "MONO": "mono"}
+
 
 @dataclass
 class Port:
-    bus: str  # DANTE | OMNI | INPUT | SLOT | PB | FX | PRFX | GEQ | MIX | MATRIX | STEREO | MONO | ... | NONE
+    bus: str  # DANTE | OMNI | INPUT | SLOT | REC | PB | FX | PRFX | GEQ | MIX | MATRIX | STEREO | MONO | INS | DIRECT | ... | NONE
     number: Optional[int] = None  # channel / port number
     slot: Optional[int] = None  # SLOT 1..3
     tag: str = ""  # L / R / A / B / C
     raw: str = ""
+    insert: int = 0  # INS / DIRECT only: 1 = Insert 1, 2 = Insert 2
+    channel: str = ""  # INS / DIRECT only: console channel label (``CH 7``, ``MIX 10``, ``ST L``, ``MONO``)
 
     @property
     def text(self) -> str:
         if self.bus == "SLOT":
             return f"SLOT{self.slot} {self.number}"
-        if self.bus in ("FX", "PRFX", "GEQ"):
-            return f"{self.bus} {self.number} {self.tag}".strip()
+        if self.bus in RACK_BUSES:
+            return f"{self.bus} {self.number}{self.tag}".strip()
+        if self.bus == "INS" and self.channel:
+            return f"INS{'2' if self.insert == 2 else ''} {self.channel}"
+        if self.bus == "DIRECT" and self.channel:
+            return f"DIR {self.channel}"
         if self.number is not None:
             return f"{self.bus} {self.number}"
         if self.tag:
@@ -165,6 +204,36 @@ class Port:
     def is_physical_input(self) -> bool:
         return self.bus in ("DANTE", "OMNI", "INPUT", "SLOT")
 
+    @property
+    def is_physical_output(self) -> bool:
+        return self.bus in PHYSICAL_OUTPUT_BUSES
+
+    @property
+    def is_rack(self) -> bool:
+        return self.bus in RACK_BUSES
+
+    @property
+    def is_bus(self) -> bool:
+        return self.bus in _BUS_KIND
+
+
+def _insert_port(m: "re.Match", raw: str) -> Port:
+    g = m.groupdict()
+    ins = next((v for k, v in g.items() if k.startswith("ins") and v), None)
+    port = Port(bus="INS", raw=raw, insert=2 if ins == "2" else 1)
+    if g.get("ch"):
+        port.number, port.channel = int(g["ch"]), f"CH {int(g['ch'])}"
+    elif g.get("mix"):
+        port.number, port.channel = int(g["mix"]), f"MIX {int(g['mix'])}"
+    elif g.get("mtx"):
+        port.number, port.channel = int(g["mtx"]), f"MATRIX {int(g['mtx'])}"
+    elif g.get("st"):
+        port.tag = {"LEFT": "L", "RIGHT": "R"}.get(g["st"], g["st"])
+        port.channel = f"ST {port.tag}"
+    else:
+        port.channel = "MONO"
+    return port
+
 
 def parse_port(text: str) -> Optional[Port]:
     """Normalise a Yamaha port name in Normal, Short or synonym notation."""
@@ -173,6 +242,13 @@ def parse_port(text: str) -> Optional[Port]:
         return None
     t = re.sub(r"\s+", " ", raw.upper().replace("_", " ").replace("-", " ")).strip()
     t = t.replace("( C )", "(C)")
+    m = _INS_RE.match(t) or _INS_SHORT_RE.match(t)
+    if m:
+        return _insert_port(m, raw)
+    m = _DIRECT_RE.match(t)
+    if m:
+        n = int(m.group(1))
+        return Port(bus="DIRECT", number=n, raw=raw, channel=f"CH {n}")
     for pat, bus in _PORT_PATTERNS:
         m = pat.match(t)
         if not m:
@@ -203,7 +279,7 @@ def looks_like_port(text: str) -> bool:
 
 _CH_LABEL = re.compile(
     r"^(?:(?P<in>(?:CH|INPUT|IN)\s*(?P<in_n>\d+))"
-    r"|(?P<stin>ST\s*IN\s*(?P<stin_n>\d+)\s*(?P<stin_lr>L|R)?)"
+    r"|(?P<stin>(?:ST\s*IN|STEREO\s*IN(?:PUT)?|STIN)\s*(?P<stin_n>\d+)\s*(?P<stin_lr>L|R)?)"
     r"|(?P<mix>MIX\s*(?P<mix_n>\d+))"
     r"|(?P<mtx>(?:MATRIX|MTRX|MT)\s*(?P<mtx_n>\d+))"
     r"|(?P<st>(?:STEREO|ST)\s*(?P<st_lr>L|R)?)"
@@ -215,7 +291,8 @@ _CH_LABEL = re.compile(
 
 
 def parse_channel_label(text: str) -> Optional[Tuple[str, int, str]]:
-    """``'CH 12' -> ('in', 12, 'CH 12')``; ``'MIX 3' -> ('mix', 3, 'MIX 3')``; ``'ST L' -> ('stereo', 0, 'ST L')``."""
+    """``'CH 12' -> ('in', 12, 'CH 12')``; ``'MIX 3' -> ('mix', 3, 'MIX 3')``; ``'ST L' -> ('stereo', 0, 'ST L')``;
+    ``'STEREO INPUT 4L' -> ('stin', 4, 'ST IN 4 L')``."""
     t = re.sub(r"\s+", " ", (text or "").strip().upper())
     if not t:
         return None
@@ -285,6 +362,14 @@ def categorize(name: str, icon: str) -> str:
 # ------------------------------------------------------------------ model
 
 
+_PLACEHOLDER_NAME = re.compile(r"(?i)^(?:ch|st\s*in|mix|mtx|matrix|dca)\s*\d+$")
+
+
+def is_placeholder_name(name: str) -> bool:
+    """``ch28`` / ``DCA10`` style default names the console shows when nothing was typed."""
+    return bool(_PLACEHOLDER_NAME.match((name or "").strip()))
+
+
 @dataclass
 class ConsoleChannel:
     kind: str  # in | stin | mix | matrix | stereo | mono | dca | mute
@@ -293,22 +378,50 @@ class ConsoleChannel:
     name: str = ""
     color: str = ""
     icon: str = ""
+    tag: str = ""  # stin only: L / R half
     patch: Optional[Port] = None  # input patch (inputs) / none for buses
-    outputs: List[Port] = field(default_factory=list)  # physical output ports fed by this bus
+    outputs: List[Port] = field(default_factory=list)  # physical output ports fed by this bus (PortRackPatch)
+    direct_outs: List[Port] = field(default_factory=list)  # input channels: ports fed by the direct out (PortRackPatch ``DIR CH n``)
+    rack_feeds: List[Port] = field(default_factory=list)  # rack inputs fed straight from this bus / direct out (``FX 1A ← MIX 17``)
+    insert_sends: Dict[int, List[Port]] = field(default_factory=dict)  # insert 1/2 send → rack inputs (PortRackPatch ``… ← INS CH n``)
+    insert_returns: Dict[int, Port] = field(default_factory=dict)  # insert 1/2 return ← rack output (InPatch / OutPatch ``INS CH n``)
 
     @property
     def is_input(self) -> bool:
         return self.kind in ("in", "stin")
 
     @property
+    def is_bus(self) -> bool:
+        return self.kind in ("mix", "matrix", "stereo", "mono")
+
+    @property
     def category(self) -> str:
         return categorize(self.name, self.icon)
+
+    @property
+    def insert1(self) -> Optional[Port]:
+        return self.insert_returns.get(1)
+
+    @property
+    def insert2(self) -> Optional[Port]:
+        return self.insert_returns.get(2)
+
+    @property
+    def has_output(self) -> bool:
+        return bool(self.outputs or self.rack_feeds or any(self.insert_sends.values()))
+
+    def feeds_text(self) -> str:
+        """``DANTE 28, GEQ 7A (via insert send)`` — everything this bus / channel feeds."""
+        parts = [p.text for p in self.outputs] + [p.text for p in self.direct_outs] + [p.text for p in self.rack_feeds]
+        for slot in sorted(self.insert_sends):
+            parts.extend(f"{p.text} (via insert {slot} send)" if slot == 2 else f"{p.text} (via insert send)" for p in self.insert_sends[slot])
+        return ", ".join(parts)
 
 
 @dataclass
 class OutputPatch:
-    port: Port
-    source: Optional[Port]  # MIX 1 / STEREO L / ...
+    port: Port  # output connector (DANTE / OMNI / SLOT / REC) or rack input (GEQ / FX / PRFX)
+    source: Optional[Port]  # MIX 1 / STEREO L / DIR CH 3 / INS CH 25 ...
     raw_source: str = ""
 
 
@@ -318,24 +431,59 @@ class ConsoleData(ParseResult):
     def __init__(self) -> None:
         super().__init__()
         self.model = ""
+        self.firmware = ""
         self.console_name = ""
         self.channels: Dict[str, ConsoleChannel] = {}  # by label
-        self.output_patches: List[OutputPatch] = []
+        self.output_patches: List[OutputPatch] = []  # physical output port ← console signal
+        self.rack_patches: List[OutputPatch] = []  # rack input ← console signal
         self.files_by_role: Dict[str, List[str]] = {}
+        self.sections: List[str] = []  # [SectionName] tags seen in console exports
+        self.warnings: List[str] = []  # anomalies worth a look; never errors
+
+    def warn(self, text: str) -> None:
+        if text not in self.warnings:
+            self.warnings.append(text)
 
     # -- access helpers
-    def channel(self, kind: str, index: int) -> ConsoleChannel:
-        label = {"in": f"CH {index}", "stin": f"ST IN {index}", "mix": f"MIX {index}", "matrix": f"MATRIX {index}",
+    def channel(self, kind: str, index: int, tag: str = "") -> ConsoleChannel:
+        label = {"in": f"CH {index}", "stin": f"ST IN {index}{(' ' + tag) if tag else ''}", "mix": f"MIX {index}", "matrix": f"MATRIX {index}",
                  "stereo": "ST L" if index == 0 else "ST R", "mono": "MONO", "dca": f"DCA {index}", "mute": f"MUTE {index}"}[kind]
         ch = self.channels.get(label)
         if ch is None:
-            ch = ConsoleChannel(kind=kind, index=index, label=label)
+            ch = ConsoleChannel(kind=kind, index=index, label=label, tag=tag if kind == "stin" else "")
             self.channels[label] = ch
         return ch
 
+    def channel_by_label(self, label: str) -> Optional[ConsoleChannel]:
+        parsed = parse_channel_label(label)
+        if not parsed:
+            return None
+        kind, idx, lab = parsed
+        tag = lab.rsplit(" ", 1)[-1] if kind == "stin" and lab[-1:] in ("L", "R") else ""
+        return self.channel(kind, idx, tag)
+
+    def channel_for_source(self, port: Optional[Port]) -> Optional[ConsoleChannel]:
+        """Console channel a PortRackPatch / insert source refers to (bus, direct out or insert send)."""
+        if port is None:
+            return None
+        if port.bus in _BUS_KIND:
+            idx = port.number if port.number is not None else (1 if port.tag == "R" else 0)
+            return self.channel(_BUS_KIND[port.bus], idx)
+        if port.bus in ("INS", "DIRECT") and port.channel:
+            return self.channel_by_label(port.channel)
+        return None
+
     @property
     def inputs(self) -> List[ConsoleChannel]:
-        return sorted((c for c in self.channels.values() if c.is_input), key=lambda c: (c.kind != "in", c.index))
+        return sorted((c for c in self.channels.values() if c.is_input), key=lambda c: (c.kind != "in", c.index, c.tag))
+
+    @property
+    def mono_inputs(self) -> List[ConsoleChannel]:
+        return [c for c in self.inputs if c.kind == "in"]
+
+    @property
+    def stereo_inputs(self) -> List[ConsoleChannel]:
+        return [c for c in self.inputs if c.kind == "stin"]
 
     @property
     def named_inputs(self) -> List[ConsoleChannel]:
@@ -346,20 +494,31 @@ class ConsoleData(ParseResult):
         order = {"mix": 0, "matrix": 1, "stereo": 2, "mono": 3}
         return sorted((c for c in self.channels.values() if c.kind in order), key=lambda c: (order[c.kind], c.index))
 
+    @property
+    def dcas(self) -> List[ConsoleChannel]:
+        return sorted((c for c in self.channels.values() if c.kind == "dca"), key=lambda c: c.index)
+
     def dante_input_map(self) -> Dict[int, ConsoleChannel]:
-        """Dante receive channel number → console input channel patched from it."""
+        """Dante *receive* channel number → console input channel patched from it (InPatch namespace)."""
         out: Dict[int, ConsoleChannel] = {}
         for c in self.inputs:
             if c.patch and c.patch.bus == "DANTE" and c.patch.number:
-                out[c.patch.number] = c
+                out.setdefault(c.patch.number, c)
         return out
 
     def dante_output_map(self) -> Dict[int, OutputPatch]:
+        """Dante *transmit* channel number → what feeds it (PortRackPatch namespace, unrelated to the input map)."""
         out: Dict[int, OutputPatch] = {}
         for op in self.output_patches:
             if op.port.bus == "DANTE" and op.port.number:
                 out[op.port.number] = op
         return out
+
+    def output_port_map(self) -> Dict[str, OutputPatch]:
+        return {op.port.text: op for op in self.output_patches}
+
+    def rack_input_map(self) -> Dict[str, OutputPatch]:
+        return {op.port.text: op for op in self.rack_patches}
 
     def patch_counts(self) -> Dict[str, int]:
         counts: Dict[str, int] = {}
@@ -369,9 +528,63 @@ class ConsoleData(ParseResult):
                 counts[key] = counts.get(key, 0) + 1
         return counts
 
+    def source_name(self, port: Optional[Port]) -> str:
+        """Name of the console channel behind a PortRackPatch source (``MIX 1`` → ``1 IEM``, ``DIR CH 43`` → ``Video L``)."""
+        ch = self.channel_for_source(port)
+        return ch.name if ch else ""
+
+    # -- resolved views (joins across the files)
+    def rack_table(self) -> List[Dict[str, str]]:
+        """One row per rack I/O: what feeds it, where its output returns, and whether the loop closes."""
+        fed: Dict[str, OutputPatch] = self.rack_input_map()
+        returns: Dict[str, List[Tuple[ConsoleChannel, int]]] = {}
+        for ch in self.channels.values():
+            for slot, port in ch.insert_returns.items():
+                returns.setdefault(port.text, []).append((ch, slot))
+            if ch.kind == "stin" and ch.patch and ch.patch.is_rack:
+                returns.setdefault(ch.patch.text, []).append((ch, 0))
+
+        def sort_key(text: str) -> Tuple[int, int, str]:
+            p = parse_port(text)
+            return (RACK_BUSES.index(p.bus) if p and p.bus in RACK_BUSES else 9, (p.number or 0) if p else 0, (p.tag if p else ""))
+
+        rows = []
+        for text in sorted(set(fed) | set(returns), key=sort_key):
+            op = fed.get(text)
+            src = op.source.text if op and op.source else "NONE"
+            rets = returns.get(text, [])
+            ret_text = ", ".join(_return_label(ch, slot) for ch, slot in rets) or "NONE"
+            status = "fed, output not returned anywhere"
+            if rets:
+                if all(slot == 0 for _, slot in rets):
+                    if op is None or op.source is None:
+                        status = "FX return (input not fed: mono-in effect or unused)"
+                    elif op.source.bus == "INS":
+                        status = f"FX send/return fed from an insert send ({src}); check that insert's return"
+                    else:
+                        status = "FX send/return"
+                else:
+                    ok = op is not None and op.source is not None and op.source.bus == "INS" and any(
+                        slot and (op.source.insert or 1) == slot and self.channel_for_source(op.source) is ch for ch, slot in rets)
+                    if ok:
+                        status = "OK closed insert loop"
+                    elif op is None or op.source is None:
+                        status = "OPEN: insert return patched but the rack input is not fed"
+                    else:
+                        status = f"OPEN: insert return patched but the rack is fed by {src}"
+            rows.append({"rack": text, "fed_by": src, "returns_to": ret_text, "status": status})
+        return rows
+
+    def insert_loops(self) -> List[Dict[str, str]]:
+        return [r for r in self.rack_table() if "insert" in r["status"]]
+
+    def dca_names(self) -> Dict[str, str]:
+        return {d.label: d.name for d in self.dcas}
+
     def summary(self) -> Dict[str, object]:
         inputs = self.inputs
-        return {
+        racks = self.rack_table()
+        out: Dict[str, object] = {
             "kind": self.kind,
             "model": self.model,
             "inputs": len(inputs),
@@ -383,6 +596,29 @@ class ConsoleData(ParseResult):
             "files": dict(self.files_by_role),
             "notes": list(self.notes),
         }
+        if self.sections:
+            out.update({
+                "firmware": self.firmware,
+                "sections": list(self.sections),
+                "mono_inputs": len(self.mono_inputs),
+                "stereo_inputs": len(self.stereo_inputs),
+                "buses": len(self.buses),
+                "buses_patched": sum(1 for b in self.buses if b.has_output),
+                "dcas": len(self.dcas),
+                "direct_outs": sum(len(c.direct_outs) for c in inputs),
+                "rack_patches": len(self.rack_patches),
+                "insert_loops_closed": sum(1 for r in racks if r["status"].startswith("OK")),
+                "insert_loops_open": sum(1 for r in racks if r["status"].startswith("OPEN")),
+                "fx_returns": sum(1 for r in racks if r["status"].startswith("FX")),
+                "warnings": list(self.warnings),
+            })
+        return out
+
+
+def _return_label(ch: ConsoleChannel, slot: int) -> str:
+    if slot == 0:
+        return ch.label
+    return f"INS{'2' if slot == 2 else ''} {ch.label}"
 
 
 # ------------------------------------------------------------- the parser
@@ -547,6 +783,233 @@ def classify_rows(rows: Sequence[Sequence[str]]) -> Tuple[str, Dict[str, int], L
     return role, cols, data
 
 
+# ------------------------------------------------ console exports ([Section] files)
+
+_SECTION_RE = re.compile(r"^\[([A-Za-z0-9_ /-]+)\]$")
+_INDEX_RE = re.compile(r"^_?0*(\d+)$")
+
+#: [Section] tag (lower-case) → (role, channel kind)
+_NAME_SECTIONS: Dict[str, str] = {
+    "inname": "in", "inputname": "in", "inchname": "in",
+    "stname": "stin", "stinname": "stin", "stereoinname": "stin",
+    "mixname": "mix", "mtxname": "matrix", "matrixname": "matrix",
+    "stmononame": "stmono", "stereomononame": "stmono",
+    "dcaname": "dca", "mutename": "mute", "mutegroupname": "mute",
+}
+_PATCH_SECTIONS: Dict[str, str] = {
+    "inpatch": "input_patch", "inputpatch": "input_patch",
+    "outpatch": "insert_patch", "outputpatch": "insert_patch",
+    "portrackpatch": "output_patch", "portpatch": "output_patch", "rackpatch": "output_patch",
+}
+
+
+def console_section(rows: Sequence[Sequence[str]]) -> Optional[Tuple[str, str, str, int]]:
+    """``(section, model, firmware, header_row_index)`` for a console export, else ``None``.
+
+    Console exports start with ``[Information]``, the model, the firmware and
+    the ``[SectionName]`` line; the row after that is the column header.
+    """
+    if not rows or not _SECTION_RE.match(rows[0][0] or ""):
+        return None
+    section, idx = "", -1
+    for i, r in enumerate(rows[:6]):
+        m = _SECTION_RE.match(r[0] or "")
+        if m and m.group(1).strip().lower() != "information":
+            section, idx = m.group(1).strip(), i
+            break
+    if not section:
+        return None
+    model = firmware = ""
+    for r in rows[1:idx]:
+        c = (r[0] or "").strip()
+        if not model and _MODEL_RE.search(c):
+            model = _MODEL_RE.search(c).group(1).upper()  # type: ignore[union-attr]
+        elif not firmware and re.match(r"^V?\d+(\.\d+)*$", c, re.I):
+            firmware = c
+    return section, model, firmware, idx
+
+
+def _section_index(text: str) -> Optional[int]:
+    m = _INDEX_RE.match((text or "").strip())
+    return int(m.group(1)) if m else None
+
+
+def _ingest_section(data: ConsoleData, section: str, rows: List[List[str]], fname: str) -> str:
+    """Ingest one ``[Section]`` file. Returns the role recorded in ``files_by_role``."""
+    key = re.sub(r"[^a-z0-9]", "", section.lower())
+    header: List[str] = []
+    body = rows
+    if rows and not any(re.search(r"\d", c or "") for c in rows[0]):
+        header, body = list(rows[0]), rows[1:]
+    if key in _NAME_SECTIONS:
+        cols: Dict[str, Optional[int]] = {"name": 1, "color": 2, "icon": 3}
+        if header:
+            for k, cands in (("name", ("name", "channel name", "label")), ("color", ("color", "colour")), ("icon", ("icon",))):
+                found = column_index(header, *cands)
+                if found is not None and found != 0:
+                    cols[k] = found
+        _ingest_section_names(data, _NAME_SECTIONS[key], cols, body)
+        return "names"
+    if key in _PATCH_SECTIONS:
+        src_idx = (column_index(header, "source", "port", "patch") if header else None)
+        if src_idx is None or src_idx == 0:
+            src_idx = 1
+        role = _PATCH_SECTIONS[key]
+        if role == "output_patch":
+            _ingest_port_patch(data, body, 0, src_idx, fname)
+        else:
+            _ingest_channel_patch(data, body, 0, src_idx, fname)
+        return role
+    data.note(f"{fname}: section [{section}] is not used by Fathom")
+    return "unknown"
+
+
+def _ingest_section_names(data: ConsoleData, kind: str, cols: Dict[str, Optional[int]], rows: List[List[str]]) -> None:
+    for r in rows:
+        n = _section_index(cell(r, 0))
+        if n is None:
+            parsed = parse_channel_label(cell(r, 0))
+            if not parsed:
+                continue
+            ch = data.channel_by_label(parsed[2])
+        elif kind == "stin":  # _01/_02 = ST IN 1 L/R, _(2n-1)/_(2n) = ST IN n L/R
+            ch = data.channel("stin", (n + 1) // 2, "L" if n % 2 else "R")
+        elif kind == "stmono":
+            ch = data.channel("stereo", 0) if n == 1 else data.channel("stereo", 1) if n == 2 else data.channel("mono", 0)
+        else:
+            ch = data.channel(kind, n)
+        if ch is None:
+            continue
+        ch.name = cell(r, cols.get("name"))  # trimmed by read_rows; blank names stay blank
+        color = cell(r, cols.get("color"))
+        if color:
+            ch.color = normalize_color(color)
+        icon = cell(r, cols.get("icon"))
+        if icon:
+            ch.icon = normalize_icon(icon)
+
+
+def _ingest_channel_patch(data: ConsoleData, rows: List[List[str]], label_idx: int, src_idx: int, fname: str) -> None:
+    """[InPatch] / [OutPatch]: channel sources and insert returns."""
+    unknown = 0
+    for r in rows:
+        label, src_raw = cell(r, label_idx), cell(r, src_idx)
+        if not label:
+            continue
+        parsed = parse_channel_label(label)
+        if parsed and parsed[0] in ("in", "stin"):
+            ch = data.channel_by_label(parsed[2])
+            port = parse_port(src_raw)
+            if ch is not None and port is not None:
+                ch.patch = port
+            continue
+        point = parse_port(label)
+        if point is not None and point.bus == "INS" and point.channel:
+            ch = data.channel_by_label(point.channel)
+            ret = parse_port(src_raw)
+            if ch is not None and ret is not None and ret.bus != "NONE":
+                ch.insert_returns[point.insert or 1] = ret
+            elif ch is not None:
+                ch.insert_returns.pop(point.insert or 1, None)
+            continue
+        unknown += 1
+    if unknown:
+        data.note(f"{fname}: {unknown} rows not understood (neither channel source nor insert return)")
+
+
+def _ingest_port_patch(data: ConsoleData, rows: List[List[str]], port_idx: int, src_idx: int, fname: str = "") -> None:
+    """[PortRackPatch] (and legacy ``PORT,SOURCE`` files): what feeds each output connector and rack input."""
+    for r in rows:
+        port = parse_port(cell(r, port_idx))
+        if not port or port.bus == "NONE":
+            continue
+        src_raw = cell(r, src_idx)
+        src = parse_port(src_raw)
+        if src and src.bus == "NONE":
+            continue
+        if not src and not src_raw:
+            continue
+        entry = OutputPatch(port=port, source=src, raw_source=src_raw)
+        (data.rack_patches if port.is_rack else data.output_patches).append(entry)
+        target = data.channel_for_source(src)
+        if target is None or src is None:
+            continue
+        if src.bus == "INS":
+            target.insert_sends.setdefault(src.insert or 1, []).append(port)
+        elif port.is_rack:
+            target.rack_feeds.append(port)
+        elif src.bus == "DIRECT":
+            target.direct_outs.append(port)
+        else:
+            target.outputs.append(port)
+
+
+def _finalize(data: ConsoleData) -> None:
+    """Section 5-style anomaly scan: everything here is a warning, never an error."""
+    have_in_patch = "input_patch" in data.files_by_role
+    have_port_patch = "output_patch" in data.files_by_role
+    inputs = data.inputs
+
+    def label_name(ch: ConsoleChannel) -> str:
+        return f"{ch.label} ({ch.name})" if ch.name and ch.name.strip().upper() != ch.label else ch.label
+
+    # 1. one physical input feeding several channels
+    by_source: Dict[str, List[ConsoleChannel]] = {}
+    for ch in inputs:
+        if ch.patch and ch.patch.is_physical_input:
+            by_source.setdefault(ch.patch.text, []).append(ch)
+    for src, chans in by_source.items():
+        if len(chans) > 1:
+            data.warn(f"{src} is patched to {len(chans)} input channels: {', '.join(label_name(c) for c in chans)}")
+
+    # 2. insert loops that do not close
+    rack_fed = data.rack_input_map()
+    for ch in list(inputs) + list(data.buses):
+        for slot, racks in sorted(ch.insert_sends.items()):
+            for rack in racks:
+                ret = ch.insert_returns.get(slot)
+                if ret is None or ret.text != rack.text:
+                    data.warn(f"INS{'2' if slot == 2 else ''} {ch.label} feeds {rack.text} but insert {slot} return of {label_name(ch)} is "
+                              f"{ret.text if ret else 'NONE'} (open insert loop)")
+        for slot, ret in sorted(ch.insert_returns.items()):
+            op = rack_fed.get(ret.text)
+            if op is None or op.source is None:
+                data.warn(f"{label_name(ch)} insert {slot} returns from {ret.text} but nothing feeds {ret.text}")
+            elif not (op.source.bus == "INS" and (op.source.insert or 1) == slot and data.channel_for_source(op.source) is ch):
+                data.warn(f"{label_name(ch)} insert {slot} returns from {ret.text} but {ret.text} is fed by {op.source.text}")
+
+    if have_port_patch:
+        # 3. FX send buses that also leave the console
+        for b in data.buses:
+            fx = [p.text for p in b.rack_feeds if p.bus == "FX"]
+            if fx and b.outputs:
+                data.warn(f"{label_name(b)} feeds {', '.join(fx)} and also output {', '.join(p.text for p in b.outputs)} (FX send bus also leaves the console)")
+        # 4. buses that go nowhere
+        unpatched = [b for b in data.buses if not b.has_output]
+        if unpatched:
+            data.warn("not patched to any output port or rack: " + ", ".join(label_name(b) for b in unpatched))
+
+    if have_in_patch:
+        # 5. named channels with no source / 6. patched channels with default names
+        no_src = [c for c in inputs if c.name and not is_placeholder_name(c.name) and (c.patch is None or c.patch.bus == "NONE")]
+        if no_src:
+            data.warn("named but no input source: " + ", ".join(label_name(c) for c in no_src))
+        placeholder = [c for c in inputs if c.patch and c.patch.bus != "NONE" and is_placeholder_name(c.name)]
+        if placeholder:
+            data.warn("patched but still carrying the default name: " + ", ".join(f"{c.label} ({c.name} ← {c.patch.text})" for c in placeholder))  # type: ignore[union-attr]
+
+    # 7. duplicate names (stereo halves legitimately share a name)
+    for kind, group in (("in", data.mono_inputs), ("mix", [b for b in data.buses if b.kind == "mix"]),
+                        ("matrix", [b for b in data.buses if b.kind == "matrix"]), ("dca", data.dcas)):
+        seen: Dict[str, List[ConsoleChannel]] = {}
+        for ch in group:
+            if ch.name and not is_placeholder_name(ch.name):
+                seen.setdefault(ch.name.strip().lower(), []).append(ch)
+        for chans in seen.values():
+            if len(chans) > 1:
+                data.warn("same name on " + " and ".join(f"{c.label} '{c.name}'" for c in chans))
+
+
 def parse_yamaha(path: Path) -> ConsoleData:
     """Parse one CSV or a folder of CSVs."""
     data = ConsoleData()
@@ -557,6 +1020,16 @@ def parse_yamaha(path: Path) -> ConsoleData:
     for f in files:
         try:
             all_rows = read_rows(f)
+            sec = console_section(all_rows)
+            if sec is not None:
+                section, model, firmware, idx = sec
+                data.sections.append(section)
+                data.model = data.model or model
+                data.firmware = data.firmware or firmware
+                role = _ingest_section(data, section, all_rows[idx + 1:], f.name)
+                data.source_files.append(str(f))
+                data.files_by_role.setdefault(role, []).append(f.name)
+                continue
             role, cols, rows = classify_rows(all_rows)
         except Exception as exc:  # pragma: no cover - defensive
             data.note(f"{f.name}: could not read ({exc})")
@@ -568,13 +1041,14 @@ def parse_yamaha(path: Path) -> ConsoleData:
         elif role == "input_patch":
             _ingest_input_patch(data, cols, rows)
         elif role == "output_patch":
-            _ingest_output_patch(data, cols, rows)
+            _ingest_port_patch(data, rows, cols.get("port", 0), cols.get("source", 1), f.name)
         else:
             data.note(f"{f.name}: not recognised as channel names / input patch / output patch")
         if not data.model:
             data.model = _detect_model(all_rows) or _detect_model([[f.stem]])
     if not data.channels and not data.output_patches:
         data.note("no channel data found (expected CL/QL CSV exports: channel names, input patch, output patch)")
+    _finalize(data)
     return data
 
 
@@ -583,8 +1057,9 @@ def _ingest_names(data: ConsoleData, cols: Dict[str, int], rows: List[List[str]]
         parsed = parse_channel_label(cell(r, cols.get("channel")))
         if not parsed:
             continue
-        kind, idx, _label = parsed
-        ch = data.channel(kind, idx)
+        ch = data.channel_by_label(parsed[2])
+        if ch is None:
+            continue
         name = cell(r, cols.get("name"))
         if name:
             ch.name = name
@@ -601,32 +1076,18 @@ def _ingest_input_patch(data: ConsoleData, cols: Dict[str, int], rows: List[List
         parsed = parse_channel_label(cell(r, cols.get("channel")))
         if not parsed:
             continue
-        kind, idx, _label = parsed
+        kind, _idx, label = parsed
         if kind not in ("in", "stin"):
             continue
-        ch = data.channel(kind, idx)
+        ch = data.channel_by_label(label)
+        if ch is None:
+            continue
         port = parse_port(cell(r, cols.get("port")))
         if port:
             ch.patch = port
         name = cell(r, cols.get("name"))
         if name and not ch.name:
             ch.name = name
-
-
-def _ingest_output_patch(data: ConsoleData, cols: Dict[str, int], rows: List[List[str]]) -> None:
-    for r in rows:
-        port = parse_port(cell(r, cols.get("port")))
-        if not port or port.bus == "NONE":
-            continue
-        src_raw = cell(r, cols.get("source"))
-        src = parse_port(src_raw)
-        if src and src.bus == "NONE":
-            continue
-        data.output_patches.append(OutputPatch(port=port, source=src, raw_source=src_raw))
-        if src and src.bus in ("MIX", "MATRIX", "STEREO", "MONO"):
-            kind = {"MIX": "mix", "MATRIX": "matrix", "STEREO": "stereo", "MONO": "mono"}[src.bus]
-            idx = src.number if src.number is not None else (1 if src.tag == "R" else 0)
-            data.channel(kind, idx).outputs.append(port)
 
 
 def describe_patch_source(port: Optional[Port]) -> str:
@@ -638,6 +1099,10 @@ def describe_patch_source(port: Optional[Port]) -> str:
         return f"Dante {port.number}"
     if port.bus == "OMNI":
         return f"Omni {port.number}"
+    if port.bus == "REC":
+        return f"Rec {port.number}"
+    if port.is_rack or port.bus in ("INS", "DIRECT"):
+        return port.text
     return port.text.title()
 
 
