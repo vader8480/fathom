@@ -180,7 +180,12 @@ def _ref(kind: str, ref: str, label: str, ctx: _Ctx) -> str:
     ctx.note(kind, ref, hit is not None)
     text = label or (hit or {}).get("label") or ref
     data = f'data-ref="{_esc(kind)}:{_esc(ref)}"'
-    if hit is None or not safe_url(hit.get("href")):
+    if hit is None:
+        return f'<span class="md-ref md-ref-{kind} md-missing" {data} title="{_esc(kind)} {_esc(ref)} not found">{_esc(text)}</span>'
+    if not hit.get("href"):
+        # Resolved but not navigable here (e.g. a device on a procedures-only share link): a plain chip.
+        return f'<span class="md-ref md-ref-{kind}" {data}>{_esc(text)}</span>'
+    if not safe_url(hit.get("href")):
         return f'<span class="md-ref md-ref-{kind} md-missing" {data} title="{_esc(kind)} {_esc(ref)} not found">{_esc(text)}</span>'
     return f'<a class="md-ref md-ref-{kind}" href="{_esc(safe_url(hit.get("href")))}" {data}>{_esc(text)}</a>'
 

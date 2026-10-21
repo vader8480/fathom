@@ -301,5 +301,147 @@ class PagesApi(unittest.TestCase):
         self.assertIn("Page", spec["components"]["schemas"])
 
 
+# ================================================================== public pages, share scope, QR, report (phase 2)
+
+class PublicPages(unittest.TestCase):
+    """Chrome-free SOP pages under /p/… and share links, procedures-only share scope, QR codes, report section."""
+
+    def setUp(self):
+        self.app = get_app()
+        self._ctx = temp_data_dir()
+        self.data = self._ctx.__enter__()
+        self.addCleanup(self._ctx.__exit__, None, None, None)
+        install_campus(self.data, "campus")
+
+    def get(self, path, status=None, headers=None):
+        st, hdrs, b = call(self.app, "GET", path, None, headers or {})
+        if status is not None:
+            self.assertEqual(st, status, "GET %s -> %s %s" % (path, st, b[:300]))
+        return st, hdrs, b
+
+    def share(self, scope="sop"):
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/shares", {"label": "labels", "scope": scope}, JSON_H)
+        self.assertEqual(st, 201, b[:300])
+        return jbody(b)["share"]["token"]
+
+    def test_public_page_and_index(self):
+        st, h, b = self.get("/p/campus/sop/power-up", 200)
+        html = b.decode("utf-8")
+        self.assertIn("text/html", h.get("content-type", ""))
+        self.assertIn('data-sop-page="power-up"', html)
+        self.assertIn("<h1 id=\"sop-title\">Power-up: Main Auditorium</h1>", html)
+        self.assertIn('class="sop-body md"', html, "the pages API renderer is reused")
+        self.assertIn('<input type="checkbox" data-task="0">', html)
+        self.assertIn('href="../d/foh-cl5"', html, "device refs link to the viewer device page")
+        self.assertIn('href="../sop/no-audio"', html, "page refs link to sibling public pages")
+        self.assertIn('class="sop-applies"', html)
+        self.assertIn('class="sop-prevnext"', html)
+        self.assertIn("sessionStorage", html, "checklist state is kept on the phone")
+        self.assertIn("sop-lightbox", html, "tap-to-zoom images")
+        self.assertNotIn("data-action=\"edit\"", html, "no edit controls on the public page")
+        self.assertIn('content="width=device-width, initial-scale=1, viewport-fit=cover"', html)
+        for bad in ("<script src=", "http://", "https://"):
+            self.assertNotIn(bad, html.replace("https://example", ""), "self-contained page: no external assets")
+        # drafts are not public
+        self.get("/p/campus/sop/chapel-pre-service", 404)
+        self.get("/p/campus/sop/does-not-exist", 404)
+        # the index lists published pages in tree order and skips drafts
+        st, _, b = self.get("/p/campus/sop", 200)
+        idx = b.decode("utf-8")
+        order = [m for m in re.findall(r'href="sop/([a-z0-9-]+)"', idx)]
+        self.assertEqual(order, ["main-auditorium", "power-up", "shut-down", "no-audio"])
+        self.assertNotIn("chapel-pre-service", idx)
+        # review-due badge is rendered server-side too
+        st, _, b = call(self.app, "PUT", "/api/v2/projects/campus/pages/power-up", {"review_due": "2001-01-01"}, JSON_H)
+        self.assertEqual(st, 200)
+        self.assertIn("Review overdue", self.get("/p/campus/sop/power-up", 200)[2].decode("utf-8"))
+
+    def test_share_scope(self):
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/shares", {"scope": "everything"}, JSON_H)
+        self.assertEqual((st, jbody(b)["code"]), (400, "bad_enum"))
+        tok = self.share("sop")
+        st, _, b = call(self.app, "GET", "/api/v2/projects/campus/shares")
+        self.assertEqual([s["scope"] for s in jbody(b)["shares"] if s["token"] == tok], ["sop"])
+        # procedures-only: /sop/… and the files they embed, nothing else
+        st, _, b = self.get("/s/%s/sop/power-up" % tok, 200)
+        html = b.decode("utf-8")
+        self.assertNotIn('href="../d/', html, "device pages are not reachable through a procedures-only link")
+        self.assertIn('<span class="md-ref md-ref-device" data-ref="device:pdu-foh">', html, "…so device refs are plain chips")
+        self.assertIn('<span class="chip sop-chip-device">', html)
+        self.assertIn('href="../sop/no-audio"', html)
+        self.get("/s/%s/sop" % tok, 200)
+        st, _, b = self.get("/s/%s" % tok, 200)
+        self.assertIn("Procedures", b.decode("utf-8"), "the bare share URL opens the procedures index")
+        self.get("/s/%s/files/att-b249b8bb7f21/chapel.png" % tok, 200)
+        for path in ("rooms", "d/foh-cl5", "r/main", "r/main/patch", "project.json", "diagram.svg"):
+            st, _, b = self.get("/s/%s/%s" % (tok, path))
+            self.assertEqual((st, jbody(b).get("code")), (403, "share_scope"), path)
+        # the default scope still mirrors the whole viewer tree
+        full = self.share("all")
+        self.get("/s/%s/rooms" % full, 200)
+        self.get("/s/%s/d/foh-cl5" % full, 200)
+        self.get("/s/%s/sop/power-up" % full, 200)
+        self.assertIn('href="../d/foh-cl5"', self.get("/s/%s/sop/power-up" % full, 200)[2].decode("utf-8"))
+        # a /p/ attachment route exists so share links can mirror embedded images
+        self.get("/p/campus/files/att-b249b8bb7f21/chapel.png", 200)
+        self.get("/p/campus/files/att-000000000000/x.png", 404)
+
+    def test_qr_code_and_sheet(self):
+        st, h, b = self.get("/api/v2/projects/campus/qr/page/power-up.svg", 200)
+        self.assertIn("image/svg+xml", h.get("content-type", ""))
+        self.assertIn(b"<svg", b)
+        tok = self.share("sop")
+        st, h, b2 = self.get("/api/v2/projects/campus/qr/page/power-up.svg?share=%s" % tok, 200)
+        self.assertNotEqual(b, b2, "the code encodes the share URL when ?share= is given")
+        self.get("/api/v2/projects/campus/qr/page/power-up.svg?share=sh-nope", 404)
+        st, _, b = self.get("/api/v2/projects/campus/qr/page/chapel-pre-service.svg")
+        self.assertEqual((st, jbody(b)["code"]), (409, "not_published"))
+        self.get("/api/v2/projects/campus/qr/page/zzz.svg", 404)
+        self.get("/api/v2/projects/campus/qr/page/power-up.svg?ecl=Z", 400)
+        # sheet: one label per published page of the room, in tree order
+        st, h, b = self.get("/api/v2/projects/campus/qr/pages.html?room=main&share=%s" % tok, 200)
+        sheet = b.decode("utf-8")
+        self.assertIn("text/html", h.get("content-type", ""))
+        self.assertEqual(sheet.count('class="qr-card"'), 4)
+        self.assertLess(sheet.index("Main Auditorium procedures"), sheet.index("Power-up: Main Auditorium"))
+        self.assertLess(sheet.index("Power-up: Main Auditorium"), sheet.index("Shut-down: Main Auditorium"))
+        self.assertIn("/s/%s/sop/power-up" % tok, sheet)
+        self.assertNotIn("Chapel", sheet)
+        self.get("/api/v2/projects/campus/qr/pages.html?room=zzz", 404)
+        st, _, b = self.get("/api/v2/projects/campus/qr/pages.html?room=chapel", 200)
+        self.assertEqual(b.decode("utf-8").count('class="qr-card"'), 0, "the chapel page is a draft")
+        # OpenAPI knows the share scope
+        spec = jbody(self.get("/api/openapi.json", 200)[2])
+        self.assertEqual(spec["components"]["schemas"]["Share"]["properties"]["scope"]["enum"], ["all", "sop"])
+        self.assertIn("/api/v2/projects/{name}/qr/page/{slug}.svg", spec["paths"])
+
+    def test_report_section(self):
+        from fathom.export import build_doc
+
+        pdir = Path(self.data) / "projects" / "campus"
+        # publish the chapel checklist so a page with an embedded image is included
+        st, _, b = call(self.app, "PUT", "/api/v2/projects/campus/pages/chapel-pre-service", {"status": "published"}, JSON_H)
+        self.assertEqual(st, 200, b[:300])
+        run = build_doc(str(pdir), run_dir=Path(self.data) / "build-all")
+        html = (run / "report.html").read_text(encoding="utf-8")
+        self.assertIn("Standard operating procedures", html)
+        slugs = re.findall(r'<article class="sop-report-page" id="sop-([a-z0-9-]+)"', html)
+        self.assertEqual(slugs, ["main-auditorium", "power-up", "shut-down", "no-audio", "chapel-pre-service"], "tree order, one block per page")
+        self.assertIn('href="devices/foh-cl5.html"', html, "device refs link to the build's device pages")
+        self.assertIn('href="#sop-no-audio"', html, "page refs link within the report")
+        self.assertIn('src="files/att-b249b8bb7f21/', html, "embedded images are copied into the package")
+        self.assertTrue(list((run / "files" / "att-b249b8bb7f21").iterdir()))
+        self.assertIn(".md .md-task-label", html, "the SOP stylesheet is inlined so the PDF renders the checklists")
+        self.assertIn('class="sop-report-page"', html)
+        # room-scoped build: pages for other rooms drop out
+        run2 = build_doc(str(pdir), rooms=["chapel"], run_dir=Path(self.data) / "build-chapel")
+        html2 = (run2 / "report.html").read_text(encoding="utf-8")
+        self.assertEqual(re.findall(r'<article class="sop-report-page" id="sop-([a-z0-9-]+)"', html2), ["chapel-pre-service"])
+        # drafts never appear
+        call(self.app, "PUT", "/api/v2/projects/campus/pages/chapel-pre-service", {"status": "draft"}, JSON_H)
+        run3 = build_doc(str(pdir), run_dir=Path(self.data) / "build-draft")
+        self.assertNotIn("chapel-pre-service", (run3 / "report.html").read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()

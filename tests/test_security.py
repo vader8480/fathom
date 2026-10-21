@@ -65,6 +65,7 @@ SPEC_ROLES = {
     ("DELETE", "/api/v2/projects/{}/pages/{}"): "editor", ("POST", "/api/v2/projects/{}/pages/{}/move"): "editor",
     ("GET", "/api/v2/projects/{}/pages/{}/versions"): "viewer", ("GET", "/api/v2/projects/{}/pages/{}/versions/{}"): "viewer",
     ("POST", "/api/v2/projects/{}/pages/{}/restore/{}"): "editor",
+    ("GET", "/api/v2/projects/{}/qr/page/{}.svg"): "viewer", ("GET", "/api/v2/projects/{}/qr/pages.html"): "viewer",
     ("POST", "/api/v2/projects/{}/builds"): "editor", ("GET", "/api/v2/projects/{}/builds"): "viewer",
     ("DELETE", "/api/v2/projects/{}/builds/{}"): "editor", ("GET", "/builds/{}/{}/{}"): "viewer",
     ("GET", "/api/meta"): "viewer", ("GET", "/api/projects"): "viewer", ("POST", "/api/projects"): "editor",
@@ -74,7 +75,8 @@ SPEC_ROLES = {
     ("GET", "/api/projects/{}/builds"): "viewer", ("DELETE", "/api/projects/{}/builds/{}"): "editor",
     ("GET", "/"): "viewer", ("GET", "/p/{}"): "viewer", ("GET", "/p/{}/{}"): "viewer", ("GET", "/p/{}/rooms"): "viewer",
     ("GET", "/p/{}/r/{}"): "viewer", ("GET", "/p/{}/r/{}/diagram.svg"): "viewer", ("GET", "/p/{}/r/{}/patch"): "viewer",
-    ("GET", "/p/{}/d/{}"): "viewer", ("GET", "/s/{}"): "public", ("GET", "/s/{}/{}"): "public", ("GET", "/static/{}"): "public",
+    ("GET", "/p/{}/d/{}"): "viewer", ("GET", "/p/{}/sop"): "viewer", ("GET", "/p/{}/sop/{}"): "viewer",
+    ("GET", "/p/{}/files/{}/{}"): "viewer", ("GET", "/s/{}"): "public", ("GET", "/s/{}/{}"): "public", ("GET", "/static/{}"): "public",
     ("GET", "/sw.js"): "public", ("GET", "/manifest.webmanifest"): "public", ("GET", "/favicon.ico"): "public",
     ("GET", "/apple-touch-icon.png"): "public", ("GET", "/api/openapi.json"): "public", ("GET", "/api/docs"): "public",
 }

@@ -1202,7 +1202,10 @@ def r_shares_create(req: Request) -> Response:
     pdir = _project_dir(req.params["name"])
     body = req.json()
     token = "sh-" + base64.urlsafe_b64encode(secrets.token_bytes(16)).decode("ascii").rstrip("=")[:22]
-    share = {"label": str(body.get("label") or ""), "created": utc_now(), "expires": str(body.get("expires") or ""), "by": req.username}
+    scope = str(body.get("scope") or "all")
+    if scope not in SHARE_SCOPES:
+        raise ApiError(400, f"scope must be one of {', '.join(SHARE_SCOPES)}", "bad_enum")
+    share = {"label": str(body.get("label") or ""), "created": utc_now(), "expires": str(body.get("expires") or ""), "by": req.username, "scope": scope}
     with project_lock(pdir):
         data = _read_shares(pdir)
         data[token] = share
@@ -1224,7 +1227,13 @@ def r_shares_delete(req: Request) -> Response:
     return Response.empty(204)
 
 
-def _share_project(token: str) -> str:
+# "all" mirrors the whole viewer tree; "sop" exposes only /sop/… pages and the files they embed,
+# so a QR label on a rack opens the procedures without revealing the patch.
+SHARE_SCOPES = ("all", "sop")
+_SHARE_SOP_OK = re.compile(r"^(sop(/.*)?|files/.*)$")
+
+
+def _share_lookup(token: str) -> Tuple[str, Dict[str, Any]]:
     from .history import utc_now
 
     for n in list_projects():
@@ -1232,9 +1241,20 @@ def _share_project(token: str) -> str:
         if s is not None:
             exp = str(s.get("expires") or "")
             if exp and exp < utc_now():
-                return ""
-            return n
-    return ""
+                return "", {}
+            return n, s
+    return "", {}
+
+
+def _share_project(token: str) -> str:
+    return _share_lookup(token)[0]
+
+
+def _share_allows(share: Dict[str, Any], rest: str) -> bool:
+    scope = str(share.get("scope") or "all")
+    if scope == "sop":
+        return bool(_SHARE_SOP_OK.match(rest))
+    return True
 
 
 # ---- SOP pages (§4.3.15, §5.15)
@@ -1311,10 +1331,11 @@ def _page_summary(doc: Dict[str, Any], p: Dict[str, Any]) -> Dict[str, Any]:
         "summary": str(p.get("summary") or plain_text(str(p.get("body") or ""), 160)), "children": kids}
 
 
-def _page_payload(project: str, doc: Dict[str, Any], page: Dict[str, Any], revision: int) -> Dict[str, Any]:
+def _page_payload(project: str, doc: Dict[str, Any], page: Dict[str, Any], revision: int,
+                  resolver: Optional[Callable[[str, str], Optional[Dict[str, Any]]]] = None) -> Dict[str, Any]:
     from .markdown import render
 
-    rendered = render(str(page.get("body") or ""), _page_resolver(project, doc))
+    rendered = render(str(page.get("body") or ""), resolver or _page_resolver(project, doc))
     refs = _page_refs(page)
     devs = {d.get("id"): d for d in doc.get("devices") or [] if isinstance(d, dict)}
     rooms = {r.get("id"): r for r in doc.get("rooms") or [] if isinstance(r, dict)}
@@ -2179,6 +2200,56 @@ def r_qr(req: Request) -> Response:
     return r
 
 
+def _sop_public_url(req: Request, pdir: Path, doc: Dict[str, Any], slug: str) -> str:
+    """Absolute URL a QR code should carry: the share link when ?share= names a valid token of this project, else /p/…"""
+    base = _public_base(req, doc)
+    if not base:
+        raise ApiError(409, "no public URL is known (set settings.public_url or FATHOM_PUBLIC_URL)", "no_public_url")
+    token = req.query.get("share") or ""
+    if token:
+        if token not in _read_shares(pdir):
+            raise ApiError(404, "share link not found", "share_missing")
+        return f"{base}/s/{quote(token)}/sop/{quote(slug)}"
+    return f"{base}/p/{quote(pdir.name)}/sop/{quote(slug)}"
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/qr/page/" + _SLUG + r"\.svg", role="viewer", summary="QR code SVG for a public SOP page (?share=<token> to encode a share link)", tags=["pages"], page="file")
+def r_qr_page(req: Request) -> Response:
+    from .qr import svg
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    page = _page_by_slug(doc, req.params["slug"])
+    if (page.get("status") or "published") != "published":
+        raise ApiError(409, "only published pages have a public URL; publish the page first", "not_published")
+    ecl = (req.query.get("ecl") or "M").upper()
+    if ecl not in ("L", "M", "Q", "H"):
+        raise ApiError(400, "ecl must be L, M, Q or H")
+    text = svg(_sop_public_url(req, pdir, doc, page["slug"]), ecl=ecl, scale=_int(req.query.get("scale"), 4, 1, 40))
+    r = Response.text(text, "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
+    r.csp = FILE_CSP
+    return r
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/qr/pages\.html", role="viewer", summary="Printable QR sheet of a room's published SOPs (?room=, ?share=)", tags=["pages"], page="viewer")
+def r_qr_pages_sheet(req: Request) -> Response:
+    from .qr import svg
+    from .render_html import render_sop_qr_sheet, sop_tree
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    room = req.query.get("room") or ""
+    if room and room not in _room_ids(doc):
+        raise ApiError(404, f"room '{room}' not found")
+    pages = [p for p, _depth in sop_tree(doc) if not room or room in _page_refs(p)["rooms"]]
+    items = []
+    for p in pages:
+        url = _sop_public_url(req, pdir, doc, p["slug"])
+        items.append({"page": p, "url": url, "svg": svg(url, ecl="M", scale=4)})
+    room_name = next((str(r.get("name") or r.get("id")) for r in doc.get("rooms") or [] if isinstance(r, dict) and r.get("id") == room), "")
+    return _viewer_html(render_sop_qr_sheet(doc, items, project=pdir.name, room=room_name, share=bool(req.query.get("share"))))
+
+
 @route("GET", r"/api/v2/projects/" + _NAME + "/trace", role="viewer", summary="Port-level trace (from, to | direction)", tags=["analysis"])
 def r_trace_v2(req: Request) -> Response:
     from . import trace as T
@@ -2631,12 +2702,78 @@ def r_view_device(req: Request) -> Response:
                                 base_url=_rel_base(req), qr_svg=qr_svg, sw=True))
 
 
+# ---- public SOP pages (§5.15): chrome-free, phone-first, published pages only
+
+
+def _share_scope(req: Request) -> str:
+    """Scope of the share link this request came through ("" when it is a plain /p/ URL)."""
+    m = re.match(r"^/s/(sh-[A-Za-z0-9_-]+)", req.path)
+    if not m:
+        return ""
+    return str(_share_lookup(m.group(1))[1].get("scope") or "all")
+
+
+def _published_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(doc)
+    out["pages"] = [p for p in _pages(doc) if (p.get("status") or "published") == "published"]
+    return out
+
+
+def _public_page_resolver(doc: Dict[str, Any], rel: str, sop_only: bool) -> Callable[[str, str], Optional[Dict[str, Any]]]:
+    from .render_html import attachment_filename, sop_link_resolver
+
+    return sop_link_resolver(
+        doc,
+        device=lambda i, _d: "" if sop_only else f"{rel}d/{quote(i, safe='')}",
+        room=lambda i, _r: "" if sop_only else f"{rel}r/{quote(i, safe='')}",
+        page=lambda s, p: f"{rel}sop/{quote(s, safe='')}" if (p.get("status") or "published") == "published" else None,
+        attachment=lambda i, a: f"{rel}files/{quote(i, safe='')}/{quote(attachment_filename(a), safe='')}",
+    )
+
+
+@route("GET", r"/p/" + _NAME + "/sop", role="viewer", summary="Viewer: published procedures (SOP index)", tags=["pages"], page="viewer")
+def r_view_sop_index(req: Request) -> Response:
+    from .render_html import render_sop_index
+
+    pdir, doc = _viewer_project(req)
+    return _viewer_html(render_sop_index(_published_doc(doc), project=pdir.name, base_url=_rel_base(req), sw=True, rel="",
+                                         sop_only=_share_scope(req) == "sop"))
+
+
+@route("GET", r"/p/" + _NAME + "/sop/" + _SLUG, role="viewer", summary="Viewer: a published SOP page (phone-first, no chrome)", tags=["pages"], page="viewer")
+def r_view_sop_page(req: Request) -> Response:
+    from .render_html import render_sop_page
+
+    pdir = _project_dir(req.params["name"])
+    doc, revision = _load(pdir)
+    pub = _published_doc(doc)
+    page = next((p for p in pub["pages"] if p["slug"] == req.params["slug"]), None)
+    if page is None:
+        raise ApiError(404, f"page '{req.params['slug']}' not found", "page_missing")
+    sop_only = _share_scope(req) == "sop"
+    data = _page_payload(pdir.name, pub, page, revision, resolver=_public_page_resolver(pub, "../", sop_only))
+    return _viewer_html(render_sop_page(pub, data, project=pdir.name, base_url=_rel_base(req), sw=True, rel="../", sop_only=sop_only))
+
+
+@route("GET", r"/p/" + _NAME + r"/files/(?P<att>att-[0-9a-f]{12})/(?P<filename>[^/]+)", role="viewer", summary="Viewer: attachment (images embedded in SOP pages; mirrored by share links)", tags=["pages"], page="viewer")
+def r_view_attachment(req: Request) -> Response:
+    pdir, doc = _viewer_project(req)
+    att = _attachment(doc, req.params["att"])
+    path = _attachment_path(pdir, att)
+    return _serve_user_file(path, str(att.get("mime") or ""), path.name)
+
+
 @route("GET", r"/s/(?P<token>sh-[A-Za-z0-9_-]{1,64})(?:/(?P<rest>.*))?", role="public", summary="Share link: read-only mirror of /p/<project>/…", tags=["viewer"], page="viewer")
 def r_share(req: Request) -> Response:
-    name = _share_project(req.params["token"])
+    name, share = _share_lookup(req.params["token"])
     if not name:
         raise ApiError(404, "share link not found")
     rest = (req.params.get("rest") or "").strip("/")
+    if not _share_allows(share, rest):
+        if str(share.get("scope") or "all") == "sop" and not rest:
+            rest = "sop"
+        else:
+            raise ApiError(403, "this share link only opens procedures", "share_scope")
     inner = f"/p/{name}" + (f"/{rest}" if rest else "")
     for rt in ROUTES:
         if rt.method == "GET" and rt.page == "viewer" and rt.pattern.startswith("/p/"):

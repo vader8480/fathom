@@ -123,7 +123,9 @@ def _components() -> Dict[str, Any]:
         "Changes": {"type": "object", "required": ["base_revision", "ops"], "properties": {
             "base_revision": {"type": "integer"}, "ops": {"type": "array", "items": _ref("Op"), "maxItems": 2000}, "summary": {"type": "string"}}},
         "Restore": {"type": "object", "required": ["base_revision"], "properties": {"base_revision": {"type": "integer"}}},
-        "Share": {"type": "object", "properties": {"label": {"type": "string"}, "expires": {"type": "string"}}},
+        "Share": {"type": "object", "properties": {"label": {"type": "string"}, "expires": {"type": "string"},
+                                                  "scope": {"type": "string", "enum": ["all", "sop"], "default": "all",
+                                                            "description": "all: whole viewer tree; sop: only /sop/… pages and the files they embed"}}},
         "Reconvert": {"type": "object", "properties": {"page": {"type": "integer"}, "hidden_layers": {"type": "array", "items": {"type": "string"}}}},
         "BuildOptions": {"type": "object", "properties": {"pdf": {"type": "boolean"}, "png": {"type": "boolean"},
                                                           "state": {"type": "string", "enum": ["all", "planned", "as_built", "everything"]},
