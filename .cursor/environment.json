@@ -1,13 +1,7 @@
 {
   "name": "Fathom",
   "install": "set -e; if ! command -v pdftoppm >/dev/null 2>&1 || ! python3 -c 'import ensurepip' >/dev/null 2>&1; then sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv poppler-utils; fi; [ -x .venv/bin/python ] || python3 -m venv .venv; .venv/bin/python -m pip install -q --upgrade pip; .venv/bin/python -m pip install -q -e '.[dev,serve]'; [ -d \"$HOME/.fathom/projects/campus\" ] || .venv/bin/fathom new campus --template campus-demo",
-  "terminals": [
-    {
-      "name": "Fathom server",
-      "command": ".venv/bin/fathom serve --host 0.0.0.0 --port 8080",
-      "description": "Fathom dev server at http://localhost:8080 (no login; data in ~/.fathom with the campus-demo sample project). Restart this terminal after Python changes; static JS/CSS changes need only a browser reload."
-    }
-  ],
+  "start": "[ -f .cursor/start.sh ] && bash .cursor/start.sh",
   "ports": [
     {
       "port": 8080,
