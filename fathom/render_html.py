@@ -404,8 +404,27 @@ def _appendix(project: Project) -> str:
         out.append(f"<details><summary>Console output patch <span>{len(rows)} ports</span></summary>{_table(['Console', 'Output port', 'Source bus', 'Bus name', 'Dante destination'], rows, (1, 2))}</details>")
     buses = project.appendix.get("console_buses") or []
     if buses:
-        rows = [[esc(b.get("console", "")), esc(b["bus"]), esc(b["name"]), esc(b.get("color", "")), esc(b.get("outputs", ""))] for b in buses]
-        out.append(f"<details><summary>Console buses <span>{len(rows)}</span></summary>{_table(['Console', 'Bus', 'Name', 'Color', 'Output ports'], rows, (1, 4))}</details>")
+        detailed = any(b.get("insert1") or b.get("insert2") or b.get("feeds") for b in buses)
+        if detailed:
+            rows = [[esc(b.get("console", "")), esc(b["bus"]), esc(b["name"]), esc(b.get("color", "")), esc(b.get("insert1", "")), esc(b.get("insert2", "")),
+                     esc(b.get("feeds") or b.get("outputs", ""))] for b in buses]
+            out.append(f"<details><summary>Console buses <span>{len(rows)}</span></summary>{_table(['Console', 'Bus', 'Name', 'Color', 'Insert 1', 'Insert 2', 'Feeds → ports / racks'], rows, (1, 4, 5, 6))}</details>")
+        else:
+            rows = [[esc(b.get("console", "")), esc(b["bus"]), esc(b["name"]), esc(b.get("color", "")), esc(b.get("outputs", ""))] for b in buses]
+            out.append(f"<details><summary>Console buses <span>{len(rows)}</span></summary>{_table(['Console', 'Bus', 'Name', 'Color', 'Output ports'], rows, (1, 4))}</details>")
+    racks = project.appendix.get("console_racks") or []
+    if racks:
+        rows = [[esc(r.get("console", "")), esc(r["rack"]), esc(r.get("fed_by", "")), esc(r.get("returns_to", "")), esc(r.get("status", ""))] for r in racks]
+        closed = sum(1 for r in racks if str(r.get("status", "")).startswith("OK"))
+        out.append(f"<details><summary>Console racks <span>{len(rows)} rack I/O · {closed} closed insert loops</span></summary>{_table(['Console', 'Rack I/O', 'Fed by', 'Returns to', 'Loop'], rows, (1, 2, 3))}</details>")
+    dcas = project.appendix.get("console_dcas") or []
+    if dcas:
+        rows = [[esc(d.get("console", "")), esc(d["dca"]), esc(d.get("name", "")), esc(d.get("color", "")), esc(d.get("icon", ""))] for d in dcas]
+        out.append(f"<details><summary>Console DCAs <span>{len(rows)} · names only, membership is not in the export</span></summary>{_table(['Console', 'DCA', 'Name', 'Color', 'Icon'], rows, (1,))}</details>")
+    cwarn = project.appendix.get("console_warnings") or []
+    if cwarn:
+        items = "".join(f"<li><b>{esc(w.get('console', ''))}</b> · {esc(w.get('warning', ''))}</li>" for w in cwarn)
+        out.append(f"<details open><summary>Console warnings <span>{len(cwarn)} things to check in the console patch</span></summary><ul class='notes'>{items}</ul></details>")
     devs = project.appendix.get("dante_devices") or []
     if devs:
         rows = [[esc(d["device"]), esc(d["dante_name"]), esc(d["model"]), str(d["tx"]), str(d["rx"]), str(d["subscribed"]), esc(d.get("samplerate", "")), esc(d.get("latency", ""))] for d in devs]

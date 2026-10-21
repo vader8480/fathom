@@ -1,0 +1,8 @@
+Headno,Headname,Dmxno,Headtype,Gel,Pinv,Tinv,Swap
+0001,Front Left Par,1-001,Generic_Dimmer,No col,no,no,no
+0002,Spots,1-002,Generic_Dimmer,No col,no,no,no
+0003,Spots,1-003,Generic_Dimmer,No col,no,no,no
+0005,Finger L,1-005,Generic_Dimmer,R59 Indigo,no,no,no
+0006,Finger L,1-006,Generic_Dimmer,R312 Canary,no,no,no
+0101,Wash SR,2-001,Chauvet_Maverick Storm 2 Profile,No col,yes,no,no
+0102,Wash SL,2-033,Chauvet_Maverick Storm 2 Profile,No col,no,yes,yes

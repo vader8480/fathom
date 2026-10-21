@@ -583,6 +583,7 @@ export function addDeviceFromTemplateOps(doc, template, opts) {
   if (t.model) dev.model = t.model;
   if (t.brand) dev.brand = t.brand;
   if (t.id) dev.template = t.id;
+  else if (parseInt(t.ru, 10) >= 1) dev.rack = { height: parseInt(t.ru, 10) };  // no template to look the height up from
   if (opts.count) dev.count = opts.count;
   if (t.dante) dev.dante = true;
   if (t.dmx_footprint) dev.dmx = { footprint: t.dmx_footprint };

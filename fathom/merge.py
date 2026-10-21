@@ -342,16 +342,25 @@ def merge_console(project: Project, data: ConsoleData, node_id: str, dante: Opti
             "source": src_text,
             "source_id": src_node.id if src_node else "",
             "category": ch.category if ch.name else "",
+            "insert1": ch.insert1.text if ch.insert1 else "",
+            "insert2": ch.insert2.text if ch.insert2 else "",
+            "direct_outs": ", ".join(p.text for p in ch.direct_outs),
         }
         channels.append(row)
-        if ch.patch and ch.patch.bus != "NONE" and ch.name:
+        # rack returns (FX → ST IN) are internal to the console: not a patch-sheet row
+        if ch.patch and ch.patch.bus != "NONE" and not ch.patch.is_rack and ch.name:
             project.patch_rows.append({
                 "device": node.id, "dir": "in", "port": f"{ch.label} ← {describe_patch_source(ch.patch)}",
                 "medium": "dante" if ch.patch.bus == "DANTE" else "analog", "peer": src_node.id if src_node and src_node is not node else "",
                 "peer_name": src_text.split(" · ")[0] if src_text and src_node is not node else "", "peer_port": src_text.split(" · ", 1)[1] if " · " in src_text and src_node is not node else "",
                 "signal": ch.name, "source": "console",
             })
-    buses = [{"bus": b.label, "name": b.name, "color": b.color, "outputs": ", ".join(p.text for p in b.outputs)} for b in data.buses if b.name or b.outputs]
+    buses = [{
+        "bus": b.label, "name": b.name, "color": b.color, "icon": b.icon,
+        "outputs": ", ".join(p.text for p in b.outputs),
+        "insert1": b.insert1.text if b.insert1 else "", "insert2": b.insert2.text if b.insert2 else "",
+        "feeds": b.feeds_text(),
+    } for b in data.buses if b.name or b.has_output or b.insert_returns]
     out_rows = []
     for op in data.output_patches:
         dest_text, dest_node = "", None
@@ -361,11 +370,7 @@ def merge_console(project: Project, data: ConsoleData, node_id: str, dante: Opti
                 parts.append(f"{n.label if n else dev_name} · {rx_label}")
                 dest_node = dest_node or n
             dest_text = "; ".join(parts)
-        src_name = ""
-        if op.source and op.source.bus in ("MIX", "MATRIX", "STEREO", "MONO"):
-            kind = {"MIX": "mix", "MATRIX": "matrix", "STEREO": "stereo", "MONO": "mono"}[op.source.bus]
-            idx = op.source.number if op.source.number is not None else (1 if op.source.tag == "R" else 0)
-            src_name = data.channel(kind, idx).name
+        src_name = data.source_name(op.source)
         out_rows.append({"port": op.port.text, "source": op.raw_source or (op.source.text if op.source else ""), "name": src_name, "destination": dest_text})
         if op.source:
             project.patch_rows.append({
@@ -374,21 +379,34 @@ def merge_console(project: Project, data: ConsoleData, node_id: str, dante: Opti
                 "peer_name": dest_text.split(" · ")[0] if dest_text else "", "peer_port": dest_text.split(" · ", 1)[1] if " · " in dest_text else "",
                 "signal": src_name or op.source.text, "source": "console",
             })
+    racks = data.rack_table()
+    dcas = [{"dca": d.label, "name": d.name, "color": d.color, "icon": d.icon} for d in data.dcas]
 
     node.detail["console"] = {
         "model": data.model,
+        "firmware": data.firmware,
         "inputs_total": len(data.inputs),
         "inputs_named": len(named),
         "patch_by_bus": data.patch_counts(),
         "channels": channels,
         "buses": buses,
         "outputs": out_rows,
+        "racks": racks,
+        "dcas": dcas,
+        "warnings": list(data.warnings),
         "categories": dict(Counter(c["category"] for c in channels if c["category"])),
     }
     project.appendix.setdefault("console", []).extend([dict(c, console=node.label) for c in channels if c["name"]])
     project.appendix.setdefault("console_outputs", []).extend([dict(o, console=node.label) for o in out_rows])
     project.appendix.setdefault("console_buses", []).extend([dict(b, console=node.label) for b in buses])
+    if racks:
+        project.appendix.setdefault("console_racks", []).extend([dict(r, console=node.label) for r in racks])
+    if dcas:
+        project.appendix.setdefault("console_dcas", []).extend([dict(d, console=node.label) for d in dcas])
+    if data.warnings:
+        project.appendix.setdefault("console_warnings", []).extend([{"console": node.label, "warning": w} for w in data.warnings])
     project.notes.extend(f"yamaha: {n}" for n in data.notes)
+    project.notes.extend(f"yamaha: warning: {w}" for w in data.warnings)
     node.detail.setdefault("_console_data", data)  # for auto sources (not serialised)
     return node
 

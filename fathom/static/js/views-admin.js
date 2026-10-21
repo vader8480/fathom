@@ -68,13 +68,58 @@ export function mountImports(el, ctx) {
     return ctx.api.overlay(ctx.project).then(function (o) { store.setOverlay(o); }, function () { /* optional */ });
   }
 
+  function templateBox(imp) {
+    const tpls = imp.templates || [];
+    if (!tpls.length || !ctx.api.importTemplateUrl) return null;
+    const links = tpls.map(function (t) {
+      return h('a', { class: 'btn small', role: 'button', href: ctx.api.importTemplateUrl(ctx.project, imp.kind, t.name), download: 'fathom-' + t.name + '-template.csv',
+        'data-template': t.name }, '\u2193 ' + (t.label || t.name) + ' template');
+    });
+    const guide = h('details', { class: 'imp-guide' }, [h('summary', null, 'Columns')].concat(tpls.map(function (t) {
+      return h('div', null, [
+        h('div', { class: 'imp-guide-title' }, t.label || t.name),
+        h('dl', null, (t.columns || []).reduce(function (acc, c) {
+          acc.push(h('dt', { class: 'mono' }, [c.key, c.required ? h('span', { class: 'imp-req', title: 'required' }, ' *') : null]));
+          acc.push(h('dd', null, [c.help || '', (c.allowed || []).length ? h('div', { class: 'imp-allowed mono' }, c.allowed.join(' \u00b7 ')) : null]));
+          return acc;
+        }, [])),
+      ]);
+    })));
+    return h('div', { class: 'imp-tpl' }, [
+      h('div', { class: 'imp-tpl-text' }, 'Download a template, fill it in (Excel, Numbers, Sheets), save as CSV and upload it here. * = required.'),
+      h('div', { class: 'row' }, links),
+      guide,
+    ]);
+  }
+  function errorTable(errors) {
+    const tb = h('tbody');
+    errors.forEach(function (e) {
+      tb.appendChild(h('tr', null, [
+        h('td', { 'data-label': 'Row', class: 'mono' }, String(e.row)), h('td', { 'data-label': 'Column', class: 'mono' }, e.column || ''),
+        h('td', { 'data-label': 'Value', class: 'mono' }, e.value === '' ? h('span', { class: 'muted' }, '(empty)') : e.value),
+        h('td', { 'data-label': 'Problem' }, e.message),
+      ]));
+    });
+    return h('div', { class: 'imp-errors' }, h('table', { class: 'adm-table' }, [h('thead', null, h('tr', null, ['Row', 'Column', 'Value', 'Problem'].map(function (t) { return h('th', { scope: 'col' }, t); }))), tb]));
+  }
+  function liveSummary(out, s) {
+    const chips = Object.keys(s || {}).filter(function (k) { return k !== 'kind' && k !== 'notes' && k !== 'files'; }).map(function (k) {
+      const v = s[k];
+      const txt = Array.isArray(v) ? (v.length > 4 ? v.length + '' : v.join(', ') || '\u2014') : (typeof v === 'object' && v ? Object.keys(v).length + '' : String(v));
+      return h('span', { class: 'chip' }, k.replace(/_/g, ' ') + ': ' + txt);
+    });
+    out.appendChild(h('div', { class: 'row imp-sum' }, chips));
+    (s.notes || []).forEach(function (n) { out.appendChild(h('div', { class: 'imp-warn' }, n)); });
+  }
+
   function card(imp) {
     const files = h('input', { type: 'file', multiple: true, accept: (imp.accepts || []).join(',') || null, 'aria-label': 'Files for ' + imp.label });
     if (imp.folder) { files.setAttribute('webkitdirectory', ''); }
     const dev = deviceSelect();
     const room = roomSelect();
-    const out = h('div', { class: 'adm-pre hidden' });
+    const out = h('div', { class: 'imp-out hidden', 'aria-live': 'polite' });
     const go = h('button', { type: 'button', class: 'primary small', disabled: store.readOnly ? true : null }, imp.mode === 'oneshot' ? 'Preview' : 'Import');
+    let el = null;
     go.addEventListener('click', function () {
       const fs = Array.prototype.slice.call(files.files || []);
       if (!fs.length) { ctx.toast('Choose a file first', 'warn'); return; }
@@ -87,32 +132,61 @@ export function mountImports(el, ctx) {
           out.classList.remove('hidden');
           out.innerHTML = '';
           const s = r.summary || {};
-          out.appendChild(h('div', null, 'Create ' + (s.create || 0) + ' \u00b7 update ' + (s.update || 0) + ' \u00b7 skip ' + (s.skip || 0) + ' \u00b7 ' + (r.ops || []).length + ' changes'));
-          (r.warnings || []).forEach(function (w) { out.appendChild(h('div', { style: { color: 'var(--warn)' } }, w)); });
-          if ((r.ops || []).length) out.appendChild(h('button', { type: 'button', class: 'primary small', style: { marginTop: '6px' }, onclick: function () {
-            if (r.base_revision !== undefined && r.base_revision !== store.revision) ctx.toast('The project changed since the preview; applying on the latest revision.', 'warn');
-            ctx.commit(r.ops, 'Import ' + (fs[0].name || imp.label));
-            out.classList.add('hidden');
-          } }, 'Apply ' + r.ops.length + ' changes'));
+          const errors = r.errors || [];
+          const errText = {};
+          errors.forEach(function (e) { errText['row ' + e.row + (e.column ? ', ' + e.column : '') + ': ' + e.message] = true; });
+          el.classList.toggle('wide', errors.length > 0);
+          out.appendChild(h('div', { class: 'row imp-sum' }, [
+            h('span', { class: 'chip' }, 'create ' + (s.create || 0)), h('span', { class: 'chip' }, 'update ' + (s.update || 0)),
+            h('span', { class: 'chip' }, 'skip ' + (s.skip || 0)), errors.length ? h('span', { class: 'chip imp-chip-err' }, errors.length + (errors.length === 1 ? ' problem' : ' problems')) : null,
+          ]));
+          if (errors.length) {
+            const rows = {};
+            errors.forEach(function (e) { rows[e.row] = true; });
+            const nRows = Object.keys(rows).length;
+            out.appendChild(h('div', { class: 'imp-err-head' }, nRows + (nRows === 1 ? ' row has' : ' rows have') + ' problems and will be skipped. Fix them in the file and preview again, or apply the rest.'));
+            out.appendChild(errorTable(errors));
+          }
+          (r.warnings || []).filter(function (w) { return !errText[w]; }).forEach(function (w) { out.appendChild(h('div', { class: 'imp-warn' }, w)); });
+          if ((r.ops || []).length) {
+            out.appendChild(h('button', { type: 'button', class: 'primary small', style: { marginTop: '8px' }, onclick: function () {
+              if (r.base_revision !== undefined && r.base_revision !== store.revision) ctx.toast('The project changed since the preview; applying on the latest revision.', 'warn');
+              ctx.commit(r.ops, 'Import ' + (fs[0].name || imp.label));
+              ctx.toast('Applied ' + r.ops.length + ' changes', 'ok');
+              out.classList.add('hidden');
+              el.classList.remove('wide');
+            } }, 'Apply ' + r.ops.length + ' changes'));
+          } else {
+            out.appendChild(h('div', { class: 'muted', style: { marginTop: '6px' } }, 'Nothing to apply.'));
+          }
         }, function (e) { go.disabled = false; ctx.toast(msg(e), 'err'); });
         return;
       }
       flush.then(function () { return ctx.api.upload(ctx.project, 'imports', fs, params); }).then(function (r) {
         go.disabled = false;
         out.classList.remove('hidden');
-        out.textContent = JSON.stringify((r && r.summary) || r, null, 2);
+        out.innerHTML = '';
+        liveSummary(out, (r && r.summary) || {});
         ctx.toast('Imported ' + imp.label, 'ok');
         return ctx.reload().then(refreshOverlay).then(drawRegistered);
-      }, function (e) { go.disabled = false; ctx.toast(msg(e), 'err'); });
+      }, function (e) {
+        go.disabled = false;
+        out.classList.remove('hidden');
+        out.innerHTML = '';
+        out.appendChild(h('div', { class: 'imp-err-head' }, msg(e)));
+        ctx.toast(msg(e), 'err');
+      });
     });
-    return h('div', { class: 'adm-card', 'data-importer': imp.kind }, [
+    el = h('div', { class: 'adm-card' + ((imp.templates || []).length ? ' has-tpl' : ''), 'data-importer': imp.kind }, [
       h('h4', null, imp.label || imp.kind),
       h('div', { class: 'help' }, imp.help || ''),
+      templateBox(imp),
       files,
-      h('div', { class: 'row', style: { marginTop: '6px' } }, [imp.mode === 'oneshot' ? null : dev, room]),
+      h('div', { class: 'row adm-card-opts', style: { marginTop: '6px' } }, [imp.mode === 'oneshot' ? null : dev, room]),
       h('div', { class: 'row', style: { marginTop: '6px' } }, [go, h('span', { class: 'muted', style: { fontSize: '11px' } }, imp.mode === 'oneshot' ? 'one-shot: preview, then apply' : 'kept and re-parsed on every build')]),
       out,
     ]);
+    return el;
   }
 
   const regWrap = h('div');
@@ -171,7 +245,7 @@ export function mountImports(el, ctx) {
   }
 
   root.appendChild(h('h2', null, 'Imports'));
-  root.appendChild(h('p', { class: 'muted' }, 'Console, Dante, Waves, Eos, Videohub and CSV exports. Imports never overwrite what you typed: they fill an overlay that is rebuilt every time.'));
+  root.appendChild(h('p', { class: 'muted' }, 'Console, Dante, Waves, Eos, MagicQ, Videohub and CSV exports. Imports never overwrite what you typed: they fill an overlay that is rebuilt every time.'));
   root.appendChild(h('h3', null, 'Add an import'));
   const cards = h('div', { class: 'adm-cards' });
   if (!importers.length) cards.appendChild(h('div', { class: 'muted' }, 'The server did not list any importers.'));

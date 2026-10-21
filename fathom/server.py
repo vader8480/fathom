@@ -840,7 +840,8 @@ def r_meta_v2(req: Request) -> Response:
         from . import plugins
 
         out["importers"] = [{"kind": i.kind, "label": i.label, "mode": getattr(i, "mode", "live"), "accepts": list(getattr(i, "accepts", ()) or ()),
-                             "folder": bool(getattr(i, "folder", False)), "help": getattr(i, "help", "")} for i in plugins.importers()]
+                             "folder": bool(getattr(i, "folder", False)), "help": getattr(i, "help", ""),
+                             "templates": list(getattr(i, "templates", ()) or ()) if getattr(i, "template", None) else []} for i in plugins.importers()]
         out["plugins_errors"] = [str(x) for x in plugins.plugin_errors()]
     except Exception:
         _log_exc("plugins unavailable")
@@ -936,9 +937,16 @@ def _builtin_ids() -> set:
     try:
         from .library import load_library
 
-        return {k for k, v in load_library().items() if (v or {}).get("source", "builtin") in ("builtin", "extension")}
+        return {k for k, v in load_library().items() if (v or {}).get("source", "builtin") in ("builtin", "extension", "preset")}
     except Exception:
         return set()
+
+
+@route("GET", "/api/v2/presets", role="viewer", summary="Built-in device type presets (generic gear with default ports)", tags=["library"])
+def r_presets(req: Request) -> Response:
+    from .presets import as_dict
+
+    return Response.json(as_dict())
 
 
 @route("POST", "/api/v2/library", role="editor", summary="Save a global custom template", tags=["library"], body="Template")
@@ -1413,7 +1421,13 @@ def r_import_v2(req: Request) -> Response:
     if device and not _ID_RE.match(device):
         raise ApiError(400, "bad device id")
     target, kind, _ = _save_upload(req, pdir, req.query.get("kind", "auto"), req.query.get("folder", ""))
-    summary = _summary(_parse(target, kind))
+    result = _parse(target, kind)
+    fatal = str(getattr(result, "fatal", "") or "")
+    if fatal:
+        if target.is_file():
+            target.unlink(missing_ok=True)
+        raise ApiError(422, fatal)
+    summary = _summary(result)
     ent, rev = _register_import(req, pdir, target, kind, device, req.query.get("room", ""))
     return Response.json({"import": ent, "summary": summary, "revision": rev}, 201)
 
@@ -1474,7 +1488,22 @@ def r_import_preview(req: Request) -> Response:
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return Response.json({"kind": kind, "ops": out.get("ops") or [], "summary": out.get("summary") or {}, "warnings": out.get("warnings") or [],
-                          "base_revision": _rev(doc)})
+                          "errors": out.get("errors") or [], "base_revision": _rev(doc)})
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/imports/templates/(?P<kind>" + _EID + r")/(?P<table>[a-z0-9_-]{1,32})\.csv", role="viewer",
+       summary="Example file for an importer (edit, then upload)", tags=["imports"])
+def r_import_template(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    imp = _importer(req.params["kind"])
+    table = req.params["table"]
+    names = [str(t.get("name")) for t in getattr(imp, "templates", ()) or ()] if imp is not None else []
+    if imp is None or getattr(imp, "template", None) is None or table not in names:
+        raise ApiError(404, "no such import template")
+    text = imp.template(table, doc)
+    fname = f"fathom-{table}-template.csv"
+    return Response.text("\ufeff" + text, "text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
 # ---- files (attachments)

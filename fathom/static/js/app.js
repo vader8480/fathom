@@ -251,19 +251,179 @@ function listNav(input, list, onPick) {
 
 // ------------------------------------------------------------ pickers
 
+const ADD_GEAR_TAB_KEY = 'fathom.addgear.tab';
+let presetsCache = null;
+
+function loadPresets(ctx) {
+  if (presetsCache) return Promise.resolve(presetsCache);
+  if (!ctx.api || !ctx.api.presets) return Promise.reject(new Error('Presets need a connection to the server'));
+  return Promise.resolve(ctx.api.presets()).then(function (r) {
+    presetsCache = { groups: (r && r.groups) || [], presets: (r && r.presets) || [] };
+    return presetsCache;
+  });
+}
+
+function readTab() {
+  try { return window.localStorage.getItem(ADD_GEAR_TAB_KEY) || ''; } catch (e) { return ''; }
+}
+
+function writeTab(v) {
+  try { window.localStorage.setItem(ADD_GEAR_TAB_KEY, v); } catch (e) { /* private mode */ }
+}
+
+// Presets tab of the Add gear dialog: searchable grouped list → pre-filled form → template for addDeviceFromTemplateOps.
+function presetsPanel(ctx, opts, onReady) {
+  const vocab = ctx.vocab || FALLBACK_VOCAB;
+  const root = h('div', { class: 'pf-panel' });
+  const input = h('input', { type: 'search', class: 'search-input', placeholder: 'Search presets (e.g. "ups", "switch", "patch panel")', 'aria-label': 'Search presets' });
+  const list = h('ul', { class: 'pick-list pf-list', role: 'listbox', 'aria-label': 'Device presets' });
+  const status = h('div', { class: 'muted', style: { marginTop: '6px', fontSize: '12px' } }, 'Loading presets\u2026');
+  const pickView = h('div', { class: 'pf-pick' }, [input, list, status]);
+  const formView = h('div', { class: 'pf-form', hidden: true });
+  root.appendChild(pickView);
+  root.appendChild(formView);
+  const S = { data: null, preset: null, form: null, api: null, byId: {} };
+
+  function kindLabel(k) { const m = (vocab.kinds || {})[k]; return m ? m.label : k; }
+  function kindColor(k) { const m = (vocab.kinds || {})[k]; return m ? m.color : '#9aa3b5'; }
+
+  function renderList() {
+    list.innerHTML = '';
+    S.byId = {};
+    if (!S.data) return;
+    let items = S.api.filterPresets(S.data.presets, input.value, S.data.groups);
+    if (opts.kind) items = items.filter(function (p) { return p.kind === opts.kind; });
+    S.api.groupPresets(items, S.data.groups).forEach(function (g) {
+      list.appendChild(h('li', { class: 'group' }, g.group));
+      g.items.forEach(function (p) {
+        S.byId[p.id] = p;
+        list.appendChild(h('li', { 'data-pick': p.id, role: 'option' }, [
+          h('span', { class: 'dot', style: { color: kindColor(p.kind) } }),
+          h('div', { class: 'pf-item' }, [h('div', null, p.label), h('div', { class: 'muted pf-ports' }, S.api.portsSummary(p.ports))]),
+          h('span', { class: 'sub' }, kindLabel(p.kind) + (p.ru ? ' \u00b7 ' + p.ru + 'U' : '')),
+        ]));
+      });
+    });
+    status.textContent = items.length ? items.length + ' presets \u00b7 pick one to pre-fill the form' : 'No presets match.';
+  }
+
+  function openForm(p) {
+    S.preset = p;
+    S.form = S.api.presetForm(p);
+    formView.innerHTML = '';
+    const f = S.form;
+    const name = h('input', { type: 'text', id: 'pf-name', value: f.name, autocomplete: 'off', autofocus: true });
+    const kinds = Object.keys(vocab.kinds || {}).sort(function (a, b) { return kindLabel(a).localeCompare(kindLabel(b)); });
+    if (kinds.indexOf(f.kind) < 0) kinds.unshift(f.kind);
+    const kind = h('select', { id: 'pf-kind' }, kinds.map(function (k) { return h('option', { value: k, selected: k === f.kind }, kindLabel(k)); }));
+    const manu = h('input', { type: 'text', id: 'pf-manufacturer', placeholder: 'optional', autocomplete: 'off' });
+    const model = h('input', { type: 'text', id: 'pf-model', placeholder: 'optional', autocomplete: 'off' });
+    const ru = h('input', { type: 'number', id: 'pf-ru', min: 0, max: 60, step: 1, inputmode: 'numeric', value: f.ru || '', placeholder: 'not racked' });
+    name.addEventListener('input', function () { f.name = name.value; });
+    kind.addEventListener('change', function () { f.kind = kind.value; });
+    manu.addEventListener('input', function () { f.manufacturer = manu.value; });
+    model.addEventListener('input', function () { f.model = model.value; });
+    ru.addEventListener('input', function () { const n = parseInt(ru.value, 10); f.ru = n >= 1 ? n : null; });
+    const field = function (id, label, el) { return h('div', { class: 'pf-field' }, [h('label', { for: id }, label), el]); };
+    const ports = h('div', { class: 'pf-portlist' }, f.ports.map(function (g, i) {
+      const src = (p.ports || [])[i] || {};
+      const mi = mediumInfo(src.medium, vocab);
+      const num = h('input', { type: 'number', min: 0, max: 512, step: 1, inputmode: 'numeric', value: g.count, disabled: g.fixed, 'aria-label': g.group + ' count' });
+      num.addEventListener('input', function () { const n = parseInt(num.value, 10); g.count = n >= 0 ? n : 0; });
+      return h('div', { class: 'pf-port' }, [
+        h('span', { class: 'dot', style: { color: mi.color || '#9aa3b5' } }),
+        h('span', { class: 'pf-port-name' }, g.group),
+        h('span', { class: 'muted pf-port-meta' }, [mi.short || src.medium || '', src.connector ? ' \u00b7 ' + src.connector : '', src.channels > 1 ? ' \u00b7 ' + src.channels + ' ch' : '']),
+        num,
+      ]);
+    }));
+    formView.appendChild(h('div', { class: 'pf-head' }, [
+      h('button', { type: 'button', class: 'chip', onclick: function () { showPick(); } }, '\u2190 Presets'),
+      h('div', { class: 'pf-title' }, [h('strong', null, p.label), h('div', { class: 'muted pf-desc' }, p.description || '')]),
+    ]));
+    formView.appendChild(h('div', { class: 'pf-fields' }, [
+      field('pf-name', 'Name', name), field('pf-kind', 'Kind', kind),
+      field('pf-manufacturer', 'Manufacturer', manu), field('pf-model', 'Model', model),
+      field('pf-ru', 'Rack units', ru),
+    ]));
+    formView.appendChild(h('div', { class: 'pf-section' }, [h('h4', null, 'Ports'), h('span', { class: 'muted' }, 'Set a count to 0 to drop a group.')]));
+    formView.appendChild(ports);
+    formView.appendChild(h('p', { class: 'muted pf-hint' }, 'Everything can still be changed later in the inspector.'));
+    formView.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT') { e.preventDefault(); onReady.create(); }
+    });
+    pickView.hidden = true;
+    formView.hidden = false;
+    onReady.step('form');
+    setTimeout(function () { name.focus(); name.select(); }, 20);
+  }
+
+  function showPick() {
+    S.preset = null;
+    formView.hidden = true;
+    pickView.hidden = false;
+    onReady.step('pick');
+    setTimeout(function () { input.focus(); }, 20);
+  }
+
+  input.addEventListener('input', renderList);
+  listNav(input, list, function (li) { const p = S.byId[li.getAttribute('data-pick')]; if (p) openForm(p); });
+  Promise.all([import('./presets-core.js'), loadPresets(ctx)]).then(function (r) {
+    S.api = r[0];
+    S.data = r[1];
+    renderList();
+  }, function (e) { status.textContent = errMsg(e); });
+
+  return {
+    el: root,
+    focus: function () { if (S.preset) return; setTimeout(function () { input.focus(); }, 20); },
+    result: function () {
+      if (!S.preset || !S.api) return null;
+      if (!(S.form.name || '').trim()) { toast('Give the device a name', 'warn'); return null; }
+      return S.api.presetTemplate(S.preset, S.form);
+    },
+  };
+}
+
 function makePickTemplate(getCtx) {
   return function pickTemplate(opts) {
     opts = opts || {};
     const ctx = getCtx();
     const vocab = ctx.vocab || FALLBACK_VOCAB;
     let disc = opts.discipline || '';
-    const input = h('input', { type: 'search', class: 'search-input', placeholder: 'Search the library (e.g. "rio", "atem")', 'aria-label': 'Search templates', autofocus: true });
+    const input = h('input', { type: 'search', class: 'search-input', placeholder: 'Search the library (e.g. "rio", "atem")', 'aria-label': 'Search templates' });
     const chips = h('div', { class: 'row', style: { marginTop: '8px' } });
     const list = h('ul', { class: 'pick-list', role: 'listbox', 'aria-label': 'Templates' });
     const status = h('div', { class: 'muted', style: { marginTop: '6px', fontSize: '12px' } });
     let byId = {};
     let timer = null;
     let dlg = null;
+    let createBtn = null;
+    const hasPresets = !!(ctx.api && ctx.api.presets);
+    let tab = hasPresets && readTab() !== 'library' ? 'presets' : 'library';
+    const presets = hasPresets ? presetsPanel(ctx, opts, {
+      step: function (s) { if (createBtn) createBtn.hidden = s !== 'form'; },
+      create: function () { if (dlg && createBtn && !createBtn.hidden) createBtn.click(); },
+    }) : null;
+    const libraryPanel = h('div', { class: 'pf-panel' }, [input, chips, list, status]);
+    const tabs = h('div', { class: 'pf-tabs', role: 'tablist' });
+    function renderTabs() {
+      tabs.innerHTML = '';
+      [['presets', 'Presets'], ['library', 'Library']].forEach(function (t) {
+        if (t[0] === 'presets' && !presets) return;
+        tabs.appendChild(h('button', { type: 'button', role: 'tab', class: 'pf-tab' + (tab === t[0] ? ' on' : ''), 'aria-selected': tab === t[0] ? 'true' : 'false', onclick: function () { setTab(t[0]); } }, t[1]));
+      });
+      if (presets) presets.el.hidden = tab !== 'presets';
+      libraryPanel.hidden = tab !== 'library';
+      if (createBtn) createBtn.hidden = !(tab === 'presets' && presets && !presets.el.querySelector('.pf-form').hidden);
+    }
+    function setTab(t) {
+      tab = t;
+      writeTab(t);
+      renderTabs();
+      if (t === 'library') setTimeout(function () { input.focus(); }, 20);
+      else if (presets) presets.focus();
+    }
     function renderChips() {
       chips.innerHTML = '';
       [''].concat(Object.keys(vocab.disciplines || {})).forEach(function (k) {
@@ -302,14 +462,25 @@ function makePickTemplate(getCtx) {
     input.addEventListener('input', load);
     listNav(input, list, function (li) { if (dlg) dlg.close(li.getAttribute('data-pick')); });
     renderChips();
+    renderTabs();
     load();
     return openDialog({
-      title: 'Add gear from the library', wide: true,
-      body: h('div', null, [input, chips, list, status]),
-      onOpen: function (d) { dlg = d; },
-      buttons: [{ label: 'Cancel', value: null }],
+      title: 'Add gear', wide: true,
+      body: h('div', { class: 'pf-root' }, [presets ? tabs : null, presets ? presets.el : null, libraryPanel]),
+      onOpen: function (d) {
+        dlg = d;
+        createBtn = d.box.querySelector('footer button.primary');
+        renderTabs();
+        setTimeout(function () { if (tab === 'library') input.focus(); else if (presets) presets.focus(); }, 25);
+      },
+      buttons: [{ label: 'Cancel', value: null }].concat(presets ? [{
+        label: 'Create device', primary: true,
+        validate: function () { return !!presets.result(); },
+        value: function () { return { preset: presets.result() }; },
+      }] : []),
     }).then(function (id) {
       if (!id) return null;
+      if (typeof id === 'object') return id.preset ? deepClone(id.preset) : null;
       const t = byId[id];
       if (t && Array.isArray(t.ports)) return deepClone(t);
       if (!ctx.api) return t || null;
@@ -555,9 +726,21 @@ function replaceHash(project, room, view, params) {
 function renderTabs() {
   const nav = $('app-views');
   nav.innerHTML = '';
+  const strip = h('div', { class: 'app-views-strip' });
   Object.keys(VIEWS).forEach(function (k) {
-    nav.appendChild(h('button', { type: 'button', 'data-view': k, 'aria-current': A.view === k ? 'page' : null, onclick: function () { navigate(k); } }, VIEWS[k].label));
+    strip.appendChild(h('button', { type: 'button', 'data-view': k, 'aria-current': A.view === k ? 'page' : null, onclick: function () { navigate(k); } }, VIEWS[k].label));
   });
+  const overflow = h('button', { type: 'button', class: 'app-views-more', 'aria-haspopup': 'menu', hidden: true }, ['More', h('span', { class: 'caret', 'aria-hidden': 'true' }, '\u25BE')]);
+  overflow.addEventListener('click', function () {
+    const items = Array.prototype.filter.call(strip.children, function (b) { return b.hidden; }).map(function (b) {
+      const k = b.getAttribute('data-view');
+      return { label: VIEWS[k].label, current: A.view === k, action: function () { navigate(k); } };
+    });
+    openMenu(overflow, items);
+  });
+  nav.appendChild(strip);
+  nav.appendChild(overflow);
+  fitTabs();
   const bar = $('app-tabbar');
   bar.innerHTML = '';
   PHONE_TABS.forEach(function (k) {
@@ -573,6 +756,23 @@ function renderTabs() {
     openMenu(more, items);
   });
   bar.appendChild(more);
+}
+
+// Tabs that do not fit the top bar move, last first, into the More menu.
+function fitTabs() {
+  const nav = $('app-views');
+  const strip = nav && nav.querySelector('.app-views-strip');
+  const more = nav && nav.querySelector('.app-views-more');
+  if (!strip || !more) return;
+  const tabs = strip.children;
+  let i;
+  for (i = 0; i < tabs.length; i++) tabs[i].hidden = false;
+  more.hidden = true;
+  more.removeAttribute('aria-current');
+  if (!nav.offsetWidth || strip.scrollWidth <= strip.clientWidth) return;
+  more.hidden = false;
+  for (i = tabs.length - 1; i >= 0 && strip.scrollWidth > strip.clientWidth; i--) tabs[i].hidden = true;
+  if (strip.querySelector('[aria-current][hidden]')) more.setAttribute('aria-current', 'page');
 }
 
 function renderPickers() {
@@ -1003,7 +1203,7 @@ function openMenu(anchor, items) {
   items.forEach(function (it) {
     if (it.sep) { menu.appendChild(h('div', { class: 'sep', role: 'separator' })); return; }
     if (it.info) { menu.appendChild(h('div', { class: 'lbl' }, it.info)); return; }
-    menu.appendChild(h('button', { type: 'button', role: 'menuitem', onclick: function () { close(); it.action(); } }, it.label));
+    menu.appendChild(h('button', { type: 'button', role: 'menuitem', 'aria-current': it.current ? 'page' : null, onclick: function () { close(); it.action(); } }, it.label));
   });
   document.body.appendChild(menu);
   const r = anchor.getBoundingClientRect();
@@ -1352,7 +1552,10 @@ export function boot(root, opts) {
     if (A.ctx) { A.ctx.env.narrow = window.innerWidth < 700; }
     if (window.innerWidth >= 1100 && A.store && A.store.selection) A.inspectorOpen = true;
     layoutInspector();
+    if (typeof ResizeObserver === 'undefined') fitTabs();
   });
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(fitTabs).observe($('app-views'));
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTabs);
   renderTabs();
   registerSW();
   return A.api.session().catch(function (e) {

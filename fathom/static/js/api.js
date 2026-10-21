@@ -122,6 +122,7 @@ export function createApi(opts) {
       return send('POST', proj(name) + '/imports/preview', fd, params);
     },
     deleteImport: function (name, id, deleteFiles) { return send('DELETE', proj(name) + '/imports/' + enc(id), undefined, { delete_files: deleteFiles ? 1 : '' }); },
+    importTemplateUrl: function (name, kind, table) { return url(proj(name) + '/imports/templates/' + enc(kind) + '/' + enc(table) + '.csv'); },
     inspectImport: function (name, id) { return get(proj(name) + '/imports/' + enc(id) + '/inspect'); },
     schedule: function (name, kind, params) { return get(proj(name) + '/schedules/' + enc(kind), params); },
     scheduleUrl: function (name, kind, params) { return url(proj(name) + '/schedules/' + enc(kind), params); },
@@ -138,6 +139,7 @@ export function createApi(opts) {
     build: function (name, o) { return send('POST', proj(name) + '/builds', o || {}); },
     deleteBuild: function (name, run) { return send('DELETE', proj(name) + '/builds/' + enc(run)); },
     library: function (params) { return get('api/v2/library', params); },
+    presets: function () { return get('api/v2/presets'); },
     template: function (id, project) { return get('api/v2/library/' + enc(id), { project: project }); },
     saveTemplate: function (t, override) { return send('POST', 'api/v2/library', t, { override: override ? 1 : '' }); },
     deleteTemplate: function (id) { return send('DELETE', 'api/v2/library/' + enc(id)); },

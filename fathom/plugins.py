@@ -36,11 +36,14 @@ class Importer:
     folder: bool = False
     help: str = ""
     source: str = "builtin"
+    #: downloadable example files: [{"name", "label", "columns": [{"key", "required", "help"}]}]
+    templates: Tuple[Dict[str, Any], ...] = ()
+    template: Optional[Callable[[str, Dict[str, Any]], str]] = None  # template(name, doc) -> CSV text
 
     def info(self) -> Dict[str, Any]:
         return {
             "kind": self.kind, "label": self.label, "mode": self.mode, "accepts": list(self.accepts),
-            "folder": self.folder, "help": self.help, "source": self.source,
+            "folder": self.folder, "help": self.help, "source": self.source, "templates": list(self.templates),
         }
 
 

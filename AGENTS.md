@@ -19,18 +19,38 @@ Python WSGI server (`fathom/server.py`) plus a no-build ES-module frontend in
 - All data lives under `FATHOM_DATA` (default `~/.fathom`; `/data` in Docker).
   Writes are atomic and per-project locked (`project.project_lock`).
 
+## Application server
+
+`ccc-apps01` (`10.6.9.239`) is the application server. The checkout is
+`/home/cccadmin/Code/fathom` for user `cccadmin`, data is
+`/home/cccadmin/.fathom`, and `fathom.service` is enabled and listens on
+`http://10.6.9.239:8080`. Connect with SSH host `ccc-apps01`
+(`HostName 10.6.9.239`, `User cccadmin`). Key login is already in place;
+do not recreate the account, `.venv`, packages, or sample data on this host.
+Open that checkout in Cursor with Remote-SSH. Restart `fathom.service` after
+Python changes (`sudo systemctl restart fathom.service`); static JS/CSS
+changes need only a browser reload. Port 8080 is taken by that service, so
+do not start a second `fathom serve` on it.
+
 ## Cursor Cloud specific instructions
 
-The environment (`.cursor/environment.json`) creates `.venv` with
-`pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
+These steps apply to a Cursor-hosted cloud VM, not to a session already on
+`ccc-apps01`. The environment (`.cursor/environment.json`) creates `.venv`
+with `pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
 `campus` sample project in `~/.fathom`.
 
-- **Dev server:** already running in the *Fathom server* terminal at
-  <http://localhost:8080> with login off (everyone is admin). Restart that
-  terminal after changing Python files; JS/CSS changes need only a reload.
-  If the terminal is gone: `.venv/bin/fathom serve --host 0.0.0.0 --port 8080`.
-- **Backend tests:** `.venv/bin/python -m unittest discover -s tests -q`
-  (about 45 s, all should pass with one skip). Single suite:
+- **Dev server:** `start` (`.cursor/start.sh`) runs it on boot in the
+ `fathom-server` tmux session at <http://localhost:8080> with login off
+ (everyone is admin); log in `/tmp/fathom-server.log`, boot output in
+ `/tmp/cursor/start-user/start-user.log`. After changing Python files,
+ `tmux kill-session -t fathom-server && bash .cursor/start.sh`; JS/CSS
+ changes need only a reload. The editor UI is at `/` (there is no `/ui`).
+- **Backend tests:**
+  `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -q`
+  (283 tests, about 30 s, all pass with one skip). Without `FATHOM_CHROME`
+  the headless-Chrome smoke suite picks up `/usr/local/bin/google-chrome`, a
+  desktop wrapper that pins `--remote-debugging-port=9222`; its parallel runs
+  then time out (~57 failures, 15 min). Single suite:
   `.venv/bin/python -m unittest tests.test_backup -v`.
 - **Frontend tests:** `node --test tests/js/*.test.mjs` (pass the files; the
   bare directory form fails on recent Node).

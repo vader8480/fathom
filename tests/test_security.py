@@ -42,7 +42,7 @@ SPEC_ROLES = {
     ("GET", "/api/v2/backups/{}"): "admin", ("DELETE", "/api/v2/backups/{}"): "admin", ("POST", "/api/v2/backups/{}/restore"): "admin",
     ("GET", "/healthz"): "public", ("GET", "/api/v2/schema.json"): "public",
     ("GET", "/api/v2/meta"): "viewer", ("GET", "/api/v2/library"): "viewer", ("GET", "/api/v2/library/{}"): "viewer",
-    ("POST", "/api/v2/library"): "editor", ("DELETE", "/api/v2/library/{}"): "editor",
+    ("POST", "/api/v2/library"): "editor", ("DELETE", "/api/v2/library/{}"): "editor", ("GET", "/api/v2/presets"): "viewer",
     ("GET", "/api/v2/projects"): "viewer", ("POST", "/api/v2/projects"): "editor", ("GET", "/api/v2/projects/{}"): "viewer",
     ("PUT", "/api/v2/projects/{}"): "editor", ("POST", "/api/v2/projects/{}/changes"): "editor", ("DELETE", "/api/v2/projects/{}"): "admin",
     ("GET", "/api/v2/projects/{}/devices/duplicates"): "viewer", ("POST", "/api/v2/projects/{}/devices/merge/preview"): "editor",
@@ -54,6 +54,7 @@ SPEC_ROLES = {
     ("POST", "/api/v2/projects/{}/shares"): "editor", ("DELETE", "/api/v2/projects/{}/shares/{}"): "editor",
     ("POST", "/api/v2/projects/{}/imports"): "editor", ("DELETE", "/api/v2/projects/{}/imports/{}"): "editor",
     ("GET", "/api/v2/projects/{}/imports/{}/inspect"): "viewer", ("POST", "/api/v2/projects/{}/imports/preview"): "editor",
+    ("GET", "/api/v2/projects/{}/imports/templates/{}/{}.csv"): "viewer",
     ("POST", "/api/v2/projects/{}/files"): "editor", ("GET", "/api/v2/projects/{}/files/{}/{}"): "viewer",
     ("DELETE", "/api/v2/projects/{}/files/{}"): "editor", ("POST", "/api/v2/projects/{}/floorplans"): "editor",
     ("POST", "/api/v2/projects/{}/floorplans/{}/reconvert"): "editor", ("GET", "/api/v2/projects/{}/floorplans/{}/image"): "viewer",
@@ -79,7 +80,7 @@ SAMPLES = ["proj", "main", "atem-mini", "rk-foh", "cables", "1", "nobody", "imp-
            "run1", "index.html", "diagram.svg", "x.png", "app.html", "nope"]
 PARAM_HINTS = {"name": "proj", "room": "main", "device": "atem-mini", "rack": "rk-foh", "kind": "cables", "rev": "1", "username": "nobody",
                "iid": "imp-0001", "att": "att-000000000000", "token": "sh-abc123", "fp": "fp-none", "run": "run1", "file": "index.html",
-               "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip"}
+               "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip", "table": "devices"}
 
 
 def _groups(pattern):
