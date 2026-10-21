@@ -57,6 +57,7 @@ _INLINE_RE = re.compile(
     r"|\[\[(?P<refkind>device|room|page):(?P<refid>[^\]|\n]+?)(?:\|(?P<reflabel>[^\]\n]+))?\]\]"
     r"|\[(?P<ltext>[^\]\n]+)\]\((?P<lhref>(?:[^()\s]|\([^()\s]*\))+)(?:\s+\"(?P<ltitle>[^\"]*)\")?\)"
     r"|<(?P<auto>(?:https?://|mailto:)[^\s<>]+)>"
+    r"|(?P<bare>https?://[^\s<>]+?)(?=[.,;:!?)\]]*(?:\s|$))"
     r"|\*\*(?P<strong>\S(?:.*?\S)?)\*\*"
     r"|__(?P<strong2>\S(?:.*?\S)?)__"
     r"|\*(?P<em>[^\s*](?:[^*\n]*?[^\s*])?)\*"
@@ -160,9 +161,10 @@ def _inline(text: str, ctx: _Ctx) -> str:
                 out.append(f'<a href="{_esc(href)}"{title}{ext}>{inner}</a>')
             else:
                 out.append(inner)
-        elif g["auto"] is not None:
-            href = safe_url(g["auto"])
-            out.append(f'<a href="{_esc(href)}" rel="noopener">{_esc(g["auto"])}</a>' if href else _esc(g["auto"]))
+        elif g["auto"] is not None or g["bare"] is not None:
+            raw = g["auto"] if g["auto"] is not None else g["bare"]
+            href = safe_url(raw)
+            out.append(f'<a href="{_esc(href)}" rel="noopener">{_esc(raw)}</a>' if href else _esc(raw))
         elif g["strong"] is not None or g["strong2"] is not None:
             out.append("<strong>" + _inline(g["strong"] if g["strong"] is not None else g["strong2"], ctx) + "</strong>")
         elif g["em"] is not None or g["em2"] is not None:

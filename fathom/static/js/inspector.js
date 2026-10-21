@@ -268,8 +268,43 @@ export function mountInspector(el, ctx) {
       fieldRow('Protocol', boundSelect('devices', id, ['dmx', 'protocol'], ['dmx', 'sacn', 'artnet'], { empty: '\u2014' })),
     ]));
     root.appendChild(section('files', 'Photos & documents', attachmentsBlock(d)));
+    const procs = proceduresFor(d);
+    root.appendChild(section('procedures', 'Procedures' + (procs.length ? ' (' + procs.length + ')' : ''), proceduresBlock(d, procs), procs.length > 0));
     root.appendChild(section('qr', 'QR label', qrBlock(d, devUrl)));
     root.appendChild(section('notes', 'Notes', [bound('devices', id, ['note'], { multiline: true, label: 'Edit note' })], !!d.note));
+  }
+
+  // SOP pages that apply to this device: listed in page.devices or linked as [[device:id]] in the body.
+  function proceduresFor(d) {
+    const re = /\[\[device:([^\]|]+)(?:\|[^\]]*)?\]\]/g;
+    return (store.doc.pages || []).filter(function (p) {
+      if (ro() && (p.status || 'published') === 'draft') return false;
+      if ((p.devices || []).indexOf(d.id) >= 0) return true;
+      let m;
+      re.lastIndex = 0;
+      while ((m = re.exec(p.body || ''))) if (m[1].trim() === d.id) return true;
+      return false;
+    }).sort(function (a, b) { return String(a.title || '').localeCompare(String(b.title || '')); });
+  }
+
+  function proceduresBlock(d, procs) {
+    const KIND = { sop: 'SOP', troubleshooting: 'Troubleshooting', checklist: 'Checklist', reference: 'Reference' };
+    const sopHash = function (params) {
+      const q = Object.keys(params).map(function (k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
+      return '#/' + encodeURIComponent(ctx.project) + '/' + encodeURIComponent(store.room || '*').replace(/%2A/g, '*') + '/sop' + (q ? '?' + q : '');
+    };
+    const out = [];
+    if (!procs.length) out.push(h('div', { class: 'muted', style: { fontSize: '12px' } }, 'No procedures mention this device yet.'));
+    else {
+      out.push(h('ul', { class: 'ins-procs' }, procs.map(function (p) {
+        return h('li', null, h('a', { href: sopHash({ page: p.slug }), 'data-page': p.slug }, [
+          h('span', { class: 'ins-proc-title' }, p.title || p.slug),
+          h('span', { class: 'ins-proc-sub' }, (KIND[p.kind || 'sop'] || p.kind) + ((p.status || 'published') === 'draft' ? ' \u00b7 draft' : '') + (p.summary ? ' \u00b7 ' + p.summary : '')),
+        ]));
+      })));
+    }
+    if (!ro()) out.push(h('div', { class: 'row', style: { marginTop: '6px' } }, h('a', { class: 'chip', href: sopHash({ new: 1, device: d.id }) }, '+ New SOP for this device')));
+    return out;
   }
 
   function tagsInput(d) {

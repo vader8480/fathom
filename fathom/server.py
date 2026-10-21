@@ -1485,8 +1485,10 @@ def r_page_put(req: Request) -> Response:
     label = ("New SOP " if cur is None else "Edit SOP ") + page["title"]
     base = body.get("base_revision")
     res = _changes(req, pdir, ops, _int(base, -1), label, "pages") if base is not None else _server_ops(req, pdir, ops, label, "pages")
-    return Response.json({"page": page, "revision": res["revision"], "problems": res.get("problems") or []}, 201 if cur is None else 200,
-                         headers={"ETag": f'"r{res["revision"]}"'})
+    doc, _ = _load(pdir)
+    out = _page_payload(pdir.name, doc, _page_by_slug(doc, page["slug"]), res["revision"])
+    out["problems"] = res.get("problems") or []
+    return Response.json(out, 201 if cur is None else 200, headers={"ETag": f'"r{res["revision"]}"'})
 
 
 @route("DELETE", r"/api/v2/projects/" + _NAME + "/pages/" + _SLUG, role="editor", summary="Delete a page (archived instead when it has children)", tags=["pages"])
@@ -1592,10 +1594,12 @@ def r_page_restore(req: Request) -> Response:
     page = _page_by_slug(doc, req.params["slug"])
     rev = int(req.params["rev"])
     old = dict(_page_at(pdir, page, rev))
-    old["id"] = page["id"]
-    old["slug"] = page["slug"]
-    if old.get("parent") and old["parent"] not in {p["id"] for p in _pages(doc)}:
-        old.pop("parent", None)
+    # Restore the content; keep the page where it lives in the tree today.
+    for k in ("id", "slug", "parent", "order", "created"):
+        if page.get(k) is not None:
+            old[k] = page[k]
+        else:
+            old.pop(k, None)
     old["updated"] = utc_now()
     if req.username:
         old["updated_by"] = req.username
