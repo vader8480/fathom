@@ -163,3 +163,8 @@ T('ChangeQueue conflict pauses', async () => {
     mock.timers.reset();
   }
 });
+
+T('importTemplateUrl builds the import template download path', () => {
+  const a = api.createApi({ base: '/', fetchImpl: fakeFetch(() => jsonResponse(200, {})) });
+  assert.equal(a.importTemplateUrl('my show', 'csv', 'devices'), '/api/v2/projects/my%20show/imports/templates/csv/devices.csv');
+});

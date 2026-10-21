@@ -2,8 +2,8 @@
 
 The v0.2 API is unchanged: ``KINDS`` (the three legacy kinds),
 ``detect_kind`` (legacy heuristics, returns yamaha | dante | waves | unknown),
-``parse_any`` and ``parse_yamaha/dante/waves``. New importers (Eos, Videohub,
-generic CSV, ATEM) are reachable through the registry and through
+``parse_any`` and ``parse_yamaha/dante/waves``. New importers (Eos, MagicQ,
+Videohub, generic CSV, ATEM) are reachable through the registry and through
 ``parse_any(path, kind)`` with an explicit kind.
 """
 
@@ -114,7 +114,7 @@ def _parse_waves(path: Path, **_o: Any) -> WavesSession:
 
 
 def _register_builtins() -> None:
-    from . import atem, eos, generic_csv, videohub
+    from . import atem, eos, generic_csv, magicq, videohub
 
     Imp = _plugins.Importer
     _plugins.register_importer(Imp(
@@ -138,6 +138,12 @@ def _register_builtins() -> None:
         help="Lighting patch: Eos CSV export (START_CHANNELS), USITT ASCII show file (.asc) or a Lightwright / Vectorworks instrument schedule.",
     ))
     _plugins.register_importer(Imp(
+        kind="magicq", label="ChamSys MagicQ patch CSV", detect=magicq.detect, parse=magicq.parse_magicq,
+        contribute=magicq.contribute, accepts=(".csv", ".txt", ".tsv", ".shw"), folder=False,
+        help="Head list from MagicQ: Patch → View Heads → File → Print Window → Create CSV, or (older versions) Patch → View Chans → EXPORT HEADS. "
+             "Head number, name, type, DMX address, mode, gel and channel count; .shw show files cannot be read.",
+    ))
+    _plugins.register_importer(Imp(
         kind="videohub", label="Blackmagic Videohub protocol dump", detect=videohub.detect, parse=videohub.parse_videohub,
         contribute=videohub.contribute, accepts=(".txt", ".log"), folder=False,
         help="Text captured from the router on TCP 9990 (e.g. nc <ip> 9990 > dump.txt): labels and routing.",
@@ -145,7 +151,9 @@ def _register_builtins() -> None:
     _plugins.register_importer(Imp(
         kind="csv", label="Device / cable CSV (one-shot)", detect=generic_csv.detect, parse=generic_csv.parse_csv,
         preview=generic_csv.preview, mode="oneshot", accepts=(".csv", ".tsv", ".txt"), folder=False,
-        help="Spreadsheet of devices (name, kind, model, room, serial, ip …) or cables (from/to device + port, tag, type, length). Previewed as changes before anything is written.",
+        help="Spreadsheet of devices (name, kind, model, room, serial, ip …) or cables (from/to device + port, tag, type, length). "
+             "Start from a template, edit it in any spreadsheet app and upload it; every row is checked and previewed before anything is written.",
+        templates=tuple(generic_csv.template_info()), template=generic_csv.template_csv,
     ))
     _plugins.register_importer(Imp(
         kind="atem", label="ATEM Software Control settings (XML)", detect=atem.detect, parse=atem.parse_atem,

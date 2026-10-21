@@ -87,7 +87,7 @@ class Registry(unittest.TestCase):
 
     def test_plugin_registry(self):
         kinds = [i.kind for i in self.plugins.importers()]
-        for k in ("yamaha", "dante", "waves", "eos", "videohub", "csv"):
+        for k in ("yamaha", "dante", "waves", "eos", "magicq", "videohub", "csv"):
             self.assertIn(k, kinds, fr("FR-EXT-01", "7.4.2", "built-in importer %s registered" % k))
         imp = self.plugins.get_importer("dante")
         for f in ("kind", "label", "detect", "parse", "contribute", "preview", "mode", "accepts", "folder", "help", "source"):
@@ -422,6 +422,314 @@ class GenericCsv(unittest.TestCase):
         self.assertEqual((op["op"], op["coll"], op["id"]), ("merge", "cables", "c-0003"), fr("FR-CAB-06", "3.10"))
         self.assertEqual(list(op["value"]), ["length_m"])
         self.assertGreater(op["value"]["length_m"], 3.0)
+
+
+    def _rows_preview(self, text, doc=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            q = Path(tmp) / "edit.csv"
+            q.write_text(text, encoding="utf-8")
+            return self.preview(q, doc or sunday_doc())
+
+    def test_generic_csv_row_validation(self):
+        text = ("name,kind,status,ip,mac,vlan,universe,address,footprint,room,purchase_date,cost,colour\n"
+                "Good Box,stage_io,Installed,10.0.0.1,001d.c10a.2b3c,20,,,,main,,,\n"
+                "\n"
+                ",console,,,,,,,,,,,\n"
+                "Bad Kind,mixer,maybe,10.0.0.300,zz:zz,5000,0,600,4,Basement,15/01/2026,abc,\n"
+                "good box,console,,,,,,,,,,,\n"
+                "Overflow,fixture,,,,,1,510,8,,,,,extra\n"
+                "Video Switch,Video switcher,,,,,,,,,,,\n")
+        p = self._rows_preview(text)
+        errs = p["errors"]
+        by_row = {}
+        for e in errs:
+            self.assertEqual(set(e), {"row", "column", "value", "message"})
+            by_row.setdefault(e["row"], {})[e["column"]] = e
+        self.assertNotIn(2, by_row, "valid row (Cisco MAC, mixed-case status) passes")
+        self.assertIn("name", by_row[4], "row numbers are spreadsheet rows (blank row 3 counted)")
+        bad = by_row[5]
+        for col in ("kind", "status", "ip", "mac", "vlan", "universe", "address", "room", "purchase_date", "cost"):
+            self.assertIn(col, bad, "row 5 flags %s" % col)
+        self.assertIn("mixer", bad["kind"]["value"])
+        self.assertIn("console", bad["kind"]["message"], "message lists the valid kinds")
+        self.assertIn("Main", bad["room"]["message"], "message lists the project rooms")
+        self.assertIn("duplicate of row 2", by_row[6]["name"]["message"], "names compare case-insensitively")
+        self.assertIn("past 512", by_row[7]["footprint"]["message"])
+        puts = {o["value"]["name"]: o["value"] for o in p["ops"] if o["op"] == "put"}
+        self.assertEqual(sorted(puts), ["Good Box", "Video Switch"], "rows with problems are skipped, the rest preview")
+        self.assertEqual(puts["Good Box"]["status"], "installed")
+        self.assertEqual(puts["Video Switch"]["kind"], "video_switcher", "kind labels / spaces normalise to the vocab key")
+        self.assertEqual(p["summary"], {"create": 2, "update": 0, "skip": 4})
+        self.assertTrue(any("colour" in w for w in p["warnings"]), "unknown column reported")
+        self.assertTrue(any("row 7" in w and "extra cells" in w for w in p["warnings"]), "extra cells reported")
+        self.assertTrue(any(w.startswith("row 5, kind:") for w in p["warnings"]), "errors mirrored into warnings for the CLI")
+        schema = requires("schema")
+        newdoc, _ = schema.apply_ops(sunday_doc(), p["ops"])
+        self.assertEqual(schema.errors(schema.validate_doc(newdoc)), [])
+
+    def test_generic_csv_cable_validation(self):
+        text = ("tag,from_device,from_port,to_device,to_port,medium,length,channels,status\n"
+                "V-1,Video Converter,sdi-out-2,Samsung TV - 1,hdmi-in-1,sdi,3 m,1,planned\n"
+                "V-1,Video Converter,sdi-out-1,Samsung TV - 1,hdmi-in-1,sdi,,,\n"
+                "V-2,,,Samsung TV - 1,,sdi,,,\n"
+                "V-3,Video Converter,,Samsung TV - 1,,smoke-signal,ten,0,lost\n"
+                "V-4,Nowhere Box,out,Samsung TV - 1,,sdi,,,\n")
+        p = self._rows_preview(text)
+        cols = {(e["row"], e["column"]) for e in p["errors"]}
+        self.assertIn((3, "tag"), cols, "duplicate tag in the file")
+        self.assertIn((4, "from_device"), cols, "from device required for a new cable")
+        for c in ("medium", "length", "channels", "status"):
+            self.assertIn((5, c), cols, "row 5 flags %s" % c)
+        self.assertIn((6, "from_device"), cols, "unknown device")
+        self.assertIn("not found", [e for e in p["errors"] if e["row"] == 6][0]["message"])
+        puts = [o for o in p["ops"] if o["op"] == "put"]
+        self.assertEqual([o["value"]["tag"] for o in puts], ["V-1"])
+        self.assertEqual(puts[0]["value"]["status"], "planned")
+
+
+class CsvTemplates(unittest.TestCase):
+    """Downloadable templates: download → edit → upload (preview) → apply."""
+
+    def setUp(self):
+        requires("parsers.generic_csv")
+        self.plugins = requires("plugins")
+
+    def test_templates_listed_in_meta(self):
+        st, _, b = call(get_app(), "GET", "/api/v2/meta")
+        imps = {i["kind"]: i for i in jbody(b)["importers"]}
+        tpls = {t["name"]: t for t in imps["csv"]["templates"]}
+        self.assertEqual(sorted(tpls), ["cables", "devices"])
+        req = [c["key"] for c in tpls["devices"]["columns"] if c["required"]]
+        self.assertEqual(req, ["name"])
+        self.assertEqual(sorted(c["key"] for c in tpls["cables"]["columns"] if c["required"]), ["from_device", "to_device"])
+        self.assertTrue(all(c["key"] in requires("parsers.generic_csv").DEVICE_COLS for c in tpls["devices"]["columns"]), "template headers are canonical")
+        self.assertEqual(imps["magicq"]["templates"], [])
+
+    def test_template_download_edit_upload_roundtrip(self):
+        app = get_app()
+        schema = requires("schema")
+        doc = sunday_doc()
+        doc["devices"] = [d for d in doc["devices"] if d.get("name") not in ("FOH Console", "Stage Box 1", "Wash 1")]
+        with temp_data_dir() as data:
+            install_project(data, "tp", doc=doc)
+            st, hd, b = call(app, "GET", "/api/v2/projects/tp/imports/templates/csv/devices.csv")
+            self.assertEqual(st, 200)
+            self.assertIn("text/csv", hd.get("Content-Type"))
+            self.assertIn('filename="fathom-devices-template.csv"', hd.get("Content-Disposition"))
+            text = b.decode("utf-8")
+            self.assertTrue(text.startswith("\ufeff"), "BOM so Excel opens UTF-8 correctly")
+            rows = list(csv.reader(io.StringIO(text.lstrip("\ufeff"))))
+            header = rows[0]
+            self.assertEqual(header[0], "name")
+            self.assertEqual(len(rows), 4, "header + three example rows")
+            room_name = [r["name"] for r in doc["rooms"] if r["id"] == (doc.get("settings") or {}).get("default_room", r["id"])][0]
+            self.assertEqual(rows[1][header.index("room")], room_name, "examples use the project's room")
+
+            # unedited template previews cleanly
+            st, _, b = upload(app, "/api/v2/projects/tp/imports/preview?room=main", [("fathom-devices-template.csv", text.encode("utf-8"), "text/csv")])
+            self.assertEqual(st, 200, b)
+            pv = jbody(b)
+            self.assertEqual(pv["kind"], "csv", "template auto-detects as the generic CSV")
+            self.assertEqual((pv["errors"], pv["summary"]), ([], {"create": 3, "update": 0, "skip": 0}))
+
+            # edit like a user would: rename, add a good row and a bad row, re-save from a spreadsheet (semicolons)
+            ni, ii, ai, fi = header.index("name"), header.index("ip"), header.index("address"), header.index("footprint")
+            rows[3][ni] = "Wash SR"
+            extra = list(rows[3])
+            extra[ni], extra[ai] = "Wash SL", "17"
+            bad = [""] * len(header)
+            bad[ni], bad[ii], bad[header.index("kind")] = "Broken Row", "192.168.1.999", "console"
+            rows += [extra, bad]
+            buf = io.StringIO()
+            csv.writer(buf, delimiter=";", lineterminator="\r\n").writerows(rows)
+            st, _, b = upload(app, "/api/v2/projects/tp/imports/preview?kind=csv&room=main", [("edited.csv", buf.getvalue().encode("utf-8"), "text/csv")])
+            pv = jbody(b)
+            self.assertEqual([(e["row"], e["column"], e["value"]) for e in pv["errors"]], [(6, "ip", "192.168.1.999")],
+                             "the bad row is reported with its spreadsheet row and column")
+            names = sorted(o["value"]["name"] for o in pv["ops"] if o["op"] == "put")
+            self.assertEqual(names, ["FOH Console", "Stage Box 1", "Wash SL", "Wash SR"])
+            sl = [o["value"] for o in pv["ops"] if o["op"] == "put" and o["value"]["name"] == "Wash SL"][0]
+            self.assertEqual(sl["dmx"], {"universe": 1, "address": 17, "footprint": int(rows[3][fi]), "channel": "101"})
+            self.assertTrue([p for p in sl["ports"] if p.get("medium") == "dmx"], "template column instantiates library ports")
+
+            st, _, b = call(app, "POST", "/api/v2/projects/tp/changes", {"base_revision": pv["base_revision"], "ops": pv["ops"], "summary": "csv"},
+                            {"X-Fathom": "1"})
+            self.assertEqual(st, 200, b)
+            st, _, b = call(app, "GET", "/api/v2/projects/tp")
+            applied = jbody(b)["doc"]
+            self.assertEqual(schema.errors(schema.validate_doc(applied)), [])
+
+            # re-uploading the same edited file now only matches (idempotent)
+            st, _, b = upload(app, "/api/v2/projects/tp/imports/preview?kind=csv&room=main", [("edited.csv", buf.getvalue().encode("utf-8"), "text/csv")])
+            again = jbody(b)
+            self.assertEqual(again["summary"]["create"], 0)
+            self.assertEqual(again["summary"]["update"], 0, again["ops"])
+
+            # the cables template connects the template devices without inventing ports
+            st, _, b = call(app, "GET", "/api/v2/projects/tp/imports/templates/csv/cables.csv")
+            self.assertEqual(st, 200)
+            st, _, b = upload(app, "/api/v2/projects/tp/imports/preview?room=main", [("cables.csv", b, "text/csv")])
+            cv = jbody(b)
+            self.assertEqual(cv["errors"], [])
+            self.assertEqual([o["op"] for o in cv["ops"]], ["put", "put"], "no port merges: Dante Primary/Secondary exist")
+            self.assertEqual(cv["ops"][0]["value"]["from"], {"device": "stage-box-1", "port": "dante-primary"})
+            self.assertAlmostEqual(cv["ops"][1]["value"]["length_m"], 45.72, places=2, msg="150 ft")
+
+    def test_template_errors(self):
+        app = get_app()
+        with temp_data_dir() as data:
+            install_project(data, "tp", doc=sunday_doc())
+            for path in ("/api/v2/projects/tp/imports/templates/csv/racks.csv", "/api/v2/projects/tp/imports/templates/magicq/devices.csv",
+                         "/api/v2/projects/tp/imports/templates/nope/devices.csv", "/api/v2/projects/nope/imports/templates/csv/devices.csv"):
+                st, _, _ = call(app, "GET", path)
+                self.assertEqual(st, 404, path)
+        with self.assertRaises(KeyError):
+            requires("parsers.generic_csv").template_csv("racks")
+
+
+class MagicQ(unittest.TestCase):
+    def setUp(self):
+        self.mq = requires("parsers.magicq")
+        self.plugins = requires("plugins")
+
+    def parse_text(self, text, name="patch.csv", encoding="utf-8"):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / name
+            p.write_bytes(text.encode(encoding))
+            return self.plugins.detect(p), self.mq.parse_magicq(p)
+
+    def test_detect(self):
+        for f in ("magicq-export-heads.csv", "magicq-print-window.csv"):
+            self.assertEqual(self.plugins.detect(IMP / f), "magicq", f)
+        for f, kind in (("eos-show.csv", "eos"), ("lightwright.txt", "eos"), ("show.asc", "eos"), ("videohub-dump.txt", "videohub")):
+            self.assertEqual(self.plugins.detect(IMP / f), kind, "%s still detected as %s" % (f, kind))
+        self.assertEqual(self.plugins.detect(fixture_path("csv", "devices.csv")), "csv")
+        kind, _ = self.parse_text("Channel,Universe,Address,Instrument Type,Purpose\n1,1,1,Source Four,Wash\n")
+        self.assertEqual(kind, "eos", "a Vectorworks schedule stays with the Lightwright importer")
+
+    def test_export_heads(self):
+        r = self.mq.parse_magicq(IMP / "magicq-export-heads.csv")
+        self.assertEqual(r.format, "export-heads")
+        self.assertEqual(len(r.heads), 7)
+        h = {x["head"]: x for x in r.heads}
+        self.assertEqual((h["1"]["universe"], h["1"]["address"]), (1, 1), "'0001' / '1-001'")
+        self.assertEqual((h["102"]["universe"], h["102"]["address"]), (2, 33))
+        self.assertEqual((h["1"]["manufacturer"], h["1"]["model"]), ("Generic", "Dimmer"), "Headtype Manufacturer_Model")
+        self.assertEqual(h["101"]["model"], "Maverick Storm 2 Profile")
+        self.assertEqual(h["5"]["color"], "R59 Indigo")
+        self.assertNotIn("color", h["2"], "'No col' is no gel")
+        self.assertTrue(h["101"].get("pinv"))
+        self.assertTrue(h["102"].get("tinv") and h["102"].get("swap"))
+        self.assertNotIn("pinv", h["102"])
+        self.assertEqual(r.notes, [])
+        self.assertEqual(r.summary()["universes"], [1, 2])
+
+    def test_print_window(self):
+        r = self.mq.parse_magicq(IMP / "magicq-print-window.csv")
+        self.assertEqual(r.format, "print-window")
+        h = {x["head"]: x for x in r.heads}
+        self.assertEqual(sorted(h, key=int), ["1", "2", "11", "12", "21"], "semicolon file; virtual head 20 skipped")
+        self.assertEqual((h["1"]["universe"], h["1"]["address"], h["1"]["footprint"]), (1, 101, 8), "Universe column + in-universe DMX")
+        self.assertEqual((h["11"]["universe"], h["11"]["address"]), (3, 1))
+        self.assertEqual((h["1"]["manufacturer"], h["1"]["model"]), ("ETC", "Source Four LED Series 2 Lustr"), "Manufacturer column wins")
+        self.assertEqual(h["11"]["model"], "MAC Aura PXL")
+        self.assertEqual(h["11"]["mode"], "Mode 1")
+        self.assertEqual(h["1"]["xyz"], [-2.5, 6.0, 4.0])
+        self.assertNotIn("xyz", h["11"])
+        self.assertEqual(r.unpatched, ["20"])
+        notes = " | ".join(r.notes)
+        self.assertIn("without a DMX address", notes)
+        self.assertIn("heads 11 and 12 overlap at 3-020", notes)
+        self.assertIn("head 21: 4-505 with 12 channels runs past address 512", notes)
+
+    def test_address_forms_and_files(self):
+        text = ("MagicQ patch - View Heads\n"
+                "Head No,Head Name,Universe,DMX,Head Type,# of Data Channels\n"
+                "1,A,,513,Generic_Dimmer,1\n"
+                "2,B,,1/17,Generic_Dimmer,1\n"
+                "3,C,,1.18,Generic_Dimmer,1\n"
+                "4,D,2,5,Generic_Dimmer,1\n"
+                "\n"
+                "5,E,,bogus,Generic_Dimmer,1\n"
+                "6,F,,-,Generic_Dimmer,1\n")
+        kind, r = self.parse_text(text, encoding="utf-8-sig")
+        self.assertEqual(kind, "magicq", "title row before the header; BOM")
+        got = {x["head"]: (x["universe"], x["address"]) for x in r.heads}
+        self.assertEqual(got, {"1": (2, 1), "2": (1, 17), "3": (1, 18), "4": (2, 5)})
+        self.assertTrue(any("DMX 'bogus' not understood" in n for n in r.notes))
+        self.assertEqual(r.unpatched, ["6"])
+        kind, r = self.parse_text("Headno\tHeadname\tDmxno\tHeadtype\n0007\tTab\t3-100\tGeneric_LED\n", name="paste.txt")
+        self.assertEqual((kind, [(x["head"], x["universe"], x["address"]) for x in r.heads]), ("magicq", [("7", 3, 100)]), "tab paste")
+        _, r = self.parse_text("Name,Universe,Address\nx,1,1\n")
+        self.assertEqual(r.heads, [])
+        self.assertTrue(r.fatal, "not a MagicQ head list")
+
+    def test_show_file_refused(self):
+        _, r = self.parse_text("\\ MagicQ Show File. Chamsys Ltd.  www.chamsys.co.uk\nV 1\n", name="show.shw")
+        self.assertIn("Print Window", r.fatal, "a .shw explains how to export the patch")
+        app = get_app()
+        with temp_data_dir() as data:
+            pdir = install_project(data, "mq", doc=sunday_doc())
+            st, _, b = upload(app, "/api/v2/projects/mq/imports", [("rig.shw", b"\\ MagicQ Show File. Chamsys Ltd.\x00\x01binary", "application/octet-stream")])
+            self.assertEqual(st, 422, b)
+            self.assertIn("EXPORT HEADS", jbody(b)["error"])
+            st, _, b = call(app, "GET", "/api/v2/projects/mq")
+            self.assertEqual(jbody(b)["doc"].get("imports") or [], [], "nothing registered")
+            self.assertFalse(list((pdir / "exports").rglob("rig.shw")), "upload removed")
+
+    def test_contribute(self):
+        doc = lighting_doc()
+        doc["devices"].append({"id": "spots", "name": "Spots", "kind": "fixture", "room": "main", "ports": []})
+        kind, c = contribute(IMP / "magicq-export-heads.csv", doc)
+        self.assertEqual(kind, "magicq")
+        self.assertEqual(dmx_of(c, "front-l"), {"universe": 1, "address": 1, "channel": "1", "source": "magicq"}, "matched by dmx.channel = head number")
+        self.assertIsNone(dmx_of(c, "spots"), "a head name used by several heads is not matched by name")
+        autos = [d for d in c["devices"] if d.get("auto")]
+        self.assertEqual(len(autos), 6)
+        ids = {d["id"] for d in autos}
+        self.assertTrue({"mq-2", "mq-3", "mq-101"} <= ids)
+        wash = [d for d in autos if d["id"] == "mq-101"][0]
+        self.assertEqual((wash["kind"], wash["room"], wash["source"], wash["manufacturer"], wash["model"]),
+                         ("fixture", "main", "magicq", "Chauvet", "Maverick Storm 2 Profile"))
+        self.assertEqual(wash["name"], "Wash SR · head 101")
+        self.assertEqual(c["detail"]["mq-101"]["lighting"].get("pinv"), True)
+        kind, c = contribute(IMP / "magicq-print-window.csv", lighting_doc())
+        self.assertEqual(dmx_of(c, "front-r")["address"], 109, "matched by a unique head name")
+        self.assertEqual(dmx_of(c, "front-l")["footprint"], 8)
+        self.assertEqual(dmx_of(c, "mq-11")["mode"], "Mode 1")
+        self.assertTrue(any("overlap" in n for n in c["notes"]))
+
+    def test_upload_and_overlay(self):
+        app = get_app()
+        merge = requires("merge:build_overlay")
+        with temp_data_dir() as data:
+            pdir = install_project(data, "mq", doc=lighting_doc())
+            st, _, b = upload(app, "/api/v2/projects/mq/imports?room=main", [("patch.csv", (IMP / "magicq-print-window.csv").read_bytes(), "text/csv")])
+            self.assertEqual(st, 201, b)
+            r = jbody(b)
+            self.assertEqual((r["import"]["kind"], r["summary"]["heads"], r["summary"]["unpatched"]), ("magicq", 5, 1))
+            self.assertTrue((pdir / r["import"]["path"]).exists())
+            st, _, b = call(app, "GET", "/api/v2/projects/mq/overlay")
+            ov = jbody(b)
+            srcs = {k: v.get("source") for k, v in ov["dmx"].items()}
+            self.assertEqual(set(srcs.values()), {"magicq"})
+            self.assertIn("front-l", srcs)
+            self.assertEqual(len([d for d in ov["devices"] if d.get("source") == "magicq"]), 3)
+            st, _, b = call(app, "GET", "/api/v2/projects/mq/imports/%s/inspect" % r["import"]["id"])
+            self.assertEqual(jbody(b)["summary"]["format"], "print-window")
+            self.assertTrue(callable(merge))
+
+    def test_cli_inspect(self):
+        cli = requires("cli")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            try:
+                cli.main(["inspect", str(IMP / "magicq-export-heads.csv")])
+            except SystemExit as e:
+                self.assertIn(e.code, (0, None))
+        text = out.getvalue()
+        self.assertIn("detected: magicq", text)
+        self.assertIn("2-033", text)
 
 
 # ================================================================== library (§3.13, §4.5)
