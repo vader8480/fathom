@@ -219,8 +219,9 @@ def _name_similarity(a: str, b: str) -> float:
     sa, sb = set(ta), set(tb)
     if sa == sb:
         return 1.0
-    if sa <= sb or sb <= sa:
-        return 0.85 + 0.15 * min(len(sa), len(sb)) / max(len(sa), len(sb))
+    small = sa if len(sa) <= len(sb) else sb
+    if (sa <= sb or sb <= sa) and (len(small) >= 2 or any(c.isdigit() for c in next(iter(small)))):
+        return 0.85 + 0.15 * len(small) / max(len(sa), len(sb))
     chars = difflib.SequenceMatcher(None, "".join(ta), "".join(tb)).ratio()
     jaccard = len(sa & sb) / len(sa | sb)
     return 0.5 * chars + 0.5 * jaccard
@@ -296,10 +297,7 @@ def score_pair(a: Dict[str, Any], b: Dict[str, Any]) -> Tuple[float, List[Dict[s
     elif ka["name"] & kb["name"]:
         hit("name", 0.8, "same name")
     else:
-        best = 0.0
-        for x in (a.get("name"), a.get("id")):
-            for y in (b.get("name"), b.get("id")):
-                best = max(best, _name_similarity(str(x or ""), str(y or "")))
+        best = _name_similarity(str(a.get("name") or a.get("id") or ""), str(b.get("name") or b.get("id") or ""))
         if best >= 0.8:
             hit("name_similar", 0.25 + (best - 0.8) * 1.5, f"names are {int(best * 100)}% similar")
         shared_models = _model_tokens(a) & _model_tokens(b)

@@ -7,6 +7,7 @@ import {
   connectOps, disconnectOps, repatchOps, expandPortGroups, newId, slug, formatLength, parseLength, deepClone,
   normalizeMac,
 } from './model-core.js';
+import { duplicateHints, openMergeDialog } from './merge-ui.js';
 
 const DEBOUNCE = 400;
 let uid = 0;
@@ -202,6 +203,12 @@ export function mountInspector(el, ctx) {
         commit(r.ops, 'Duplicate ' + d.name);
         if (r.id) store.select({ type: 'device', id: r.id, device: r.id });
       } }, 'Duplicate'),
+      ro() || !ctx.api ? null : h('button', { type: 'button', class: 'small', onclick: function () {
+        ctx.pickDevice({ title: 'Merge ' + d.name + ' with which device?' }).then(function (other) {
+          if (!other || other === d.id) return;
+          openMergeDialog(ctx, [d.id, other], { survivor: d.id });
+        });
+      } }, 'Merge\u2026'),
       ro() ? null : h('button', { type: 'button', class: 'small danger', onclick: function () {
         const n = ((store.index.cablesByDevice[d.id]) || []).length;
         ctx.confirm('Delete ' + d.name + (n ? ' and its ' + n + ' cable' + (n > 1 ? 's' : '') : '') + '?', { danger: true }).then(function (yes) {
@@ -270,6 +277,27 @@ export function mountInspector(el, ctx) {
     root.appendChild(section('files', 'Photos & documents', attachmentsBlock(d)));
     root.appendChild(section('qr', 'QR label', qrBlock(d, devUrl)));
     root.appendChild(section('notes', 'Notes', [bound('devices', id, ['note'], { multiline: true, label: 'Edit note' })], !!d.note));
+    if (ctx.api) {
+      const host = h('div', { class: 'ins-dups' });
+      const dups = section('dups', 'Possible duplicates', [host], true);
+      let filled = false;
+      function fill() {
+        if (filled) return;
+        filled = true;
+        host.appendChild(duplicateHints(ctx, id, function (res) {
+          if (res && res.survivor) store.select({ type: 'device', id: res.survivor, device: res.survivor });
+        }));
+      }
+      if (dups.open) fill();
+      dups.addEventListener('toggle', function () { if (dups.open) fill(); });
+      root.appendChild(dups);
+    }
+    if (d.merged_from && d.merged_from.length) {
+      root.appendChild(section('merged', 'Merge history (' + d.merged_from.length + ')', [h('ul', { class: 'ins-merged' }, d.merged_from.map(function (m) {
+        return h('li', null, [h('b', null, m.name || m.id), ' (' + (m.source || 'project') + ')', m.at ? ' \u00b7 ' + String(m.at).slice(0, 10) : '', m.by ? ' by ' + m.by : '',
+          m.fields && m.fields.length ? h('div', { class: 'muted' }, 'took: ' + m.fields.join(', ')) : null]);
+      }))]));
+    }
   }
 
   function tagsInput(d) {
