@@ -25,10 +25,12 @@ The environment (`.cursor/environment.json`) creates `.venv` with
 `pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
 `campus` sample project in `~/.fathom`.
 
-- **Dev server:** already running in the *Fathom server* terminal at
-  <http://localhost:8080> with login off (everyone is admin). Restart that
-  terminal after changing Python files; JS/CSS changes need only a reload.
-  If the terminal is gone: `.venv/bin/fathom serve --host 0.0.0.0 --port 8080`.
+- **Dev server:** `start` (`.cursor/start.sh`) runs it on boot in the
+ `fathom-server` tmux session at <http://localhost:8080> with login off
+ (everyone is admin); log in `/tmp/fathom-server.log`, boot output in
+ `/tmp/cursor/start-user/start-user.log`. After changing Python files,
+ `tmux kill-session -t fathom-server && bash .cursor/start.sh`; JS/CSS
+ changes need only a reload. The editor UI is at `/` (there is no `/ui`).
 - **Backend tests:** `.venv/bin/python -m unittest discover -s tests -q`
   (about 45 s, all should pass with one skip). Single suite:
   `.venv/bin/python -m unittest tests.test_backup -v`.
