@@ -9,17 +9,27 @@ cables --csv``) re-imports through the same path (FR-CAB-06).
 Rows match existing entities by ``id``; else devices by normalised name and
 cables by ``tag``. Matched rows become ``merge`` ops with only the cells that
 change something; new rows become ``put`` ops.
+
+Every row is validated first (kind, status, medium, IP / MAC / VLAN, DMX
+range, dates, numbers, rooms, duplicates). A row with a problem is skipped
+and reported in ``errors`` as ``{"row", "column", "value", "message"}``
+(``row`` is the spreadsheet row number); the other rows still preview.
+:func:`template_csv` writes an editable example file per table that
+re-imports cleanly (``TEMPLATES`` documents its columns).
 """
 
 from __future__ import annotations
 
 import copy
+import csv
 import hashlib
+import io
+import ipaddress
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .common import ParseResult, check_size, header_map, norm_header, read_rows
+from .common import ParseResult, check_size, header_map, norm_header, read_text, sniff_delimiter
 
 DEVICE_COLS: Dict[str, Tuple[str, ...]] = {
     "id": (),
@@ -88,9 +98,16 @@ class CsvTable(ParseResult):
         self.columns: Dict[str, int] = {}
         self.header: List[str] = []
         self.rows: List[Dict[str, str]] = []
+        self.lines: List[int] = []  # spreadsheet row number of each entry in ``rows``
+        self.extra_cells: List[int] = []  # rows with more cells than the header
 
     def summary(self) -> Dict[str, object]:
         return {"kind": self.kind, "table": self.table, "rows": len(self.rows), "columns": sorted(self.columns), "notes": list(self.notes)}
+
+    def column_label(self, key: str) -> str:
+        """The header text the user wrote for canonical column ``key``."""
+        i = self.columns.get(key)
+        return self.header[i] if i is not None and i < len(self.header) else key
 
 
 def _has(cells: List[str], key: str, syns: Tuple[str, ...]) -> bool:
@@ -106,18 +123,41 @@ def classify_header(header: List[str]) -> str:
     return ""
 
 
+def _numbered_rows(path: Path) -> List[Tuple[int, List[str]]]:
+    """Non-blank rows with the spreadsheet row number each one starts on."""
+    text = read_text(path)
+    reader = csv.reader(io.StringIO(text), delimiter=sniff_delimiter(text))
+    out: List[Tuple[int, List[str]]] = []
+    start = 1
+    for row in reader:
+        cells = [c.strip() for c in row]
+        if any(cells):
+            out.append((start, cells))
+        start = reader.line_num + 1
+    return out
+
+
 def parse_csv(path: Path, **_opts: Any) -> CsvTable:
     res = CsvTable()
     check_size(path)
     res.source_files.append(str(path))
-    rows = read_rows(path)
-    for i, r in enumerate(rows[:5]):
+    rows = _numbered_rows(path)
+    for i, (_, r) in enumerate(rows[:5]):
         t = classify_header(r)
         if t:
             res.table, res.header = t, r
-            res.columns = header_map(r, CABLE_COLS if t == "cables" else DEVICE_COLS)
-            for data in rows[i + 1:]:
+            spec = CABLE_COLS if t == "cables" else DEVICE_COLS
+            res.columns = header_map(r, spec)
+            known = {norm_header(c) for k, syns in spec.items() for c in (k,) + syns}
+            unknown = [c for c in r if c and norm_header(c) not in known]
+            if unknown:
+                res.note(f"column(s) not recognised and ignored: {', '.join(unknown)}")
+            width = len(r)
+            for line, data in rows[i + 1:]:
                 res.rows.append({k: (data[j].strip() if j < len(data) else "") for k, j in res.columns.items()})
+                res.lines.append(line)
+                if len(data) > width and any(data[width:]):
+                    res.extra_cells.append(line)
             break
     if not res.table:
         res.note("no header row with a device name column or from/to device columns")
@@ -241,6 +281,132 @@ def _find_port(dev: Dict[str, Any], text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+# ------------------------------------------------------------ validation
+
+_MAC_RE = re.compile(r"^(?:[0-9A-Fa-f]{2}([:-])(?:[0-9A-Fa-f]{2}\1){4}[0-9A-Fa-f]{2}|[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}|[0-9A-Fa-f]{12})$")
+_DATE_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
+
+
+def _vocab() -> Tuple[Dict[str, Any], Dict[str, Any], Tuple[str, ...]]:
+    from ..vocab import KINDS, MEDIA, STATUSES
+
+    return KINDS, MEDIA, STATUSES
+
+
+def kind_key(text: str) -> str:
+    """``'Video switcher'`` / ``'video-switcher'`` → ``'video_switcher'`` when that is a known kind, else ``''``."""
+    kinds = _vocab()[0]
+    t = (text or "").strip()
+    if t in kinds:
+        return t
+    k = re.sub(r"[^a-z0-9]+", "_", t.lower()).strip("_")
+    if k in kinds:
+        return k
+    for key, meta in kinds.items():
+        if _norm(meta.get("label", "")) in (_norm(t), _norm(t) + "s"):
+            return key
+    return ""
+
+
+def _rows(res: CsvTable) -> List[Tuple[int, Dict[str, str]]]:
+    lines = res.lines if len(res.lines) == len(res.rows) else list(range(2, len(res.rows) + 2))
+    return list(zip(lines, res.rows))
+
+
+class _Errors:
+    """Collects ``{"row", "column", "value", "message"}`` problems for one table."""
+
+    def __init__(self, res: CsvTable) -> None:
+        self.res = res
+        self.items: List[Dict[str, Any]] = []
+
+    def add(self, row: int, key: str, value: str, message: str) -> None:
+        self.items.append({"row": row, "column": self.res.column_label(key) if key else "", "value": value, "message": message})
+
+    def has(self, row: int) -> bool:
+        return any(e["row"] == row for e in self.items)
+
+    def as_warnings(self) -> List[str]:
+        out = []
+        for e in self.items:
+            where = f"row {e['row']}" + (f", {e['column']}" if e["column"] else "")
+            out.append(f"{where}: {e['message']}")
+        return out
+
+
+def _int_in(row: Dict[str, str], key: str, lo: int, hi: Optional[int], n: int, errs: _Errors, what: str) -> Optional[int]:
+    raw = (row.get(key) or "").strip()
+    if not raw:
+        return None
+    v = _intv(raw)
+    if v is None or v < lo or (hi is not None and v > hi):
+        rng = f"{lo}–{hi}" if hi is not None else f"{lo} or more"
+        errs.add(n, key, raw, f"{what} must be a whole number {rng}")
+        return None
+    return v
+
+
+def _validate_device(row: Dict[str, str], n: int, lk: "_Lookup", errs: _Errors, seen: Dict[str, int]) -> None:
+    kinds, _media, statuses = _vocab()
+    name = (row.get("name") or "").strip()
+    if not name and not (row.get("id") and row["id"].strip() in lk.by_id):
+        errs.add(n, "name", "", "name is required (every device needs one)")
+    elif name:
+        key = _norm(name)
+        if key in seen:
+            errs.add(n, "name", name, f"duplicate of row {seen[key]}; each device name may appear once")
+        else:
+            seen[key] = n
+    if row.get("kind") and not kind_key(row["kind"]):
+        errs.add(n, "kind", row["kind"], "unknown kind; use one of " + ", ".join(sorted(kinds)))
+    if row.get("status") and row["status"].strip().lower() not in statuses:
+        errs.add(n, "status", row["status"], "status must be one of " + ", ".join(statuses))
+    if row.get("room") and lk.rooms and lk.room(row["room"]) not in lk.rooms:
+        names = ", ".join(str(r.get("name") or r.get("id")) for r in lk.rooms.values())
+        errs.add(n, "room", row["room"], f"room not found; use a room id or name ({names})")
+    if row.get("ip"):
+        try:
+            ipaddress.ip_address(row["ip"].strip())
+        except ValueError:
+            errs.add(n, "ip", row["ip"], "not a valid IP address (e.g. 192.168.1.20)")
+    if row.get("mac") and not _MAC_RE.match(row["mac"].strip()):
+        errs.add(n, "mac", row["mac"], "not a valid MAC address (e.g. 00:1D:C1:0A:2B:3C)")
+    _int_in(row, "vlan", 1, 4094, n, errs, "VLAN")
+    _int_in(row, "ru", 1, 60, n, errs, "rack unit")
+    _int_in(row, "height", 1, 60, n, errs, "height (RU)")
+    if row.get("face") and row["face"].strip().lower() not in ("front", "rear"):
+        errs.add(n, "face", row["face"], "face must be front or rear")
+    _int_in(row, "universe", 1, 63999, n, errs, "universe")
+    addr = _int_in(row, "address", 1, 512, n, errs, "DMX address")
+    fp = _int_in(row, "footprint", 1, 512, n, errs, "footprint")
+    if addr is not None and fp is not None and addr + fp - 1 > 512:
+        errs.add(n, "footprint", row["footprint"], f"address {addr} + {fp} channels runs past 512")
+    if row.get("cost") and _num(row["cost"].replace("$", "").replace(" ", "")) is None:
+        errs.add(n, "cost", row["cost"], "cost must be a number (e.g. 1299.00)")
+    for k in ("purchase_date", "warranty_until"):
+        if row.get(k) and not _DATE_RE.match(row[k].strip()):
+            errs.add(n, k, row[k], "date must be YYYY-MM-DD")
+
+
+def _validate_cable(row: Dict[str, str], n: int, existing: bool, errs: _Errors, seen: Dict[str, int]) -> None:
+    _kinds, media, statuses = _vocab()
+    if not existing:
+        for k in ("from_device", "to_device"):
+            if not (row.get(k) or "").strip():
+                errs.add(n, k, "", f"{k.replace('_', ' ')} is required for a new cable")
+    tag = (row.get("tag") or "").strip()
+    if tag:
+        if tag in seen:
+            errs.add(n, "tag", tag, f"duplicate of row {seen[tag]}; each cable tag may appear once")
+        else:
+            seen[tag] = n
+    if row.get("medium") and _medium_key(row["medium"]) not in media:
+        errs.add(n, "medium", row["medium"], "unknown medium; use one of " + ", ".join(sorted(media)))
+    if row.get("status") and row["status"].strip().lower() not in statuses:
+        errs.add(n, "status", row["status"], "status must be one of " + ", ".join(statuses))
+    _int_in(row, "channels", 1, None, n, errs, "channels")
+
+
 # --------------------------------------------------------------- devices
 
 
@@ -249,6 +415,10 @@ def _device_values(row: Dict[str, str], lk: _Lookup, existing: Optional[Dict[str
     for k in ("name", "kind", "manufacturer", "model", "template", "location", "system", "status", "code"):
         if row.get(k):
             v[k] = row[k]
+    if v.get("kind"):
+        v["kind"] = kind_key(v["kind"]) or v["kind"]
+    if v.get("status"):
+        v["status"] = v["status"].strip().lower()
     if row.get("room"):
         v["room"] = lk.room(row["room"])
     if row.get("notes"):
@@ -290,7 +460,7 @@ def _device_values(row: Dict[str, str], lk: _Lookup, existing: Optional[Dict[str
             if _intv(row.get("height", "")) is not None:
                 rk["height"] = int(row["height"])
             if row.get("face"):
-                rk["face"] = row["face"].lower()
+                rk["face"] = row["face"].strip().lower()
             v["rack"] = rk
     dmx: Dict[str, Any] = {}
     for k in ("universe", "address", "footprint"):
@@ -310,7 +480,13 @@ def _preview_devices(res: CsvTable, doc: Dict[str, Any], ctx: Dict[str, Any]) ->
     summary = {"create": 0, "update": 0, "skip": 0}
     new_ids = set(lk.by_id)
     default_room = ctx.get("room") or ""
-    for n, row in enumerate(res.rows, start=2):
+    errs = _Errors(res)
+    seen: Dict[str, int] = {}
+    for n, row in _rows(res):
+        _validate_device(row, n, lk, errs, seen)
+        if errs.has(n):
+            summary["skip"] += 1
+            continue
         name = row.get("name", "").strip()
         existing = lk.by_id.get(row.get("id", "").strip()) if row.get("id") else None
         if existing is None and name:
@@ -357,7 +533,7 @@ def _preview_devices(res: CsvTable, doc: Dict[str, Any], ctx: Dict[str, Any]) ->
         ops.append({"op": "put", "coll": "devices", "id": did, "value": dev})
         lk.by_name.setdefault(_norm(name), dev)
         summary["create"] += 1
-    return {"ops": ops, "summary": summary, "warnings": warnings}
+    return _result(res, ops, summary, warnings, errs)
 
 
 # ---------------------------------------------------------------- cables
@@ -407,19 +583,34 @@ def _preview_cables(res: CsvTable, doc: Dict[str, Any], ctx: Dict[str, Any]) -> 
     summary = {"create": 0, "update": 0, "skip": 0}
     port_adds: Dict[str, List[Dict[str, Any]]] = {}
     used_ids = set(by_id)
-    for n, row in enumerate(res.rows, start=2):
+    errs = _Errors(res)
+    seen: Dict[str, int] = {}
+    for n, row in _rows(res):
         cur = by_id.get(row.get("id", "").strip()) if row.get("id") else None
         if cur is None and row.get("tag"):
             cur = by_tag.get(row["tag"].strip())
+        _validate_cable(row, n, cur is not None, errs, seen)
+        len_problems: List[str] = []
+        ln = _length_m(row, len_problems, n)
+        for p in len_problems:
+            errs.add(n, "length", row.get("length", ""), p.split(": ", 1)[-1])
+        if cur is None and not errs.has(n):
+            for k in ("from_device", "to_device"):
+                if lk.device(row.get(k, "")) is None:
+                    errs.add(n, k, row.get(k, ""), "device not found in the project; check the spelling or import the devices first")
+        if errs.has(n):
+            summary["skip"] += 1
+            continue
         vals: Dict[str, Any] = {}
         for k in ("tag", "type", "color", "signal", "status"):
             if row.get(k):
                 vals[k] = row[k].strip()
+        if vals.get("status"):
+            vals["status"] = vals["status"].lower()
         if row.get("note"):
             vals["note"] = row["note"]
         if _intv(row.get("channels", "")) is not None:
             vals["channels"] = int(row["channels"])
-        ln = _length_m(row, warnings, n)
         if ln is not None:
             vals["length_m"] = ln
         if cur is not None:
@@ -436,10 +627,7 @@ def _preview_cables(res: CsvTable, doc: Dict[str, Any], ctx: Dict[str, Any]) -> 
                 summary["skip"] += 1
             continue
         fd, td = lk.device(row.get("from_device", "")), lk.device(row.get("to_device", ""))
-        if fd is None or td is None:
-            missing = row.get("from_device") if fd is None else row.get("to_device")
-            warnings.append(f"row {n}: device '{missing}' not found; row skipped")
-            summary["skip"] += 1
+        if fd is None or td is None:  # pragma: no cover - reported as an error above
             continue
         medium = _medium_key(row.get("medium", ""))
         ends = []
@@ -474,7 +662,12 @@ def _preview_cables(res: CsvTable, doc: Dict[str, Any], ctx: Dict[str, Any]) -> 
         dev = lk.by_id[dev_id]
         port_ops.append({"op": "merge", "coll": "devices", "id": dev_id, "value": {"ports": copy.deepcopy(dev.get("ports") or []) + adds}})
         warnings.append(f"{dev.get('name', dev_id)}: {len(adds)} new port(s) created ({', '.join(a['name'] for a in adds)})")
-    return {"ops": port_ops + ops, "summary": summary, "warnings": warnings}
+    return _result(res, port_ops + ops, summary, warnings, errs)
+
+
+def _result(res: CsvTable, ops: List[Dict[str, Any]], summary: Dict[str, int], warnings: List[str], errs: _Errors) -> Dict[str, Any]:
+    notes = list(res.notes) + [f"row {n}: more cells than header columns; the extra cells were ignored" for n in res.extra_cells]
+    return {"ops": ops, "summary": summary, "warnings": notes + errs.as_warnings() + warnings, "errors": errs.items}
 
 
 def preview(result: CsvTable, doc: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -482,4 +675,110 @@ def preview(result: CsvTable, doc: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[
         return _preview_devices(result, doc, ctx or {})
     if result.table == "cables":
         return _preview_cables(result, doc, ctx or {})
-    return {"ops": [], "summary": {"create": 0, "update": 0, "skip": len(result.rows)}, "warnings": list(result.notes) or ["not a device or cable CSV"]}
+    return {"ops": [], "summary": {"create": 0, "update": 0, "skip": len(result.rows)}, "errors": [],
+            "warnings": list(result.notes) or ["not a device or cable CSV"]}
+
+
+# ------------------------------------------------------------- templates
+
+#: column guide for the downloadable templates: (column, required, help)
+TEMPLATES: Dict[str, Dict[str, Any]] = {
+    "devices": {
+        "label": "Devices",
+        "columns": [
+            ("name", True, "Device name; an existing device with this name is updated, otherwise one is created"),
+            ("kind", False, "console, stage_io, mic, speaker, amp, fixture, display, camera, switch … (see the Kinds list)"),
+            ("manufacturer", False, "e.g. Yamaha"),
+            ("model", False, "e.g. CL5"),
+            ("template", False, "Equipment library id (e.g. yamaha-cl5) to create the device with its real ports"),
+            ("room", False, "Room id or name; blank = the room chosen on the import card"),
+            ("status", False, "installed, planned, spare or retired"),
+            ("serial", False, "Serial number"),
+            ("asset_tag", False, "Asset tag"),
+            ("ip", False, "IPv4 / IPv6 address of the primary interface"),
+            ("mac", False, "00:1D:C1:0A:2B:3C, 00-1D-… or 001d.c10a.2b3c"),
+            ("vlan", False, "1–4094"),
+            ("hostname", False, ""),
+            ("rack", False, "Rack id or name (must exist)"),
+            ("ru", False, "Lowest rack unit, 1–60"),
+            ("universe", False, "DMX universe (1 or more)"),
+            ("address", False, "DMX start address, 1–512"),
+            ("footprint", False, "DMX channels used; address + footprint − 1 must be ≤ 512"),
+            ("dmx_channel", False, "Console channel / head number"),
+            ("purchase_date", False, "YYYY-MM-DD"),
+            ("cost", False, "Number, e.g. 1299.00"),
+            ("notes", False, ""),
+            ("id", False, "Leave blank for new devices; keep it to update an existing one"),
+        ],
+    },
+    "cables": {
+        "label": "Cables",
+        "columns": [
+            ("tag", False, "Cable label; an existing cable with this tag is updated"),
+            ("from_device", True, "Device name or id the cable starts at"),
+            ("from_port", False, "Port name or id; created on the device when missing"),
+            ("to_device", True, "Device name or id the cable ends at"),
+            ("to_port", False, "Port name or id; created on the device when missing"),
+            ("medium", False, "analog, aes3, dante, network, sdi, hdmi, dmx, speaker, power … (see the Media list)"),
+            ("type", False, "Cable product, e.g. Cat6A"),
+            ("length", False, "Number, optionally with a unit (10, 3.5 m, 25ft)"),
+            ("length_unit", False, "m (default), ft, in or cm"),
+            ("color", False, ""),
+            ("signal", False, ""),
+            ("status", False, "installed, planned, spare or retired"),
+            ("note", False, ""),
+            ("id", False, "Leave blank for new cables"),
+        ],
+    },
+}
+
+
+def template_info() -> List[Dict[str, Any]]:
+    """Template metadata for ``/api/v2/meta`` (name, label, columns with required + help)."""
+    return [{"name": name, "label": spec["label"], "columns": [{"key": c, "required": req, "help": hlp} for c, req, hlp in spec["columns"]]}
+            for name, spec in TEMPLATES.items()]
+
+
+def _room_name(doc: Optional[Dict[str, Any]]) -> str:
+    rooms = [r for r in (doc or {}).get("rooms") or [] if isinstance(r, dict)]
+    want = ((doc or {}).get("settings") or {}).get("default_room")
+    room = next((r for r in rooms if r.get("id") == want), rooms[0] if rooms else None)
+    return str(room.get("name") or room.get("id")) if room else ""
+
+
+def template_csv(table: str, doc: Optional[Dict[str, Any]] = None) -> str:
+    """An example CSV for ``table`` (devices | cables) that previews without errors.
+
+    The cables example connects the devices of the devices example, so
+    importing both in order yields a working pair.
+    """
+    if table not in TEMPLATES:
+        raise KeyError(table)
+    cols = [c for c, _, _ in TEMPLATES[table]["columns"]]
+    room = _room_name(doc)
+    if table == "devices":
+        examples = [
+            {"name": "FOH Console", "kind": "console", "manufacturer": "Yamaha", "model": "CL5", "template": "yamaha-cl5", "room": room,
+             "status": "installed", "serial": "CL5-001234", "asset_tag": "AV-0001", "ip": "192.168.1.10", "vlan": "10",
+             "hostname": "foh-cl5", "notes": "Example row: edit or delete"},
+            {"name": "Stage Box 1", "kind": "stage_io", "manufacturer": "Yamaha", "model": "Rio3224-D2", "template": "yamaha-rio3224-d2",
+             "room": room, "status": "installed", "serial": "RIO-004321", "ip": "192.168.1.21", "mac": "00:1D:C1:0A:2B:3C", "vlan": "10"},
+            {"name": "Wash 1", "kind": "fixture", "manufacturer": "Chauvet Professional", "model": "Maverick Storm 2 Profile",
+             "template": "chauvet-maverick-storm-2-profile", "room": room, "status": "planned", "universe": "1", "address": "1",
+             "footprint": "16", "dmx_channel": "101", "purchase_date": "2026-01-15", "cost": "4999.00"},
+        ]
+    else:
+        examples = [
+            {"tag": "D-001", "from_device": "Stage Box 1", "from_port": "Dante Primary", "to_device": "FOH Console",
+             "to_port": "Dante Primary", "medium": "dante", "type": "Cat6A", "length": "45", "length_unit": "m", "color": "blue",
+             "status": "installed", "note": "Example row: edit or delete"},
+            {"tag": "D-002", "from_device": "Stage Box 1", "from_port": "Dante Secondary", "to_device": "FOH Console",
+             "to_port": "Dante Secondary", "medium": "dante", "type": "Cat6A", "length": "150", "length_unit": "ft", "color": "red",
+             "status": "installed"},
+        ]
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\r\n")
+    w.writerow(cols)
+    for ex in examples:
+        w.writerow([ex.get(c, "") for c in cols])
+    return buf.getvalue()
