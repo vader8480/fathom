@@ -217,7 +217,7 @@ lists importers and load errors.
 ```bash
 python -m pip install -e ".[dev]"
 python -m unittest discover -s tests     # backend tests (also: /usr/bin/python3 for 3.9)
-node --test tests/js                     # frontend cores
+node --test tests/js/*.test.mjs          # frontend cores
 python -m fathom selftest                # parse the samples, migrate, build, QR / DXF / Draw.io checks
 python -m fathom serve --open
 ```

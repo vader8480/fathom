@@ -1,0 +1,47 @@
+# Fathom: notes for coding agents
+
+Fathom is an AVL (audio, video, lighting) documentation web app: a stdlib-only
+Python WSGI server (`fathom/server.py`) plus a no-build ES-module frontend in
+`fathom/static/`. The full contract is `docs/SPEC.md`; the module map is in
+`README.md` under *Development*.
+
+## Conventions
+
+- **No runtime dependencies.** `pyproject.toml` has `dependencies = []`; only
+  `gunicorn` (serve) and `pytest` (dev) are optional. Keep Python 3.9 syntax.
+- **Frontend is ES2018** (Safari 15+): no `?.`, `??`, class fields, etc.
+  `tests/js/syntax.test.mjs` enforces it. No bundler; files are served as-is.
+- **Routes** are registered with `@route(method, regex, role=...)` in
+  `server.py`. A new route must also be listed in `SPEC_ROLES` in
+  `tests/test_security.py` (and get a `PARAM_HINTS` entry for new path
+  parameters), or the route/role and OpenAPI tests fail.
+- Engine modules are imported lazily inside handlers; follow that pattern.
+- All data lives under `FATHOM_DATA` (default `~/.fathom`; `/data` in Docker).
+  Writes are atomic and per-project locked (`project.project_lock`).
+
+## Cursor Cloud specific instructions
+
+The environment (`.cursor/environment.json`) creates `.venv` with
+`pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
+`campus` sample project in `~/.fathom`.
+
+- **Dev server:** already running in the *Fathom server* terminal at
+  <http://localhost:8080> with login off (everyone is admin). Restart that
+  terminal after changing Python files; JS/CSS changes need only a reload.
+  If the terminal is gone: `.venv/bin/fathom serve --host 0.0.0.0 --port 8080`.
+- **Backend tests:** `.venv/bin/python -m unittest discover -s tests -q`
+  (about 45 s, all should pass with one skip). Single suite:
+  `.venv/bin/python -m unittest tests.test_backup -v`.
+- **Frontend tests:** `node --test tests/js/*.test.mjs` (pass the files; the
+  bare directory form fails on recent Node).
+- **End-to-end check:** `.venv/bin/fathom selftest`.
+- **Calling the API with curl:** mutating requests need `X-Fathom: 1`
+  (CSRF guard), e.g.
+  `curl -X POST -H 'Content-Type: application/json' -H 'X-Fathom: 1' -d '{}' localhost:8080/api/v2/backups`.
+  Route list: <http://localhost:8080/api/docs>.
+- **Testing with a login:** run a second server with its own data dir, e.g.
+  `echo admin-password-1 | FATHOM_DATA=/tmp/fathom-auth .venv/bin/fathom user add admin --role admin --password-stdin`
+  then `FATHOM_DATA=/tmp/fathom-auth .venv/bin/fathom serve --port 8081` and
+  sign in at `/login` (or use HTTP basic auth with curl: `-u admin:admin-password-1`).
+- Tests create throwaway data dirs (`tests/_helpers.py: temp_data_dir`);
+  never point them at `~/.fathom`.
