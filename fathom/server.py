@@ -1469,7 +1469,7 @@ def r_discovery_runs(req: Request) -> Response:
 
     pdir = _project_dir(req.params["name"])
     doc, _ = _load(pdir)
-    return Response.json({"runs": discovery.list_runs(pdir), "active": discovery.active_run_id(pdir), "sources": discovery.sources(doc, pdir),
+    return Response.json({"runs": discovery.list_runs(pdir), "active": discovery.active_run_id(pdir) or None, "sources": discovery.sources(doc, pdir),
                           "capabilities": discovery.extra_installed(), "mode": discovery.MODE})
 
 
