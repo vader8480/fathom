@@ -49,11 +49,15 @@ a{color:var(--accent)}
 .app-top>.app-views{flex-shrink:1}
 .app-brand{font-weight:800;letter-spacing:1.6px;text-transform:uppercase;font-size:12px;color:var(--accent);margin-right:4px;white-space:nowrap}
 .app-top select{max-width:180px;min-height:32px;padding:4px 8px}
-.app-views{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;min-width:0;flex:1}
-.app-views::-webkit-scrollbar{display:none}
-.app-views button{background:transparent;border-color:transparent;color:var(--muted);padding:5px 10px;white-space:nowrap}
+.app-top>select{flex-shrink:1;min-width:84px;max-width:min(180px,15vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-views{display:flex;gap:2px;flex:1 1 0}
+.app-views-strip{display:flex;gap:2px;flex:1 1 0;width:0;overflow:hidden}
+.app-views button{background:transparent;border-color:transparent;color:var(--muted);padding:5px 10px;white-space:nowrap;flex:none}
 .app-views button[aria-current=page]{color:var(--text);background:rgba(142,162,255,.14);border-color:var(--border)}
+.app-views-more .caret{margin-left:4px;font-size:10px}
+.app-menu button[aria-current=page]{color:var(--accent)}
 .app-save{font-size:12px;color:var(--muted);white-space:nowrap;background:transparent;border-color:transparent}
+.app-top>.app-save{flex-shrink:1;min-width:52px;overflow:hidden;text-overflow:ellipsis}
 .app-save[data-state=conflict],.app-save[data-state=error]{color:var(--err)}
 .app-save[data-state=offline],.app-save[data-state=pending]{color:var(--warn)}
 .app-save[data-state=saved]{color:var(--muted)}
@@ -88,6 +92,7 @@ a{color:var(--accent)}
   .app-body.has-inspector .app-inspector{display:none}
   .app-body.sheet-open .app-inspector{display:block}
 }
+@media (max-width:899px){.app-brand{display:none}}
 /* phone: bottom tab bar, full-screen sheets */
 @media (max-width:699px){
   .app{grid-template-rows:auto auto 1fr auto}
@@ -276,14 +281,20 @@ a{color:var(--accent)}
 .adm{padding:14px 16px calc(40px + var(--sab));max-width:1100px}
 .adm h2{font-size:16px;margin:4px 0 10px}
 .adm h3{font-size:11px;letter-spacing:1.3px;text-transform:uppercase;color:var(--muted);margin:18px 0 8px}
-.adm-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
-.adm-card{border:1px solid var(--border);border-radius:10px;padding:12px;background:rgba(255,255,255,.02)}
+.adm-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(250px,100%),1fr));gap:10px}
+.adm-card{border:1px solid var(--border);border-radius:10px;padding:12px;background:rgba(255,255,255,.02);display:flex;flex-direction:column;min-width:0}
 .adm-card h4{margin:0 0 4px;font-size:13px}
-.adm-card .help{color:var(--muted);font-size:12px;margin-bottom:8px}
-.adm-card{min-width:0}
+.adm-card .help{color:var(--muted);font-size:12px;margin-bottom:8px;flex:1}
+.adm input[type=file]{max-width:100%;min-width:0;padding:0;border:0;background:transparent;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adm-card input[type=file]{display:block;width:100%}
+.adm input[type=file]::-webkit-file-upload-button{font:inherit;font-size:12px;color:var(--text);background:var(--panel-2);border:1px solid var(--border-2);border-radius:6px;padding:4px 10px;margin-right:8px;cursor:pointer}
+.adm input[type=file]::file-selector-button{font:inherit;font-size:12px;color:var(--text);background:var(--panel-2);border:1px solid var(--border-2);border-radius:6px;padding:4px 10px;margin-right:8px;cursor:pointer}
+.adm input[type=file]:hover::file-selector-button{border-color:var(--accent)}
+.adm-card-opts{flex-direction:column;align-items:stretch}
+.adm-card-opts select{min-width:0;width:100%;-webkit-appearance:none;appearance:none;text-overflow:ellipsis;padding-right:26px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238e97ab' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center}
+@media (pointer:coarse){.adm input[type=file]::file-selector-button{min-height:44px}}
 @media (min-width:700px){.adm-card.has-tpl{grid-column:span 2}}
 .adm-card.wide{grid-column:1/-1}
-.adm-card input[type=file]{max-width:100%;width:100%;font-size:12px}
 a.btn{display:inline-flex;align-items:center;gap:4px;text-decoration:none;color:var(--text);background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;min-height:30px}
 a.btn:hover{border-color:var(--accent)}
 a.btn.small{padding:2px 9px;font-size:12px;min-height:26px}

@@ -1,0 +1,23 @@
+# Fathom over plain HTTP on the LAN. Install with: sudo deploy/install-service.sh
+# Session cookies get the Secure flag only on HTTPS requests (or X-Forwarded-Proto: https),
+# so login works over http:// without extra settings. Once TLS is in front, change
+# FATHOM_PUBLIC_URL to the https:// address.
+[Unit]
+Description=Fathom AVL documentation server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cccadmin
+Group=cccadmin
+WorkingDirectory=/home/cccadmin/Code/fathom
+Environment=FATHOM_DATA=/home/cccadmin/.fathom
+Environment=FATHOM_PUBLIC_URL=http://10.6.9.239:8080
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/cccadmin/Code/fathom/.venv/bin/gunicorn --bind 0.0.0.0:8080 --workers 2 --threads 4 --timeout 180 --access-logfile - fathom.server:app
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -182,7 +182,7 @@ export function mountImports(el, ctx) {
       h('div', { class: 'help' }, imp.help || ''),
       templateBox(imp),
       files,
-      h('div', { class: 'row', style: { marginTop: '6px' } }, [imp.mode === 'oneshot' ? null : dev, room]),
+      h('div', { class: 'row adm-card-opts', style: { marginTop: '6px' } }, [imp.mode === 'oneshot' ? null : dev, room]),
       h('div', { class: 'row', style: { marginTop: '6px' } }, [go, h('span', { class: 'muted', style: { fontSize: '11px' } }, imp.mode === 'oneshot' ? 'one-shot: preview, then apply' : 'kept and re-parsed on every build')]),
       out,
     ]);
