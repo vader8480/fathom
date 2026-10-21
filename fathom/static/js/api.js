@@ -44,6 +44,9 @@ export function createApi(opts) {
     let payload;
     if (body instanceof (typeof FormData !== 'undefined' ? FormData : function () {})) {
       payload = body;
+    } else if (body instanceof (typeof Blob !== 'undefined' ? Blob : function () {})) {
+      headers['Content-Type'] = body.type || 'application/octet-stream';
+      payload = body;
     } else if (body !== undefined) {
       headers['Content-Type'] = 'application/json';
       payload = JSON.stringify(body);
@@ -138,6 +141,12 @@ export function createApi(opts) {
     updateUser: function (username, patch) { return send('PATCH', 'api/v2/users/' + enc(username), patch); },
     deleteUser: function (username) { return send('DELETE', 'api/v2/users/' + enc(username)); },
     changePassword: function (old, nw) { return send('POST', 'api/v2/users/me/password', { old: old, new: nw }); },
+    backups: function () { return get('api/v2/backups'); },
+    createBackup: function (o) { return send('POST', 'api/v2/backups', o || {}); },
+    uploadBackup: function (file) { return send('POST', 'api/v2/backups/upload', new Blob([file], { type: 'application/zip' })); },
+    backupUrl: function (name) { return url('api/v2/backups/' + enc(name)); },
+    deleteBackup: function (name) { return send('DELETE', 'api/v2/backups/' + enc(name)); },
+    restoreBackup: function (name) { return send('POST', 'api/v2/backups/' + enc(name) + '/restore', { confirm: name }); },
     shares: function (name) { return get(proj(name) + '/shares'); },
     createShare: function (name, o) { return send('POST', proj(name) + '/shares', o || {}); },
     deleteShare: function (name, token) { return send('DELETE', proj(name) + '/shares/' + enc(token)); },

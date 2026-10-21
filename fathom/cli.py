@@ -15,6 +15,7 @@
   fathom selftest                                           parse samples, build, verify
   fathom migrate <project> [--write]                        v1 → v2 summary (and save)
   fathom user add|list|passwd|role|remove|disable|enable    users and roles
+  fathom backup create [--include-builds] | list | restore <zip|name> [--yes]   whole-server backups
   fathom library list [-q Q] | show <id>                    equipment templates
   fathom schedule <kind> <project> [--room R] [--csv]       patch, cables, ip, dmx, bom, inventory, racks, labels
   fathom tags <project> [--scope all] [--apply]             auto cable tags (preview, then apply)
@@ -530,6 +531,47 @@ def cmd_user(a: argparse.Namespace) -> None:
         _die(str(exc).strip("'\""))
 
 
+def cmd_backup(a: argparse.Namespace) -> None:
+    from . import backup as B
+
+    try:
+        if a.action == "list":
+            rows = B.list_backups()
+            if not rows:
+                print(f"no backups in {display_path(B.backups_root())}")
+            for b in rows:
+                desc = b.get("error") or f"{len(b.get('projects') or [])} projects{' + builds' if b.get('include_builds') else ''}"
+                print(f"{b['name']}\t{B.human_size(b['size'])}\t{b.get('kind') or ''}\t{desc}\t{b.get('label') or ''}")
+            return
+        if a.action == "create":
+            info = B.create_backup(include_builds=a.include_builds, label=a.label or "", author=getpass.getuser(), kind="cli")
+            path = B.backups_root() / info["name"]
+            if a.out:
+                out = Path(a.out).expanduser()
+                out = out / info["name"] if out.is_dir() else out
+                if out.resolve() != path.resolve():
+                    shutil.copy2(path, out)
+                    path = out
+            print(f"ok: {display_path(path)} ({B.human_size(info['size'])}, {len(info.get('projects') or [])} projects)")
+            return
+        if not a.target:
+            _die("backup restore <file.zip | backup name>")
+        target = Path(a.target).expanduser()
+        if not a.yes:
+            print(f"This replaces every project, user and custom template in {display_path(data_root())} with {a.target}.")
+            if input("Type RESTORE to continue: ").strip().upper() != "RESTORE":
+                _die("not restored")
+        if target.is_file():
+            res = B.restore_file(target, author=getpass.getuser(), safety=not a.no_safety)
+        else:
+            res = B.restore_backup(a.target, author=getpass.getuser(), safety=not a.no_safety)
+        print(f"ok: restored {res['restored']} ({len(res['projects'])} projects)")
+        if res.get("pre_restore_backup"):
+            print(f"  previous data saved as {res['pre_restore_backup']}")
+    except B.BackupError as exc:
+        _die(str(exc))
+
+
 def cmd_library(a: argparse.Namespace) -> None:
     from .library import get_template, list_templates, ports_summary
 
@@ -920,6 +962,16 @@ def main(argv=None) -> None:
     s.add_argument("--role", choices=["viewer", "editor", "admin"])
     s.add_argument("--password-stdin", action="store_true", help="read the password from stdin")
     s.set_defaults(func=cmd_user)
+
+    s = sub.add_parser("backup", help="whole-server backups (FATHOM_DATA/backups)")
+    s.add_argument("action", choices=["create", "list", "restore"])
+    s.add_argument("target", nargs="?", help="restore: a backup .zip path or a name from 'backup list'")
+    s.add_argument("--include-builds", action="store_true", help="create: also back up rendered builds")
+    s.add_argument("--label", help="create: a note stored in the backup")
+    s.add_argument("--out", help="create: also copy the zip here (file or folder)")
+    s.add_argument("--yes", action="store_true", help="restore: do not ask for confirmation")
+    s.add_argument("--no-safety", action="store_true", help="restore: skip the pre-restore backup of the current data")
+    s.set_defaults(func=cmd_backup)
 
     s = sub.add_parser("library", help="equipment templates")
     s.add_argument("action", choices=["list", "show"])

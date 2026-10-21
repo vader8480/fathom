@@ -16,6 +16,7 @@
 #   FATHOM_PUBLIC_VIEW=1              keep /p/* viewer pages and builds public when auth is on
 #   FATHOM_PUBLIC_URL=https://av.example.org   base URL encoded in device QR codes
 #   FATHOM_MAX_UPLOAD_MB=50 / FATHOM_MAX_JSON_MB=20   request body caps
+#   FATHOM_MAX_BACKUP_MB=4096         largest backup zip accepted by upload-and-restore
 #   FATHOM_LLM_URL / FATHOM_LLM_MODEL / FATHOM_LLM_API_KEY / FATHOM_LLM_TIMEOUT / FATHOM_LLM_MAX_CONTEXT
 #                                     optional OpenAI-compatible bridge for assistant notes
 #   FATHOM_PLUGINS / FATHOM_LIBRARY / FATHOM_CHECKLISTS   extension directories (os.pathsep-separated)

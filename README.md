@@ -66,6 +66,7 @@ Without installing: `python -m fathom serve` from this folder.
 | `FATHOM_PUBLIC_VIEW=1` | keep the viewer (`/p/*`) and build downloads public while the app needs a login |
 | `FATHOM_PUBLIC_URL` | base URL encoded in device QR codes (or `settings.public_url` per project), e.g. `https://av.example.org` |
 | `FATHOM_MAX_UPLOAD_MB`, `FATHOM_MAX_JSON_MB` | request size caps (default 50 / 20) |
+| `FATHOM_MAX_BACKUP_MB` | largest backup zip accepted by *Upload and restore* (default 4096) |
 | `FATHOM_CHROME`, `FATHOM_CHROME_NO_SANDBOX` | Chrome / Chromium for server-side PDF / PNG (`--build-arg WITH_CHROMIUM=true` installs one) |
 | `FATHOM_PDF_RASTERIZER` | command template for PDF floor plans, e.g. `pdftoppm -f {page} -l {page} -r {dpi} -png -singlefile {in} {out}` (`{page}` is 0-based); otherwise `pdftoppm`, `mutool`, `gs` or macOS `sips` is used when found |
 | `FATHOM_ODA`, `FATHOM_ODA_XVFB=1` | ODA File Converter binary for DWG floor plans (optionally under `xvfb-run`) |
@@ -135,6 +136,7 @@ fathom ask <project> "<question>" [--room R] [--json] [--no-llm]
 fathom library list [-q Q] [--discipline D] [--kind K] | fathom library show <id>
 fathom migrate <project> [--write] · fathom history <project> · fathom restore <project> <rev>
 fathom user add <name> [--role viewer|editor|admin] [--password-stdin] | list | passwd <name> | role <name> <role> | remove <name>
+fathom backup create [--include-builds] [--label L] [--out F] | list | restore <file.zip|name> [--yes] [--no-safety]
 fathom vocab [--json] · fathom plugins · fathom validate <project> · fathom list · fathom status · fathom demo · fathom selftest
 ```
 
@@ -148,6 +150,7 @@ discipline letter and a number, `A-001`, `V-003`). Tokens: `{D}`, `{disc}`,
 ```text
 $FATHOM_DATA/
   users.json  secret.key                     logins (fathom user …) and the session key
+  backups/fathom-backup-<stamp>.zip          whole-server backups (Settings › Backups, fathom backup)
   library/<template-id>.json                 your global equipment templates
   projects/<name>/project.json               the model (schema 2, with "revision")
   projects/<name>/project.v1.json            the original 0.2 file, kept once after migration
@@ -168,6 +171,28 @@ A build folder holds `index.html` + `diagram.svg` + `patch-sheet.csv` (the
 folder works from `file://`.
 
 Back up the data directory and you have everything.
+
+### Backup and restore
+
+Admins get **Settings › Backups**. *Back up now* zips every project (with
+history, attachments, floor plans and imports), `users.json`, `secret.key`
+and the custom library into `backups/` and downloads a copy; tick *Include
+builds* to add the rendered packages. Keep the downloaded copy off the
+server, and treat it like a password file (it holds password hashes).
+
+*Upload and restore* (or *Restore* on a listed backup) verifies the zip,
+saves the current state as a `…-pre-restore.zip` backup, then swaps the
+backup's data in. Builds are only replaced when the backup includes them;
+`backups/` itself is never touched. Restoring brings back the backup's user
+accounts, so you may have to sign in again. From a shell, e.g. inside the
+container:
+
+```bash
+docker exec fathom fathom backup create              # prints the backup name
+docker cp fathom:/data/backups/fathom-backup-20261021-183105.zip .
+docker cp ./fathom-backup-20261021-183105.zip fathom:/tmp/
+docker exec -it fathom fathom backup restore /tmp/fathom-backup-20261021-183105.zip
+```
 
 ## Extending
 

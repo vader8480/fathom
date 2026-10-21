@@ -30,6 +30,13 @@ function fmtTime(s) {
   const d = new Date(s);
   return isNaN(d.getTime()) ? s : d.toLocaleString();
 }
+function fmtSize(n) {
+  n = Number(n) || 0;
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+  return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+}
 function needApi(el, ctx) {
   if (ctx.api) return false;
   el.appendChild(h('div', { class: 'adm' }, h('div', { class: 'app-error-card' }, [h('h3', null, 'Needs the server'), h('div', null, 'This view talks to the Fathom server.')])));
@@ -364,7 +371,7 @@ export function mountSettings(el, ctx) {
   const vocab = ctx.vocab || {};
   const root = h('div', { class: 'adm' });
   el.appendChild(root);
-  const tabs = [['project', 'Project'], ['rooms', 'Venues & rooms'], ['systems', 'Systems & locations'], ['networks', 'Networks'], ['templates', 'Templates'], ['users', 'Users'], ['sharing', 'Sharing'], ['offline', 'Offline']];
+  const tabs = [['project', 'Project'], ['rooms', 'Venues & rooms'], ['systems', 'Systems & locations'], ['networks', 'Networks'], ['templates', 'Templates'], ['users', 'Users'], ['backups', 'Backups'], ['sharing', 'Sharing'], ['offline', 'Offline']];
   let tab = 'project';
   const tabBar = h('div', { class: 'adm-tabs', role: 'tablist' });
   const panel = h('div', { role: 'tabpanel' });
@@ -379,7 +386,7 @@ export function mountSettings(el, ctx) {
   function drawTabs() {
     tabBar.innerHTML = '';
     tabs.forEach(function (t) {
-      if (t[0] === 'users' && ctx.role !== 'admin') return;
+      if ((t[0] === 'users' || t[0] === 'backups') && ctx.role !== 'admin') return;
       tabBar.appendChild(h('button', { type: 'button', role: 'tab', 'aria-selected': tab === t[0] ? 'true' : 'false', 'data-tab': t[0], onclick: function () { tab = t[0]; drawTabs(); drawPanel(); } }, t[1]));
     });
   }
@@ -532,6 +539,107 @@ export function mountSettings(el, ctx) {
     return [h('h3', null, 'Users'), wrap];
   }
 
+  function backupsPanel() {
+    if (!ctx.api) return [h('div', { class: 'muted' }, 'Needs the server.')];
+    const maxMb = (ctx.meta && ctx.meta.limits && ctx.meta.limits.max_backup_mb) || 0;
+    const listWrap = h('div');
+    function download(name) {
+      const a = h('a', { href: ctx.api.backupUrl(name), download: name, style: { display: 'none' } });
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    function restore(b) {
+      const what = (b.projects || []).length + ' project' + ((b.projects || []).length === 1 ? '' : 's') + (b.created ? ' from ' + fmtTime(b.created) : '');
+      return ctx.prompt('This replaces every project, user account and custom template on this server with the backup (' + what + '). '
+        + 'A "pre-restore" backup of the current data is taken first, so you can undo this. You may need to sign in again afterwards. Type RESTORE to continue.',
+      '', { title: 'Restore ' + b.name, ok: 'Restore' }).then(function (v) {
+        if (v === null) return false;
+        if (String(v).trim().toUpperCase() !== 'RESTORE') { ctx.toast('Not restored: type RESTORE to confirm', 'warn'); return false; }
+        ctx.toast('Restoring ' + b.name + '\u2026', 'ok');
+        const flush = ctx.flush ? ctx.flush() : Promise.resolve();
+        return flush.then(function () { return ctx.api.restoreBackup(b.name); }).then(function (r) {
+          ctx.toast('Restored ' + b.name + (r.pre_restore_backup ? '. Previous data saved as ' + r.pre_restore_backup : '') + '. Reloading\u2026', 'ok');
+          setTimeout(function () { location.reload(); }, 1500);
+          return true;
+        }, function (e) { ctx.toast(msg(e), 'err'); load(); return false; });
+      });
+    }
+    function load() {
+      ctx.api.backups().then(function (r) {
+        listWrap.innerHTML = '';
+        const bs = (r && r.backups) || [];
+        if (!bs.length) { listWrap.appendChild(h('div', { class: 'muted' }, 'No backups on this server yet.')); return; }
+        const tb = h('tbody');
+        bs.forEach(function (b) {
+          const kind = b.error ? 'unreadable' : (b.kind === 'pre-restore' ? 'before a restore' : (/-uploaded(-\d+)?\.zip$/.test(b.name) ? 'uploaded' : (b.kind || '')));
+          tb.appendChild(h('tr', { 'data-backup': b.name }, [
+            h('td', { class: 'mono' }, b.name),
+            h('td', null, fmtTime(b.created || b.modified)),
+            h('td', { title: b.error || (b.projects || []).join('\n') }, b.error ? b.error : String((b.projects || []).length) + (b.include_builds ? ' + builds' : '')),
+            h('td', null, [kind, b.label ? h('div', { class: 'muted', style: { fontSize: '11px' } }, b.label) : null]),
+            h('td', null, fmtSize(b.size)),
+            h('td', { style: { whiteSpace: 'nowrap' } }, [
+              h('a', { class: 'chip', href: ctx.api.backupUrl(b.name), download: b.name }, 'Download'),
+              b.error ? null : h('button', { type: 'button', class: 'small danger', onclick: function () { restore(b); } }, 'Restore'),
+              h('button', { type: 'button', class: 'small danger', 'aria-label': 'Delete ' + b.name, onclick: function () {
+                ctx.confirm('Delete backup ' + b.name + ' from the server? Downloaded copies are not affected.', { danger: true, ok: 'Delete' }).then(function (y) {
+                  if (y) ctx.api.deleteBackup(b.name).then(load, function (e) { ctx.toast(msg(e), 'err'); });
+                });
+              } }, 'Delete'),
+            ]),
+          ]));
+        });
+        listWrap.appendChild(h('div', { style: { overflowX: 'auto' } }, h('table', { class: 'adm-table' }, [h('thead', null, h('tr', null, ['Backup', 'Created', 'Projects', 'Kind', 'Size', ''].map(function (x) { return h('th', { scope: 'col' }, x); }))), tb])));
+      }, function (e) { listWrap.innerHTML = ''; listWrap.appendChild(h('div', { class: 'muted' }, msg(e))); });
+    }
+
+    const label = h('input', { placeholder: 'note (optional), e.g. before Easter changes', 'aria-label': 'Backup note' });
+    const builds = h('input', { type: 'checkbox', id: 'bk-builds' });
+    const create = h('button', { type: 'button', class: 'primary' }, 'Back up now');
+    create.addEventListener('click', function () {
+      create.disabled = true;
+      create.textContent = 'Backing up\u2026';
+      const flush = ctx.flush ? ctx.flush() : Promise.resolve();
+      flush.then(function () { return ctx.api.createBackup({ label: label.value.trim(), include_builds: builds.checked }); }).then(function (r) {
+        const b = r.backup || {};
+        ctx.toast('Backup ' + b.name + ' created (' + fmtSize(b.size) + '); downloading a copy', 'ok');
+        label.value = '';
+        download(b.name);
+        load();
+      }, function (e) { ctx.toast(msg(e), 'err'); }).then(function () { create.disabled = false; create.textContent = 'Back up now'; });
+    });
+
+    const file = h('input', { type: 'file', accept: '.zip,application/zip', 'aria-label': 'Backup file' });
+    const upload = h('button', { type: 'button', class: 'danger' }, 'Upload and restore\u2026');
+    upload.addEventListener('click', function () {
+      const f = file.files && file.files[0];
+      if (!f) { ctx.toast('Choose a backup .zip first', 'warn'); return; }
+      if (maxMb && f.size > maxMb * 1024 * 1024) { ctx.toast('That file is larger than the ' + maxMb + ' MB limit (FATHOM_MAX_BACKUP_MB)', 'err'); return; }
+      upload.disabled = true;
+      upload.textContent = 'Uploading\u2026';
+      ctx.api.uploadBackup(f).then(function (r) {
+        file.value = '';
+        load();
+        return restore(r.backup || {});
+      }, function (e) { ctx.toast(msg(e), 'err'); }).then(function () { upload.disabled = false; upload.textContent = 'Upload and restore\u2026'; });
+    });
+
+    load();
+    return [
+      h('h3', null, 'Back up'),
+      h('p', { class: 'muted' }, 'One .zip with every project (history, photos, floor plans and imports included), user accounts and custom equipment templates. '
+        + 'A copy stays on this server and one downloads to this device. Keep the downloaded copy somewhere else: the server copy is lost with the server. '
+        + 'The file contains password hashes, so store it like a password.'),
+      h('div', { class: 'row' }, [label, h('label', { class: 'row', for: 'bk-builds' }, [builds, 'Include builds']), create]),
+      h('h3', null, 'Restore from a file'),
+      h('p', { class: 'muted' }, 'Upload a backup .zip saved earlier (from this server or another one). You confirm before anything is replaced.'),
+      h('div', { class: 'row' }, [file, upload]),
+      h('h3', null, 'Backups on this server'),
+      listWrap,
+    ];
+  }
+
   function sharingPanel() {
     if (!ctx.api) return [h('div', { class: 'muted' }, 'Needs the server.')];
     const wrap = h('div');
@@ -573,13 +681,13 @@ export function mountSettings(el, ctx) {
   function drawPanel() {
     panel.innerHTML = '';
     tables = [];
-    const map = { project: projectPanel, rooms: roomsPanel, systems: systemsPanel, networks: networksPanel, templates: templatesPanel, users: usersPanel, sharing: sharingPanel, offline: offlinePanel };
+    const map = { project: projectPanel, rooms: roomsPanel, systems: systemsPanel, networks: networksPanel, templates: templatesPanel, users: usersPanel, backups: backupsPanel, sharing: sharingPanel, offline: offlinePanel };
     (map[tab] || projectPanel)().forEach(function (n) { if (n) panel.appendChild(n); });
   }
   function onDoc(e) {
     const d = e.detail || {};
     if (d.source === 'local' && el.contains(document.activeElement) && tab === 'project') return;
-    if (tab === 'users' || tab === 'sharing' || tab === 'offline') return;
+    if (tab === 'users' || tab === 'backups' || tab === 'sharing' || tab === 'offline') return;
     const active = document.activeElement;
     if (active && el.contains(active) && active.tagName === 'INPUT' && d.source === 'local' && tab === 'project') return;
     drawPanel();

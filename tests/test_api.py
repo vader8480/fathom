@@ -128,7 +128,7 @@ class MetaAndLibrary(ApiCase):
         for k in ("chrome", "pdf_rasterizer", "oda", "llm", "secure_context_hint"):
             self.assertIn(k, m["capabilities"], "5.5 capabilities.%s" % k)
         self.assertEqual(set(m["llm"] if "llm" in m else m["capabilities"]["llm"]) >= {"configured", "model"}, True)
-        self.assertEqual(m["limits"], {"max_upload_mb": 50, "max_json_mb": 20}, "5.5 limits defaults")
+        self.assertEqual(m["limits"], {"max_upload_mb": 50, "max_json_mb": 20, "max_backup_mb": 4096}, "5.5 limits defaults")
         self.assertEqual(set(m["auth"]), {"enabled", "public_view"})
         kinds = {i["kind"] for i in m["importers"]}
         self.assertTrue({"yamaha", "dante", "waves"} <= kinds, "FR-IMP-01 legacy importers registered")

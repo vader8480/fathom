@@ -38,6 +38,8 @@ SPEC_ROLES = {
     ("GET", "/api/v2/session"): "public", ("POST", "/api/v2/session"): "public", ("DELETE", "/api/v2/session"): "any",
     ("GET", "/api/v2/users"): "admin", ("POST", "/api/v2/users"): "admin", ("PATCH", "/api/v2/users/{}"): "admin",
     ("DELETE", "/api/v2/users/{}"): "admin", ("POST", "/api/v2/users/me/password"): "any", ("GET", "/login"): "public",
+    ("GET", "/api/v2/backups"): "admin", ("POST", "/api/v2/backups"): "admin", ("POST", "/api/v2/backups/upload"): "admin",
+    ("GET", "/api/v2/backups/{}"): "admin", ("DELETE", "/api/v2/backups/{}"): "admin", ("POST", "/api/v2/backups/{}/restore"): "admin",
     ("GET", "/healthz"): "public", ("GET", "/api/v2/schema.json"): "public",
     ("GET", "/api/v2/meta"): "viewer", ("GET", "/api/v2/library"): "viewer", ("GET", "/api/v2/library/{}"): "viewer",
     ("POST", "/api/v2/library"): "editor", ("DELETE", "/api/v2/library/{}"): "editor",
@@ -75,7 +77,7 @@ SAMPLES = ["proj", "main", "atem-mini", "rk-foh", "cables", "1", "nobody", "imp-
            "run1", "index.html", "diagram.svg", "x.png", "app.html", "nope"]
 PARAM_HINTS = {"name": "proj", "room": "main", "device": "atem-mini", "rack": "rk-foh", "kind": "cables", "rev": "1", "username": "nobody",
                "iid": "imp-0001", "att": "att-000000000000", "token": "sh-abc123", "fp": "fp-none", "run": "run1", "file": "index.html",
-               "filename": "x.png", "path": "app.html", "tid": "nope"}
+               "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip"}
 
 
 def _groups(pattern):

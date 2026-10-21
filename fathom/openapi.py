@@ -130,6 +130,8 @@ def _components() -> Dict[str, Any]:
                                                           "rooms": {"type": ["array", "null"], "items": {"type": "string"}}}},
         "Question": {"type": "object", "required": ["question"], "properties": {"question": {"type": "string"}, "room": {"type": "string"},
                                                                               "use_llm": {"type": "boolean"}, "history": {"type": "array"}}},
+        "BackupCreate": {"type": "object", "properties": {"include_builds": {"type": "boolean"}, "label": {"type": "string"}}},
+        "BackupRestore": {"type": "object", "required": ["confirm"], "properties": {"confirm": {"type": "string", "description": "the backup name"}}},
         "Template": obj, "V1Project": obj,
     }
     return schemas
@@ -157,6 +159,8 @@ def build_spec(routes: Iterable[Any], version: str) -> Dict[str, Any]:
             if body == "Multipart":
                 op["requestBody"] = {"required": True, "content": {"multipart/form-data": {"schema": {
                     "type": "object", "properties": {"file": {"type": "array", "items": {"type": "string", "format": "binary"}}}}}}}
+            elif body == "BackupZip":
+                op["requestBody"] = {"required": True, "content": {"application/zip": {"schema": {"type": "string", "format": "binary"}}}}
             else:
                 op["requestBody"] = {"required": True, "content": {"application/json": {"schema": _ref(body) if body in schemas else {"type": "object"}}}}
         resp_name = getattr(rt, "response", None)

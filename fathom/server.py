@@ -17,6 +17,7 @@ FATHOM_AUTH            "user:pass[,user2:pass2]" in-memory admins (enables auth)
 FATHOM_PUBLIC_VIEW=1   viewer (/p/*) and builds stay public when auth is on
 FATHOM_MAX_UPLOAD_MB   multipart cap (default 50)
 FATHOM_MAX_JSON_MB     JSON body cap (default 20)
+FATHOM_MAX_BACKUP_MB   backup upload cap (default 4096)
 FATHOM_PUBLIC_URL      base URL for QR codes when settings.public_url is empty
 FATHOM_DEV=1           serve /static/dev/* harnesses to non-loopback clients
 FATHOM_CHROME          Chrome / Chromium binary for server-side PDF / PNG
@@ -98,11 +99,12 @@ _STATUS_TEXT = {
     200: "OK", 201: "Created", 204: "No Content", 302: "Found", 304: "Not Modified", 400: "Bad Request", 401: "Unauthorized",
     403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 409: "Conflict", 413: "Payload Too Large",
     415: "Unsupported Media Type", 422: "Unprocessable Entity", 428: "Precondition Required", 429: "Too Many Requests",
-    500: "Internal Server Error",
+    500: "Internal Server Error", 507: "Insufficient Storage",
 }
 _DEFAULT_CODES = {
     400: "bad_request", 401: "auth_required", 403: "forbidden", 404: "not_found", 405: "method_not_allowed", 409: "conflict",
     413: "too_large", 415: "unsupported_format", 422: "invalid", 428: "precondition_required", 429: "throttled", 500: "internal",
+    507: "no_space",
 }
 
 
@@ -270,6 +272,8 @@ class Request:
         return "multipart/form-data" in self.header("content-type").lower()
 
     def body_cap(self) -> int:
+        if self.route is not None and self.route.max_body is not None:
+            return self.route.max_body()
         return _max_upload() if self.is_multipart() else _max_json()
 
     def body(self) -> bytes:
@@ -340,6 +344,14 @@ class Response:
         self.headers.update(headers or {})
         self.cookies: List[str] = []
         self.csp: Optional[str] = None
+        self.file: Optional[Path] = None
+
+    @classmethod
+    def stream_file(cls, path: Path, content_type: str, headers: Optional[Dict[str, str]] = None) -> "Response":
+        """Body read from ``path`` in chunks when sent (large downloads)."""
+        r = cls(b"", 200, content_type, headers)
+        r.file = path
+        return r
 
     @classmethod
     def json(cls, obj: Any, status: int = 200, headers: Optional[Dict[str, str]] = None) -> "Response":
@@ -371,7 +383,8 @@ Handler = Callable[[Request], Response]
 
 class Route:
     def __init__(self, method: str, pattern: str, handler: Handler, role: str = "viewer", summary: str = "",
-                 tags: Optional[List[str]] = None, body: Optional[str] = None, response: Optional[str] = None, page: str = "api") -> None:
+                 tags: Optional[List[str]] = None, body: Optional[str] = None, response: Optional[str] = None, page: str = "api",
+                 max_body: Optional[Callable[[], int]] = None) -> None:
         self.method = method
         self.pattern = pattern
         self.regex: Pattern[str] = re.compile("^" + pattern + "$")
@@ -382,6 +395,7 @@ class Route:
         self.body = body
         self.response = response
         self.page = page  # api | app | viewer | static | file | build
+        self.max_body = max_body  # body cap override; such handlers read wsgi.input themselves
 
     @property
     def path(self) -> str:
@@ -398,9 +412,10 @@ _ROUTES = ROUTES
 
 
 def route(method: str, pattern: str, role: str = "viewer", summary: str = "", tags: Optional[List[str]] = None,
-          body: Optional[str] = None, response: Optional[str] = None, page: str = "api") -> Callable[[Handler], Handler]:
+          body: Optional[str] = None, response: Optional[str] = None, page: str = "api",
+          max_body: Optional[Callable[[], int]] = None) -> Callable[[Handler], Handler]:
     def deco(fn: Handler) -> Handler:
-        ROUTES.append(Route(method, pattern, fn, role=role, summary=summary, tags=tags, body=body, response=response, page=page))
+        ROUTES.append(Route(method, pattern, fn, role=role, summary=summary, tags=tags, body=body, response=response, page=page, max_body=max_body))
         return fn
 
     return deco
@@ -705,6 +720,98 @@ def r_user_password(req: Request) -> Response:
     return resp
 
 
+# ---- backups
+
+_BACKUP = r"(?P<backup>[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.zip)"
+_ZIP_TYPES = ("application/zip", "application/x-zip-compressed", "application/octet-stream")
+
+
+def _max_backup() -> int:
+    from .backup import max_upload_bytes
+
+    return max_upload_bytes()
+
+
+def _backup_error(exc: Exception) -> ApiError:
+    code = getattr(exc, "code", "invalid")
+    status = {"not_found": 404, "too_large": 413, "no_space": 507, "busy": 409}.get(code, 422)
+    return ApiError(status, str(exc), code)
+
+
+@route("GET", "/api/v2/backups", role="admin", summary="List server backups", tags=["backups"])
+def r_backups(req: Request) -> Response:
+    from .backup import list_backups
+
+    return Response.json({"backups": list_backups(), "max_upload_mb": _max_backup() // (1024 * 1024)})
+
+
+@route("POST", "/api/v2/backups", role="admin", summary="Back up every project, user and setting", tags=["backups"], body="BackupCreate")
+def r_backups_create(req: Request) -> Response:
+    from .backup import BackupError, create_backup
+
+    body = req.json()
+    try:
+        info = create_backup(include_builds=bool(body.get("include_builds")), label=str(body.get("label") or ""), author=req.username)
+    except BackupError as exc:
+        raise _backup_error(exc)
+    return Response.json({"backup": info}, 201)
+
+
+@route("POST", "/api/v2/backups/upload", role="admin", summary="Upload a backup zip (raw request body)", tags=["backups"], body="BackupZip",
+       max_body=_max_backup)
+def r_backups_upload(req: Request) -> Response:
+    from .backup import BackupError, save_upload
+
+    if req.header("content-type").split(";")[0].strip().lower() not in _ZIP_TYPES:
+        raise ApiError(415, "send the backup zip as the request body (Content-Type: application/zip)", "unsupported_format")
+    raw_len = req.header("content-length")
+    if not raw_len and "chunked" not in req.header("transfer-encoding").lower():
+        raise ApiError(400, "Content-Length required")
+    try:
+        info = save_upload(req.environ["wsgi.input"], int(raw_len) if raw_len else None)
+    except BackupError as exc:
+        raise _backup_error(exc)
+    return Response.json({"backup": info}, 201)
+
+
+@route("GET", r"/api/v2/backups/" + _BACKUP, role="admin", summary="Download a backup", tags=["backups"], page="file")
+def r_backup_get(req: Request) -> Response:
+    from .backup import BackupError, backup_path
+
+    try:
+        path = backup_path(req.params["backup"])
+    except BackupError as exc:
+        raise _backup_error(exc)
+    return Response.stream_file(path, "application/zip", {"Content-Disposition": f'attachment; filename="{path.name}"'})
+
+
+@route("DELETE", r"/api/v2/backups/" + _BACKUP, role="admin", summary="Delete a backup", tags=["backups"])
+def r_backup_delete(req: Request) -> Response:
+    from .backup import BackupError, delete_backup
+
+    try:
+        delete_backup(req.params["backup"])
+    except BackupError as exc:
+        raise _backup_error(exc)
+    return Response.empty(204)
+
+
+@route("POST", r"/api/v2/backups/" + _BACKUP + "/restore", role="admin", summary="Replace all data with a backup ({\"confirm\": <backup>})",
+       tags=["backups"], body="BackupRestore")
+def r_backup_restore(req: Request) -> Response:
+    from .backup import BackupError, restore_backup
+
+    name = req.params["backup"]
+    if req.json().get("confirm") != name:
+        raise ApiError(400, "pass {\"confirm\": \"<backup name>\"} to replace all data with this backup")
+    try:
+        res = restore_backup(name, author=req.username)
+    except BackupError as exc:
+        raise _backup_error(exc)
+    _sync_generation()
+    return Response.json(res)
+
+
 # ---- meta, schema, library
 
 
@@ -760,7 +867,8 @@ def r_meta_v2(req: Request) -> Response:
         pass
     out["capabilities"] = caps
     out["auth"] = {"enabled": auth_enabled(), "public_view": public_view()}
-    out["limits"] = {"max_upload_mb": _max_upload() // (1024 * 1024), "max_json_mb": _max_json() // (1024 * 1024)}
+    out["limits"] = {"max_upload_mb": _max_upload() // (1024 * 1024), "max_json_mb": _max_json() // (1024 * 1024),
+                     "max_backup_mb": _max_backup() // (1024 * 1024)}
     try:
         from .library import load_library
 
@@ -2411,12 +2519,68 @@ def _handle_exception(exc: BaseException) -> Response:
     return Response.json({"error": "internal error", "code": "internal", "id": err_id}, 500)
 
 
+_GENERATION: Dict[str, int] = {}
+
+
+def _sync_generation() -> None:
+    """Drop in-memory caches once a backup restore (in any worker) has swapped the data dir."""
+    try:
+        from .backup import generation
+
+        g = generation()
+    except Exception:
+        return
+    key = str(projects_root())
+    if _GENERATION.get(key, g) == g:
+        _GENERATION[key] = g
+        return
+    _GENERATION[key] = g
+    with _CACHE_LOCK:
+        _OVERLAY_CACHE.clear()
+        _SEARCH_CACHE.clear()
+    try:
+        from . import users
+
+        users._VERIFY_CACHE.clear()
+        from .library import load_library
+
+        load_library(refresh=True)
+    except Exception:
+        _log_exc("cache reset after restore failed")
+
+
+def _file_chunks(fh: Any) -> Any:
+    try:
+        while True:
+            chunk = fh.read(1024 * 1024)
+            if not chunk:
+                break
+            yield chunk
+    finally:
+        fh.close()
+
+
 def app(environ: Dict[str, Any], start_response: Callable) -> List[bytes]:
     """WSGI entry point."""
     req = Request(environ)
     try:
         ensure_data_dirs()
+        _sync_generation()
         resp = dispatch(req)
+        if resp.file is not None:
+            try:
+                fh = open(resp.file, "rb")
+            except OSError:
+                raise ApiError(404, "file not found")
+            resp.headers["Content-Length"] = str(os.fstat(fh.fileno()).st_size)
+            resp = _finish(req, resp)
+            start_response(f"{resp.status} {_STATUS_TEXT.get(resp.status, 'OK')}",
+                           list(resp.headers.items()) + [("Set-Cookie", c) for c in resp.cookies])
+            if req.is_head:
+                fh.close()
+                return [b""]
+            wrapper = environ.get("wsgi.file_wrapper")
+            return wrapper(fh, 1024 * 1024) if wrapper else _file_chunks(fh)
     except BaseException as exc:  # noqa: B036 - we re-raise interpreter exits below
         if isinstance(exc, (KeyboardInterrupt, GeneratorExit)):
             raise

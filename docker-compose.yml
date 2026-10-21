@@ -22,6 +22,8 @@ services:
       # FATHOM_PUBLIC_URL: "https://av.example.org"
       FATHOM_MAX_UPLOAD_MB: "50"
       # FATHOM_MAX_JSON_MB: "20"
+      # Largest backup zip accepted by Settings › Backups › Upload and restore.
+      # FATHOM_MAX_BACKUP_MB: "4096"
       # Optional OpenAI-compatible LLM bridge for assistant notes (the deterministic answer never needs it).
       # FATHOM_LLM_URL: "https://api.openai.com/v1"
       # FATHOM_LLM_MODEL: "gpt-4o-mini"
