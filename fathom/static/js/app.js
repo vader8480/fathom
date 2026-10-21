@@ -555,9 +555,21 @@ function replaceHash(project, room, view, params) {
 function renderTabs() {
   const nav = $('app-views');
   nav.innerHTML = '';
+  const strip = h('div', { class: 'app-views-strip' });
   Object.keys(VIEWS).forEach(function (k) {
-    nav.appendChild(h('button', { type: 'button', 'data-view': k, 'aria-current': A.view === k ? 'page' : null, onclick: function () { navigate(k); } }, VIEWS[k].label));
+    strip.appendChild(h('button', { type: 'button', 'data-view': k, 'aria-current': A.view === k ? 'page' : null, onclick: function () { navigate(k); } }, VIEWS[k].label));
   });
+  const overflow = h('button', { type: 'button', class: 'app-views-more', 'aria-haspopup': 'menu', hidden: true }, ['More', h('span', { class: 'caret', 'aria-hidden': 'true' }, '\u25BE')]);
+  overflow.addEventListener('click', function () {
+    const items = Array.prototype.filter.call(strip.children, function (b) { return b.hidden; }).map(function (b) {
+      const k = b.getAttribute('data-view');
+      return { label: VIEWS[k].label, current: A.view === k, action: function () { navigate(k); } };
+    });
+    openMenu(overflow, items);
+  });
+  nav.appendChild(strip);
+  nav.appendChild(overflow);
+  fitTabs();
   const bar = $('app-tabbar');
   bar.innerHTML = '';
   PHONE_TABS.forEach(function (k) {
@@ -573,6 +585,23 @@ function renderTabs() {
     openMenu(more, items);
   });
   bar.appendChild(more);
+}
+
+// Tabs that do not fit the top bar move, last first, into the More menu.
+function fitTabs() {
+  const nav = $('app-views');
+  const strip = nav && nav.querySelector('.app-views-strip');
+  const more = nav && nav.querySelector('.app-views-more');
+  if (!strip || !more) return;
+  const tabs = strip.children;
+  let i;
+  for (i = 0; i < tabs.length; i++) tabs[i].hidden = false;
+  more.hidden = true;
+  more.removeAttribute('aria-current');
+  if (!nav.offsetWidth || strip.scrollWidth <= strip.clientWidth) return;
+  more.hidden = false;
+  for (i = tabs.length - 1; i >= 0 && strip.scrollWidth > strip.clientWidth; i--) tabs[i].hidden = true;
+  if (strip.querySelector('[aria-current][hidden]')) more.setAttribute('aria-current', 'page');
 }
 
 function renderPickers() {
@@ -1003,7 +1032,7 @@ function openMenu(anchor, items) {
   items.forEach(function (it) {
     if (it.sep) { menu.appendChild(h('div', { class: 'sep', role: 'separator' })); return; }
     if (it.info) { menu.appendChild(h('div', { class: 'lbl' }, it.info)); return; }
-    menu.appendChild(h('button', { type: 'button', role: 'menuitem', onclick: function () { close(); it.action(); } }, it.label));
+    menu.appendChild(h('button', { type: 'button', role: 'menuitem', 'aria-current': it.current ? 'page' : null, onclick: function () { close(); it.action(); } }, it.label));
   });
   document.body.appendChild(menu);
   const r = anchor.getBoundingClientRect();
@@ -1352,7 +1381,10 @@ export function boot(root, opts) {
     if (A.ctx) { A.ctx.env.narrow = window.innerWidth < 700; }
     if (window.innerWidth >= 1100 && A.store && A.store.selection) A.inspectorOpen = true;
     layoutInspector();
+    if (typeof ResizeObserver === 'undefined') fitTabs();
   });
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(fitTabs).observe($('app-views'));
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTabs);
   renderTabs();
   registerSW();
   return A.api.session().catch(function (e) {
