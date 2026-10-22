@@ -749,7 +749,7 @@ class FrontendSmoke(unittest.TestCase):
               appliesSticky: getComputedStyle(document.querySelector('.sop-applies')).position,
               toc: !!document.querySelector('details.sop-toc'),
               hscroll: document.documentElement.scrollWidth > window.innerWidth,
-              edit: !!document.querySelector('[data-action=edit], textarea, .sop-editor'),
+              edit: !!document.querySelector('[data-action=edit], .sop-editor, textarea:not(.sop-sheet textarea)'),
               print: !!document.getElementById('sop-print'),
               next: (document.querySelector('.sop-prevnext .sop-next') || {}).getAttribute ? document.querySelector('.sop-prevnext .sop-next').getAttribute('href') : null,
               back: document.querySelector('.sop-back').getAttribute('href'),
@@ -789,6 +789,72 @@ class FrontendSmoke(unittest.TestCase):
             # the same link refuses anything but procedures
             cdp.eval("location.href = location.href.replace(/\\/sop\\/.*$/, '/rooms'); 1")
             cdp.wait("document.body.textContent.indexOf('share_scope') >= 0")
+
+    def test_report_a_problem_sheet_on_a_phone(self) -> None:
+        """"Report a problem" on a public SOP page at 390×844: bottom sheet with the page's devices, ≥44px controls, camera-capable photo
+        input, posts without a login and lands in the project's problem reports; "Mark complete" + "Reset checklist" are session-only."""
+        if not self.campus_rooms:
+            self.skipTest("campus-demo sample not present")
+        import urllib.request
+
+        def problems() -> list:
+            with urllib.request.urlopen(self.base + "/api/v2/projects/campus-demo/problems", timeout=10) as resp:
+                return json.loads(resp.read().decode("utf-8"))["problems"]
+
+        before = len(problems())
+        url = self.base + smoke_url("/p/campus-demo/sop/power-up")
+        with cdp_session(url, mobile=(390, 844)) as cdp:
+            cdp.wait("!!document.getElementById('sop-report')")
+            btn = cdp.eval("({h: document.getElementById('sop-report').getBoundingClientRect().height, hidden: document.getElementById('sop-sheet').hidden})")
+            self.assertGreaterEqual(btn["h"], 44, "SOP-RP-01: the report button is a comfortable tap target")
+            self.assertTrue(btn["hidden"])
+            cdp.eval("document.getElementById('sop-report').click(); 1")
+            cdp.wait("!document.getElementById('sop-sheet').hidden")
+            cdp.wait("Math.abs(document.querySelector('.sop-sheet-panel').getBoundingClientRect().bottom - window.innerHeight) <= 2")  # slide-in finished
+            sheet = cdp.eval("""({
+              devices: document.querySelectorAll('#sop-sheet select[name=device] option').length,
+              hasProjector: !!document.querySelector('#sop-sheet option[value=projector]'),
+              capture: document.querySelector('#sop-sheet input[type=file]').getAttribute('capture'),
+              accept: document.querySelector('#sop-sheet input[type=file]').getAttribute('accept'),
+              tap: Math.min.apply(null, Array.from(document.querySelectorAll('#sop-sheet select, #sop-sheet textarea, #sop-sheet button')).map(function (b) { return b.getBoundingClientRect().height; })),
+              font: parseFloat(getComputedStyle(document.querySelector('#sop-sheet textarea')).fontSize),
+              bottom: Math.round(document.querySelector('.sop-sheet-panel').getBoundingClientRect().bottom),
+              hscroll: document.documentElement.scrollWidth > window.innerWidth,
+            })""")
+            self.assertGreater(sheet["devices"], 2, "SOP-RP-02: the devices the page applies to are offered")
+            self.assertTrue(sheet["hasProjector"])
+            self.assertEqual((sheet["capture"], sheet["accept"]), ("environment", "image/*"), "SOP-RP-03: phones open the camera")
+            self.assertGreaterEqual(sheet["tap"], 44)
+            self.assertGreaterEqual(sheet["font"], 16, "no iOS zoom-on-focus")
+            self.assertLessEqual(abs(sheet["bottom"] - 844), 2, "a bottom sheet, anchored to the bottom edge")
+            self.assertFalse(sheet["hscroll"])
+            # an empty description is refused client-side; a real one is posted and acknowledged
+            cdp.eval("document.querySelector('#sop-sheet form').requestSubmit(); 1")
+            cdp.wait("document.querySelector('.sop-sheet-status').textContent.indexOf('Describe') >= 0")
+            cdp.eval("""document.querySelector('#sop-sheet select[name=device]').value = 'projector';
+                        document.querySelector('#sop-sheet textarea').value = 'Blue tint on the left after warm-up';
+                        document.querySelector('#sop-sheet input[name=name]').value = 'Smoke volunteer';
+                        document.querySelector('#sop-sheet form').requestSubmit(); 1""")
+            cdp.wait("document.querySelector('.sop-sheet-status').textContent.indexOf('Thanks') >= 0")
+            cdp.wait("document.getElementById('sop-sheet').hidden")
+            after = problems()
+            self.assertEqual(len(after), before + 1, "SOP-RP-04: the report is stored")
+            self.assertEqual((after[0]["text"], after[0]["device"], after[0]["page"], after[0]["by"], after[0]["via"]),
+                             ("Blue tint on the left after warm-up", "projector", "power-up", "Smoke volunteer", "public"))
+            # checklist polish: progress → mark complete → reset, kept in sessionStorage only for public users
+            cdp.eval("document.querySelector('.sop-progress-complete').click(); 1")
+            done = cdp.eval("({text: document.querySelector('.sop-progress-text').textContent, note: document.getElementById('sop-complete-note').textContent, stored: sessionStorage.getItem('fathom.sop.done.campus-demo.power-up'), checked: document.querySelectorAll('input[data-task]:checked').length, total: document.querySelectorAll('input[data-task]').length})")
+            self.assertEqual(done["checked"], done["total"])
+            self.assertIn("%d of %d" % (done["total"], done["total"]), done["text"])
+            self.assertIn("Marked complete", done["note"])
+            self.assertTrue(done["stored"])
+            cdp.eval("document.querySelector('.sop-progress-reset').click(); 1")
+            reset = cdp.eval("({checked: document.querySelectorAll('input[data-task]:checked').length, stored: sessionStorage.getItem('fathom.sop.done.campus-demo.power-up'), text: document.querySelector('.sop-progress-text').textContent})")
+            self.assertEqual((reset["checked"], reset["stored"]), (0, None))
+            self.assertIn("0 of", reset["text"])
+        # nothing was written to the page: "Mark complete" on a public page is session-only
+        with urllib.request.urlopen(self.base + "/api/v2/projects/campus-demo/pages/power-up", timeout=10) as resp:
+            self.assertFalse(json.loads(resp.read().decode("utf-8"))["page"].get("completions"))
 
     def test_view_error_card(self) -> None:
         path = "/?debug_missing_view=racks#/sunday-demo/main/racks"

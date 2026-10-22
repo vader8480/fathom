@@ -8,9 +8,9 @@ import unittest
 from pathlib import Path
 
 try:
-    from _helpers import call, fr, get_app, install_campus, install_sunday, jbody, requires, sunday_doc, temp_data_dir
+    from _helpers import call, fr, get_app, install_campus, install_sunday, jbody, multipart, requires, sunday_doc, temp_data_dir
 except ImportError:  # pragma: no cover
-    from tests._helpers import call, fr, get_app, install_campus, install_sunday, jbody, requires, sunday_doc, temp_data_dir
+    from tests._helpers import call, fr, get_app, install_campus, install_sunday, jbody, multipart, requires, sunday_doc, temp_data_dir
 
 JSON_H = {"Content-Type": "application/json", "X-Fathom": "1"}
 
@@ -140,6 +140,22 @@ class Schema(unittest.TestCase):
         self.assertIn(("bad_date", "warning"), codes)
         self.assertIn("pages", schema.COLLECTIONS)
         self.assertFalse(schema.is_v1_expressible(schema.normalize(doc)), "pages make a doc v2-only")
+
+    def test_problem_validation(self):
+        schema = requires("schema")
+        doc = sunday_doc()
+        doc["problems"] = [
+            {"id": "pr-00000001", "text": "ok", "device": "atem-mini", "status": "open", "via": "app"},
+            {"id": "pr-00000002", "text": "", "status": "weird", "device": "nope", "page": "nope", "attachment": "att-000000000000"},
+        ]
+        probs = schema.validate_doc(schema.normalize(doc))
+        codes = {(p["ref"], p["code"], p["level"]) for p in probs if p["ref"].startswith("problems/")}
+        self.assertIn(("problems/pr-00000002", "missing_field", "error"), codes)
+        self.assertIn(("problems/pr-00000002", "bad_enum", "error"), codes)
+        self.assertIn(("problems/pr-00000002", "dangling_link", "warning"), codes)
+        self.assertFalse([c for c in codes if c[0] == "problems/pr-00000001"], "a well-formed report has no problems")
+        self.assertIn("problems", schema.COLLECTIONS)
+        self.assertFalse(schema.is_v1_expressible(schema.normalize(doc)), "problem reports make a doc v2-only")
 
 
 # ================================================================== API
@@ -441,6 +457,262 @@ class PublicPages(unittest.TestCase):
         call(self.app, "PUT", "/api/v2/projects/campus/pages/chapel-pre-service", {"status": "draft"}, JSON_H)
         run3 = build_doc(str(pdir), run_dir=Path(self.data) / "build-draft")
         self.assertNotIn("chapel-pre-service", (run3 / "report.html").read_text(encoding="utf-8"))
+
+
+# ================================================================== phase 3
+
+def _png(w: int = 4, h: int = 3) -> bytes:
+    import struct
+    import zlib
+
+    raw = b"".join(b"\x00" + b"\xff\x80\x00" * w for _ in range(h))
+
+    def chunk(t: bytes, d: bytes) -> bytes:
+        return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xFFFFFFFF)
+
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+
+
+class Problems(unittest.TestCase):
+    """§4.3.16 / §5.16: "Report a problem" from app, public page and share link; inspector data; resolve."""
+
+    def setUp(self):
+        self.app = get_app()
+        self._ctx = temp_data_dir()
+        self.data = self._ctx.__enter__()
+        self.addCleanup(self._ctx.__exit__, None, None, None)
+        install_campus(self.data, "campus")
+
+    def doc(self):
+        return jbody(call(self.app, "GET", "/api/v2/projects/campus")[2])["doc"]
+
+    def device(self, did):
+        return next(d for d in self.doc()["devices"] if d["id"] == did)
+
+    def test_editor_report_notes_the_device(self):
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/problems",
+                        {"text": "  Lectern mic dead; red light on ch 3 ", "device": "foh-cl5", "page": "power-up", "device_status": "spare"}, JSON_H)
+        self.assertEqual(st, 201, b[:300])
+        r = jbody(b)
+        self.assertTrue(r["noted"])
+        pr = r["problem"]
+        self.assertTrue(pr["id"].startswith("pr-"))
+        self.assertEqual((pr["text"], pr["status"], pr["via"], pr["device"], pr["room"], pr["page"]), ("Lectern mic dead; red light on ch 3", "open", "app", "foh-cl5", "main", "power-up"))
+        dev = self.device("foh-cl5")
+        self.assertEqual(dev["status"], "spare")
+        self.assertRegex(dev["note"], r"^\[\d{4}-\d\d-\d\d \d\d:\d\d local\] Problem: Lectern mic dead; red light on ch 3$")
+        # a second report appends, keeping the earlier note
+        call(self.app, "POST", "/api/v2/projects/campus/problems", {"text": "Still dead", "device": "foh-cl5"}, JSON_H)
+        self.assertEqual(self.device("foh-cl5")["note"].count("Problem:"), 2)
+        self.assertEqual(self.device("foh-cl5")["status"], "spare", "no device_status → status untouched")
+        # the problems collection is in the doc and on the list endpoint, newest first with names resolved
+        st, _, b = call(self.app, "GET", "/api/v2/projects/campus/problems")
+        lst = jbody(b)
+        self.assertEqual(lst["open"], 2)
+        self.assertEqual([p["text"] for p in lst["problems"]], ["Still dead", "Lectern mic dead; red light on ch 3"])
+        self.assertEqual((lst["problems"][1]["device_name"], lst["problems"][1]["page_title"]), ("FOH CL5", "Power-up: Main Auditorium"))
+        self.assertEqual(len(jbody(call(self.app, "GET", "/api/v2/projects/campus/problems?page=power-up")[2])["problems"]), 1)
+        self.assertEqual(len(self.doc()["problems"]), 2)
+        # history records the source
+        st, _, b = call(self.app, "GET", "/api/v2/projects/campus/history?limit=1")
+        self.assertEqual(jbody(b)["revisions"][0]["source"], "problems")
+
+    def test_photo_multipart_and_validation(self):
+        body, ctype = multipart([("photo", "fault.png", _png(), "image/png")], {"text": "Projector flickers", "device": "projector", "page": "power-up"})
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/problems", body, {"Content-Type": ctype, "X-Fathom": "1"})
+        self.assertEqual(st, 201, b[:300])
+        pr = jbody(b)["problem"]
+        self.assertTrue(pr["attachment"].startswith("att-"))
+        att = next(a for a in self.doc()["attachments"] if a["id"] == pr["attachment"])
+        self.assertEqual((att["device"], att["kind"], att["note"]), ("projector", "photo", "Problem report " + pr["id"]))
+        self.assertTrue((Path(self.data) / "projects" / "campus" / att["file"]).is_file())
+        st, _, b = call(self.app, "GET", "/api/v2/projects/campus/problems")
+        self.assertIn("api/v2/projects/campus/files/" + pr["attachment"] + "/fault.png", jbody(b)["problems"][0]["photo"])
+        # validation
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/problems", {"text": "  "}, JSON_H)
+        self.assertEqual((st, jbody(b)["code"]), (400, "missing_field"))
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/problems", {"text": "x", "device": "nope"}, JSON_H)
+        self.assertEqual((st, jbody(b)["code"]), (400, "dangling_ref"))
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/problems", {"text": "x", "page": "nope"}, JSON_H)
+        self.assertEqual((st, jbody(b)["code"]), (400, "dangling_ref"))
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/problems", {"text": "x", "device": "projector", "device_status": "broken"}, JSON_H)
+        self.assertEqual((st, jbody(b)["code"]), (400, "bad_enum"))
+        body, ctype = multipart([("photo", "notes.txt", b"hello", "text/plain")], {"text": "x"})
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/problems", body, {"Content-Type": ctype, "X-Fathom": "1"})
+        self.assertEqual((st, jbody(b)["code"]), (400, "bad_type"))
+        self.assertEqual(len(self.doc()["problems"]), 1, "rejected reports leave nothing behind")
+
+    def test_public_and_share_reports(self):
+        # anonymous via the public page route: entry only, no device note, reporter's name is kept
+        st, _, b = call(self.app, "POST", "/p/campus/problems", {"text": "Stage box sync light red", "device": "rio-sl", "page": "no-audio", "name": "Sam  (volunteer)"}, JSON_H)
+        self.assertEqual(st, 201, b[:300])
+        r = jbody(b)
+        self.assertFalse(r["noted"])
+        self.assertEqual((r["problem"]["via"], r["problem"]["by"]), ("public", "Sam (volunteer)"))
+        self.assertFalse(self.device("rio-sl").get("note"), "public reports never write device notes")
+        # through a procedures-only share link (role public)
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/shares", {"label": "labels", "scope": "sop"}, JSON_H)
+        tok = jbody(b)["share"]["token"]
+        st, _, b = call(self.app, "POST", "/s/%s/problems" % tok, {"text": "Loose XLR", "page": "power-up"}, JSON_H)
+        self.assertEqual(st, 201, b[:300])
+        self.assertEqual((jbody(b)["problem"]["via"], jbody(b)["problem"]["by"]), ("share", "anonymous"))
+        st, _, b = call(self.app, "POST", "/s/sh-nope/problems", {"text": "x"}, JSON_H)
+        self.assertEqual(st, 404)
+        # the public page carries the sheet, posts to ../problems and knows the mailto fallback once configured
+        html = call(self.app, "GET", "/p/campus/sop/no-audio")[2].decode("utf-8")
+        self.assertIn('id="sop-report"', html)
+        self.assertIn('data-action="../problems"', html)
+        self.assertIn('<option value="rio-sl"', html, "devices the page applies to are offered")
+        self.assertIn('capture="environment"', html, "phones open the camera")
+        self.assertNotIn("Email the AV team instead", html, "no mailto fallback until settings.problem_email is set")
+        rev = jbody(call(self.app, "GET", "/api/v2/projects/campus")[2])["revision"]
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/changes", {"base_revision": rev, "ops": [{"op": "root", "key": "settings", "value": {"problem_email": "av@example.org"}}]}, JSON_H)
+        self.assertEqual(st, 200, b[:300])
+        html = call(self.app, "GET", "/s/%s/sop/no-audio" % tok)[2].decode("utf-8")
+        self.assertIn('data-email="av@example.org"', html)
+        self.assertIn('href="mailto:av@example.org"', html)
+        self.assertIn('data-action="../problems"', html, "share pages post to the share's problems route")
+
+    def test_resolve_and_reopen(self):
+        pid = jbody(call(self.app, "POST", "/api/v2/projects/campus/problems", {"text": "Hum on the PA"}, JSON_H)[2])["problem"]["id"]
+        st, _, b = call(self.app, "PATCH", "/api/v2/projects/campus/problems/" + pid, {"status": "resolved", "note": "Ground lift"}, JSON_H)
+        self.assertEqual(st, 200, b[:300])
+        pr = jbody(b)["problem"]
+        self.assertEqual((pr["status"], pr["note"], pr["resolved_by"]), ("resolved", "Ground lift", "local"))
+        self.assertTrue(pr["resolved"])
+        self.assertEqual(jbody(call(self.app, "GET", "/api/v2/projects/campus/problems")[2])["open"], 0)
+        self.assertEqual(len(jbody(call(self.app, "GET", "/api/v2/projects/campus/problems?status=resolved")[2])["problems"]), 1)
+        st, _, b = call(self.app, "PATCH", "/api/v2/projects/campus/problems/" + pid, {"status": "open"}, JSON_H)
+        self.assertEqual(st, 200)
+        stored = next(p for p in self.doc()["problems"] if p["id"] == pid)
+        self.assertEqual(stored["status"], "open")
+        self.assertNotIn("resolved", stored)
+        st, _, b = call(self.app, "PATCH", "/api/v2/projects/campus/problems/" + pid, {"status": "maybe"}, JSON_H)
+        self.assertEqual((st, jbody(b)["code"]), (400, "bad_enum"))
+        self.assertEqual(call(self.app, "PATCH", "/api/v2/projects/campus/problems/pr-00000000", {"status": "open"}, JSON_H)[0], 404)
+        spec = jbody(call(self.app, "GET", "/api/openapi.json")[2])
+        self.assertIn("ProblemReport", spec["components"]["schemas"])
+        self.assertIn("/api/v2/projects/{name}/problems", spec["paths"])
+
+
+class ChecklistsArchiveBundle(unittest.TestCase):
+    """Mark complete (who / when), archived pages hidden from volunteers and public routes, offline bundle + CLI."""
+
+    def setUp(self):
+        self.app = get_app()
+        self._ctx = temp_data_dir()
+        self.data = self._ctx.__enter__()
+        self.addCleanup(self._ctx.__exit__, None, None, None)
+        install_campus(self.data, "campus")
+        self.pdir = Path(self.data) / "projects" / "campus"
+
+    def test_mark_complete(self):
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/pages/power-up/complete", {}, JSON_H)
+        self.assertEqual(st, 200, b[:300])
+        r = jbody(b)
+        self.assertEqual(r["completion"]["by"], "local")
+        self.assertEqual(len(r["completions"]), 1)
+        for _ in range(25):
+            call(self.app, "POST", "/api/v2/projects/campus/pages/power-up/complete", {}, JSON_H)
+        page = jbody(call(self.app, "GET", "/api/v2/projects/campus/pages/power-up")[2])["page"]
+        self.assertEqual(len(page["completions"]), 20, "capped at the last 20")
+        self.assertEqual(call(self.app, "POST", "/api/v2/projects/campus/pages/nope/complete", {}, JSON_H)[0], 404)
+        html = call(self.app, "GET", "/p/campus/sop/power-up")[2].decode("utf-8")
+        self.assertIn("Last completed", html)
+        self.assertIn("Mark complete", html)
+        self.assertIn("Reset checklist", html)
+        self.assertIn("fathom.sop.done.", html, "public pages keep the mark in sessionStorage only")
+
+    def test_archived_pages_are_hidden(self):
+        from fathom.export import build_doc
+
+        st, _, b = call(self.app, "PUT", "/api/v2/projects/campus/pages/no-audio", {"status": "archived"}, JSON_H)
+        self.assertEqual(st, 200, b[:300])
+        self.assertEqual(call(self.app, "GET", "/p/campus/sop/no-audio")[0], 404)
+        idx = call(self.app, "GET", "/p/campus/sop")[2].decode("utf-8")
+        self.assertNotIn("no-audio", idx)
+        # page refs to an archived page render as "missing" rather than dead links
+        html = call(self.app, "GET", "/p/campus/sop/power-up")[2].decode("utf-8")
+        self.assertNotIn('href="../sop/no-audio"', html)
+        self.assertNotIn("no-audio", call(self.app, "GET", "/api/v2/projects/campus/qr/pages.html")[2].decode("utf-8"))
+        run = build_doc(str(self.pdir), run_dir=Path(self.data) / "build")
+        self.assertNotIn('id="sop-no-audio"', (run / "report.html").read_text(encoding="utf-8"))
+        # the API still returns it so editors can filter / restore
+        self.assertIn("no-audio", [p["slug"] for p in jbody(call(self.app, "GET", "/api/v2/projects/campus/pages?status=archived")[2])["pages"]])
+        st, _, b = call(self.app, "PUT", "/api/v2/projects/campus/pages/no-audio", {"status": "published"}, JSON_H)
+        self.assertEqual(st, 200)
+        self.assertEqual(call(self.app, "GET", "/p/campus/sop/no-audio")[0], 200)
+
+    def test_offline_bundle(self):
+        import io
+        import zipfile
+
+        from fathom.export import write_sop_bundle
+
+        # publish the chapel page so an embedded image is included
+        call(self.app, "PUT", "/api/v2/projects/campus/pages/chapel-pre-service", {"status": "published"}, JSON_H)
+        call(self.app, "PUT", "/api/v2/projects/campus/pages/no-audio", {"status": "archived"}, JSON_H)
+        st, h, b = call(self.app, "GET", "/api/v2/projects/campus/sop/bundle.zip")
+        self.assertEqual(st, 200, b[:300])
+        self.assertEqual(h.get("content-type"), "application/zip")
+        self.assertIn('filename="campus-procedures.zip"', h.get("content-disposition", ""))
+        zf = zipfile.ZipFile(io.BytesIO(b))
+        names = sorted(zf.namelist())
+        self.assertIn("campus-procedures/index.html", names)
+        self.assertIn("campus-procedures/pages/power-up.html", names)
+        self.assertIn("campus-procedures/pages/chapel-pre-service.html", names)
+        self.assertNotIn("campus-procedures/pages/no-audio.html", names, "archived pages stay out of the bundle")
+        self.assertTrue([n for n in names if n.startswith("campus-procedures/files/att-b249b8bb7f21/")], "embedded images are copied")
+        idx = zf.read("campus-procedures/index.html").decode("utf-8")
+        self.assertIn('href="pages/power-up.html"', idx)
+        self.assertNotIn("no-audio", idx)
+        self.assertIn("Offline copy from", idx)
+        page = zf.read("campus-procedures/pages/power-up.html").decode("utf-8")
+        self.assertIn('href="main-auditorium.html"', page, "parent / sibling links are relative files")
+        self.assertIn('href="shut-down.html"', page)
+        self.assertIn('<span class="chip sop-chip-device">', page, "device chips are plain text offline")
+        self.assertNotIn('href="../d/', page)
+        self.assertIn("sessionStorage", page, "checklists work offline")
+        self.assertIn('data-sop-page="power-up"', page)
+        self.assertNotIn("manifest.webmanifest", page, "no service worker / manifest: works from file://")
+        self.assertNotIn('data-app-root', page)
+        for bad in ("<script src=", 'href="http', 'src="http'):
+            self.assertNotIn(bad, page)
+        chapel = zf.read("campus-procedures/pages/chapel-pre-service.html").decode("utf-8")
+        self.assertIn('src="../files/att-b249b8bb7f21/', chapel)
+        self.assertNotIn('id="sop-report"', page, "no e-mail configured → no report sheet offline")
+        # with a problem e-mail the sheet is there as a mailto-only form
+        rev = jbody(call(self.app, "GET", "/api/v2/projects/campus")[2])["revision"]
+        call(self.app, "POST", "/api/v2/projects/campus/changes", {"base_revision": rev, "ops": [{"op": "root", "key": "settings", "value": {"problem_email": "av@example.org"}}]}, JSON_H)
+        out = Path(self.data) / "bundle-dir"
+        from fathom.project import read_doc
+
+        files = write_sop_bundle(self.pdir, read_doc(self.pdir)[0], out)
+        self.assertIn("pages/power-up.html", files)
+        page = (out / "pages" / "power-up.html").read_text(encoding="utf-8")
+        self.assertIn('data-action=""', page)
+        self.assertIn("Send by email", page)
+        self.assertIn('data-email="av@example.org"', page)
+        self.assertNotIn("Email the AV team instead", page, "offline the e-mail is the only channel, not an alternative")
+
+    def test_cli_sop_bundle(self):
+        import io
+        import zipfile
+        from contextlib import redirect_stdout
+
+        from fathom.cli import main
+
+        out = io.StringIO()
+        zpath = Path(self.data) / "out" / "procs.zip"
+        with redirect_stdout(out):
+            main(["sop-bundle", str(self.pdir), "-o", str(zpath)])
+        self.assertIn("4 published pages", out.getvalue())
+        self.assertIn("campus-procedures/pages/power-up.html", zipfile.ZipFile(zpath).namelist())
+        folder = Path(self.data) / "out" / "folder"
+        with redirect_stdout(out):
+            main(["sop-bundle", str(self.pdir), "-o", str(folder)])
+        self.assertTrue((folder / "index.html").is_file())
+        self.assertTrue((folder / "pages" / "power-up.html").is_file())
 
 
 if __name__ == "__main__":

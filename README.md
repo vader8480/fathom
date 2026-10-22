@@ -256,6 +256,7 @@ fathom patch <project> [--csv]
 fathom schedule patch|cables|ip|dmx|bom|inventory|racks|labels <project> [--room R] [--state S] [--csv|--json]
 fathom tags <project> [--scope missing|all] [--apply]             cable tags from settings.cable_tag_pattern
 fathom qr <project> [device] [--base-url URL] [--out F] | fathom qr --text T [--ascii]
+fathom sop-bundle <project> [-o out.zip | -o folder]              offline HTML copy of the published procedures (phone-friendly, works from file://)
 fathom plan convert <file> [--out F] [--page N] [--hide L1,L2]
 fathom ask <project> "<question>" [--room R] [--json] [--no-llm]
 fathom library list [-q Q] [--discipline D] [--kind K] | fathom library show <id>
@@ -360,8 +361,8 @@ settings), `floorplan.py` (DXF / Draw.io / PDF / SVG), `cables.py`, `network.py`
 `bom.py`, `qr.py`, `racks.py`, `dmx.py`, `patch.py`, `trace.py`, `search.py`,
 `markdown.py` (SOP wiki renderer + sanitizer),
 `assistant.py` / `llm.py`, `layout.py` / `render_html.py` / `render_svg.py`
-(maps, viewer pages, public SOP pages, QR sheets, report sections),
-`export.py` (builds), `server.py` (WSGI app),
+(maps, viewer pages, public SOP pages with the "Report a problem" sheet, QR sheets, report sections),
+`export.py` (builds, offline SOP bundle), `server.py` (WSGI app),
 `static/` (app). Samples: `samples/rrc-littleton` (0.2 project),
 `samples/campus-demo` (three rooms, audio/video/lighting, every importer),
 `samples/floorplans` (one file per supported format).

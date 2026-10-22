@@ -152,6 +152,11 @@ def _components() -> Dict[str, Any]:
             "review_due": {"type": "string"}, "base_revision": {"type": "integer"}}},
         "PagePreview": {"type": "object", "required": ["body"], "properties": {"body": {"type": "string"}}},
         "PageMove": {"type": "object", "properties": {"parent": {"type": ["string", "null"]}, "before": {"type": ["string", "null"]}, "order": {"type": "integer"}}},
+        "ProblemReport": {"type": "object", "required": ["text"], "description": "JSON, or multipart/form-data with the same fields plus one image part (photo)",
+                          "properties": {"text": {"type": "string", "maxLength": 2000}, "device": {"type": "string"}, "page": {"type": "string", "description": "page slug"},
+                                         "name": {"type": "string", "description": "reporter name for anonymous reports"},
+                                         "device_status": {"type": "string", "enum": ["installed", "planned", "spare", "retired"], "description": "editor+: also set the device status"}}},
+        "ProblemPatch": {"type": "object", "properties": {"status": {"type": "string", "enum": ["open", "resolved"]}, "note": {"type": "string"}}},
         "DiscoveryRun": {"type": "object", "properties": {
             "window": {"type": "integer", "minimum": 10, "maximum": 300, "description": "listen window in seconds (default from settings, 60)"},
             "probes": {"type": "array", "items": {"type": "string", "enum": ["unifi", "mdns", "lldp", "arp", "snmp", "yamaha", "videohub", "qsys", "ddm"]}, "description": "subset of the enabled probes"}}},

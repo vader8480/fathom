@@ -461,7 +461,7 @@ def _sop_section(doc: Doc, project_dir: Path, run_dir: Path, *, rooms: List[str]
     (or to no room at all) are included. Links point at the build's device/room pages and other included pages;
     images referenced as ``att:`` are copied to ``files/<att>/<name>`` so the package stays self-contained."""
     from .markdown import render
-    from .render_html import SOP_REPORT_CSS, attachment_filename, sop_css, sop_link_resolver, sop_tree
+    from .render_html import SOP_REPORT_CSS, sop_css, sop_link_resolver, sop_tree
 
     from . import markdown as md_mod
 
@@ -479,32 +479,12 @@ def _sop_section(doc: Doc, project_dir: Path, run_dir: Path, *, rooms: List[str]
     included = {p["slug"] for p, _ in rows}
     devices = {d.get("id"): d for d in doc.get("devices") or [] if isinstance(d, dict) and not d.get("auto")}
     room_set = set(rooms)
-    files_root = project_dir / "files"
-    copied: Dict[str, str] = {}
-
-    def attachment(att_id: str, att: Dict[str, Any]) -> Optional[str]:
-        if att_id in copied:
-            return copied[att_id]
-        src = project_dir / str(att.get("file") or "")
-        try:
-            inside = src.resolve().is_relative_to(files_root.resolve())
-        except OSError:
-            inside = False
-        if not str(att.get("file") or "").startswith("files/") or not inside or not src.is_file():
-            return None
-        rel = f"files/{att_id}/{attachment_filename(att)}"
-        dest = run_dir / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(src, dest)
-        copied[att_id] = rel
-        return rel
-
     resolver = sop_link_resolver(
         doc,
         device=lambda i, d: f"devices/{quote(i, safe='')}.html" if (i in devices and (all_rooms or d.get("room") in room_set)) else "",
         room=lambda i, _r: f"rooms/{quote(i, safe='')}/index.html" if i in room_set else "",
         page=lambda s, _p: f"#sop-{quote(s, safe='')}" if s in included else None,
-        attachment=attachment,
+        attachment=_attachment_copier(doc, project_dir, run_dir),
     )
     rmap = {r.get("id"): str(r.get("name") or r.get("id")) for r in doc.get("rooms") or [] if isinstance(r, dict)}
     entries = []
@@ -517,6 +497,87 @@ def _sop_section(doc: Doc, project_dir: Path, run_dir: Path, *, rooms: List[str]
     from .render_html import render_sop_report_section
 
     return render_sop_report_section(doc, entries), sop_css() + SOP_REPORT_CSS
+
+
+def _attachment_copier(doc: Doc, project_dir: Path, run_dir: Path, prefix: str = "") -> Callable[[str, Dict[str, Any]], Optional[str]]:
+    """``sop_link_resolver`` attachment callback that copies ``files/<att>/<name>`` into ``run_dir`` once and links it."""
+    files_root = project_dir / "files"
+    copied: Dict[str, str] = {}
+
+    def attachment(att_id: str, att: Dict[str, Any]) -> Optional[str]:
+        from .render_html import attachment_filename
+
+        if att_id in copied:
+            return prefix + copied[att_id]
+        src = project_dir / str(att.get("file") or "")
+        try:
+            inside = src.resolve().is_relative_to(files_root.resolve())
+        except OSError:
+            inside = False
+        if not str(att.get("file") or "").startswith("files/") or not inside or not src.is_file():
+            return None
+        rel = f"files/{att_id}/{attachment_filename(att)}"
+        dest = run_dir / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dest)
+        copied[att_id] = rel
+        return prefix + rel
+
+    return attachment
+
+
+def write_sop_bundle(project_dir: Path, doc: Doc, out_dir: Path) -> List[str]:
+    """Standalone offline copy of the published procedures (§5.16): ``index.html``, ``pages/<slug>.html`` and the
+    images they embed under ``files/``. Pages are the same phone-first renderers as ``/p/<n>/sop``, with CSS and JS
+    inlined so the folder works from ``file://`` or any static host: navigation, TOC, tap-to-zoom and sessionStorage
+    checklists need no server. Device and room chips are plain text; "Report a problem" falls back to e-mail when
+    ``settings.problem_email`` is set. Returns the files written (relative, sorted)."""
+    import datetime
+
+    from .render_html import render_sop_index, render_sop_page, sop_link_resolver, sop_tree
+    from .server import _page_payload
+
+    pub = dict(doc)
+    pub["pages"] = [p for p in doc.get("pages") or [] if isinstance(p, dict) and p.get("id") and p.get("slug")
+                    and (p.get("status") or "published") == "published"]
+    project = project_dir.name
+    rows = sop_tree(pub)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    note = f"Offline copy from {stamp}. It may be out of date; the live procedures are the reference."
+    email = str((doc.get("settings") or {}).get("problem_email") or "")
+    report = {"action": "", "email": email} if email else None
+    page_href = lambda s: f"{quote(s, safe='')}.html"  # noqa: E731
+    resolver = sop_link_resolver(
+        pub,
+        device=lambda _i, _d: "",
+        room=lambda _i, _r: "",
+        page=lambda s, p: page_href(s) if (p.get("status") or "published") == "published" else None,
+        attachment=_attachment_copier(pub, project_dir, out_dir, prefix="../"),
+    )
+    _write(out_dir / "index.html", render_sop_index(pub, project=project, sop_only=True, offline_note=note,
+                                                    page_href=lambda s: f"pages/{quote(s, safe='')}.html"))
+    for p, _depth in rows:
+        data = _page_payload(project, pub, p, 0, resolver=resolver)
+        _write(out_dir / "pages" / f"{p['slug']}.html",
+               render_sop_page(pub, data, project=project, sop_only=True, page_href=page_href, index_href="../index.html",
+                               report=report, offline_note=note))
+    return sorted(f.relative_to(out_dir).as_posix() for f in out_dir.rglob("*") if f.is_file())
+
+
+def sop_bundle_zip(project_dir: Path, doc: Doc) -> bytes:
+    """:func:`write_sop_bundle` as a zip (entries under ``<project>-procedures/``)."""
+    import io
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="fathom-sop-") as tmp:
+        root = Path(tmp) / f"{project_dir.name}-procedures"
+        files = write_sop_bundle(project_dir, doc, root)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for rel in files:
+                zf.write(root / rel, arcname=f"{root.name}/{rel}")
+        return buf.getvalue()
 
 
 def build(target: str, slug: str = "", run_dir: Optional[Path] = None, pdf: bool = False, png: bool = False, open_after: bool = False, quiet: bool = False) -> Path:

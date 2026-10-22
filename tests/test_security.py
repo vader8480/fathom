@@ -71,7 +71,9 @@ SPEC_ROLES = {
     ("GET", "/api/v2/projects/{}/pages/{}"): "viewer", ("PUT", "/api/v2/projects/{}/pages/{}"): "editor",
     ("DELETE", "/api/v2/projects/{}/pages/{}"): "editor", ("POST", "/api/v2/projects/{}/pages/{}/move"): "editor",
     ("GET", "/api/v2/projects/{}/pages/{}/versions"): "viewer", ("GET", "/api/v2/projects/{}/pages/{}/versions/{}"): "viewer",
-    ("POST", "/api/v2/projects/{}/pages/{}/restore/{}"): "editor",
+    ("POST", "/api/v2/projects/{}/pages/{}/restore/{}"): "editor", ("POST", "/api/v2/projects/{}/pages/{}/complete"): "editor",
+    ("GET", "/api/v2/projects/{}/sop/bundle.zip"): "editor", ("POST", "/api/v2/projects/{}/problems"): "viewer",
+    ("GET", "/api/v2/projects/{}/problems"): "viewer", ("PATCH", "/api/v2/projects/{}/problems/{}"): "editor",
     ("GET", "/api/v2/projects/{}/qr/page/{}.svg"): "viewer", ("GET", "/api/v2/projects/{}/qr/pages.html"): "viewer",
     ("POST", "/api/v2/projects/{}/builds"): "editor", ("GET", "/api/v2/projects/{}/builds"): "viewer",
     ("DELETE", "/api/v2/projects/{}/builds/{}"): "editor", ("GET", "/builds/{}/{}/{}"): "viewer",
@@ -83,6 +85,7 @@ SPEC_ROLES = {
     ("GET", "/"): "viewer", ("GET", "/p/{}"): "viewer", ("GET", "/p/{}/{}"): "viewer", ("GET", "/p/{}/rooms"): "viewer",
     ("GET", "/p/{}/r/{}"): "viewer", ("GET", "/p/{}/r/{}/diagram.svg"): "viewer", ("GET", "/p/{}/r/{}/patch"): "viewer",
     ("GET", "/p/{}/d/{}"): "viewer", ("GET", "/p/{}/sop"): "viewer", ("GET", "/p/{}/sop/{}"): "viewer",
+    ("POST", "/p/{}/problems"): "viewer", ("POST", "/s/{}/problems"): "public",
     ("GET", "/p/{}/files/{}/{}"): "viewer", ("GET", "/s/{}"): "public", ("GET", "/s/{}/{}"): "public", ("GET", "/static/{}"): "public",
     ("GET", "/sw.js"): "public", ("GET", "/manifest.webmanifest"): "public", ("GET", "/favicon.ico"): "public",
     ("GET", "/apple-touch-icon.png"): "public", ("GET", "/api/openapi.json"): "public", ("GET", "/api/docs"): "public",
@@ -93,7 +96,7 @@ SAMPLES = ["proj", "main", "atem-mini", "rk-foh", "cables", "1", "nobody", "imp-
 PARAM_HINTS = {"name": "proj", "room": "main", "device": "atem-mini", "rack": "rk-foh", "kind": "cables", "rev": "1", "username": "nobody",
                "iid": "imp-0001", "att": "att-000000000000", "token": "sh-abc123", "fp": "fp-none", "run": "run1", "file": "index.html",
                "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip", "table": "devices", "slug": "power-up",
-               "rid": "run-20260101-000000-0000"}
+               "rid": "run-20260101-000000-0000", "pid": "pr-00000000"}
 DISCOVERY_FIXTURES = str(Path(__file__).parent / "fixtures" / "discovery")
 
 

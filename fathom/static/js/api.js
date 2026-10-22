@@ -176,6 +176,12 @@ export function createApi(opts) {
     pageQrUrl: function (name, slug, o) { o = o || {}; return url(proj(name) + '/qr/page/' + enc(slug) + '.svg', { share: o.share, scale: o.scale, ecl: o.ecl }); },
     pagesQrSheetUrl: function (name, o) { o = o || {}; return url(proj(name) + '/qr/pages.html', { room: o.room, share: o.share }); },
     publicPageUrl: function (name, slug, shareToken) { return url((shareToken ? 's/' + enc(shareToken) : 'p/' + enc(name)) + '/sop/' + enc(slug)); },
+    completePage: function (name, slug) { return send('POST', proj(name) + '/pages/' + enc(slug) + '/complete', {}); },
+    sopBundleUrl: function (name) { return url(proj(name) + '/sop/bundle.zip'); },
+    problems: function (name, params) { return get(proj(name) + '/problems', params); },
+    // body: a plain object (JSON) or a FormData with text/device/page/name/device_status and an optional photo
+    reportProblem: function (name, body) { return send('POST', proj(name) + '/problems', body); },
+    patchProblem: function (name, id, patch) { return send('PATCH', proj(name) + '/problems/' + enc(id), patch); },
     shares: function (name) { return get(proj(name) + '/shares'); },
     createShare: function (name, o) { return send('POST', proj(name) + '/shares', o || {}); },
     deleteShare: function (name, token) { return send('DELETE', proj(name) + '/shares/' + enc(token)); },

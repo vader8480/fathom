@@ -1090,10 +1090,13 @@ body.sop-pub{font-size:17px;line-height:1.5}
 .sop-pub .sop-item-main{color:var(--text)}
 .sop-pub .sop-progress-bar{min-width:60px}
 .sop-pub footer.sop-foot{color:var(--muted);font-size:13px;padding:16px 0 calc(8px + var(--sab))}
-.sop-pub .sop-progress-reset{min-height:36px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font:inherit;font-size:14px}
+.sop-pub .sop-progress-reset,.sop-pub .sop-progress-complete{min-height:36px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font:inherit;font-size:14px}
+.sop-pub .sop-progress-complete{border-color:rgba(52,211,153,.5);color:#6fe2b4}
 .sop-pub .sop-lightbox-close{cursor:pointer}
+.sop-pub .sop-sheet-panel label{display:flex;flex-direction:column;gap:4px}
+.sop-pub .sop-sheet-panel h2{text-transform:none;letter-spacing:0;color:var(--text)}
 @media print{
-  .sop-pub .sop-topbar,.sop-pub .sop-prevnext,.sop-pub .sop-progress,.sop-pub .sop-toc{display:none!important}
+  .sop-pub .sop-topbar,.sop-pub .sop-prevnext,.sop-pub .sop-progress,.sop-pub .sop-toc,.sop-pub .sop-report,.sop-pub .sop-sheet{display:none!important}
   .sop-pub .sop-applies{position:static;border:0;padding-left:0}
   body.sop-pub{font-size:12pt}
   .sop-pub .sop-head h1{font-size:20pt}
@@ -1132,14 +1135,20 @@ SOP_PUB_JS = r"""
   var key='fathom.sop.tasks.'+project+'.'+slug;
   function read(){try{var v=JSON.parse(sessionStorage.getItem(key)||'[]');return Array.isArray(v)?v:[]}catch(e){return[]}}
   function write(l){try{if(l.length)sessionStorage.setItem(key,JSON.stringify(l));else sessionStorage.removeItem(key)}catch(e){}}
-  var boxes=root.querySelectorAll('input[data-task]'),prog=document.getElementById('sop-progress');
+  var boxes=root.querySelectorAll('input[data-task]'),prog=document.getElementById('sop-progress'),note=document.getElementById('sop-complete-note');
+  var doneKey='fathom.sop.done.'+project+'.'+slug;
+  function doneAt(){try{return sessionStorage.getItem(doneKey)||''}catch(e){return''}}
+  function setDone(v){try{if(v)sessionStorage.setItem(doneKey,v);else sessionStorage.removeItem(doneKey)}catch(e){}}
   function paint(){
     var done=0;
     Array.prototype.forEach.call(boxes,function(b){var li=b.closest('li');if(li)li.classList.toggle('done',b.checked);if(b.checked)done++;});
     if(prog){
+      var at=doneAt();
       prog.querySelector('.sop-progress-text').textContent=done+' of '+boxes.length+' done';
       prog.querySelector('.sop-progress-bar i').style.width=Math.round(100*done/Math.max(1,boxes.length))+'%';
-      prog.querySelector('.sop-progress-reset').hidden=!done;
+      prog.querySelector('.sop-progress-reset').hidden=!done&&!at;
+      prog.querySelector('.sop-progress-complete').hidden=!!at||!boxes.length;
+      if(note){note.hidden=!at;note.textContent=at?'Marked complete at '+new Date(at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+' on this phone (not sent anywhere).':'';}
     }
   }
   var done=read();
@@ -1150,7 +1159,13 @@ SOP_PUB_JS = r"""
       if(b.checked)cur.push(n);write(cur);paint();
     });
   });
-  if(prog){prog.querySelector('.sop-progress-reset').addEventListener('click',function(){write([]);Array.prototype.forEach.call(boxes,function(b){b.checked=false});paint();});}
+  if(prog){
+    prog.querySelector('.sop-progress-reset').addEventListener('click',function(){write([]);setDone('');Array.prototype.forEach.call(boxes,function(b){b.checked=false});paint();});
+    prog.querySelector('.sop-progress-complete').addEventListener('click',function(){
+      var cur=[];Array.prototype.forEach.call(boxes,function(b){b.checked=true;cur.push(Number(b.getAttribute('data-task')))});
+      write(cur);setDone(new Date().toISOString());paint();
+    });
+  }
   paint();
   var pr=document.getElementById('sop-print');if(pr)pr.addEventListener('click',function(){window.print();});
   root.addEventListener('click',function(e){
@@ -1167,6 +1182,46 @@ SOP_PUB_JS = r"""
   });
   var toc=document.querySelector('.sop-toc');
   if(toc)toc.addEventListener('click',function(e){var a=e.target.closest?e.target.closest('a'):null;if(!a)return;var id=(a.getAttribute('href')||'').slice(1);var t=id&&document.getElementById(id);if(t){e.preventDefault();t.scrollIntoView({behavior:'smooth',block:'start'});}});
+})();
+"""
+
+# "Report a problem" bottom sheet. Posts multipart form data to data-action (the /p/ or /s/ problems route); without an
+# action (offline bundle) or when the POST fails it falls back to a mailto: built from the form and settings.problem_email.
+SOP_REPORT_JS = r"""
+(function(){
+  var btn=document.getElementById('sop-report'),sheet=document.getElementById('sop-sheet');
+  if(!btn||!sheet)return;
+  var form=sheet.querySelector('form'),status=sheet.querySelector('.sop-sheet-status'),mail=sheet.querySelector('.sop-sheet-mail');
+  var action=form.getAttribute('data-action')||'',email=form.getAttribute('data-email')||'',submit=form.querySelector('button[type=submit]');
+  var title=(document.getElementById('sop-title')||{}).textContent||document.title;
+  function open(){sheet.hidden=false;document.body.classList.add('sop-sheet-open');status.textContent='';setTimeout(function(){var t=form.querySelector('textarea');if(t)t.focus();},60);}
+  function close(){sheet.hidden=true;document.body.classList.remove('sop-sheet-open');}
+  function val(n){var el=form.elements[n];return el?String(el.value||'').trim():''}
+  function mailto(){
+    var sel=form.elements.device,dev=sel&&sel.selectedIndex>0?sel.options[sel.selectedIndex].text:'';
+    var body='Procedure: '+title+'\nLink: '+location.href+(dev?'\nDevice: '+dev:'')+'\n\n'+val('text')+(val('name')?'\n\n\u2014 '+val('name'):'');
+    return 'mailto:'+encodeURIComponent(email||'')+'?subject='+encodeURIComponent('Problem: '+title)+'&body='+encodeURIComponent(body);
+  }
+  btn.addEventListener('click',open);
+  sheet.querySelector('.sop-sheet-cancel').addEventListener('click',close);
+  sheet.querySelector('.sop-sheet-backdrop').addEventListener('click',close);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!sheet.hidden)close();});
+  if(mail)mail.addEventListener('click',function(){mail.href=mailto();});
+  form.addEventListener('submit',function(e){
+    e.preventDefault();
+    if(!val('text')){status.textContent='Describe the problem first.';form.elements.text.focus();return;}
+    if(!action){location.href=mailto();return;}
+    var fd=new FormData(form);var photo=fd.get('photo');if(photo&&!photo.size)fd.delete('photo');
+    submit.disabled=true;status.textContent='Sending\u2026';
+    fetch(action,{method:'POST',body:fd,headers:{'X-Fathom':'1','Accept':'application/json'},credentials:'same-origin'}).then(function(r){
+      return r.json().catch(function(){return{}}).then(function(j){if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j;});
+    }).then(function(){
+      submit.disabled=false;form.reset();status.textContent='Thanks \u2014 the problem has been reported.';
+      setTimeout(close,1400);
+    },function(err){
+      submit.disabled=false;status.textContent='Could not send ('+err.message+').'+(email?' Use the email link below instead.':'');
+    });
+  });
 })();
 """
 
@@ -1272,24 +1327,62 @@ def _sop_shell(title: str, body: str, *, base_url: str, sw: bool, js: str = "") 
                  extra_css=sop_css() + SOP_SHELL_CSS, body_class="sop-pub", wrap=False)
 
 
+def _report_sheet(data: Dict[str, Any], report: Dict[str, Any]) -> str:
+    """"Report a problem" bottom sheet: the page's devices to pick from (pre-selected when there is one), a short
+    description, an optional photo (camera capture on phones), and a name for anonymous reporters. ``report`` carries
+    ``action`` (POST URL, "" offline → mailto only) and ``email`` (``settings.problem_email`` fallback)."""
+    p = data["page"]
+    devices = (data.get("links") or {}).get("devices") or []
+    action = str(report.get("action") or "")
+    email = str(report.get("email") or "")
+    if not action and not email:
+        return ""
+    opts = [f'<option value="">{"Not a specific device" if devices else "No device picked"}</option>']
+    for d in devices:
+        sel = " selected" if len(devices) == 1 else ""
+        opts.append(f'<option value="{esc(d["id"])}"{sel}>{esc(d["name"])}</option>')
+    mail = f'<a class="sop-sheet-mail" href="mailto:{esc(email)}">Email the AV team instead</a>' if email else ""
+    return (
+        '<div class="sop-sheet" id="sop-sheet" hidden><div class="sop-sheet-backdrop"></div>'
+        f'<form class="sop-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sop-sheet-title" data-action="{esc(action)}" data-email="{esc(email)}" novalidate>'
+        '<div class="sop-sheet-grip" aria-hidden="true"></div><h2 id="sop-sheet-title">Report a problem</h2>'
+        f'<input type="hidden" name="page" value="{esc(p["slug"])}">'
+        f'<label class="sop-field"><span>Device</span><select name="device">{"".join(opts)}</select></label>'
+        '<label class="sop-field"><span>What is wrong?</span><textarea name="text" rows="3" required maxlength="2000" placeholder="e.g. No sound from the lectern mic; red light on channel 3"></textarea></label>'
+        '<label class="sop-field"><span>Your name <small>(optional)</small></span><input type="text" name="name" maxlength="80" autocomplete="name"></label>'
+        '<label class="sop-field sop-photo"><span>Photo <small>(optional)</small></span><input type="file" name="photo" accept="image/*" capture="environment"></label>'
+        '<p class="sop-sheet-status" role="status" aria-live="polite"></p>'
+        '<div class="sop-sheet-actions"><button type="button" class="sop-sheet-cancel">Cancel</button>'
+        f'<button type="submit" class="primary">{"Send report" if action else "Send by email"}</button></div>'
+        + (f'<div class="sop-sheet-foot">{mail}</div>' if (mail and action) else "")
+        + "</form></div>"
+    )
+
+
 def render_sop_page(doc: Dict[str, Any], data: Dict[str, Any], *, project: str, base_url: str = "", sw: bool = False,
-                    rel: str = "../", sop_only: bool = False) -> str:
-    """Chrome-free, phone-first page for ``/p/<n>/sop/<slug>`` (and share links).
+                    rel: str = "../", sop_only: bool = False, page_href: Optional[Callable[[str], str]] = None,
+                    index_href: Optional[str] = None, report: Optional[Dict[str, Any]] = None, offline_note: str = "") -> str:
+    """Chrome-free, phone-first page for ``/p/<n>/sop/<slug>`` (and share links, and the offline bundle).
 
     ``data`` is the pages API payload (``page``, ``html``, ``toc``, ``tasks``, ``links``, ``breadcrumbs``, ``prev``/``next``,
     ``children``, ``backlinks``); ``rel`` is the relative prefix back to the viewer root (``../`` from a page URL).
-    With ``sop_only`` (procedures-only share links) device and room chips are plain text."""
+    With ``sop_only`` (procedures-only share links) device and room chips are plain text. ``page_href``/``index_href``
+    override where links to other pages and the index go (the offline bundle uses ``<slug>.html``); ``report`` enables
+    the "Report a problem" sheet (see :func:`_report_sheet`)."""
     p = data["page"]
     meta = doc.get("meta") or {}
+    href = page_href or (lambda s: f"{rel}sop/{_q(s)}")
     crumbs = data.get("breadcrumbs") or []
     back_label = crumbs[-1]["title"] if crumbs else "Procedures"
-    back_href = f"{rel}sop/{_q(crumbs[-1]['slug'])}" if crumbs else f"{rel}sop"
+    back_href = href(crumbs[-1]["slug"]) if crumbs else (index_href if index_href is not None else f"{rel}sop")
     out: List[str] = [f'<main class="sop-main sop-page" data-sop-page="{esc(p["slug"])}" data-sop-project="{esc(project)}">']
     out.append('<div class="sop-topbar">'
                f'<a class="sop-back" href="{esc(back_href)}">\u2039 {esc(back_label)}</a><span class="grow"></span>'
                '<button type="button" id="sop-print" class="no-print">Print</button></div>')
+    if offline_note:
+        out.append(f'<p class="sop-offline-note">{esc(offline_note)}</p>')
     if crumbs:
-        out.append('<nav class="sop-crumbs" aria-label="Breadcrumb">' + " / ".join(f'<a href="{esc(rel)}sop/{_q(c["slug"])}">{esc(c["title"])}</a>' for c in crumbs) + "</nav>")
+        out.append('<nav class="sop-crumbs" aria-label="Breadcrumb">' + " / ".join(f'<a href="{esc(href(c["slug"]))}">{esc(c["title"])}</a>' for c in crumbs) + "</nav>")
     badges = _kind_badge(p) + _review_badge(p)
     out.append(f'<header class="sop-head"><div class="eyebrow">{esc(_org_eyebrow(doc, "Procedures"))}</div><div class="sop-head-badges">{badges}</div>'
                f'<h1 id="sop-title">{esc(p.get("title") or p["slug"])}</h1>'
@@ -1308,53 +1401,71 @@ def render_sop_page(doc: Dict[str, Any], data: Dict[str, Any], *, project: str, 
     if data.get("tasks"):
         out.append('<div class="sop-progress" id="sop-progress" role="status"><span class="sop-progress-text"></span>'
                    '<span class="sop-progress-bar" aria-hidden="true"><i style="width:0"></i></span>'
-                   '<button type="button" class="sop-progress-reset" hidden>Reset</button></div>')
+                   '<button type="button" class="sop-progress-reset" hidden>Reset checklist</button>'
+                   '<button type="button" class="sop-progress-complete" hidden>Mark complete</button></div>'
+                   '<p class="sop-complete-note" id="sop-complete-note" hidden></p>')
     toc = data.get("toc") or []
     if len(toc) > 1:
         items = "".join(f'<li class="lvl-{int(t.get("level") or 2)}"><a href="#{esc(t["id"])}">{esc(t["text"])}</a></li>' for t in toc)
         out.append(f'<details class="sop-toc"><summary>Contents</summary><ol>{items}</ol></details>')
     out.append(f'<article class="sop-body md">{data.get("html") or ""}</article>')
+    sheet = _report_sheet(data, report) if report else ""
+    if sheet:
+        out.append('<div class="sop-report"><button type="button" id="sop-report" class="sop-report-btn">\u26A0 Report a problem</button></div>')
     kids = data.get("children") or []
     if kids:
         out.append('<section class="sop-related"><h2>In this section</h2><ul class="sop-list">'
-                   + "".join(f'<li class="sop-item"><a class="sop-item-main" href="{esc(rel)}sop/{_q(c["slug"])}"><span class="sop-item-title">{esc(c["title"])}</span></a></li>' for c in kids)
+                   + "".join(f'<li class="sop-item"><a class="sop-item-main" href="{esc(href(c["slug"]))}"><span class="sop-item-title">{esc(c["title"])}</span></a></li>' for c in kids)
                    + "</ul></section>")
     back = data.get("backlinks") or []
     if back:
         out.append('<section class="sop-related"><h2>Referenced by</h2><ul class="sop-links">'
-                   + "".join(f'<li><a href="{esc(rel)}sop/{_q(c["slug"])}">{esc(c["title"])}</a></li>' for c in back) + "</ul></section>")
+                   + "".join(f'<li><a href="{esc(href(c["slug"]))}">{esc(c["title"])}</a></li>' for c in back) + "</ul></section>")
     prev, nxt = data.get("prev"), data.get("next")
     if prev or nxt:
         out.append('<nav class="sop-prevnext" aria-label="Previous and next page">'
-                   + (f'<a class="sop-prev" href="{esc(rel)}sop/{_q(prev["slug"])}"><small>\u2039 Previous</small><span>{esc(prev["title"])}</span></a>' if prev else "<span></span>")
-                   + (f'<a class="sop-next" href="{esc(rel)}sop/{_q(nxt["slug"])}"><small>Next \u203a</small><span>{esc(nxt["title"])}</span></a>' if nxt else "<span></span>")
+                   + (f'<a class="sop-prev" href="{esc(href(prev["slug"]))}"><small>\u2039 Previous</small><span>{esc(prev["title"])}</span></a>' if prev else "<span></span>")
+                   + (f'<a class="sop-next" href="{esc(href(nxt["slug"]))}"><small>Next \u203a</small><span>{esc(nxt["title"])}</span></a>' if nxt else "<span></span>")
                    + "</nav>")
     foot = []
     if p.get("updated"):
         foot.append("Updated " + _fmt_date(p["updated"]) + (f' by {p["updated_by"]}' if p.get("updated_by") else ""))
     if p.get("review_due"):
         foot.append("Review due " + _fmt_date(p["review_due"]))
+    last = last_completion(p)
+    if last:
+        foot.append("Last completed " + _fmt_date(last.get("at")) + (f' by {last["by"]}' if last.get("by") else ""))
     if data.get("revision"):
         foot.append(f'r{data["revision"]}')
     out.append(f'<footer class="sop-foot">{esc(" · ".join(foot))}</footer></main>')
-    return _sop_shell(f'{p.get("title") or p["slug"]} · {meta.get("org") or project}', "".join(out), base_url=base_url, sw=sw, js=SOP_PUB_JS)
+    return _sop_shell(f'{p.get("title") or p["slug"]} · {meta.get("org") or project}', "".join(out) + sheet, base_url=base_url, sw=sw,
+                      js=SOP_PUB_JS + (SOP_REPORT_JS if sheet else ""))
+
+
+def last_completion(p: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The most recent ``{"at", "by"}`` entry of ``page.completions`` (editors' "Mark complete"), or ``None``."""
+    done = [c for c in p.get("completions") or [] if isinstance(c, dict) and c.get("at")]
+    return max(done, key=lambda c: str(c["at"])) if done else None
 
 
 def render_sop_index(doc: Dict[str, Any], *, project: str, base_url: str = "", sw: bool = False, rel: str = "",
-                     sop_only: bool = False) -> str:
-    """Published procedures as a drill-down list (``/p/<n>/sop``)."""
+                     sop_only: bool = False, page_href: Optional[Callable[[str], str]] = None, offline_note: str = "") -> str:
+    """Published procedures as a drill-down list (``/p/<n>/sop``; ``page_href`` relinks it for the offline bundle)."""
     meta = doc.get("meta") or {}
+    href = page_href or (lambda s: f"{rel}sop/{_q(s)}")
     rows = sop_tree(doc)
     out: List[str] = ['<main class="sop-main sop-index">']
     nav = "" if sop_only else f'<a class="btn" href="{esc(rel)}rooms">Rooms</a>'
     out.append(f'<div class="sop-topbar"><span class="grow"></span>{nav}</div>')
+    if offline_note:
+        out.append(f'<p class="sop-offline-note">{esc(offline_note)}</p>')
     out.append(f'<div class="eyebrow">{esc(_org_eyebrow(doc, "Procedures"))}</div><h1>{esc(meta.get("title") or project)}</h1>'
                f'<p class="muted">{len(rows)} published page{"s" if len(rows) != 1 else ""}. Tap a page to open it; checklists remember your place on this device.</p>')
     if rows:
         items = []
         for p, depth in rows:
             sub = _kind_badge(p) + _review_badge(p) + (f'<span class="sop-item-sum">{esc(p["summary"])}</span>' if p.get("summary") else "")
-            items.append(f'<li class="sop-item" style="--depth:{depth}"><a class="sop-item-main" href="{esc(rel)}sop/{_q(p["slug"])}">'
+            items.append(f'<li class="sop-item" style="--depth:{depth}"><a class="sop-item-main" href="{esc(href(p["slug"]))}">'
                          f'<span class="sop-item-title">{esc(p.get("title") or p["slug"])}</span><span class="sop-item-sub">{sub}</span></a></li>')
         out.append(f'<ul class="sop-list" role="list">{"".join(items)}</ul>')
     else:
