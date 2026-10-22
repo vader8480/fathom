@@ -1133,6 +1133,52 @@ def r_device_merge(req: Request) -> Response:
     return Response.json(res, headers={"ETag": f'"r{res["revision"]}"'})
 
 
+def _device_or_404(doc: Dict[str, Any], device_id: str) -> Dict[str, Any]:
+    for d in doc.get("devices") or []:
+        if isinstance(d, dict) and d.get("id") == device_id:
+            return d
+    raise ApiError(404, f"device '{device_id}' not found", "not_found")
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/devices/(?P<device>" + _EID + ")/channels", role="viewer",
+       summary="Console channels, buses, DCAs and links of a device (persisted, else from the imports overlay)", tags=["devices"])
+def r_device_channels(req: Request) -> Response:
+    from . import console as C
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    dev = _device_or_404(doc, req.params["device"])
+    ov = _overlay(doc, pdir, strict=False) or {}
+    eff = C.effective_channels(doc, ov, dev["id"])
+    labels = (ov.get("channel_labels") or {}).get(dev["id"]) or {}
+    out = dict(eff)
+    out.update({"device": dev["id"], "labels": labels, "summary": C.summary(eff["channels"], eff["links"])})
+    return Response.json(out)
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + r"/devices/(?P<device>" + _EID + ")/channels/apply", role="editor",
+       summary="Apply the imported console channels to the device (user-entered channels and links are kept)", tags=["devices"])
+def r_device_channels_apply(req: Request) -> Response:
+    from . import console as C
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    dev = _device_or_404(doc, req.params["device"])
+    ov = _overlay(doc, pdir) or {}
+    if C.overlay_channels(ov, dev["id"]) is None:
+        raise ApiError(404, "no imported console channels for this device", "not_found")
+    ops = C.apply_ops(doc, ov, dev["id"])
+    revision = _rev(doc)
+    if ops:
+        value = ops[0]["value"]
+        res = _server_ops(req, pdir, ops, f"Apply console channels to {dev.get('name') or dev['id']}", "import")
+        revision = res["revision"]
+        applied = C.summary(value.get("channels") or [], value.get("channel_links") or [])
+    else:
+        applied = C.summary(dev.get("channels") or [], dev.get("channel_links") or [])
+    return Response.json({"revision": revision, "changed": bool(ops), "summary": applied})
+
+
 @route("DELETE", r"/api/v2/projects/" + _NAME, role="admin", summary="Delete a project (?confirm=<name>)", tags=["projects"])
 def r_project_delete_v2(req: Request) -> Response:
     name = req.params["name"]

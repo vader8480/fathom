@@ -196,7 +196,29 @@ RACK_DEPTHS: Tuple[str, ...] = ("full", "half")
 INTERFACE_ROLES: Tuple[str, ...] = ("primary", "secondary", "control", "management", "media")
 NETWORK_PROTOCOLS: Tuple[str, ...] = ("dante", "aes67", "avb", "ndi", "st2110", "sacn", "artnet", "qlan", "control", "management", "other")
 DMX_PROTOCOLS: Tuple[str, ...] = ("dmx", "sacn", "artnet")
-ROUTING_MODES: Tuple[str, ...] = ("matrix", "passthrough", "none", "explicit")
+ROUTING_MODES: Tuple[str, ...] = ("matrix", "passthrough", "none", "explicit", "indexed")
+#: Console-internal channel kinds (§4.3.17). Open vocabulary: unknown kinds are warnings.
+CHANNEL_KINDS: Dict[str, Dict[str, str]] = {
+    "input": {"label": "Input channels", "short": "CH", "role": "input"},
+    "stereo_input": {"label": "Stereo inputs", "short": "ST IN", "role": "input"},
+    "mix": {"label": "Mix buses", "short": "MIX", "role": "bus"},
+    "aux": {"label": "Aux buses", "short": "AUX", "role": "bus"},
+    "group": {"label": "Groups", "short": "GRP", "role": "bus"},
+    "matrix": {"label": "Matrix buses", "short": "MTX", "role": "bus"},
+    "stereo": {"label": "Stereo / main", "short": "ST", "role": "bus"},
+    "mono": {"label": "Mono / centre", "short": "MONO", "role": "bus"},
+    "dca": {"label": "DCAs", "short": "DCA", "role": "control"},
+    "mute_group": {"label": "Mute groups", "short": "MUTE", "role": "control"},
+    "rack": {"label": "Racks (GEQ / FX / Premium)", "short": "RACK", "role": "rack"},
+    "monitor": {"label": "Monitor", "short": "MON", "role": "bus"},
+    "cue": {"label": "Cue", "short": "CUE", "role": "bus"},
+    "talkback": {"label": "Talkback", "short": "TB", "role": "input"},
+    "oscillator": {"label": "Oscillator", "short": "OSC", "role": "input"},
+}
+#: Edges inside a console: physical / rack ↔ channel ↔ bus (§4.3.17). ``dca`` / ``mute`` carry control, not audio.
+CHANNEL_LINK_KINDS: Tuple[str, ...] = ("input_patch", "send", "output_patch", "direct_out", "insert_send", "insert_return", "dca", "mute")
+#: Where a channel / link came from; imports never overwrite ``user`` entries.
+CHANNEL_SOURCES: Tuple[str, ...] = ("user", "yamaha", "clf", "dante", "csv")
 SYMPTOMS: Tuple[str, ...] = (
     "no_audio", "no_video", "noise", "feedback", "dropout", "latency", "no_power", "no_network",
     "lighting_no_response", "flicker", "wrong_source", "general",
@@ -255,6 +277,9 @@ def as_dict() -> Dict[str, Any]:
         "network_protocols": list(NETWORK_PROTOCOLS),
         "dmx_protocols": list(DMX_PROTOCOLS),
         "routing_modes": list(ROUTING_MODES),
+        "channel_kinds": CHANNEL_KINDS,
+        "channel_link_kinds": list(CHANNEL_LINK_KINDS),
+        "channel_sources": list(CHANNEL_SOURCES),
         "symptoms": list(SYMPTOMS),
     })
 
@@ -262,7 +287,8 @@ def as_dict() -> Dict[str, Any]:
 __all__ = [
     "KINDS", "MEDIA", "DISCIPLINES", "BRANDS", "CONNECTORS", "STATUSES", "ROOM_KINDS", "PORT_DIRS",
     "LOCATION_KINDS", "RACK_NUMBERING", "RACK_FACES", "RACK_SIDES", "RACK_DEPTHS", "INTERFACE_ROLES",
-    "NETWORK_PROTOCOLS", "DMX_PROTOCOLS", "ROUTING_MODES", "SYMPTOMS", "NETWORK_MEDIA", "SOURCE_KINDS",
+    "NETWORK_PROTOCOLS", "DMX_PROTOCOLS", "ROUTING_MODES", "CHANNEL_KINDS", "CHANNEL_LINK_KINDS", "CHANNEL_SOURCES",
+    "SYMPTOMS", "NETWORK_MEDIA", "SOURCE_KINDS",
     "V1_KINDS", "V1_MEDIA", "as_dict", "kind_discipline", "medium_discipline", "medium_carries",
     "discipline_letter", "kind_routing",
 ]

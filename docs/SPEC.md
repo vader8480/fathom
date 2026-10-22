@@ -590,8 +590,9 @@ Types: `str`, `int`, `num` (float), `bool`, `obj`, `[T]` array of T. "Req" = req
 | `dante_name` | str | no | Dante device name for import matching |
 | `status` | str | no | `installed` (default) \| `planned` \| `spare` \| `retired` |
 | `tags` | `[str]` | no | free tags |
-| `routing` | obj | no | `{"mode": "matrix"\|"passthrough"\|"none"\|"explicit", "map": [[in_port, out_port], …]}`; default mode from kind (§4.4.5) |
+| `routing` | obj | no | `{"mode": "matrix"\|"passthrough"\|"indexed"\|"none"\|"explicit", "map": [[in_port, out_port], …]}`; default mode from kind (§4.4.5) |
 | `ports` | `[Port]` | yes | always written (may be `[]`) |
+| `channels`, `channel_links` | `[Channel]`, `[ChannelLink]` | no | console internals — input channels, buses, DCAs and the patch edges between them (§4.3.17); a doc with them is v2-only |
 | `flow` | obj | no | `{group, column, order, seq, show}` map placement for the device's primary card; `show:false` hides it from the map |
 | `patch` | obj | no | `{x, y}` world coordinates in the patch view (px at zoom 1); `collapsed: bool` |
 | `rack` | obj | no | `{id, u, height, face, side, depth}` (FR-RACK-02) |
@@ -707,6 +708,43 @@ Archived pages are hidden from viewers and volunteers everywhere (app tree, insp
 | `created`, `by`, `via` | str | no | — | Set by the server: UTC time, reporter (login, or the typed name, or `anonymous`), channel `app` / `public` / `share`. |
 | `resolved`, `resolved_by`, `note` | str | no | — | Set when resolved (cleared on reopen). |
 
+#### 4.3.17 Console channels — `devices[].channels[]` and `channel_links[]` (`fathom/console.py`)
+
+A mixing console is more than its connectors: the signal enters on a Dante receive channel, lands on an **input channel**, is sent to **buses** (mix, matrix, stereo, mono), grouped under **DCAs**, and leaves on a transmit channel or an Omni output. `channels[]` lists those logical channels and `channel_links[]` the edges between them, so a trace can follow *Bass → Rio analog in 6 → Dante 17 → CH 12 "Bass" → ST L/R → Dante 63/64 → Rio out 1/2 → amps*. The model is generic (any console); importers populate it (today the Yamaha CL/QL CSV export, §7.3.x), users edit it, and the tracer reads it. A doc that has them is v2-only (`is_v1_expressible` → false).
+
+**Channel**
+
+| Field | Type | Req | Notes |
+| --- | --- | --- | --- |
+| `id` | str | yes | unique per device; convention `<prefix>-<index>[-<side>]`: `in-12`, `stin-4-l`, `mix-3`, `mtx-7`, `st-l`, `mono`, `dca-1`, `mute-2`, racks `fx-1` / `geq-3` / `prfx-6` (`console.channel_id`) |
+| `kind` | str | yes | `input`, `stereo_input`, `mix`, `aux`, `group`, `matrix`, `stereo`, `mono`, `dca`, `mute_group`, `rack`, `monitor`, `cue`, `talkback`, `oscillator` (`vocab.CHANNEL_KINDS`; unknown kept, warning `unknown_channel_kind`) |
+| `index` | int | no | console number (`CH 12` → 12); omitted for `stereo` / `mono` |
+| `side` | str | no | `L` / `R` for stereo pairs (`stereo_input`, `stereo`) |
+| `rack` | str | no | rack family for `kind: rack` (`FX`, `GEQ`, `PRFX`, `PEQ`); the rack's two sides are endpoint `tag`s `A` / `B` |
+| `name` | str | no | console name ("Bass", "9 IEM", "BAND") |
+| `label` | str | no | display label override; default `CH 12`, `ST IN 4 L`, `MIX 3`, `MATRIX 7`, `ST L`, `MONO`, `DCA 1`, `FX 1` (`console.channel_label`) |
+| `color`, `icon`, `note` | str | no | console colour / icon names, free note |
+| `source` | str | no | `user` (default when edited in the app), `yamaha`, `clf`, `dante`, `csv` (`vocab.CHANNEL_SOURCES`; warning `bad_enum`). Imports never overwrite `user` entries (§4.11). |
+
+**ChannelLink** — `{from, to, kind, insert?, note?, source?}`; `from`/`to` are **endpoints**:
+
+| Endpoint | Meaning |
+| --- | --- |
+| `{"channel": "in-12"}` | a console channel of this device; racks add `"tag": "A"` / `"B"` |
+| `{"port": "dante-primary", "ch": 17}` | sub-channel `ch` (1-based) of a multichannel port of this device; `ch` omitted for mono connectors (`{"port": "omni-out-7"}`). At `from` the signal **enters** the device (a receive channel), at `to` it **leaves** (a transmit channel). |
+| `{"text": "REC 1"}` | a console port the importer could not map onto a device port (kept verbatim; warning `dangling_port` when a `port` id is unknown, the link is kept as text) |
+
+| `kind` | Edge | Example |
+| --- | --- | --- |
+| `input_patch` | port / rack → input channel | `DANTE 17 → CH 12` |
+| `send` | channel → bus (level not modelled; absence means *not recorded*, never *off*) | `CH 12 → ST L`, `CH 12 → MIX 9` |
+| `output_patch` | bus / channel → port / rack | `ST L → DANTE 63`, `MIX 9 → OMNI 3` |
+| `direct_out` | input channel → port (`DIR CH 43`) | `CH 43 → SLOT1 9` |
+| `insert_send` / `insert_return` | channel ↔ rack or port; `insert` = insert slot 1/2 | `MATRIX 7 → PRFX 1 A`, `PRFX 1 A → MATRIX 7` |
+| `dca`, `mute` | input channel / bus → DCA / mute group (control only — a trace reports them as *via*, never as an audio hop unless asked) | `CH 12 → DCA 1` |
+
+Validation (`schema._channel_problems`): errors `bad_type`, `missing_field` (channel `id`/`kind`, link `from`/`to`/`kind`), `bad_id`, `duplicate_channel`, `dangling_channel` (endpoint channel not in `channels[]`), `bad_enum` for a non-positive `ch` or an `insert` other than 1/2; warnings `unknown_channel_kind`, `unknown_link_kind`, `bad_enum` (source), `dangling_port`. A link whose two endpoints are both ports is allowed (console-internal port-to-port patch). Links are unordered; `console.sort_channels` orders channels by kind, rack, index, side.
+
 ### 4.4 Semantics
 
 #### 4.4.1 Normalization (`schema.normalize(doc) -> doc`)
@@ -761,10 +799,11 @@ Medium checks (only when both ports have media): equal → ok; `carries` interse
 | --- | --- |
 | `matrix` | every `in`/`io` port → every `out`/`io` port (≠ itself) where `carries(in) ∩ carries(out) ≠ ∅` (∩ the trace discipline when filtered) |
 | `passthrough` | port A (`in`/`io`) → port B (`out`/`io`), `A.medium == B.medium`, and either (a) A and B are in the **same** group and that group has exactly one `in` port (thru semantics: `DMX In → DMX Out/Thru`, `Power In → Power Out`), or (b) `idx(A) == idx(B)` and `stem(A.group) == stem(B.group)` for different groups, where `idx(p) = p.index or (1-based position of p among ports with the same group)` and `stem(g)` = `slug(g)` split on `-` with the tokens `in, input, inputs, out, output, outputs, thru, through, loop` removed, re-joined with `-`. Examples: "Analog In"/"Analog Out" → `analog`; "HDMI In"/"HDMI Out" → `hdmi`; "IEM Return" → `iem-return` (no partner). Used for passive snakes, wall plates, DMX thru, speaker thru. |
+| `indexed` | channel-numbered stage boxes and converters: analog/AES **in** port *n* → sub-channel *n* of every multichannel (`channels > 1`) `out`/`io` port, and sub-channel *n* of every multichannel `in`/`io` port → analog/AES **out** port *n*, where *n* counts the device's single-channel in (resp. out) ports in port order, a 2-channel AES port taking two numbers (Rio3224-D: analog in 1–32 → Dante TX 1–32; Dante RX 1–16 → analog out 1–16, RX 17–24 → AES out 1/2–7/8). Port-level tracers (which do not know sub-channels) treat it as `matrix`. |
 | `none` | no internal edges (endpoints: speakers without thru, streams, projectors) |
 | `explicit` | exactly `routing.map` pairs |
 
-Default mode per kind is the `routing` column of Appendix A.1.
+Default mode per kind is the `routing` column of Appendix A.1; a template's `routing` (§4.5) is copied onto devices made from it (`library.instantiate`). The built-in Yamaha R/Tio and Focusrite RedNet stage-box templates use `indexed`.
 
 #### 4.4.6 State filter
 
@@ -784,7 +823,7 @@ Default mode per kind is the `routing` column of Appendix A.1.
   "ru": 5, "width": "full", "depth_mm": 368, "power_w": 120, "weight_kg": 13.5,
   "cost": null, "currency": "USD",
   "dante": true,
-  "routing": "matrix",
+  "routing": "indexed",
   "dmx_footprint": null,
   "ports": [
     {"group": "Analog In", "dir": "in", "medium": "analog", "connector": "XLR3F", "count": 32},
@@ -1013,7 +1052,9 @@ Revision rules:
   "imports_hash": "9f2c…",
   "devices":    [{"id": "dante-am2-7", "name": "AM2-7", "kind": "iem", "room": "main", "auto": true, "source": "dante", "ports": [{"id": "dante", "name": "Dante", "dir": "io", "medium": "dante", "channels": 2}]}],
   "detail":     {"foh": {"dante": {"name": "FOH-CL5", "tx": 64, "rx": 64}, "console": {"model": "CL5", "inputs_named": 58}}, "foh-pc": {"waves": {"app": "SuperRack SoundGrid", "racks": []}}},
-  "routes":     [{"kind": "dante", "from": {"device": "neve1", "port": "dante-tx", "channel": "1 · Kick In"}, "to": {"device": "foh", "port": "dante", "channel": "1 · 01"}, "label": "Kick In", "medium": "dante"}],
+  "routes":     [{"kind": "dante", "from": {"device": "neve1", "port": "dante-tx", "channel": "1 · Kick In", "ch": 1}, "to": {"device": "foh", "port": "dante", "channel": "1 · 01", "ch": 1}, "label": "Kick In", "medium": "dante"}],
+  "channels":   {"foh": {"channels": [{"id": "in-12", "kind": "input", "index": 12, "name": "Bass", "source": "yamaha"}], "links": [{"from": {"port": "dante", "ch": 17}, "to": {"channel": "in-12"}, "kind": "input_patch", "source": "yamaha"}]}},
+  "channel_labels": {"rio3224": {"dante-primary": {"out": {"6": "Bass 17"}, "in": {"1": "Main L"}}}},
   "port_labels": {"vhub": {"sdi-in-1": "CAM 1"}},
   "interfaces": {"rio3224": [{"id": "dante-primary", "role": "primary", "ip": "192.168.1.21", "protocol": "dante", "source": "dante"}]},
   "dmx":        {"fx-12": {"universe": 1, "address": 101, "footprint": 16, "channel": "12", "source": "eos"}},
@@ -1024,7 +1065,9 @@ Revision rules:
 }
 ```
 
-- Legacy importers run through `merge.apply_imports` on each room's flow project; results are lifted: auto nodes → overlay devices (kind as inferred, ports: one `dante` io port with `channels = max(tx, rx)` when Dante), `node.detail` → `detail`, Dante subscriptions → `routes` (device-level port = the device's first `dante`-medium port, else omitted), console channel names → `port_labels` on the console's matching Omni ports when they exist.
+- Legacy importers run through `merge.apply_imports` on each room's flow project; results are lifted: auto nodes → overlay devices (kind as inferred, ports: one `dante` io port with `channels = max(tx, rx)` when Dante), `node.detail` → `detail`, Dante subscriptions → `routes` (device-level port = the device's first `dante`-medium port, else omitted; `from.ch` / `to.ch` = the integer TX / RX channel numbers when known), console channel names → `port_labels` on the console's matching Omni ports when they exist.
+- `channel_labels[device][port] = {"out": {ch: tx_name}, "in": {ch: rx_name}}` — the Dante channel names of every device in a Dante preset, keyed by its first `dante` port; the UI shows both the Dante name and the console name of a channel.
+- `channels[device] = {"channels", "links"}` (§4.3.17) — the console importer's channels and links for the console device the import is attached to, mapped onto that device's ports (`console.console_contribution`: `DANTE n` → the first `dante` io port with `ch: n`; `OMNI n` → the n-th analog Omni in/out port; `SLOTk n` → the k-th slot port with `ch: n`; anything else is kept as a `text` endpoint and listed in `notes`). Nothing is written to the doc: `console.effective_channels` serves the persisted set once the user has applied it (`POST …/channels/apply`, §5.6, or promoting the device copies them) and the overlay set before; on (re-)apply `user`-sourced channels and links survive and imported ones are replaced.
 - New importers contribute directly (`Importer.contribute`, §7.4.2).
 - Routes always reference canonical device ids (never extra-card ids).
 - Cache key: `(project, revision, imports_hash)` where `imports_hash` = sha1 of `(path, size, mtime_ns)` for every import file.
@@ -1151,6 +1194,8 @@ Username regex `^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$`. Session cookie payload `{"u
 | GET | `/api/v2/projects/<n>/devices/duplicates?device=<id>&min=0.5&limit=50` | viewer | — | `{"revision", "min_score", "total", "duplicates": [{"devices": [survivor, duplicate], "score", "confidence": high\|medium\|low, "reasons": [{"signal", "weight", "text"}], "suggested_survivor"}]}` — persisted and overlay devices; scored by serial / MAC / asset tag / IP / hostname / Dante name / aliases / name similarity / model / rack position, penalised for numbered series, differing kinds, models, serials and rooms; 404 unknown `device` |
 | POST | `/api/v2/projects/<n>/devices/merge/preview` | editor | `{"survivor", "duplicates": [ids], "choices?": {field: device_id\|"union"}}` | merge plan — **no write**: `{"revision", "survivor", "duplicates", "devices", "fields": [{"key", "label", "rule", "values": {id: v}, "winner", "result", "conflict", "overridable", "reason"}], "ports", "interfaces", "references", "warnings", "result", "ops", "summary"}`; 400 `self_merge`/`no_duplicates`/`auto_survivor`; 404 `not_found` |
 | POST | `/api/v2/projects/<n>/devices/merge` | editor | preview body + `"base_revision?"` | applies the plan's ops as one revision (source `merge`, summary "Merged '<dup>' into '<survivor>'"): `{"revision", "rebased", "problems", "touched", "survivor", "duplicates", "summary", "warnings", "ops"}`; 409 on stale `base_revision` |
+| GET | `/api/v2/projects/<n>/devices/<id>/channels` | viewer | — | console channels of a device (§4.3.17): `{"device", "channels", "links", "source": "device"\|"overlay"\|"none", "pending", "labels": {port: {"in": {ch: label}, "out": {ch: label}}}, "summary": {"channels", "links", "by_kind", "by_link", "named", "sends", "dca_members"}}` — the persisted set when the device has `channels`, else the imports overlay's; `pending` = an import contribution exists that a (re-)apply would write; `labels` = Dante channel names from the overlay |
+| POST | `/api/v2/projects/<n>/devices/<id>/channels/apply` | editor | — | persists the overlay's channels and links onto the device (`console.apply_ops`; `user`-sourced entries are kept, everything else replaced) as one revision (source `import`, summary "Apply console channels to <name>"): `{"revision", "changed", "summary"}`; 404 `not_found` when the overlay has nothing for the device |
 | GET | `/api/v2/projects/<n>/offline-manifest` | viewer | — | `{"urls": ["p/<n>", "p/<n>/rooms", "p/<n>/r/<room>", "p/<n>/r/<room>/patch", "p/<n>/d/<device>", …, "api/v2/projects/<n>", "api/v2/meta", <app shell assets>]}` (relative) |
 | GET/POST/DELETE | `/api/v2/projects/<n>/shares[/<token>]` | editor | POST `{"label?", "expires?", "scope?": "all"\|"sop"}` | P1 `{"shares": [{"token", "label", "created", "expires", "by", "scope"}]}` / 201 `{"share": …, "url": "s/<token>/"}` / 204. `scope: "sop"` (400 `bad_enum` otherwise) limits the mirror to `/s/<token>/sop[/…]` and `/s/<token>/files/…`; other paths → 403 `share_scope`, the bare token opens the procedures index. |
 

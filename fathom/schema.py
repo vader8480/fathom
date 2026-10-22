@@ -46,7 +46,12 @@ STATUSES: Tuple[str, ...] = ("installed", "planned", "spare", "retired")
 PORT_DIRS: Tuple[str, ...] = ("in", "out", "io")
 NETWORK_MEDIA = frozenset({"dante", "avb", "aes67", "aes50", "madi", "snake", "network", "qlan"})
 GENERIC_PREFIXES = frozenset({"", "in", "input", "inputs", "out", "output", "outputs", "ch", "channel"})
-ROUTING_MODES: Tuple[str, ...] = ("matrix", "passthrough", "none", "explicit")
+ROUTING_MODES: Tuple[str, ...] = ("matrix", "passthrough", "none", "explicit", "indexed")
+#: §4.3.17 console internals (fallback copies of ``vocab.CHANNEL_*``)
+CHANNEL_KINDS: Tuple[str, ...] = ("input", "stereo_input", "mix", "aux", "group", "matrix", "stereo", "mono", "dca", "mute_group",
+                                  "rack", "monitor", "cue", "talkback", "oscillator")
+CHANNEL_LINK_KINDS: Tuple[str, ...] = ("input_patch", "send", "output_patch", "direct_out", "insert_send", "insert_return", "dca", "mute")
+CHANNEL_SOURCES: Tuple[str, ...] = ("user", "yamaha", "clf", "dante", "csv")
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "default_room": "main", "units": "metric", "cable_tag_pattern": "{D}-{n:03}", "currency": "USD", "autosave": True,
 }
@@ -1070,7 +1075,7 @@ def is_v1_expressible(doc: Doc) -> bool:
     for d in doc.get("devices") or []:
         if not isinstance(d, dict):
             return False
-        for k in ("inventory", "rack", "interfaces", "dmx", "template", "routing", "patch", "tags"):
+        for k in ("inventory", "rack", "interfaces", "dmx", "template", "routing", "patch", "tags", "channels", "channel_links"):
             if d.get(k):
                 return False
         if str(d.get("status") or "installed") != "installed":
@@ -1137,6 +1142,14 @@ class DocIndex:
 
     def port(self, device_id: str, port_id: str) -> Optional[Dict[str, Any]]:
         return self.ports.get(device_id, {}).get(port_id)
+
+    def channel(self, device_id: str, channel_id: str) -> Optional[Dict[str, Any]]:
+        """Persisted console channel (§4.3.17) of a device, by id."""
+        dev = self.device(device_id)
+        for c in (dev or {}).get("channels") or []:
+            if isinstance(c, dict) and c.get("id") == channel_id:
+                return c
+        return None
 
     def cables_of(self, device_id: str) -> List[Dict[str, Any]]:
         return list(self._by_dev.get(device_id, []))
@@ -1484,6 +1497,7 @@ def validate_doc(doc: Doc) -> List[Problem]:
             for f in ("purchase_date", "warranty_until"):
                 if inv.get(f) and not _valid_date(inv.get(f)):
                     P.append(_prob("warning", "bad_date", ref, f"{ref}/inventory/{f}", f"{f} must be YYYY-MM-DD"))
+        P.extend(_channel_problems(d, ref, pseen))
 
     # ---- cables and bundles
     bundle_ids = ids["bundles"]
@@ -1649,6 +1663,84 @@ def _problem_report_problems(colls: Dict[str, List[Dict[str, Any]]], ids: Dict[s
     return P
 
 
+def _channel_vocab() -> Tuple[Tuple[str, ...], Tuple[str, ...], Tuple[str, ...]]:
+    try:
+        from . import vocab  # type: ignore
+
+        return tuple(vocab.CHANNEL_KINDS), tuple(vocab.CHANNEL_LINK_KINDS), tuple(vocab.CHANNEL_SOURCES)
+    except Exception:  # pragma: no cover - vocab missing
+        return CHANNEL_KINDS, CHANNEL_LINK_KINDS, CHANNEL_SOURCES
+
+
+def _channel_problems(d: Dict[str, Any], ref: str, port_ids: Set[str]) -> List[Problem]:
+    """§4.3.17 console internals: channel ids unique and well-formed (errors), link endpoints
+    name an existing channel (error) or port (warning, like dangling cable ports), enums warn."""
+    P: List[Problem] = []
+    kinds, link_kinds, sources = _channel_vocab()
+    chans = d.get("channels")
+    links = d.get("channel_links")
+    if chans is None and links is None:
+        return P
+    ids: Set[str] = set()
+    if chans is not None and not isinstance(chans, list):
+        P.append(_prob("error", "bad_type", ref, ref + "/channels", "channels must be a list"))
+        chans = []
+    for j, c in enumerate(chans or []):
+        path = f"{ref}/channels/{j}"
+        if not isinstance(c, dict):
+            P.append(_prob("error", "bad_type", ref, path, "channel must be an object"))
+            continue
+        cid = c.get("id")
+        if not isinstance(cid, str) or not cid:
+            P.append(_prob("error", "missing_field", ref, path + "/id", "channel needs an id"))
+            continue
+        if not ID_RE.match(cid):
+            P.append(_prob("error", "bad_id", ref, path + "/id", f"bad channel id {cid!r}"))
+        if cid in ids:
+            P.append(_prob("error", "duplicate_channel", ref, path + "/id", f"duplicate channel id {cid!r}"))
+        ids.add(cid)
+        if not c.get("kind"):
+            P.append(_prob("error", "missing_field", ref, path + "/kind", f"channel {cid} needs a kind"))
+        elif c["kind"] not in kinds:
+            P.append(_prob("warning", "unknown_channel_kind", ref, path + "/kind", f"unknown channel kind '{c['kind']}'"))
+        if c.get("source") not in (None, *sources):
+            P.append(_prob("warning", "bad_enum", ref, path + "/source", f"channel source should be one of {', '.join(sources)}"))
+    if links is not None and not isinstance(links, list):
+        P.append(_prob("error", "bad_type", ref, ref + "/channel_links", "channel_links must be a list"))
+        links = []
+    for j, ln in enumerate(links or []):
+        path = f"{ref}/channel_links/{j}"
+        if not isinstance(ln, dict):
+            P.append(_prob("error", "bad_type", ref, path, "channel link must be an object"))
+            continue
+        if not ln.get("kind"):
+            P.append(_prob("error", "missing_field", ref, path + "/kind", "channel link needs a kind"))
+        elif ln["kind"] not in link_kinds:
+            P.append(_prob("warning", "unknown_link_kind", ref, path + "/kind", f"unknown channel link kind '{ln['kind']}'"))
+        if ln.get("source") not in (None, *sources):
+            P.append(_prob("warning", "bad_enum", ref, path + "/source", f"link source should be one of {', '.join(sources)}"))
+        for end in ("from", "to"):
+            ep = ln.get(end)
+            if not isinstance(ep, dict):
+                P.append(_prob("error", "missing_field" if ep is None else "bad_type", ref, f"{path}/{end}", f"channel link needs a {end} endpoint"))
+                continue
+            if ep.get("channel"):
+                if ep["channel"] not in ids:
+                    P.append(_prob("error", "dangling_channel", ref, f"{path}/{end}/channel", f"{ref}: channel '{ep['channel']}' does not exist"))
+            elif ep.get("port"):
+                if ep["port"] not in port_ids:
+                    P.append(_prob("warning", "dangling_port", ref, f"{path}/{end}/port", f"{ref}: port '{ep['port']}' does not exist (link kept as text)"))
+            elif not ep.get("text"):
+                P.append(_prob("error", "missing_field", ref, f"{path}/{end}", f"{end} endpoint needs a channel, a port or a text"))
+            ch = ep.get("ch")
+            if ch is not None and (not isinstance(ch, int) or isinstance(ch, bool) or ch < 1):
+                P.append(_prob("error", "bad_enum", ref, f"{path}/{end}/ch", "ch must be a positive integer"))
+        ins = ln.get("insert")
+        if ins is not None and ins not in (1, 2):
+            P.append(_prob("error", "bad_enum", ref, path + "/insert", "insert must be 1 or 2"))
+    return P
+
+
 def _valid_date(v: Any) -> bool:
     if not isinstance(v, str) or not _DATE_RE.match(v):
         return False
@@ -1795,6 +1887,16 @@ _INTERFACE = _obj({
     "ip": _STR, "prefix": _INT, "gateway": _STR, "vlan": _INT, "mac": _STR, "hostname": _STR, "dhcp": _BOOL,
     "protocol": _STR, "network": _STR, "switch": _STR, "switch_port": _STR, "port": _STR, "note": _STR,
 }, ("id",))
+_CHANNEL = _obj({
+    "id": _ID, "kind": _STR, "index": _INT, "side": {"type": "string", "enum": ["L", "R"]}, "name": _STR, "color": _STR,
+    "icon": _STR, "rack": _STR, "label": _STR, "note": _STR, "source": _STR,
+}, ("id", "kind"))
+#: one end of a channel link: a console channel, a (sub-channel of a) device port, or free text when unmapped
+_CH_ENDPOINT = _obj({"channel": _ID, "tag": _STR, "port": _ID, "ch": {"type": "integer", "minimum": 1}, "text": _STR})
+_CHANNEL_LINK = _obj({
+    "from": _CH_ENDPOINT, "to": _CH_ENDPOINT, "kind": _STR, "insert": {"type": "integer", "enum": [1, 2]},
+    "level": _STR, "source": _STR, "note": _STR,
+}, ("from", "to", "kind"))
 
 JSON_SCHEMA: Dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1852,6 +1954,8 @@ JSON_SCHEMA: Dict[str, Any] = {
             "interfaces": _arr(_INTERFACE),
             "dmx": _obj({"universe": _INT, "address": _INT, "footprint": _INT, "mode": _STR, "channel": _STR,
                          "protocol": {"type": "string", "enum": ["dmx", "sacn", "artnet"]}, "port": _STR}),
+            "channels": _arr(_CHANNEL),
+            "channel_links": _arr(_CHANNEL_LINK),
         }, ("id", "name", "kind", "ports"))),
         "cables": _arr(_obj({
             "id": _ID, "from": _ENDPOINT, "to": _ENDPOINT, "medium": _STR, "tag": _STR, "type": _STR, "length_m": _NUM,
