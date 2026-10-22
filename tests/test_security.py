@@ -67,6 +67,11 @@ SPEC_ROLES = {
     ("GET", "/api/v2/projects/{}/cables/tag-preview"): "editor", ("GET", "/api/v2/projects/{}/racks/{}.svg"): "viewer",
     ("GET", "/api/v2/projects/{}/qr/{}.svg"): "viewer", ("GET", "/api/v2/projects/{}/trace"): "viewer",
     ("GET", "/api/v2/projects/{}/search"): "viewer", ("POST", "/api/v2/projects/{}/assistant"): "viewer",
+    ("GET", "/api/v2/projects/{}/pages"): "viewer", ("POST", "/api/v2/projects/{}/pages/preview"): "editor",
+    ("GET", "/api/v2/projects/{}/pages/{}"): "viewer", ("PUT", "/api/v2/projects/{}/pages/{}"): "editor",
+    ("DELETE", "/api/v2/projects/{}/pages/{}"): "editor", ("POST", "/api/v2/projects/{}/pages/{}/move"): "editor",
+    ("GET", "/api/v2/projects/{}/pages/{}/versions"): "viewer", ("GET", "/api/v2/projects/{}/pages/{}/versions/{}"): "viewer",
+    ("POST", "/api/v2/projects/{}/pages/{}/restore/{}"): "editor",
     ("POST", "/api/v2/projects/{}/builds"): "editor", ("GET", "/api/v2/projects/{}/builds"): "viewer",
     ("DELETE", "/api/v2/projects/{}/builds/{}"): "editor", ("GET", "/builds/{}/{}/{}"): "viewer",
     ("GET", "/api/meta"): "viewer", ("GET", "/api/projects"): "viewer", ("POST", "/api/projects"): "editor",
@@ -85,7 +90,7 @@ SAMPLES = ["proj", "main", "atem-mini", "rk-foh", "cables", "1", "nobody", "imp-
            "run1", "index.html", "diagram.svg", "x.png", "app.html", "nope"]
 PARAM_HINTS = {"name": "proj", "room": "main", "device": "atem-mini", "rack": "rk-foh", "kind": "cables", "rev": "1", "username": "nobody",
                "iid": "imp-0001", "att": "att-000000000000", "token": "sh-abc123", "fp": "fp-none", "run": "run1", "file": "index.html",
-               "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip", "table": "devices",
+               "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip", "table": "devices", "slug": "power-up",
                "rid": "run-20260101-000000-0000"}
 DISCOVERY_FIXTURES = str(Path(__file__).parent / "fixtures" / "discovery")
 

@@ -102,7 +102,7 @@ def _components() -> Dict[str, Any]:
             "before": {"type": ["string", "null"]}}},
         "Problem": problem,
         "Hit": {"type": "object", "properties": {
-            "kind": {"type": "string", "enum": ["device", "port", "cable", "interface", "room", "rack", "floorplan", "attachment"]},
+            "kind": {"type": "string", "enum": ["device", "port", "cable", "interface", "room", "rack", "floorplan", "attachment", "page"]},
             "id": {"type": "string"}, "device": {"type": ["string", "null"]}, "port": {"type": ["string", "null"]}, "title": {"type": "string"},
             "subtitle": {"type": "string"}, "room": {"type": "string"}, "score": {"type": "number"}, "match": {"type": "string"}}},
         "Answer": {"type": "object", "properties": {
@@ -139,6 +139,16 @@ def _components() -> Dict[str, Any]:
                         "description": "field key → device id whose value wins (or 'union' for list / text fields)"},
             "base_revision": {"type": "integer", "description": "merge only; defaults to the current revision"}}},
         "Template": obj, "V1Project": obj,
+        "Page": {"type": "object", "required": ["title"], "properties": {
+            "slug": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,79}$"}, "title": {"type": "string"}, "parent": {"type": ["string", "null"]},
+            "order": {"type": "integer"}, "kind": {"type": "string", "enum": ["sop", "troubleshooting", "checklist", "reference"]},
+            "body": {"type": "string", "description": "Markdown (see fathom/markdown.py)"}, "summary": {"type": "string"},
+            "tags": {"type": "array", "items": {"type": "string"}}, "rooms": {"type": "array", "items": {"type": "string"}},
+            "devices": {"type": "array", "items": {"type": "string"}}, "attachments": {"type": "array", "items": {"type": "string"}},
+            "status": {"type": "string", "enum": ["draft", "published", "archived"]}, "owner": {"type": "string"},
+            "review_due": {"type": "string"}, "base_revision": {"type": "integer"}}},
+        "PagePreview": {"type": "object", "required": ["body"], "properties": {"body": {"type": "string"}}},
+        "PageMove": {"type": "object", "properties": {"parent": {"type": ["string", "null"]}, "before": {"type": ["string", "null"]}, "order": {"type": "integer"}}},
         "DiscoveryRun": {"type": "object", "properties": {
             "window": {"type": "integer", "minimum": 10, "maximum": 300, "description": "listen window in seconds (default from settings, 60)"},
             "probes": {"type": "array", "items": {"type": "string", "enum": ["unifi", "mdns", "lldp", "arp", "snmp", "yamaha", "videohub", "qsys"]}, "description": "subset of the enabled probes"}}},

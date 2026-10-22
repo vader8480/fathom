@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-VIEWS = ["map", "patch", "table", "plan", "racks", "inventory", "schedules", "imports", "discovery", "history", "builds", "settings", "json"]
+VIEWS = ["map", "patch", "table", "plan", "racks", "inventory", "schedules", "imports", "discovery", "history", "builds", "settings", "sop", "json"]
 HARNESSES = ["patchview", "floorplan", "rack", "schedules", "patchtable"]
 VIEWER_PAGES = ["/p/sunday-demo", "/p/sunday-demo/rooms", "/p/sunday-demo/d/atem-mini", "/p/sunday-demo/r/main/patch"]
 SHELL_IDS = ["app", "app-top", "app-project", "app-room", "app-views", "app-search", "app-assistant-btn", "app-save", "app-user",
@@ -267,6 +267,23 @@ class CDP(object):
             if msg.get("id") == mid:
                 return msg
 
+    def eval(self, expression: str) -> Any:
+        """Evaluate JS (promises awaited) and return the JSON value; raises on a JS exception."""
+        r = self.call("Runtime.evaluate", {"expression": expression, "returnByValue": True, "awaitPromise": True})
+        res = r.get("result") or {}
+        if res.get("exceptionDetails"):
+            raise RuntimeError("JS error: %s" % json.dumps(res["exceptionDetails"])[:500])
+        return (res.get("result") or {}).get("value")
+
+    def wait(self, expression: str, timeout: float = 15.0) -> Any:
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            v = self.eval(expression)
+            if v:
+                return v
+            time.sleep(0.15)
+        raise RuntimeError("timed out waiting for %s" % expression)
+
     def close(self) -> None:
         try:
             self.sock.close()
@@ -274,43 +291,62 @@ class CDP(object):
             pass
 
 
+def cdp_session(url: str, timeout: float = 60.0, mobile: Optional[Tuple[int, int]] = None):
+    """Context manager: real-time headless Chrome on ``url`` (optionally emulating a phone), yielding a CDP client once data-smoke is set."""
+    import contextlib
+
+    @contextlib.contextmanager
+    def _cm():
+        ud = tempfile.mkdtemp(prefix="t2-cdp-")
+        proc = subprocess.Popen([CHROME or "chrome", "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+                                 "--disable-extensions", "--user-data-dir=" + ud, "--remote-debugging-port=0", "about:blank"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cdp = None
+        try:
+            port_file = Path(ud) / "DevToolsActivePort"
+            t0 = time.time()
+            while not port_file.exists() or not port_file.read_text().strip():
+                if time.time() - t0 > 30:
+                    raise RuntimeError("Chrome did not open a DevTools port")
+                time.sleep(0.1)
+            port = int(port_file.read_text().split()[0])
+            targets = json.loads(urllib.request.urlopen("http://127.0.0.1:%d/json/list" % port, timeout=10).read().decode())
+            page = [t for t in targets if t.get("type") == "page"][0]
+            cdp = CDP(page["webSocketDebuggerUrl"])
+            cdp.call("Page.enable")
+            if mobile:
+                cdp.call("Emulation.setDeviceMetricsOverride", {"width": mobile[0], "height": mobile[1], "deviceScaleFactor": 2, "mobile": True})
+                cdp.call("Emulation.setTouchEmulationEnabled", {"enabled": True})
+                cdp.call("Emulation.setEmulatedMedia", {"features": [{"name": "pointer", "value": "coarse"}, {"name": "hover", "value": "none"}]})
+            cdp.call("Page.navigate", {"url": url})
+            t0 = time.time()
+            while time.time() - t0 < timeout:
+                # documentElement can be null for an instant while the navigation swaps documents
+                val = cdp.eval("document.documentElement ? document.documentElement.getAttribute('data-smoke') : null")
+                if val:
+                    cdp.smoke = json.loads(val)
+                    break
+                time.sleep(0.2)
+            else:
+                raise RuntimeError("data-smoke not set within %ds (real time)" % timeout)
+            yield cdp
+        finally:
+            if cdp is not None:
+                cdp.close()
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            shutil.rmtree(ud, ignore_errors=True)
+
+    return _cm()
+
+
 def measure_realtime(url: str, timeout: float = 60.0) -> Dict[str, Any]:
     """Load url in real time (no virtual time) and return the parsed data-smoke JSON."""
-    ud = tempfile.mkdtemp(prefix="t2-cdp-")
-    proc = subprocess.Popen([CHROME or "chrome", "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-                             "--disable-extensions", "--user-data-dir=" + ud, "--remote-debugging-port=0", "about:blank"],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    cdp = None
-    try:
-        port_file = Path(ud) / "DevToolsActivePort"
-        t0 = time.time()
-        while not port_file.exists() or not port_file.read_text().strip():
-            if time.time() - t0 > 30:
-                raise RuntimeError("Chrome did not open a DevTools port")
-            time.sleep(0.1)
-        port = int(port_file.read_text().split()[0])
-        targets = json.loads(urllib.request.urlopen("http://127.0.0.1:%d/json/list" % port, timeout=10).read().decode())
-        page = [t for t in targets if t.get("type") == "page"][0]
-        cdp = CDP(page["webSocketDebuggerUrl"])
-        cdp.call("Page.enable")
-        cdp.call("Page.navigate", {"url": url})
-        t0 = time.time()
-        while time.time() - t0 < timeout:
-            r = cdp.call("Runtime.evaluate", {"expression": "document.documentElement.getAttribute('data-smoke')", "returnByValue": True})
-            val = ((r.get("result") or {}).get("result") or {}).get("value")
-            if val:
-                return json.loads(val)
-            time.sleep(0.2)
-        raise RuntimeError("data-smoke not set within %ds (real time)" % timeout)
-    finally:
-        if cdp is not None:
-            cdp.close()
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-        shutil.rmtree(ud, ignore_errors=True)
+    with cdp_session(url, timeout) as cdp:
+        return cdp.smoke
 
 
 class Browser(object):
@@ -615,6 +651,75 @@ class FrontendSmoke(unittest.TestCase):
         ins = p.by_id("app-inspector")
         self.assertIsNotNone(ins, "FR-UX-02: #app-inspector missing")
         self.assertIn("ATEM Mini", ins.text(), "FR-UX-02: deep link ?sel=device:atem-mini must show ATEM Mini in the inspector")
+
+    def test_sop_viewer_on_a_phone(self) -> None:
+        """SOP wiki (§6.4 sop view) at 390×844: drill-down tree, rendered page with tappable checklist, no horizontal scroll."""
+        if not self.campus_rooms:
+            self.skipTest("campus-demo sample not present")
+        url = self.base + smoke_url(self.app_path("sop", project="campus-demo", room="main"))
+        with cdp_session(url, mobile=(390, 844)) as cdp:
+            self.assertIs(cdp.smoke.get("ready"), True, "SOP view ready on a phone: %r" % cdp.smoke)
+            self.assertEqual(cdp.smoke.get("errors"), [])
+            cdp.wait("document.querySelectorAll('.sop-item').length")
+            tree = cdp.eval("""({
+              items: document.querySelectorAll('.sop-item').length,
+              hscroll: document.documentElement.scrollWidth > window.innerWidth,
+              tab: !!document.querySelector('#app-tabbar [data-tab=sop]'),
+              search: !!document.querySelector('.sop-search'),
+              searchSticky: getComputedStyle(document.querySelector('.sop-tree-head')).position,
+              minTap: Math.min.apply(null, Array.from(document.querySelectorAll('.sop-item-main')).map(function (b) { return b.getBoundingClientRect().height; })),
+            })""")
+            self.assertGreaterEqual(tree["items"], 1, "SOP-UI-01: page tree lists the sample sections")
+            self.assertFalse(tree["hscroll"], "SOP-UI-01: no horizontal scrolling at 390px")
+            self.assertTrue(tree["tab"], "SOP-UI-01: SOPs is a bottom tab, not under More")
+            self.assertTrue(tree["search"], "SOP-UI-01: search field present")
+            self.assertEqual(tree["searchSticky"], "sticky", "SOP-UI-01: tree header (with search) is sticky")
+            self.assertGreaterEqual(tree["minTap"], 44, "SOP-UI-01: list rows are ≥44px tap targets")
+            # drill into the first section, then open the power-up page
+            cdp.eval("document.querySelector('.sop-item.has-kids .sop-item-main').click()")
+            self.assertTrue(cdp.wait("!!document.querySelector('.sop-tree-list > .sop-back')"), "SOP-UI-02: drill-down shows a back button")
+            cdp.eval("document.querySelector('.sop-item[data-page=power-up] .sop-item-main').click()")
+            cdp.wait("document.querySelectorAll('.sop-page input[data-task]').length")
+            cdp.eval("var b = document.querySelectorAll('.sop-page input[data-task]'); b[0].click(); b[1].click(); 1")
+            page = cdp.eval("""({
+              title: document.querySelector('.sop-page h1').textContent,
+              font: parseFloat(getComputedStyle(document.querySelector('.sop-body')).fontSize),
+              tasks: document.querySelectorAll('.sop-page input[data-task]').length,
+              checked: document.querySelectorAll('.sop-page input[data-task]:checked').length,
+              stored: sessionStorage.getItem('fathom.sop.tasks.campus-demo.power-up'),
+              taskTap: Math.min.apply(null, Array.from(document.querySelectorAll('.md-task-label')).map(function (b) { return b.getBoundingClientRect().height; })),
+              applies: document.querySelectorAll('.sop-applies .chip').length,
+              appliesSticky: getComputedStyle(document.querySelector('.sop-applies')).position,
+              toc: !!document.querySelector('details.sop-toc'),
+              hscroll: document.querySelector('.sop-main').scrollWidth > document.querySelector('.sop-main').clientWidth + 1,
+              next: !!document.querySelector('.sop-prevnext .sop-next'),
+              errors: window.__fathomErrors,
+            })""")
+            self.assertIn("Power-up", page["title"])
+            self.assertGreaterEqual(page["font"], 17, "SOP-UI-03: body text ≥17px")
+            self.assertGreater(page["tasks"], 5)
+            self.assertEqual(page["checked"], 2, "SOP-UI-04: checkboxes toggle by tap")
+            self.assertEqual(json.loads(page["stored"] or "[]"), [0, 1], "SOP-UI-04: checklist state kept in sessionStorage")
+            self.assertGreaterEqual(page["taskTap"], 44, "SOP-UI-04: task rows ≥44px")
+            self.assertGreater(page["applies"], 0, "SOP-UI-03: Applies-to chips")
+            self.assertEqual(page["appliesSticky"], "sticky", "SOP-UI-03: Applies-to strip is sticky")
+            self.assertTrue(page["toc"], "SOP-UI-03: collapsible TOC")
+            self.assertFalse(page["hscroll"], "SOP-UI-03: no horizontal scrolling in the rendered page")
+            self.assertTrue(page["next"], "SOP-UI-03: next sibling at the bottom")
+            self.assertEqual(page["errors"], [])
+            # troubleshooting page: the table scrolls inside its container, the page does not
+            cdp.eval("location.hash = '#/campus-demo/main/sop?page=no-audio'; 1")
+            cdp.wait("!!document.querySelector('.sop-page .md-table')")
+            tbl = cdp.eval("({wrap: getComputedStyle(document.querySelector('.md-table')).overflowX, hscroll: document.querySelector('.sop-main').scrollWidth > document.querySelector('.sop-main').clientWidth + 1, callouts: document.querySelectorAll('.md-callout').length, errors: window.__fathomErrors})")
+            self.assertEqual(tbl["wrap"], "auto", "SOP-UI-03: tables scroll inside their container")
+            self.assertFalse(tbl["hscroll"])
+            self.assertGreater(tbl["callouts"], 0)
+            self.assertEqual(tbl["errors"], [])
+            # device inspector shows the Procedures section with backlinks
+            cdp.eval("document.querySelector('.sop-applies .chip[data-device]').click(); 1")
+            cdp.wait("document.querySelectorAll('#app-inspector .ins-procs li').length")
+            procs = cdp.eval("document.querySelectorAll('#app-inspector [data-section=procedures] .ins-procs li').length")
+            self.assertGreaterEqual(procs, 1, "SOP-UI-05: device inspector lists the procedures that reference the device")
 
     def test_view_error_card(self) -> None:
         path = "/?debug_missing_view=racks#/sunday-demo/main/racks"

@@ -32,12 +32,15 @@ Problem = Dict[str, Any]
 SCHEMA_VERSION: int = 2
 COLLECTIONS: Tuple[str, ...] = (
     "venues", "rooms", "systems", "locations", "racks", "networks", "devices",
-    "cables", "bundles", "floorplans", "attachments", "templates", "imports",
+    "cables", "bundles", "floorplans", "attachments", "templates", "imports", "pages",
 )
 ROOTS: Tuple[str, ...] = ("meta", "settings", "media")
 
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 TEMPLATE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,79}$")
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,79}$")
+PAGE_KINDS: Tuple[str, ...] = ("sop", "troubleshooting", "checklist", "reference")
+PAGE_STATUSES: Tuple[str, ...] = ("draft", "published", "archived")
 STATUSES: Tuple[str, ...] = ("installed", "planned", "spare", "retired")
 PORT_DIRS: Tuple[str, ...] = ("in", "out", "io")
 NETWORK_MEDIA = frozenset({"dante", "avb", "aes67", "aes50", "madi", "snake", "network", "qlan"})
@@ -1058,7 +1061,7 @@ def is_v1_expressible(doc: Doc) -> bool:
     """True when the doc can round-trip through the v1 format (§4.6.7)."""
     if len(doc.get("venues") or []) > 1 or len(doc.get("rooms") or []) > 1:
         return False
-    for c in ("racks", "networks", "floorplans", "attachments", "templates", "locations"):
+    for c in ("racks", "networks", "floorplans", "attachments", "templates", "locations", "pages"):
         if doc.get(c):
             return False
     if len(doc.get("systems") or []) > 1:
@@ -1341,7 +1344,7 @@ _REQUIRED: Dict[str, Tuple[str, ...]] = {
     "locations": ("name",), "racks": ("name", "units"), "networks": ("name",),
     "devices": ("name", "kind"), "cables": ("from", "to", "medium"), "bundles": (),
     "floorplans": ("name", "room", "source", "image"), "attachments": ("name", "file", "mime"),
-    "templates": (), "imports": ("kind", "path"),
+    "templates": (), "imports": ("kind", "path"), "pages": ("slug", "title"),
 }
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -1562,8 +1565,66 @@ def validate_doc(doc: Doc) -> List[Problem]:
         ref = f"imports/{imp['id']}"
         dangling(ref, ref + "/device", "device", imp.get("device"), "devices")
 
+    # ---- SOP pages (§4.3.15)
+    P.extend(_page_problems(colls, ids))
+
     # ---- helpers owned by other units (skipped when not importable)
     P.extend(_helper_problems(doc, colls))
+    return P
+
+
+def _page_problems(colls: Dict[str, List[Dict[str, Any]]], ids: Dict[str, Set[str]]) -> List[Problem]:
+    """Slug shape and uniqueness, enums, parent existence and cycles (errors);
+    links to missing rooms / devices / attachments are warnings so deleting a
+    device never makes its procedures unsaveable."""
+    P: List[Problem] = []
+    pages = colls.get("pages") or []
+    page_ids = ids.get("pages") or set()
+    by_id = {p["id"]: p for p in pages}
+    slugs: Dict[str, str] = {}
+    for p in pages:
+        ref = f"pages/{p['id']}"
+        slug_ = p.get("slug")
+        if isinstance(slug_, str) and slug_:
+            if not SLUG_RE.match(slug_):
+                P.append(_prob("error", "bad_slug", ref, ref + "/slug", f"bad slug {slug_!r} (lowercase letters, digits and dashes)"))
+            elif slug_ in slugs:
+                P.append(_prob("error", "duplicate_slug", ref, ref + "/slug", f"slug '{slug_}' is also used by {slugs[slug_]}"))
+            else:
+                slugs[slug_] = ref
+        if p.get("kind") not in (None, *PAGE_KINDS):
+            P.append(_prob("error", "bad_enum", ref, ref + "/kind", f"kind must be one of {', '.join(PAGE_KINDS)}"))
+        if p.get("status") not in (None, *PAGE_STATUSES):
+            P.append(_prob("error", "bad_enum", ref, ref + "/status", f"status must be one of {', '.join(PAGE_STATUSES)}"))
+        if p.get("body") is not None and not isinstance(p.get("body"), str):
+            P.append(_prob("error", "bad_type", ref, ref + "/body", "body must be a string"))
+        parent = p.get("parent")
+        if parent:
+            if parent == p["id"]:
+                P.append(_prob("error", "page_cycle", ref, ref + "/parent", f"{ref} is its own parent"))
+            elif parent not in page_ids:
+                P.append(_prob("error", "dangling_ref", ref, ref + "/parent", f"{ref}: parent page '{parent}' does not exist"))
+            else:
+                seen = {p["id"]}
+                cur = by_id.get(parent)
+                while cur is not None and cur.get("parent"):
+                    if cur["id"] in seen:
+                        P.append(_prob("error", "page_cycle", ref, ref + "/parent", f"{ref}: parent chain loops"))
+                        break
+                    seen.add(cur["id"])
+                    cur = by_id.get(cur["parent"])
+        for field, coll in (("rooms", "rooms"), ("devices", "devices"), ("attachments", "attachments")):
+            vals = p.get(field)
+            if vals is None:
+                continue
+            if not isinstance(vals, list):
+                P.append(_prob("error", "bad_type", ref, f"{ref}/{field}", f"{field} must be a list of ids"))
+                continue
+            for j, v in enumerate(vals):
+                if v and v not in ids[coll]:
+                    P.append(_prob("warning", "dangling_link", ref, f"{ref}/{field}/{j}", f"{ref}: {coll[:-1]} '{v}' does not exist"))
+        if p.get("review_due") and not _valid_date(p.get("review_due")):
+            P.append(_prob("warning", "bad_date", ref, ref + "/review_due", "review_due must be YYYY-MM-DD"))
     return P
 
 
@@ -1720,7 +1781,7 @@ JSON_SCHEMA: Dict[str, Any] = {
     "title": "Fathom project doc (schema 2)",
     "type": "object",
     "additionalProperties": True,
-    "required": ["fathom", "revision", "meta", "settings", *COLLECTIONS],
+    "required": ["fathom", "revision", "meta", "settings", *[c for c in COLLECTIONS if c != "pages"]],  # pages: added in 0.4, optional on disk
     "properties": {
         "fathom": {"type": "integer", "const": 2},
         "revision": {"type": "integer", "minimum": 0},
@@ -1801,5 +1862,11 @@ JSON_SCHEMA: Dict[str, Any] = {
         "templates": _arr(_obj({"id": {"type": "string"}, "manufacturer": _STR, "model": _STR, "kind": _STR, "ports": {"type": "array"}}, ("id",))),
         "imports": _arr(_obj({"id": _ID, "kind": _STR, "path": _STR, "device": _STR, "room": _STR, "label": _STR,
                               "options": {"type": "object"}, "added": _STR, "by": _STR}, ("id", "kind", "path"))),
+        "pages": _arr(_obj({
+            "id": _ID, "slug": {"type": "string", "pattern": SLUG_RE.pattern}, "title": _STR, "parent": {"type": ["string", "null"]},
+            "order": _INT, "kind": {"type": "string", "enum": list(PAGE_KINDS)}, "body": _STR, "summary": _STR, "tags": _STRS,
+            "rooms": _STRS, "devices": _STRS, "attachments": _STRS, "status": {"type": "string", "enum": list(PAGE_STATUSES)},
+            "owner": _STR, "created": _STR, "updated": _STR, "updated_by": _STR, "review_due": _STR,
+        }, ("id", "slug", "title"))),
     },
 }

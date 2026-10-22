@@ -19,7 +19,7 @@ except ImportError:  # pragma: no cover - run as a package
 
 
 COLLECTIONS = ["venues", "rooms", "systems", "locations", "racks", "networks", "devices", "cables", "bundles",
-               "floorplans", "attachments", "templates", "imports"]
+               "floorplans", "attachments", "templates", "imports", "pages"]
 
 
 def codes(problems, level=None):

@@ -13,8 +13,8 @@ const PRECACHE = [
   'static/js/app.js', 'static/js/api.js', 'static/js/model-core.js', 'static/js/inspector.js', 'static/js/assistant-ui.js',
   'static/js/patchtable.js', 'static/js/patchtable-core.js', 'static/js/patchview.js', 'static/js/patchview-core.js',
   'static/js/floorplan.js', 'static/js/floorplan-core.js', 'static/js/rack.js', 'static/js/rack-core.js',
-  'static/js/schedules.js', 'static/js/inventory.js', 'static/js/views-admin.js', 'static/js/presets-core.js', 'static/icons/icon-192.png',
-  'manifest.webmanifest'
+  'static/js/schedules.js', 'static/js/inventory.js', 'static/js/views-admin.js', 'static/js/presets-core.js',
+  'static/js/views-sop.js', 'static/css/sop.css', 'static/icons/icon-192.png', 'manifest.webmanifest'
 ];
 
 const SCOPE = new URL(self.registration ? self.registration.scope : self.location.href);

@@ -22,10 +22,11 @@ export const VIEWS = {
   history: { label: 'History', module: './views-admin.js', export: 'mountHistory' },
   builds: { label: 'Builds', module: './views-admin.js', export: 'mountBuilds' },
   settings: { label: 'Settings', module: './views-admin.js', export: 'mountSettings' },
+  sop: { label: 'SOPs', module: './views-sop.js', export: 'mount', css: 'sop.css' },
   json: { label: 'JSON', module: null, internal: true },
 };
-const PHONE_TABS = ['map', 'patch', 'table', 'plan'];
-const TAB_ICONS = { map: '\u25A6', patch: '\u2B95', table: '\u2630', plan: '\u25A3', more: '\u22EF' };
+const PHONE_TABS = ['map', 'patch', 'table', 'plan', 'sop'];
+const TAB_ICONS = { map: '\u25A6', patch: '\u2B95', table: '\u2630', plan: '\u25A3', sop: '\u2611', more: '\u22EF' };
 const DEFAULT_VIEW = 'patch';
 const FALLBACK_VOCAB = {
   kinds: {}, media: {}, brands: {}, connectors: [], statuses: ['installed', 'planned', 'spare', 'retired'],
@@ -1180,6 +1181,7 @@ function openPalette() {
     else if (hit.kind === 'rack') navigate('racks', { sel: 'rack:' + hit.id, keepSel: false });
     else if (hit.kind === 'floorplan') navigate('plan', { sel: 'floorplan:' + hit.id, keepSel: false });
     else if (hit.kind === 'attachment' && hit.device) openInspector({ type: 'device', id: hit.device, device: hit.device });
+    else if (hit.kind === 'page') location.hash = buildHash(A.project, store.room, 'sop', { page: hit.id });
   }
   function onKey(e) {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
