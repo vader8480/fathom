@@ -579,6 +579,7 @@ Types: `str`, `int`, `num` (float), `bool`, `obj`, `[T]` array of T. "Req" = req
 | `inventory` | obj | no | `{serial, asset_tag, firmware, purchase_date (YYYY-MM-DD), warranty_until (YYYY-MM-DD), vendor, cost (num), currency, po, notes}` |
 | `interfaces` | `[Interface]` | no | §4.3.9 |
 | `dmx` | obj | no | `{universe, address, footprint, mode, channel, protocol, port}` (FR-DMX-01) |
+| `merged_from` | `[obj]` | no | provenance written by a device merge (§4.11.1): `[{id, name, source, at, by, fields: [str]}]` per absorbed duplicate |
 | `auto`, `source` | | — | overlay-only; never persisted |
 
 **Port**
@@ -991,6 +992,17 @@ Revision rules:
 - Routes always reference canonical device ids (never extra-card ids).
 - Cache key: `(project, revision, imports_hash)` where `imports_hash` = sha1 of `(path, size, mtime_ns)` for every import file.
 
+#### 4.11.1 Merging duplicate devices (`dedupe.py`)
+
+Two entries for one physical box (typically an import-created device and a hand-made one) are merged into a *survivor*; the duplicates disappear. `dedupe.find_duplicates(doc, overlay, device_id, min_score)` scores every pair of persisted + overlay devices (never overlay vs overlay) and `dedupe.merge_plan(doc, survivor, duplicates, choices, overlay)` returns a plan plus the change ops (§4.9) that perform it; both are pure.
+
+- **Field rules.** Scalars (`name`, `kind`, `room`, `manufacturer`, `model`, `dante_name`, `status`, `inventory.*`, …): the survivor's non-empty value wins, blanks are filled from the duplicates in the given order; a differing non-empty value is flagged `conflict` and can be overridden per field (`choices[key] = device_id`). `tags`, `lines`, `aliases` are unioned; `note` / `inventory.notes` are concatenated; `dante` is OR-ed; `rack`, `flow`, `patch`, `dmx` are kept whole from the first device that has them; `routing.mode` comes from the winner, `routing.map` is unioned. Names, Dante names and ids that the merged device no longer carries become `aliases`, so importers that matched a duplicate keep matching the survivor. Unknown extra keys follow the scalar rule.
+- **Ports** are unioned by id: same id with compatible `dir`/`medium` → one port (blank `label`/`note`/… filled); same id but incompatible → the duplicate's port is renamed (`_letter_dedupe`) and its cables remapped; new ids are appended. **Interfaces** are unioned by id, then by IP / MAC, blanks filled.
+- **References** are re-pointed to the survivor: `cables[].from/to` (with port remap) and `cables[].flow.from_card/to_card`, `rooms[].flow.extra_cards[].device`, `floorplans[].markers[].device` (dropped when the survivor already has a marker on that plan), `attachments[].device`, `imports[].device`, other devices' `interfaces[].switch`. A cable that ends up on the survivor at both ends is kept and reported as a self-loop.
+- **Provenance.** The survivor gets `merged_from: [{id, name, source, at, by, fields}]` (duplicates' own entries are carried along). Overlay (`auto`) devices can only be duplicates, are never deleted (they are not persisted) and merely enrich the survivor; the survivor must be a persisted device.
+- **Transaction.** The ops are `put devices/<survivor>`, `merge …` for every re-pointed reference, then `del devices/<dup>`; applied together they form one revision (source `merge` via the API, or the client's own undo entry when the app commits them), so a history restore or Cmd/Ctrl+Z undoes the whole merge.
+- **Scoring** (noisy-OR of positive signals, then multiplicative penalties; `high` ≥ 0.85, `medium` ≥ 0.65, suggestions below `min_score` 0.5 are dropped): serial 0.97, MAC 0.97, Dante name matching the other's name/alias 0.95, asset tag 0.9, IP 0.9, hostname 0.85, alias ↔ name 0.85, same normalised name 0.8, similar names (token-aware) up to ~0.55, shared model-like name token (`cl5`, `rio3224d`) 0.4, same manufacturer+model 0.3 / model 0.2 / model named in the other's text 0.3–0.45, same rack U 0.6 / same rack 0.15, +0.05 each for same room and kind; ×0.25 for numbered-series names (`Lustr 1`/`Lustr 2`, `Mon L`/`Mon R`) without a hard identifier, ×0.5 differing kinds, ×0.3 differing models, ×0.2 differing serials, ×0.85 differing rooms.
+
 ### 4.12 JSON Schema
 
 `schema.JSON_SCHEMA` is a JSON Schema 2020-12 document covering §4.3 (types, required, enums, id patterns; `additionalProperties: true` everywhere for forward compatibility), served at `GET /api/v2/schema.json` and referenced from OpenAPI. `validate_doc` does **not** need a general JSON-Schema engine: it implements the rules of §4.7 directly. T1 checks the fixture and campus-demo against both (`validate_doc`, plus a tiny in-test subset validator for `type/required/enum/pattern/items/properties`).
@@ -1097,6 +1109,9 @@ Username regex `^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$`. Session cookie payload `{"u
 | GET | `/api/v2/projects/<n>/history/<rev>/diff?against=<rev2>` | viewer | — | P1 `{"added": [refs], "removed": [refs], "changed": [refs]}` |
 | POST | `/api/v2/projects/<n>/history/<rev>/restore` | editor | `{"base_revision"}` | `{"revision"}` (source `restore`, summary "Restored revision <rev>") |
 | GET | `/api/v2/projects/<n>/overlay` | viewer | — | overlay (§4.11) + `ETag: "r<rev>-<imports_hash>"` |
+| GET | `/api/v2/projects/<n>/devices/duplicates?device=<id>&min=0.5&limit=50` | viewer | — | `{"revision", "min_score", "total", "duplicates": [{"devices": [survivor, duplicate], "score", "confidence": high\|medium\|low, "reasons": [{"signal", "weight", "text"}], "suggested_survivor"}]}` — persisted and overlay devices; scored by serial / MAC / asset tag / IP / hostname / Dante name / aliases / name similarity / model / rack position, penalised for numbered series, differing kinds, models, serials and rooms; 404 unknown `device` |
+| POST | `/api/v2/projects/<n>/devices/merge/preview` | editor | `{"survivor", "duplicates": [ids], "choices?": {field: device_id\|"union"}}` | merge plan — **no write**: `{"revision", "survivor", "duplicates", "devices", "fields": [{"key", "label", "rule", "values": {id: v}, "winner", "result", "conflict", "overridable", "reason"}], "ports", "interfaces", "references", "warnings", "result", "ops", "summary"}`; 400 `self_merge`/`no_duplicates`/`auto_survivor`; 404 `not_found` |
+| POST | `/api/v2/projects/<n>/devices/merge` | editor | preview body + `"base_revision?"` | applies the plan's ops as one revision (source `merge`, summary "Merged '<dup>' into '<survivor>'"): `{"revision", "rebased", "problems", "touched", "survivor", "duplicates", "summary", "warnings", "ops"}`; 409 on stale `base_revision` |
 | GET | `/api/v2/projects/<n>/offline-manifest` | viewer | — | `{"urls": ["p/<n>", "p/<n>/rooms", "p/<n>/r/<room>", "p/<n>/r/<room>/patch", "p/<n>/d/<device>", …, "api/v2/projects/<n>", "api/v2/meta", <app shell assets>]}` (relative) |
 | GET/POST/DELETE | `/api/v2/projects/<n>/shares[/<token>]` | editor | POST `{"label?", "expires?"}` | P1 `{"shares": [{"token", "label", "created", "expires", "by"}]}` / 201 `{"share": …, "url": "s/<token>/"}` / 204 |
 
