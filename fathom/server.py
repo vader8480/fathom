@@ -1588,6 +1588,22 @@ def r_discovery_findings(req: Request) -> Response:
         raise _discovery_error(exc)
 
 
+@route("GET", r"/api/v2/projects/" + _NAME + "/discovery/runs/" + _RUN_ID + "/diff", role="viewer",
+       summary="What changed since a previous completed run (?against=<run id>; default: the one before)", tags=["discovery"])
+def r_discovery_diff(req: Request) -> Response:
+    from . import discovery
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    against = str(req.query.get("against") or "")
+    if against and not discovery.RUN_ID_RE.match(against):
+        raise ApiError(400, "against must be a run id")
+    try:
+        return Response.json(discovery.run_diff(pdir, doc, req.params["rid"], against=against))
+    except Exception as exc:
+        raise _discovery_error(exc)
+
+
 @route("POST", r"/api/v2/projects/" + _NAME + "/discovery/runs/" + _RUN_ID + "/findings/promote", role="editor",
        summary="Promote findings: create devices, merge into existing, add cables / networks, ignore", tags=["discovery"], body="DiscoveryPromote")
 def r_discovery_promote(req: Request) -> Response:
@@ -2122,9 +2138,12 @@ def r_build_v2(req: Request) -> Response:
         if not isinstance(rooms, list) or any(str(r) not in _room_ids(doc) for r in rooms):
             raise ApiError(400, "rooms must be a list of room ids")
         rooms = [str(r) for r in rooms]
+    discovery = body.get("discovery", True)
+    if not isinstance(discovery, bool):
+        raise ApiError(400, "discovery must be a boolean (include the Discovered connections section)")
     project = flow_project(doc, state=state)
     run_dir = new_build_dir(pdir.name, (doc.get("meta") or {}).get("slug") or pdir.name)
-    _compat(write_build, project, pdir, run_dir, pdf=want_pdf, png=want_png, doc=doc, state=state, rooms=rooms, base_url=_public_base(req, doc))
+    _compat(write_build, project, pdir, run_dir, pdf=want_pdf, png=want_png, doc=doc, state=state, rooms=rooms, base_url=_public_base(req, doc), discovery=discovery)
     n = pdir.name
     return Response.json({"build": run_dir.name, "files": _run_files(run_dir), "url": f"builds/{n}/{run_dir.name}/index.html",
                           "zip": f"builds/{n}/{run_dir.name}/{run_dir.name}.zip"}, 201)

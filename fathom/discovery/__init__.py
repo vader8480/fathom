@@ -247,7 +247,7 @@ def list_runs(pdir: Path, limit: int = MAX_RUNS_KEPT) -> List[Dict[str, Any]]:
 
 
 def _brief(data: Dict[str, Any]) -> Dict[str, Any]:
-    return {k: data.get(k) for k in ("id", "status", "active", "started", "finished", "elapsed", "window", "probes", "by", "counts", "error", "progress", "stage", "mode")}
+    return {k: data.get(k) for k in ("id", "status", "active", "started", "finished", "elapsed", "window", "probes", "by", "counts", "error", "progress", "stage", "mode", "diff")}
 
 
 def get_run(pdir: Path, run_id: str) -> Dict[str, Any]:
@@ -408,6 +408,17 @@ def _execute(job: jobs.Job, run: _Run, cfg: Dict[str, Any], window: int, wanted:
     run.data["summaries"] = {r.probe: r.summary() for r in probe_results}
     run.data["errors"] = errors
     run.data["counts"] = findings["counts"]
+    if not job.cancelled:
+        try:
+            run.data["diff"] = _persist_diff(pdir, run, doc, findings)
+        except Exception as exc:  # a diff that cannot be computed never fails the run
+            job.log(f"could not diff against the previous run: {type(exc).__name__}: {exc}", "warn")
+        else:
+            d = run.data["diff"]
+            if d.get("against"):
+                c = d["counts"]
+                job.log(f"compared with {d['against']}: {c['new_devices']} new, {c['missing_devices']} missing, {c['moved']} moved, {c['changed']} changed, "
+                        f"{c['new_links']} new links, {c['lost_links']} lost links")
     for r in probe_results:
         for n in r.notes:
             job.log(n, "info")
@@ -620,6 +631,65 @@ def latest_run_id(pdir: Path) -> str:
     return str(runs[0]["id"]) if runs else ""
 
 
+def completed_runs(pdir: Path, exclude: str = "") -> List[Dict[str, Any]]:
+    """Briefs of the runs that finished normally (newest first), optionally without ``exclude``."""
+    return [r for r in list_runs(pdir) if r.get("status") == "done" and r.get("id") != exclude]
+
+
+def latest_completed_run_id(pdir: Path) -> str:
+    runs = completed_runs(pdir)
+    return str(runs[0]["id"]) if runs else ""
+
+
+def previous_completed_run_id(pdir: Path, run_id: str) -> str:
+    """The completed run just before ``run_id`` (by id, which sorts by start time), or ``""``."""
+    for r in completed_runs(pdir, exclude=run_id):
+        if str(r.get("id")) < run_id:
+            return str(r["id"])
+    return ""
+
+
+# ------------------------------------------------------------------ run-to-run diff
+
+
+def _persist_diff(pdir: Path, run: _Run, doc: Doc, cur: Dict[str, Any]) -> Dict[str, Any]:
+    """Diff the finished run against the previous completed one and store it as ``diff.json``; returns the brief."""
+    from .diff import compute_diff, empty_diff
+
+    prev_id = previous_completed_run_id(pdir, run.id)
+    if prev_id:
+        d = compute_diff(cur, findings(pdir, doc, prev_id), run.id, prev_id)
+    else:
+        d = empty_diff(run.id, cur)
+    _write_json(run.dir / "diff.json", d)
+    return {"against": d["against"], "counts": d["counts"]}
+
+
+def run_diff(pdir: Path, doc: Doc, run_id: str, against: str = "") -> Dict[str, Any]:
+    """What changed between ``against`` (default: the previous completed run) and ``run_id``.
+
+    Recomputed against the live document so the two sides are comparable; the diff persisted when the
+    run finished is served as-is only when it was made against the same run and nothing else is asked.
+    """
+    from .diff import compute_diff, empty_diff
+
+    rd = run_dir(pdir, run_id)
+    if not (rd / "run.json").is_file():
+        raise RunNotFound(run_id)
+    candidates = completed_runs(pdir, exclude=run_id)
+    if against:
+        if against == run_id or not any(str(r.get("id")) == against for r in candidates):
+            raise ValueError(f"{against} is not another completed run of this project")
+        prev_id = against
+    else:
+        prev_id = previous_completed_run_id(pdir, run_id)
+    stored = _read_json(rd / "diff.json", None)
+    persisted = isinstance(stored, dict) and stored.get("against") == (prev_id or None)
+    cur = findings(pdir, doc, run_id)
+    d = compute_diff(cur, findings(pdir, doc, prev_id), run_id, prev_id) if prev_id else empty_diff(run_id, cur)
+    return {"run": run_id, "against": prev_id or None, "candidates": candidates, "diff": d, "persisted": bool(persisted)}
+
+
 # ------------------------------------------------------------------ promote
 
 
@@ -736,6 +806,8 @@ def promote_ops(pdir: Path, doc: Doc, run_id: str, body: Dict[str, Any]) -> Tupl
         cable["id"] = "c-%04d" % n
         cable_ids.add(cable["id"])
         cable["status"] = "planned"
+        cable["source"] = IMPORT_KIND  # the report's "Discovered connections" section picks these up
+        cable["discovery"] = {"run": run_id, "confidence": c.get("confidence"), "level": c.get("level") or "", "methods": list(c.get("methods") or [])}
         ops.append({"op": "put", "coll": "cables", "id": cable["id"], "value": cable})
         summary["cables"] += 1
 
@@ -856,13 +928,13 @@ def register() -> None:
 
     plugins.register_importer(plugins.Importer(
         kind=IMPORT_KIND, label="Network discovery run", detect=_detect, parse=_parse, contribute=_contribute, mode="discovery", accepts=(), folder=True,
-        help="Network discovery (UniFi controller, mDNS / Dante, LLDP / CDP, ARP; opt-in read-only SNMP, Yamaha SCP, Videohub and Q-SYS queries). "
+        help="Network discovery (UniFi controller, mDNS / Dante, LLDP / CDP, ARP; opt-in read-only SNMP, Yamaha SCP, Videohub, Q-SYS and Dante Domain Manager queries). "
              "Runs are started from the Discovery view; the latest completed run feeds the overlay.",
     ))
 
 
 __all__ = [
-    "IMPORT_KIND", "LISTEN_PROBES", "MODE", "RunBusy", "RunNotFound", "RunSnapshot", "active_run_id", "active_targets", "cancel_run", "compute_findings",
-    "extra_installed", "findings", "get_run", "latest_run_id", "list_runs", "parse_results", "promote_ops", "read_decisions", "register", "run_dir", "run_mode",
+    "IMPORT_KIND", "LISTEN_PROBES", "MODE", "RunBusy", "RunNotFound", "RunSnapshot", "active_run_id", "active_targets", "cancel_run", "completed_runs", "compute_findings",
+    "extra_installed", "findings", "get_run", "latest_completed_run_id", "latest_run_id", "list_runs", "previous_completed_run_id", "run_diff", "parse_results", "promote_ops", "read_decisions", "register", "run_dir", "run_mode",
     "runs_root", "sources", "start_run", "write_decisions",
 ]

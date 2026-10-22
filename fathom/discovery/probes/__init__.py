@@ -18,8 +18,9 @@ Passive probes (Phase 1) read from a controller that already holds the data
 host's ARP table). None of them sends a packet to an audio device; the mDNS
 browse is the same standard multicast query Dante Controller issues.
 
-Active probes (Phase 2: SNMP, Yamaha SCP, Blackmagic Videohub, Q-SYS QRC)
-send read-only queries to the hosts the user lists — and only to those. They
+Active probes (Phase 2: SNMP, Yamaha SCP, Blackmagic Videohub, Q-SYS QRC;
+Phase 3: the Dante Domain Manager GraphQL API) send read-only queries to the
+hosts the user lists — and only to those. They
 are off by default (``ProbeInfo.default_enabled``), declare what they put on
 the wire (``sends``), run one host at a time with a pause between requests
 and a timeout per request, and never issue a write / set command.
@@ -186,9 +187,9 @@ def fixture_delay(window: float) -> float:
 
 def all_probes() -> List[Any]:
     """Probe modules / objects in UI order: passive first, then the opt-in active ones."""
-    from . import arp, consoles, lldp, mdns, snmp, unifi
+    from . import arp, consoles, ddm, lldp, mdns, snmp, unifi
 
-    return [unifi, mdns, lldp, arp, snmp, consoles.YAMAHA, consoles.VIDEOHUB, consoles.QSYS]
+    return [unifi, mdns, lldp, arp, snmp, consoles.YAMAHA, consoles.VIDEOHUB, consoles.QSYS, ddm]
 
 
 def host_list(value: Any) -> List[str]:

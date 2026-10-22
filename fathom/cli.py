@@ -4,7 +4,7 @@
   fathom new <name|path> [--template T] [--org O]           create a project (T: blank | rrc-littleton | campus-demo)
   fathom import <project> <file|folder>... [--kind K] [--node ID] [--device NAME] [--room R] [--apply]
   fathom inspect <file|folder> [--kind K] [--json]          parse an export and show what was found
-  fathom build <project> [--pdf] [--png] [--open] [--out DIR] [--state S] [--rooms a,b] [--base-url URL]
+  fathom build <project> [--pdf] [--png] [--open] [--out DIR] [--state S] [--rooms a,b] [--base-url URL] [--no-discovery]
   fathom pdf <project|index.html> [--open]                  headless-Chrome PDF
   fathom trace <project> <from> [<to>] [--discipline D] [--up]   signal paths (cards, or dev:port)
   fathom patch <project> [--csv]                            patch sheet in the terminal
@@ -285,11 +285,11 @@ def cmd_inspect(a: argparse.Namespace) -> None:
 
 def cmd_build(a: argparse.Namespace) -> None:
     run_dir = Path(a.out).expanduser() if a.out else None
-    if a.state != "all" or a.rooms or a.base_url:
+    if a.state != "all" or a.rooms or a.base_url or a.no_discovery:
         from .export import build_doc, open_in_browser as _open
 
         rooms = [r for r in (a.rooms or "").split(",") if r] or None
-        run = build_doc(a.project, state=a.state, rooms=rooms, pdf=a.pdf, png=a.png, base_url=a.base_url or "", run_dir=run_dir)
+        run = build_doc(a.project, state=a.state, rooms=rooms, pdf=a.pdf, png=a.png, base_url=a.base_url or "", run_dir=run_dir, discovery=not a.no_discovery)
         print(f"ok: wrote {display_path(run / 'index.html')}")
         if a.open:
             _open(run / "index.html")
@@ -930,6 +930,7 @@ def main(argv=None) -> None:
     s.add_argument("--state", default="all", choices=["all", "planned", "as_built", "everything"])
     s.add_argument("--rooms", help="comma-separated room ids (default: all rooms)")
     s.add_argument("--base-url", help="public URL for QR codes (else settings.public_url / FATHOM_PUBLIC_URL)")
+    s.add_argument("--no-discovery", action="store_true", help="leave the Discovered connections section out of the report")
     s.set_defaults(func=cmd_build)
 
     s = sub.add_parser("pdf", help="PDF via headless Chrome")

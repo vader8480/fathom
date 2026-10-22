@@ -122,6 +122,7 @@ Without installing: `python -m fathom serve` from this folder.
 | `FATHOM_DISCOVERY_INTERFACE`, `FATHOM_DISCOVERY_INTERFACE_IP` | interface the LLDP listener / mDNS browser bind to (default: all) |
 | `FATHOM_SNMP_HOSTS`, `FATHOM_SNMP_VERSION`, `FATHOM_SNMP_COMMUNITY`, `FATHOM_SNMP_USER`, `FATHOM_SNMP_AUTH_PROTOCOL`, `FATHOM_SNMP_AUTH_KEY`, `FATHOM_SNMP_PRIV_PROTOCOL`, `FATHOM_SNMP_PRIV_KEY` | server-wide defaults for the opt-in SNMP probe (switch list and read-only credentials); never turns the probe on by themselves |
 | `FATHOM_YAMAHA_HOSTS`, `FATHOM_VIDEOHUB_HOSTS`, `FATHOM_QSYS_HOSTS`, `FATHOM_QSYS_USER`, `FATHOM_QSYS_PASSWORD` | server-wide host lists (and QRC login) for the opt-in console / router probes |
+| `FATHOM_DDM_URL`, `FATHOM_DDM_API_KEY`, `FATHOM_DDM_VERIFY_TLS` | server-wide defaults for the opt-in Dante Domain Manager probe |
 | `FATHOM_DISCOVERY_FIXTURES` | directory of recorded probe payloads to replay instead of touching the network (tests, demos) |
 
 Put it behind your reverse proxy with TLS for anything beyond a trusted LAN.
@@ -195,7 +196,7 @@ default:
 | **LLDP / CDP** | listens for frames the switches announce anyway (raw socket, `CAP_NET_RAW` from the systemd unit) | which switch and port this host is plugged into, switch model, management IP, VLAN |
 | **ARP / neighbour table** | reads the host's own neighbour cache (`ip neigh`, `/proc/net/arp`, `arp -a`) | MAC ↔ IP pairs with vendor from the bundled OUI list |
 
-Four **active** sources are off until you enable them per project and list
+The **active** sources are off until you enable them per project and list
 the hosts they may talk to. They send documented read-only queries to those
 hosts only — one host at a time, with a pause between requests, a timeout
 per read and a time budget per host — and each card in *Sources* says
@@ -207,6 +208,7 @@ exactly what goes on the wire. A run that includes one is marked *Active*:
 | **Yamaha console (SCP)** | tested | TCP 49280: `devinfo productname / deviceid / devicename / protocolver`, `sscurrent_ex MIXER:Lib/Scene`, `get MIXER:Current/<InCh\|Mix\|Mtrx\|DCA>/Label/Name n 0` per channel (stops at the first error; at most 276 reads) | product, device name, MAC (the device id), current scene, input / mix / matrix / DCA channel names |
 | **Blackmagic Videohub** | mature | one TCP connection to 9990; nothing is written — the router sends its state on connect and the connection is closed after `END PRELUDE:` | model, friendly name, unique id (MAC), size, input / output labels, current routing |
 | **Q-SYS core (QRC)** | tested | TCP 1710 JSON-RPC: `StatusGet`, `Component.GetComponents` (`Logon` first when a user / password is set); no control values are read or written | platform, running design and state, component names and types (Dante components flagged) |
+| **Dante Domain Manager** | experimental | one HTTPS POST of a read-only GraphQL query to `<DDM URL>/graphql` (API key as bearer token); never a mutation, nothing to the Dante devices themselves | enrolled devices per domain with Dante name, MACs, addresses, manufacturer / product / version, and their subscriptions as evidence. Dante Controller has no API, so without a DDM the preset-XML import stays the route to full Dante routing |
 
 Findings are correlated into one entity per device (by MAC, then IP within
 the run, then Dante name / hostname / serial), matched against the devices
@@ -216,7 +218,16 @@ high, a single MAC on a port medium, several MACs on a port flagged as an
 uplink or an unmanaged switch; a switch-to-switch link reported by both
 switches is folded into one *uplink* row). The latest run also feeds the
 overlay like any import, so discovered devices and links show up in
-italics until you promote or ignore them. The mDNS and SNMP probes need
+italics until you promote or ignore them. When a run finishes and an
+earlier completed run exists, the server stores a diff next to it (new,
+missing and moved devices, changed addresses, new and lost links); the
+*Changes* tab shows it and lets you pick which earlier run to compare with
+(`GET …/discovery/runs/<rid>/diff?against=<rid>`). "Repeat runs" are runs
+you start again later: there is still no scheduler. Builds get a
+*Discovered connections* report section and `discovered-connections.csv`
+(cable-schedule columns plus confidence, sources and run) from the latest
+completed run and from cables you promoted out of discovery; untick it in
+*Builds* or pass `fathom build --no-discovery` to leave it out. The mDNS and SNMP probes need
 `pip install "fathom-audio[discovery]"` (`zeroconf`, `puresnmp`; SNMPv3
 privacy also `puresnmp[crypto]`); the other sources are standard library
 only. On the Ubuntu VM, *Running on Ubuntu (VM)* above covers the
@@ -226,8 +237,8 @@ capabilities (`CAP_NET_RAW` for LLDP), the ESXi port-group settings
 (Discovery › Sources); secrets (UniFi key, SNMP community / v3 keys, QRC
 password) are kept in `projects/<name>/discovery-secrets.json`, never in the
 project file or its history. `FATHOM_UNIFI_*`, `FATHOM_SNMP_*`,
-`FATHOM_YAMAHA_HOSTS`, `FATHOM_VIDEOHUB_HOSTS`, `FATHOM_QSYS_*` and
-`FATHOM_DISCOVERY_INTERFACE` provide server-wide defaults (an environment
+`FATHOM_YAMAHA_HOSTS`, `FATHOM_VIDEOHUB_HOSTS`, `FATHOM_QSYS_*`, `FATHOM_DDM_*`
+and `FATHOM_DISCOVERY_INTERFACE` provide server-wide defaults (an environment
 host list never turns an active source on by itself).
 
 ## CLI
@@ -237,7 +248,7 @@ fathom serve [--host H] [--port N] [--data DIR] [--open]
 fathom new <name> [--template blank|rrc-littleton|campus-demo] [--org O]
 fathom import <project> <file|folder>... [--kind auto|yamaha|dante|waves|eos|magicq|videohub|csv|atem] [--node ID] [--room R] [--apply]
 fathom inspect <file|folder> [--kind K] [--json]
-fathom build <project> [--pdf] [--png] [--open] [--out DIR] [--state all|planned|as_built] [--rooms a,b] [--base-url URL]
+fathom build <project> [--pdf] [--png] [--open] [--out DIR] [--state all|planned|as_built] [--rooms a,b] [--base-url URL] [--no-discovery]
 fathom trace <project> <from> [<to>] [--discipline D] [--up]     cards (v0.2) or dev:port
 fathom patch <project> [--csv]
 fathom schedule patch|cables|ip|dmx|bom|inventory|racks|labels <project> [--room R] [--state S] [--csv|--json]
@@ -268,7 +279,7 @@ $FATHOM_DATA/
   projects/<name>/project.json               the model (schema 2, with "revision")
   projects/<name>/project.v1.json            the original 0.2 file, kept once after migration
   projects/<name>/exports/<kind>/...         copies of imported exports
-  projects/<name>/exports/discovery/<run>/   discovery runs (raw probe payloads, findings)
+  projects/<name>/exports/discovery/<run>/   discovery runs (raw probe payloads, findings, diff against the previous run)
   projects/<name>/discovery-secrets.json     UniFi / SNMP / QRC credentials (mode 0600; excluded from the project file)
   projects/<name>/files/<att-id>/<file>      photos, documents, floor-plan sources and renders
   projects/<name>/history/                   index.jsonl, ops/<rev>.json, snap/<rev>.json

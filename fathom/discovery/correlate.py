@@ -254,7 +254,7 @@ def build_entities(results: Iterable[ProbeResult]) -> List[Entity]:
     seen_ids: Dict[str, int] = {}
     for members in groups.values():
         # controller + LLDP sightings first: they carry the most structure
-        members.sort(key=lambda o: ({"unifi": 0, "snmp": 1, "lldp": 2, "mdns": 3, "yamaha": 4, "qsys": 4, "videohub": 4, "arp": 5}.get(o.source, 9)))
+        members.sort(key=lambda o: ({"unifi": 0, "snmp": 1, "lldp": 2, "mdns": 3, "ddm": 3, "yamaha": 4, "qsys": 4, "videohub": 4, "arp": 5}.get(o.source, 9)))
         eid = _entity_id(members)
         if eid in seen_ids:  # defensive: never two entities with one id
             seen_ids[eid] += 1

@@ -39,6 +39,8 @@ BC_SWITCH = "00:1b:54:ab:cd:ef"
 
 PASSIVE_PROBES = ["unifi", "mdns", "lldp", "arp"]
 ACTIVE_PROBES = ["snmp", "yamaha", "videohub", "qsys"]
+API_PROBES = ["ddm"]  # phase 3: active probes that contact one configured server (``targets`` is a URL field)
+ALL_PROBES = PASSIVE_PROBES + ACTIVE_PROBES + API_PROBES
 
 
 def _results(ids=None):
@@ -93,7 +95,7 @@ class ProbeFixtures(unittest.TestCase):
         self.by_id = {m.INFO.id: m for m in self.probes.all_probes()}
 
     def test_probe_catalogue_modes_and_maturity(self):
-        self.assertEqual(sorted(self.by_id), sorted(PASSIVE_PROBES + ACTIVE_PROBES))
+        self.assertEqual(sorted(self.by_id), sorted(ALL_PROBES))
         for m in self.by_id.values():
             self.assertIn(m.INFO.maturity, ("experimental", "tested", "mature"), m.INFO.id)
             self.assertTrue(m.INFO.sends, "%s must say what it puts on the wire" % m.INFO.id)
@@ -110,6 +112,11 @@ class ProbeFixtures(unittest.TestCase):
             self.assertEqual(info.targets, "hosts", "an active probe names the field that lists what it may contact")
             self.assertTrue(any(f["key"] == "hosts" and f.get("type") == "list" for f in info.fields), pid)
             self.assertTrue(len(info.sends) > 60, "%s: the Sources card needs a real 'what this sends' note" % pid)
+        for pid in API_PROBES:
+            info = self.by_id[pid].INFO
+            self.assertEqual((info.mode, info.default_enabled, info.targets, info.maturity), ("active", False, "url", "experimental"), pid)
+            self.assertTrue(any(f["key"] == "url" for f in info.fields), pid)
+            self.assertTrue(len(info.sends) > 60 and "mutation" in info.sends, "%s: says it is read-only GraphQL" % pid)
 
     def test_unifi(self):
         r = self.by_id["unifi"].parse(json.loads((DISC_FIXTURES / "unifi.json").read_text()))
@@ -631,11 +638,11 @@ class DiscoveryApi(unittest.TestCase):
             self.assertEqual(st, 200, b)
             listing = jbody(b)
             self.assertEqual((listing["runs"], listing["active"], listing["mode"]), ([], None, "passive"))
-            self.assertEqual([s["id"] for s in listing["sources"]], PASSIVE_PROBES + ACTIVE_PROBES)
+            self.assertEqual([s["id"] for s in listing["sources"]], ALL_PROBES)
             self.assertTrue(all(s["available"] for s in listing["sources"]), "fixture replay makes every source available")
             modes = {s["id"]: (s["mode"], s["settings"]["enabled"]) for s in listing["sources"]}
             self.assertTrue(all(modes[p] == ("passive", True) for p in PASSIVE_PROBES), modes)
-            self.assertTrue(all(modes[p] == ("active", False) for p in ACTIVE_PROBES), "active sources are off until enabled: %r" % (modes,))
+            self.assertTrue(all(modes[p] == ("active", False) for p in ACTIVE_PROBES + API_PROBES), "active sources are off until enabled: %r" % (modes,))
 
             st, _, b = self.req("POST", base + "/discovery/runs", {"window": 10})
             self.assertEqual(st, 202, b)
@@ -1581,6 +1588,374 @@ class ImporterRegistration(unittest.TestCase):
             self.assertTrue(all(d.get("source") == "discovery" for d in ov["devices"]))
             self.assertTrue(all(r.get("kind") == "network" for r in ov["routes"]))
             self.assertIn("rio-sl", ov["interfaces"])
+
+
+# ================================================================== phase 3: run-to-run diff, report section, DDM
+
+
+def _ent(eid, **kw):
+    e = {"id": eid, "macs": [], "ips": [], "hostname": "", "name": "", "dante_name": "", "serial": "", "vlan": None, "kind": "", "sources": ["unifi"], "status": "new",
+         "confidence": 0.8, "level": "high", "uplinks": [], "label": kw.get("name") or kw.get("hostname") or eid}
+    e.update(kw)
+    return e
+
+
+def _conn(cid, sw_ent, sw_mac, port, peer_ent, peer_mac, flag="", status="new", conf=0.85, methods=("mac_table",)):
+    return {"id": cid, "switch": {"entity": sw_ent, "device": "", "label": sw_ent, "mac": sw_mac}, "port": port, "peer": {"entity": peer_ent, "device": "", "label": peer_ent, "mac": peer_mac, "port": ""},
+            "methods": list(methods), "confidence": conf, "level": "high", "flag": flag, "status": status, "medium": "network", "vlan": None}
+
+
+def _findings(entities, connections):
+    return {"entities": entities, "connections": connections}
+
+
+class RunDiff(unittest.TestCase):
+    """compute_diff on synthetic findings: pairing, moved, changed, new / lost links, ignored rows left out (FR-DISC-11)."""
+
+    def setUp(self):
+        import importlib
+
+        self.d = importlib.import_module("fathom.discovery.diff")
+
+    def test_pairing_by_mac_serial_name_then_ip(self):
+        prev = [_ent("p1", macs=["aa:00:00:00:00:01"]), _ent("p2", serial="SER-0002"), _ent("p3", dante_name="RIO-SL"), _ent("p4", ips=["10.0.0.4"]), _ent("p5", ips=["10.0.0.5"], macs=["aa:00:00:00:00:05"])]
+        cur = [_ent("c1", macs=["bb:00:00:00:00:09", "aa:00:00:00:00:01"]), _ent("c2", serial="ser-0002"), _ent("c3", dante_name="rio-sl.local"), _ent("c4", ips=["10.0.0.4"]),
+               _ent("c5", ips=["10.0.0.5"]), _ent("c6", hostname="pc")]
+        pairs = self.d.pair_entities(cur, prev)
+        self.assertEqual(pairs, {"c1": "p1", "c2": "p2", "c3": "p3", "c4": "p4"}, "IP alone never pairs a MAC-less host with one that had a MAC; generic names never pair")
+
+    def test_two_previous_hosts_folded_into_one_box_are_not_missing(self):
+        prev = [_ent("p-pri", macs=["00:1d:c1:10:20:21"], ips=["10.20.0.21"]), _ent("p-sec", macs=["00:1d:c1:10:21:21"], ips=["10.21.0.21"]), _ent("sw", macs=["aa:aa:aa:aa:aa:aa"])]
+        cur = [_ent("c-rio", macs=["00:1d:c1:10:21:21", "00:1d:c1:10:20:21"], ips=["10.21.0.21", "10.20.0.21"], dante_name="RIO-SL"), _ent("sw2", macs=["aa:aa:aa:aa:aa:aa"])]
+        pairs = self.d.pair_entities(cur, prev)
+        self.assertEqual(pairs, {"c-rio": "p-sec", "sw2": "sw"})
+        self.assertEqual(self.d.absorbed_entities(cur, prev, pairs), {"p-pri": "c-rio"})
+        links_prev = [_conn("l1", "sw", "aa:aa:aa:aa:aa:aa", "Port 1", "p-pri", "00:1d:c1:10:20:21"), _conn("l2", "sw", "aa:aa:aa:aa:aa:aa", "Port 2", "p-sec", "00:1d:c1:10:21:21")]
+        links_cur = [_conn("l1x", "sw2", "aa:aa:aa:aa:aa:aa", "Port 1", "c-rio", "00:1d:c1:10:20:21"), _conn("l2x", "sw2", "aa:aa:aa:aa:aa:aa", "Port 2", "c-rio", "00:1d:c1:10:21:21")]
+        out = self.d.compute_diff(_findings(cur, links_cur), _findings(prev, links_prev))
+        self.assertEqual(out["counts"]["changes"], 0, out)
+        # the other way round: one previous box now seen as two hosts
+        out = self.d.compute_diff(_findings(prev, links_prev), _findings(cur, links_cur))
+        self.assertEqual((out["counts"]["new_devices"], out["counts"]["missing_devices"], out["counts"]["changed"], out["counts"]["new_links"], out["counts"]["lost_links"]), (0, 0, 0, 0, 0), out)
+
+    def test_new_missing_moved_changed_and_links(self):
+        sw1, sw2 = "aa:bb:cc:00:00:01", "aa:bb:cc:00:00:02"
+        prev = _findings(
+            [_ent("sw1", macs=[sw1], hostname="core", kind="switch"), _ent("sw2", macs=[sw2], hostname="edge", kind="switch"),
+             _ent("a", macs=["00:00:00:00:00:0a"], ips=["10.0.0.10"], hostname="rio-a", vlan=20), _ent("b", macs=["00:00:00:00:00:0b"], ips=["10.0.0.11"], hostname="rio-b"),
+             _ent("gone", macs=["00:00:00:00:00:0c"], hostname="old-dsp"), _ent("ign", macs=["00:00:00:00:00:0d"], status="ignored")],
+            [_conn("l1", "sw1", sw1, "Port 1", "a", "00:00:00:00:00:0a"), _conn("l2", "sw1", sw1, "Port 2", "b", "00:00:00:00:00:0b"),
+             _conn("l3", "sw1", sw1, "Port 3", "gone", "00:00:00:00:00:0c"), _conn("v1", "sw2", sw2, "Port 9", "a", "00:00:00:00:00:0a", flag="via")])
+        cur = _findings(
+            [_ent("sw1x", macs=[sw1], hostname="core.campus.local", kind="switch"), _ent("sw2x", macs=[sw2], hostname="edge", kind="switch"),
+             _ent("ax", macs=["00:00:00:00:00:0a"], ips=["10.0.0.10"], hostname="rio-a", vlan=30), _ent("bx", macs=["00:00:00:00:00:0b"], ips=["10.0.0.99"], hostname="rio-b"),
+             _ent("new", macs=["00:00:00:00:00:0e"], hostname="new-amp"), _ent("ign2", macs=["00:00:00:00:00:0d"], status="ignored")],
+            [_conn("l1x", "sw2x", sw2, "Gi1/0/5", "ax", "00:00:00:00:00:0a"), _conn("l2x", "sw1x", sw1, "Port 2", "bx", "00:00:00:00:00:0b"),
+             _conn("l4", "sw1x", sw1, "Port 4", "new", "00:00:00:00:00:0e"), _conn("ig", "sw1x", sw1, "Port 7", "bx", "00:00:00:00:00:0b", status="ignored")])
+        out = self.d.compute_diff(cur, prev, "run-b", "run-a")
+        c = out["counts"]
+        self.assertEqual((out["run"], out["against"]), ("run-b", "run-a"))
+        self.assertEqual([e["label"] for e in out["new_devices"]], ["new-amp"])
+        self.assertEqual([e["label"] for e in out["missing_devices"]], ["old-dsp"])
+        self.assertEqual([(m["label"], m["from"]["switch"], m["from"]["port"], m["to"]["switch"], m["to"]["port"]) for m in out["moved"]], [("rio-a", "sw1", "Port 1", "sw2x", "Port 5")])
+        changes = sorted((x["label"], x["field"], x["before"], x["after"]) for x in out["changed"])
+        self.assertEqual(changes, [("rio-a", "vlan", 20, 30), ("rio-b", "ips", ["10.0.0.11"], ["10.0.0.99"])], "a longer FQDN of the same host is not a hostname change")
+        self.assertEqual([(l["switch"], l["port"], l["peer"]) for l in out["new_links"]], [("sw1x", "Port 4", "new"), ("sw2x", "Gi1/0/5", "ax")])
+        self.assertEqual([(l["switch"], l["port"], l["peer"]) for l in out["lost_links"]], [("sw1", "Port 1", "a"), ("sw1", "Port 3", "gone")])
+        self.assertEqual((c["new_devices"], c["missing_devices"], c["moved"], c["changed"], c["new_links"], c["lost_links"]), (1, 1, 1, 2, 2, 2))
+        self.assertEqual((c["entities"], c["previous_entities"], c["paired"], c["unchanged"], c["changes"]), (5, 5, 4, 2, 9), "ignored rows are not counted; via rows are not links")
+        self.assertEqual(c["links"], 3)
+        self.assertEqual(c["previous_links"], 3)
+
+    def test_controller_and_switch_views_of_the_same_port_are_not_a_move(self):
+        core, edge = "aa:bb:cc:00:00:01", "aa:bb:cc:00:00:02"
+        prev = _findings([_ent("core", macs=[core]), _ent("edge", macs=[edge]), _ent("rx", macs=["00:00:00:00:00:aa"], uplinks=[{"mac": "00:00:00:00:00:aa", "switch_mac": core, "port": "Port 24", "source": "unifi"}])], [])
+        cur = _findings([_ent("core2", macs=[core]), _ent("edge2", macs=[edge]), _ent("rx2", macs=["00:00:00:00:00:aa"], uplinks=[{"mac": "00:00:00:00:00:aa", "switch_mac": core, "port": "Port 24", "source": "unifi"}])],
+                        [_conn("c", "edge2", edge, "Port 1", "rx2", "00:00:00:00:00:aa", methods=("snmp_lldp",))])
+        out = self.d.compute_diff(cur, prev)
+        self.assertEqual(out["moved"], [], "the SNMP view (edge port 1) refines the controller view (behind core port 24); nothing moved")
+        self.assertEqual(out["counts"]["new_links"], 1)
+        prev2 = _findings(prev["entities"], [_conn("c0", "core", core, "Port 24", "rx", "00:00:00:00:00:aa")])
+        cur2 = _findings([_ent("core2", macs=[core]), _ent("edge2", macs=[edge]), _ent("rx2", macs=["00:00:00:00:00:aa"])], [_conn("c", "edge2", edge, "Port 1", "rx2", "00:00:00:00:00:aa")])
+        out2 = self.d.compute_diff(cur2, prev2)
+        self.assertEqual([(m["from"]["port"], m["to"]["port"]) for m in out2["moved"]], [("Port 24", "Port 1")], "two direct links on different switches is a move")
+
+    def test_empty_diff_and_fixture_runs(self):
+        disc = requires("discovery")
+        e = self.d.empty_diff("run-x")
+        self.assertEqual((e["against"], e["counts"]["changes"], e["counts"]["entities"]), (None, 0, 0))
+        doc = json.loads((FIXTURES.parent.parent / "fathom" / "samples" / "campus-demo" / "project.json").read_text(encoding="utf-8"))
+        passive = disc.compute_findings("run-a", _results(), doc)
+        everything = disc.compute_findings("run-b", _results(PASSIVE_PROBES + ACTIVE_PROBES), doc)
+        out = self.d.compute_diff(everything, passive, "run-b", "run-a")
+        c = out["counts"]
+        self.assertEqual((c["missing_devices"], c["moved"], c["changed"], c["lost_links"]), (0, 0, 0, 0), "adding sources to the same network changes nothing that exists")
+        self.assertEqual(c["new_devices"], 5, [e["label"] for e in out["new_devices"]])
+        self.assertIn("Broadcast Router", [e["label"] for e in out["new_devices"]])
+        self.assertEqual(c["new_links"], 8)
+        self.assertEqual(c["paired"], 18)
+        same = self.d.compute_diff(everything, everything)
+        self.assertEqual(same["counts"]["changes"], 0)
+        self.assertEqual(self.d.empty_diff("run-b", everything)["counts"]["entities"], c["entities"])
+
+
+class RunDiffApi(unittest.TestCase):
+    """Two ad hoc runs → diff persisted with the second, served by GET …/diff, prior run selectable (FR-DISC-11)."""
+
+    def setUp(self):
+        requires("discovery")
+        self.app = get_app()
+        self.api = DiscoveryApi()
+        self.api.app = self.app
+
+    def test_diff_persisted_and_served(self):
+        with temp_data_dir(**FAST) as data:
+            install_campus(data, "campus")
+            base = "/api/v2/projects/campus"
+            r1 = self.api.run_and_wait(base, {"window": 10, "probes": ["unifi", "arp"]})
+            self.assertEqual(r1["status"], "done", r1)
+            self.assertEqual(r1["diff"]["against"], None, "the first run has nothing to compare with")
+            rdir = data / "projects" / "campus" / "exports" / "discovery"
+            self.assertTrue((rdir / r1["id"] / "diff.json").is_file())
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r1["id"] + "/diff")
+            self.assertEqual(st, 200, b)
+            d = jbody(b)
+            self.assertEqual((d["run"], d["against"], d["candidates"], d["diff"]["counts"]["changes"], d["persisted"]), (r1["id"], None, [], 0, True))
+
+            time.sleep(1.1)  # run ids carry a second resolution; "previous" is by id order
+            r2 = self.api.run_and_wait(base, {"window": 10})
+            self.assertEqual(r2["status"], "done", r2)
+            self.assertEqual(r2["diff"]["against"], r1["id"])
+            c2 = r2["diff"]["counts"]
+            self.assertGreater(c2["new_devices"], 0, "mDNS and LLDP add hosts the controller and ARP did not see")
+            self.assertEqual(c2["missing_devices"], 0)
+            self.assertTrue(any("compared with " + r1["id"] in x["msg"] for x in r2["log"]), r2["log"])
+            stored = json.loads((rdir / r2["id"] / "diff.json").read_text(encoding="utf-8"))
+            self.assertEqual((stored["run"], stored["against"], stored["counts"]), (r2["id"], r1["id"], c2))
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r2["id"] + "/diff")
+            self.assertEqual(st, 200, b)
+            d = jbody(b)
+            self.assertEqual((d["against"], [c["id"] for c in d["candidates"]], d["persisted"]), (r1["id"], [r1["id"]], True))
+            self.assertEqual(d["diff"]["counts"]["new_devices"], c2["new_devices"])
+            for e in d["diff"]["new_devices"]:
+                for k in ("id", "label", "kind", "macs", "ips", "sources", "confidence", "level", "status", "location"):
+                    self.assertIn(k, e)
+            for l in d["diff"]["new_links"]:
+                for k in ("switch", "port", "peer", "methods", "confidence", "level", "flag"):
+                    self.assertIn(k, l)
+            st, _, b = self.api.req("GET", base + "/discovery/runs")
+            briefs = {r["id"]: r for r in jbody(b)["runs"]}
+            self.assertEqual(briefs[r2["id"]]["diff"]["against"], r1["id"], "the runs list carries the stored diff counts")
+
+            # pick the other direction explicitly: run 1 against run 2
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r1["id"] + "/diff?against=" + r2["id"])
+            self.assertEqual(st, 200, b)
+            d = jbody(b)
+            self.assertEqual((d["against"], d["persisted"]), (r2["id"], False))
+            self.assertEqual(d["diff"]["counts"]["missing_devices"], c2["new_devices"])
+            self.assertEqual(d["diff"]["counts"]["new_devices"], 0)
+            # errors
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r2["id"] + "/diff?against=" + r2["id"])
+            self.assertEqual(st, 400, b)
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r2["id"] + "/diff?against=run-20000101-000000-dead")
+            self.assertEqual(st, 400, b)
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r2["id"] + "/diff?against=nonsense")
+            self.assertEqual(st, 400, b)
+            st, _, b = self.api.req("GET", base + "/discovery/runs/run-20000101-000000-dead/diff")
+            self.assertEqual(st, 404, b)
+
+            # a device promoted in between does not become a "change": both sides are correlated against the live document
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r2["id"] + "/findings")
+            f = jbody(b)
+            new_ids = [e["id"] for e in f["entities"] if e["status"] == "new" and e.get("proposed")][:3]
+            st, _, b = self.api.req("POST", base + "/discovery/runs/" + r2["id"] + "/findings/promote", {"entities": new_ids})
+            self.assertEqual(st, 200, b)
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r2["id"] + "/diff")
+            self.assertEqual(jbody(b)["diff"]["counts"]["new_devices"], c2["new_devices"])
+
+
+class DiscoveredConnectionsReport(unittest.TestCase):
+    """The build's "Discovered connections" section: latest completed run plus promoted discovered cables; off with discovery=false."""
+
+    def setUp(self):
+        requires("discovery")
+        self.app = get_app()
+        self.api = DiscoveryApi()
+        self.api.app = self.app
+
+    _last_build = 0.0
+
+    def _build(self, data, body):
+        wait = self._last_build + 1.05 - time.time()  # build folders are stamped per second; a second build in the same second would reuse the folder
+        if wait > 0:
+            time.sleep(wait)
+        self._last_build = time.time()
+        st, _, b = self.api.req("POST", "/api/v2/projects/campus/builds", body)
+        self.assertEqual(st, 201, b[:400])
+        j = jbody(b)
+        return data / "builds" / "campus" / j["build"], j["files"]
+
+    def test_report_section_csv_and_toggle(self):
+        with temp_data_dir(**FAST) as data:
+            install_campus(data, "campus")
+            base = "/api/v2/projects/campus"
+            bdir, files = self._build(data, {})
+            self.assertNotIn("discovered-connections.csv", files, "no run yet: no section, no csv")
+            self.assertNotIn("Discovered connections", (bdir / "report.html").read_text(encoding="utf-8"))
+            self.assertIn("discovered connections: no completed discovery run yet", (bdir / "build-notes.txt").read_text(encoding="utf-8"))
+
+            run = self.api.run_and_wait(base, {"window": 10})
+            self.assertEqual(run["status"], "done", run)
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + run["id"] + "/findings")
+            f = jbody(b)
+            new_ids = [e["id"] for e in f["entities"] if e["status"] == "new" and e.get("proposed")]
+            st, _, b = self.api.req("POST", base + "/discovery/runs/" + run["id"] + "/findings/promote", {"entities": new_ids})
+            self.assertEqual(st, 200, b)
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + run["id"] + "/findings")
+            f = jbody(b)
+            prop = [c for c in f["connections"] if c.get("cable") and c["status"] == "new" and c["flag"] == ""]
+            self.assertTrue(prop)
+            st, _, b = self.api.req("POST", base + "/discovery/runs/" + run["id"] + "/findings/promote", {"connections": [prop[0]["id"]]})
+            self.assertEqual(st, 200, b)
+            st, _, b = self.api.req("GET", base)
+            j = jbody(b)
+            doc = j.get("doc") or j
+            cab = [c for c in doc["cables"] if c.get("source") == "discovery"]
+            self.assertEqual(len(cab), 1, "a promoted cable is marked as discovered")
+            self.assertEqual((cab[0]["discovery"]["run"], cab[0]["discovery"]["methods"], cab[0]["status"]), (run["id"], prop[0]["methods"], "planned"))
+
+            bdir, files = self._build(data, {})
+            self.assertIn("discovered-connections.csv", files)
+            html = (bdir / "report.html").read_text(encoding="utf-8")
+            self.assertIn("<h2>Discovered connections</h2>", html)
+            self.assertIn("From discovery run <code>%s</code>" % run["id"], html)
+            self.assertLess(html.index("<h2>Cable schedule</h2>"), html.index("<h2>Discovered connections</h2>"), "right after the cable schedule")
+            csv_text = (bdir / "discovered-connections.csv").read_text(encoding="utf-8")
+            head = csv_text.splitlines()[0]
+            for col in ("Tag", "From room", "From device", "From port", "To room", "To device", "To port", "Medium", "Type", "Signal", "Status", "Confidence", "Sources", "Run", "Note", "Id"):
+                self.assertIn(col, head)
+            lines = csv_text.splitlines()[1:]
+            self.assertGreaterEqual(len(lines), 5)
+            self.assertTrue(any(",planned," in l and "mac_table" in l for l in lines), "the promoted cable row carries its status and sources")
+            self.assertTrue(any(",proposed," in l for l in lines), "unpromoted links are listed as proposed")
+            self.assertIn("high (", csv_text)
+            self.assertEqual(sum(1 for l in lines if l.endswith(cab[0]["id"])), 1)
+            self.assertEqual(sum(1 for l in lines if ("," + prop[0]["id"]) in l), 0, "the promoted link is not listed twice")
+
+            # the toggle
+            bdir, files = self._build(data, {"discovery": False})
+            self.assertNotIn("discovered-connections.csv", files)
+            self.assertNotIn("Discovered connections", (bdir / "report.html").read_text(encoding="utf-8"))
+            st, _, b = self.api.req("POST", base + "/builds", {"discovery": "yes"})
+            self.assertEqual(st, 400, b)
+            # room scoping: a build of one room without discovered links has no section
+            rooms = [r["id"] for r in doc["rooms"]]
+            per_room = {}
+            for rid in rooms:
+                bdir, files = self._build(data, {"rooms": [rid]})
+                per_room[rid] = "discovered-connections.csv" in files
+            self.assertTrue(any(per_room.values()) and not all(per_room.values()), per_room)
+
+    def test_report_module_directly(self):
+        rep = requires("discovery.report")
+        self.assertEqual(rep.confidence_text(0.914, "high"), "high (91%)")
+        self.assertEqual(rep.confidence_text(None, ""), "")
+        doc = {"rooms": [{"id": "main", "name": "Main"}], "devices": [{"id": "sw", "name": "SW", "room": "main", "ports": [{"id": "p1", "label": "Port 1"}]}, {"id": "rx", "name": "RX", "room": "main", "ports": [{"id": "net", "label": "Net"}]}],
+               "cables": [{"id": "c-1", "from": {"device": "sw", "port": "p1"}, "to": {"device": "rx", "port": "net"}, "medium": "network", "status": "planned", "source": "discovery",
+                           "discovery": {"run": "run-20260101-000000-0000", "confidence": 0.9, "level": "high", "methods": ["lldp"]}},
+                          {"id": "c-2", "from": {"device": "sw", "port": "p1"}, "to": {"device": "rx", "port": "net"}, "medium": "network", "status": "planned"}]}
+        out = rep.discovered_connections(doc, None)
+        self.assertEqual(out["totals"]["rows"], 1)
+        row = out["rows"][0]
+        self.assertEqual((row["from_device"], row["from_port"], row["to_device"], row["status"], row["confidence"], row["sources"], row["run"]), ("SW", "Port 1", "RX", "planned", "high (90%)", "lldp", "run-20260101-000000-0000"))
+        self.assertEqual(rep.discovered_connections(doc, None, rooms=["other"])["rows"], [])
+        self.assertIn("promoted cables only", rep.section_intro(out))
+
+
+class DdmProbe(unittest.TestCase):
+    """Dante Domain Manager GraphQL probe: fixture parse, correlation, opt-in run, and the guard (only the DDM URL is contacted)."""
+
+    def setUp(self):
+        self.probes = requires("discovery.probes")
+        self.ddm = requires("discovery.probes.ddm")
+
+    def test_fixture_parse(self):
+        r = self.ddm.parse(json.loads((DISC_FIXTURES / "ddm.json").read_text(encoding="utf-8")))
+        self.assertEqual(r.status, "ok")
+        self.assertEqual(r.stats, {"devices": 5, "subscriptions": 11, "domains": 2})
+        by = {o.dante_name: o for o in r.observations}
+        self.assertEqual(sorted(by), ["DCP-LOBBY", "FOH-CL5", "RIO-SL", "RIO-SR", "ULXD4Q-STAGE"])
+        rio = by["RIO-SL"]
+        self.assertEqual((rio.mac, rio.extra_macs, rio.ip, rio.manufacturer, rio.model, rio.firmware, rio.kind_hint), (RIO_SL, [RIO_SL_SEC], "10.20.0.21", "Yamaha", "Rio3224-D2", "4.2.6", "dante"))
+        self.assertEqual(rio.evidence["domain"], "Campus Main")
+        self.assertEqual(rio.evidence["subscriptions"], [{"rx": "01", "tx_device": "FOH-CL5", "tx_channel": "Mix1", "status": "DYNAMIC"}, {"rx": "02", "tx_device": "FOH-CL5", "tx_channel": "Mix2", "status": "DYNAMIC"}])
+        self.assertEqual(len(by["FOH-CL5"].evidence["subscriptions"]), 6, "an unsubscribed rx channel is not a subscription")
+        self.assertEqual(by["ULXD4Q-STAGE"].evidence["enrolment"], "UNENROLLED")
+        self.assertTrue(any("preset-XML import" in n for n in r.notes), r.notes)
+        self.assertEqual(self.ddm.parse("nope").status, "error")
+        self.assertEqual(self.ddm.parse({"data": {"domains": []}}).observations, [])
+        partial = self.ddm.parse({"data": {"devices": [{"name": "X", "interfaces": [{"macAddress": "00:11:22:33:44:55"}]}]}, "errors": ["rxChannels: forbidden"]})
+        self.assertEqual((partial.status, partial.observations[0].mac, partial.observations[0].dante_name), ("ok", "00:11:22:33:44:55", "X"))
+        self.assertTrue(any("partial" in n for n in partial.notes))
+
+    def test_query_is_read_only(self):
+        q = self.ddm.QUERY
+        self.assertTrue(q.startswith("query "))
+        self.assertNotIn("mutation", q.lower())
+        for field in ("domains", "devices", "interfaces", "rxChannels", "subscribedDevice", "txChannels"):
+            self.assertIn(field, q)
+
+    def test_correlates_with_the_other_sources(self):
+        disc = requires("discovery")
+        doc = json.loads((FIXTURES.parent.parent / "fathom" / "samples" / "campus-demo" / "project.json").read_text(encoding="utf-8"))
+        f = disc.compute_findings("run-x", _results(PASSIVE_PROBES + ["ddm"]), doc)
+        by_label = {e["label"]: e for e in f["entities"]}
+        self.assertEqual(sorted(by_label["RIO-SL"]["sources"]), ["ddm", "mdns", "unifi"])
+        self.assertEqual(by_label["RIO-SL"]["status"], "match")
+        lobby = by_label["DCP-LOBBY"]
+        self.assertEqual((lobby["sources"], lobby["status"], lobby["model"]), (["ddm"], "new", "AVIO Analog Output"))
+        self.assertTrue(lobby["proposed"])
+
+    def test_opt_in_run_and_test_endpoint(self):
+        api = DiscoveryApi()
+        api.app = get_app()
+        with temp_data_dir(**FAST) as data:
+            install_campus(data, "campus")
+            base = "/api/v2/projects/campus"
+            st, _, b = api.req("POST", base + "/discovery/test", {"probe": "ddm"})
+            self.assertEqual(st, 200, b)
+            self.assertEqual(jbody(b)["result"]["ok"], True)
+            self.assertIn("11 subscriptions", jbody(b)["result"]["message"])
+            run = api.run_and_wait(base, {"window": 10})
+            self.assertNotIn("ddm", run["probes"], "off by default")
+            st, _, b = api.req("PUT", base + "/discovery/settings", {"probes": {"ddm": {"enabled": True, "url": "https://ddm.campus.local", "api_key": "k-123"}}})
+            self.assertEqual(st, 200, b)
+            s = jbody(b)["settings"]["probes"]["ddm"]
+            self.assertEqual((s["url"], s["api_key_set"]), ("https://ddm.campus.local", True))
+            self.assertNotIn("k-123", b.decode())
+            run = api.run_and_wait(base, {"window": 10, "probes": ["ddm", "mdns"]})
+            self.assertEqual((run["status"], run["probes"], run["mode"], run["targets"]), ("done", ["mdns", "ddm"], "active", {"ddm": ["https://ddm.campus.local"]}))
+            self.assertEqual(run["summaries"]["ddm"]["status"], "ok")
+            st, _, b = api.req("GET", base + "/discovery/runs/" + run["id"] + "/findings")
+            f = jbody(b)
+            self.assertIn("DCP-LOBBY", [e["label"] for e in f["entities"]])
+
+    def test_guard_only_the_ddm_url_is_contacted(self):
+        with temp_env(FATHOM_DISCOVERY_FIXTURES=None), _SocketGuard() as g:
+            with self.assertRaises(self.ddm.DdmError):
+                self.ddm.collect({})
+            with self.assertRaises(self.ddm.DdmError):
+                self.ddm.collect({"url": "https://192.0.2.50"})
+            self.assertFalse(self.ddm.test({"url": "https://192.0.2.50"})["ok"])
+        self.assertEqual((g.connects, g.sendto, g.sends), ([], [], []), "no key: nothing leaves the host")
+        with temp_env(FATHOM_DISCOVERY_FIXTURES=None), _SocketGuard() as g:
+            with self.assertRaises(self.ddm.DdmError) as cm:
+                self.ddm.collect({"url": "192.0.2.50:8443", "api_key": "k"})
+            res = self.ddm.test({"url": "https://192.0.2.51", "api_key": "k"})
+        self.assertIn("cannot reach", str(cm.exception))
+        self.assertFalse(res["ok"])
+        self.assertEqual(sorted(a for a in g.connects if isinstance(a, tuple)), [("192.0.2.50", 8443), ("192.0.2.51", 443)])
+        self.assertEqual((g.sendto, g.sends), ([], []))
 
 
 if __name__ == "__main__":
