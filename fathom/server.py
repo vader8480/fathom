@@ -2752,18 +2752,20 @@ def r_trace_v2(req: Request) -> Response:
 
     pdir = _project_dir(req.params["name"])
     doc, _ = _load(pdir)
-    src = T.resolve_ref(doc, req.query.get("from", ""))
+    overlay = _overlay(doc, pdir, strict=False)
+    src = T.resolve_ref(doc, req.query.get("from", ""), overlay)
     if src is None:
         raise ApiError(400, "unknown endpoint in 'from'")
     dst = None
     if req.query.get("to"):
-        dst = T.resolve_ref(doc, req.query["to"])
+        dst = T.resolve_ref(doc, req.query["to"], overlay)
         if dst is None:
             raise ApiError(400, "unknown endpoint in 'to'")
     state = req.query.get("state") or "all"
-    g = _compat(T.port_graph, doc, _overlay(doc, pdir, strict=False), discipline=req.query.get("discipline") or None, state=state)
+    g = _compat(T.port_graph, doc, overlay, discipline=req.query.get("discipline") or None, state=state)
     depth = _int(req.query.get("max_depth"), 24, 1, 64)
     limit = _int(req.query.get("limit"), 50, 1, 500)
+    dca = str(req.query.get("dca") or "").lower() in ("1", "true", "yes")
 
     def node(ref: Tuple[str, Optional[str]]) -> str:
         return f"{ref[0]}:{ref[1]}" if ref[1] else f"{ref[0]}:*"
@@ -2776,10 +2778,15 @@ def r_trace_v2(req: Request) -> Response:
         paths = T.downstream_paths(g, node(src), max_depth=depth, limit=limit)
     out = []
     for p in paths:
-        labels = T.hop_labels(doc, p)
+        if dca:
+            p = T.with_dca_hops(p)
+        labels = T.hop_labels(doc, p, overlay)
         hops = [dict(h, label=labels[i] if i < len(labels) else "") for i, h in enumerate(p.get("hops") or [])]
-        out.append({"hops": hops, "cables": list(p.get("cables") or []), "text": T.path_text(doc, p)})
-    return Response.json({"paths": out})
+        item = {"hops": hops, "cables": list(p.get("cables") or []), "via": list(p.get("via") or []), "text": T.path_text(doc, p, overlay)}
+        if p.get("incomplete"):
+            item["incomplete"] = p["incomplete"]
+        out.append(item)
+    return Response.json({"paths": out, "from": node(src), "to": node(dst) if dst else None})
 
 
 @route("GET", r"/api/v2/projects/" + _NAME + "/search", role="viewer", summary="Search devices, ports, cables, interfaces …", tags=["analysis"])
