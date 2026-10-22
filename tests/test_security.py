@@ -48,6 +48,7 @@ SPEC_ROLES = {
     ("PUT", "/api/v2/projects/{}"): "editor", ("POST", "/api/v2/projects/{}/changes"): "editor", ("DELETE", "/api/v2/projects/{}"): "admin",
     ("GET", "/api/v2/projects/{}/devices/duplicates"): "viewer", ("POST", "/api/v2/projects/{}/devices/merge/preview"): "editor",
     ("POST", "/api/v2/projects/{}/devices/merge"): "editor",
+    ("GET", "/api/v2/projects/{}/devices/{}/channels"): "viewer", ("POST", "/api/v2/projects/{}/devices/{}/channels/apply"): "editor",
     ("GET", "/api/v2/projects/{}/doc.json"): "viewer", ("GET", "/api/v2/projects/{}/history"): "viewer",
     ("GET", "/api/v2/projects/{}/history/{}"): "viewer", ("GET", "/api/v2/projects/{}/history/{}/diff"): "viewer",
     ("POST", "/api/v2/projects/{}/history/{}/restore"): "editor", ("GET", "/api/v2/projects/{}/overlay"): "viewer",

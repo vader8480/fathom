@@ -848,6 +848,7 @@ def _empty_overlay(doc: Doc, ihash: str) -> Dict[str, Any]:
         "revision": doc.get("revision", 0), "imports_hash": ihash,
         "devices": [], "detail": {}, "routes": [], "port_labels": {}, "interfaces": {},
         "dmx": {}, "patch_rows": [], "appendix": {}, "notes": [], "suggestions": {},
+        "channels": {}, "channel_labels": {},
     }
 
 
@@ -876,6 +877,19 @@ def merge_contribution(ov: Dict[str, Any], c: Dict[str, Any], room: str = "") ->
     ov["patch_rows"].extend(c.get("patch_rows") or [])
     for k, rows in (c.get("appendix") or {}).items():
         ov["appendix"].setdefault(k, []).extend(_jsonable(rows))
+    for dev, sets in (c.get("channels") or {}).items():
+        if not isinstance(sets, dict):
+            continue
+        cur = ov.setdefault("channels", {}).setdefault(dev, {"channels": [], "links": []})
+        have = {ch.get("id") for ch in cur["channels"]}
+        cur["channels"].extend(_jsonable(ch) for ch in sets.get("channels") or [] if isinstance(ch, dict) and ch.get("id") not in have)
+        cur["links"].extend(_jsonable(ln) for ln in sets.get("links") or [])
+    for dev, ports in (c.get("channel_labels") or {}).items():
+        tgt = ov.setdefault("channel_labels", {}).setdefault(dev, {})
+        for port, dirs in (ports or {}).items():
+            slot = tgt.setdefault(port, {})
+            for d, labels in (dirs or {}).items():
+                slot.setdefault(d, {}).update({str(k): v for k, v in (labels or {}).items()})
     ov["notes"].extend(c.get("notes") or [])
 
 
@@ -943,6 +957,7 @@ def _lift_legacy(doc: Doc, room: str, project: Project, info: Dict[str, Any]) ->
     net: Optional[DanteNetwork] = info.get("dante")  # type: ignore[assignment]
     dmap: Dict[str, Node] = info.get("dante_map") or {}  # type: ignore[assignment]
     interfaces: Dict[str, List[Dict[str, Any]]] = {}
+    channel_labels: Dict[str, Dict[str, Dict[str, Dict[str, str]]]] = {}
     if net is not None:
         for s in net.subscriptions():
             tx, rx = dmap.get(s.tx_device), dmap.get(s.rx_device)
@@ -954,13 +969,22 @@ def _lift_legacy(doc: Doc, room: str, project: Project, info: Dict[str, Any]) ->
             pa, pb = _first_port(port_of.get(a), "dante"), _first_port(port_of.get(b), "dante")
             if pa:
                 fr["port"] = pa
+                if s.tx_id:
+                    fr["ch"] = int(s.tx_id)
             if pb:
                 to["port"] = pb
+                to["ch"] = int(s.rx_id)
             routes.append({"kind": "dante", "from": fr, "to": to, "label": s.tx_label, "medium": "dante"})
         for name, dev in net.devices.items():
             node = dmap.get(name)
             if node is None:
                 continue
+            port = _first_port(port_of.get(cid(node.id)), "dante")
+            if port and (dev.tx or dev.rx):
+                channel_labels[cid(node.id)] = {port: {
+                    "out": {str(c.id): c.label for c in dev.tx if c.label},
+                    "in": {str(c.id): c.label for c in dev.rx if c.label},
+                }}
             ifs = []
             for role, ip, mac in (("primary", dev.primary_ip, dev.primary_mac), ("secondary", dev.secondary_ip, dev.secondary_mac)):
                 if ip:
@@ -979,7 +1003,16 @@ def _lift_legacy(doc: Doc, room: str, project: Project, info: Dict[str, Any]) ->
             "label": ln.signal or ln.label, "medium": ln.medium, "count": ln.count,
         })
     port_labels: Dict[str, Dict[str, str]] = {}
+    channel_sets: Dict[str, Dict[str, Any]] = {}
+    notes = list(project.notes)
     for node, data in info.get("consoles") or []:  # type: ignore[union-attr]
+        target = port_of.get(cid(node.id))
+        if target is not None:
+            from .console import console_contribution
+
+            contrib = console_contribution(data, target)
+            channel_sets[cid(node.id)] = {"channels": contrib["channels"], "links": contrib["links"]}
+            notes.extend(f"yamaha: {n}" for n in contrib.get("notes") or [])
         dev = devices.get(cid(node.id))
         if not dev:
             continue
@@ -1002,7 +1035,7 @@ def _lift_legacy(doc: Doc, room: str, project: Project, info: Dict[str, Any]) ->
     return {
         "devices": out_devices, "detail": detail, "routes": routes, "port_labels": port_labels,
         "interfaces": interfaces, "patch_rows": patch_rows, "appendix": _jsonable(project.appendix),
-        "notes": list(project.notes),
+        "notes": notes, "channels": channel_sets, "channel_labels": channel_labels,
     }
 
 
@@ -1094,5 +1127,9 @@ def promote_ops(doc: Doc, overlay: Dict[str, Any], device_ids: List[str]) -> Lis
         ifs = (overlay.get("interfaces") or {}).get(did)
         if ifs and "interfaces" not in value:
             value["interfaces"] = [{k: v for k, v in i.items() if k != "source"} for i in ifs]
+        sets = (overlay.get("channels") or {}).get(did)
+        if isinstance(sets, dict) and (sets.get("channels") or sets.get("links")) and "channels" not in value:
+            value["channels"] = copy.deepcopy(sets.get("channels") or [])
+            value["channel_links"] = copy.deepcopy(sets.get("links") or [])
         ops.append({"op": "put", "coll": "devices", "id": did, "value": value})
     return ops

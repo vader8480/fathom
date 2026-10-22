@@ -8,6 +8,7 @@
   "cost": null,
   "currency": "USD",
   "dante": true,
+  "routing": "indexed",
   "dmx_footprint": null,
   "ports": [
     {

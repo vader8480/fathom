@@ -327,6 +327,11 @@ def instantiate(t: Dict[str, Any], *, device_id: str, name: Optional[str] = None
         dev["dante"] = True
     if t.get("dmx_footprint"):
         dev["dmx"] = {"footprint": t["dmx_footprint"]}
+    routing = t.get("routing")
+    if isinstance(routing, str) and routing:
+        dev["routing"] = {"mode": routing}
+    elif isinstance(routing, dict) and routing.get("mode"):
+        dev["routing"] = copy.deepcopy(routing)
     dev["ports"] = expand_port_groups(t.get("ports") or [])
     return dev
 
