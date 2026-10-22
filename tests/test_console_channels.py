@@ -15,9 +15,9 @@ import unittest
 from pathlib import Path
 
 try:
-    from _helpers import call, fixture_path, get_app, install_campus, jbody, read_json, requires, temp_data_dir
+    from _helpers import call, fixture_path, get_app, install_campus, jbody, read_json, requires, temp_data_dir, upload
 except ImportError:  # pragma: no cover
-    from tests._helpers import call, fixture_path, get_app, install_campus, jbody, read_json, requires, temp_data_dir
+    from tests._helpers import call, fixture_path, get_app, install_campus, jbody, read_json, requires, temp_data_dir, upload
 
 HERE = Path(__file__).resolve().parent
 if str(HERE.parent) not in sys.path:
@@ -269,6 +269,60 @@ class MergeSets(unittest.TestCase):
         self.assertEqual(links[0]["source"], "user", "the user's send is kept once (the identical imported one is a duplicate)")
         self.assertEqual([c["id"] for c in chans], ["in-1", "mix-99", "st-l"], "sorted by kind / index")
 
+    def test_csv_entries_survive_too(self):
+        from fathom.console import MANUAL_SOURCES, _merge_sets
+
+        self.assertEqual(MANUAL_SOURCES, ("user", "csv"))
+        old_ln = [{"from": {"channel": "in-1"}, "to": {"channel": "mix-1"}, "kind": "send", "source": "csv"},
+                  {"from": {"channel": "in-1"}, "to": {"channel": "mix-2"}, "kind": "send", "source": "yamaha"}]
+        new_ch = [{"id": "in-1", "kind": "input", "source": "yamaha"}, {"id": "mix-1", "kind": "mix", "index": 1, "source": "yamaha"}]
+        _, links = _merge_sets([], old_ln, new_ch, [])
+        self.assertEqual([(ln["to"]["channel"], ln["source"]) for ln in links], [("mix-1", "csv")], "spreadsheet sends are hand-entered: kept; the stale import send goes")
+
+
+class Typed(unittest.TestCase):
+    """``console.resolve_channels`` / ``expand_ranges``: what people type in the CSV template (§5.7.4)."""
+
+    def setUp(self):
+        self.chans = _contribution()["channels"]
+
+    def ids(self, text, hint=""):
+        from fathom.console import resolve_channels
+
+        return [c["id"] for c in resolve_channels(self.chans, text, hint)]
+
+    def test_console_style_references(self):
+        self.assertEqual(self.ids("CH 12"), ["in-12"])
+        self.assertEqual(self.ids("12"), ["in-12"], "a bare number is an input channel")
+        self.assertEqual(self.ids("in-12"), ["in-12"], "ids pass through")
+        self.assertEqual(self.ids("ch12"), ["in-12"])
+        self.assertEqual(self.ids("ST"), ["st-l", "st-r"], "the stereo bus means both sides")
+        self.assertEqual(self.ids("ST L/R"), ["st-l", "st-r"])
+        self.assertEqual(self.ids("Main"), ["st-l", "st-r"])
+        self.assertEqual(self.ids("ST L"), ["st-l"])
+        self.assertEqual(self.ids("MONO"), ["mono"])
+        self.assertEqual(self.ids("MIX 1"), ["mix-1"])
+        self.assertEqual(self.ids("AUX 1"), ["mix-1"], "aux falls back to mix when the console calls them mixes")
+        self.assertEqual(self.ids("MATRIX 3"), ["mtx-3"])
+        self.assertEqual(self.ids("MTX 3"), ["mtx-3"])
+        self.assertEqual(self.ids("ST IN 2"), ["stin-2-l", "stin-2-r"])
+        self.assertEqual(self.ids("DCA 1"), ["dca-1"])
+        self.assertEqual(self.ids("1", "dca"), ["dca-1"], "a bare number in the dca column is a DCA")
+        self.assertEqual(self.ids("Band", "dca"), ["dca-3"], "a DCA's name")
+        self.assertEqual(self.ids("Choir", "dca"), [], "two DCAs are named Choir: ambiguous")
+        self.assertEqual(self.ids("Kick In"), ["in-17"], "a channel's console name")
+        self.assertEqual(self.ids("FX 1"), ["fx-1"])
+        self.assertEqual(self.ids("PRFX 6"), ["prfx-6"])
+        for bad in ("MIX", "nope", "CH 99", ""):
+            self.assertEqual(self.ids(bad), [], bad)
+
+    def test_ranges_and_separators(self):
+        from fathom.console import expand_ranges
+
+        self.assertEqual(expand_ranges("ST; MIX 1-3, DCA 2 | -MIX 4"), ["ST", "MIX 1", "MIX 2", "MIX 3", "DCA 2", "-MIX 4"])
+        self.assertEqual(expand_ranges("1-3"), ["1", "2", "3"])
+        self.assertEqual(expand_ranges(""), [])
+
 
 class Overlay(unittest.TestCase):
     """campus-demo + the 9-file CL5 export: Dante routes carry ``ch``, labels and channels land in the overlay, apply persists them."""
@@ -411,6 +465,129 @@ class Overlay(unittest.TestCase):
         self.assertEqual(len(ops), 1)
         self.assertEqual(ops[0]["value"]["channels"][0]["id"], "in-1")
         self.assertEqual(ops[0]["value"]["channel_links"], [])
+
+    def _preview(self, rows, name="sends.csv"):
+        import csv
+        import io
+
+        buf = io.StringIO()
+        csv.writer(buf).writerows(rows)
+        st, _, b = upload(self.app, "/api/v2/projects/campus/imports/preview?kind=csv", [(name, buf.getvalue().encode("utf-8"), "text/csv")])
+        self.assertEqual(st, 200, b[:300])
+        return jbody(b)
+
+    def test_console_csv_template_preview_apply(self):
+        """§5.7.4 console table / FR-IMP-12: template → preview → apply; sends and DCA membership land as ``source: csv`` links the tracer follows."""
+        import csv
+        import io
+
+        st, hd, b = call(self.app, "GET", "/api/v2/projects/campus/imports/templates/csv/console.csv")
+        self.assertEqual(st, 200, b[:200])
+        self.assertIn('filename="fathom-console-template.csv"', hd.get("Content-Disposition"))
+        text = b.decode("utf-8")
+        self.assertTrue(text.startswith("\ufeff"))
+        rows = list(csv.reader(io.StringIO(text.lstrip("\ufeff"))))
+        self.assertEqual(rows[0], ["console", "channel", "name", "sends", "dca", "mute", "note"])
+        self.assertEqual(rows[1][0], "FOH CL5", "the example names the project's console")
+        st, _, b = upload(self.app, "/api/v2/projects/campus/imports/preview?room=main", [("fathom-console-template.csv", text.encode("utf-8"), "text/csv")])
+        pv = jbody(b)
+        self.assertEqual((st, pv["kind"], pv["errors"]), (200, "csv", []), "the unedited template auto-detects and previews cleanly")
+        self.assertEqual(pv["summary"]["skip"], 0)
+        self.assertEqual(len(pv["ops"]), 1)
+        self.assertTrue(any("applied to the device together" in w for w in pv["warnings"]), "overlay-only channels are persisted by the same op")
+
+        pv = self._preview([
+            ["Console", "Channel", "Name", "Sends", "DCA", "Mute"],
+            ["FOH CL5", "CH 12", "Bass", "ST; MIX 1-2", "Band", ""],          # stereo = both sides, a range, a DCA by name
+            ["FOH CL5", "17", "", "ST L/R", "1; 3", ""],                        # bare number = CH 17
+            ["FOH CL5", "MIX 1", "", "MATRIX 3; ST", "", ""],                   # a bus feeding a matrix
+            ["FOH CL5", "Kick In", "", "-MIX 9", "", ""],                       # removing an absent send changes nothing
+            ["FOH CL5", "DCA 1", "", "ST", "", ""],                             # error: a DCA is not a channel
+            ["FOH CL5", "CH 99", "", "ST", "", ""],                             # error: no such channel
+            ["FOH CL5", "CH 3", "", "MIX 77", "9", ""],                         # error: no such bus (the row is skipped whole)
+            ["Nope", "CH 3", "", "ST", "", ""],                                 # error: no such console
+        ])
+        self.assertEqual([(e["row"], e["column"], e["value"]) for e in pv["errors"]],
+                         [(6, "Channel", "DCA 1"), (7, "Channel", "CH 99"), (8, "Sends", "MIX 77"), (9, "Console", "Nope")],
+                         "spreadsheet rows and the user's header text")
+        self.assertEqual(pv["summary"], {"create": 3, "update": 0, "skip": 5})
+        self.assertTrue(any(w.startswith("row 5: nothing to change") for w in pv["warnings"]), pv["warnings"])
+        op = pv["ops"][0]
+        self.assertEqual((op["op"], op["coll"], op["id"]), ("merge", "devices", "foh-cl5"))
+        csv_links = [(ln["from"]["channel"], ln["to"]["channel"], ln["kind"]) for ln in op["value"]["channel_links"] if ln.get("source") == "csv"]
+        self.assertEqual(csv_links, [("in-12", "st-l", "send"), ("in-12", "st-r", "send"), ("in-12", "mix-1", "send"), ("in-12", "mix-2", "send"),
+                                     ("in-12", "dca-3", "dca"), ("in-17", "st-l", "send"), ("in-17", "st-r", "send"), ("in-17", "dca-1", "dca"),
+                                     ("in-17", "dca-3", "dca"), ("mix-1", "mtx-3", "send"), ("mix-1", "st-l", "send"), ("mix-1", "st-r", "send")])
+        self.assertEqual(len(op["value"]["channels"]), 72 + 16 + 24 + 8 + 2 + 1 + 16 + len([c for c in op["value"]["channels"] if c["kind"] == "rack"]),
+                         "the whole imported set rides along (72 in, 8 st in pairs, 24 mix, 8 mtx, st l/r, mono, 16 dca + racks)")
+
+        doc = read_json(self.pdir / "project.json")
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/changes", {"base_revision": doc["revision"], "ops": pv["ops"], "summary": "Import sends.csv"}, {"X-Fathom": "1"})
+        self.assertEqual(st, 200, b[:300])
+        st, _, b = call(self.app, "GET", "/api/v2/projects/campus/devices/foh-cl5/channels")
+        j = jbody(b)
+        self.assertEqual((j["source"], j["pending"], j["summary"]["sends"], j["summary"]["dca_members"]), ("device", False, 9, 3))
+        st, _, b = call(self.app, "GET", "/api/v2/projects/campus/trace?from=foh-cl5:%40in-12&direction=down")
+        self.assertEqual(st, 200, b[:300])
+        hops = [(h["device"], h.get("channel")) for p in jbody(b)["paths"] for h in p["hops"]]
+        self.assertIn(("foh-cl5", "st-l"), hops, "the tracer follows the spreadsheet send")
+        self.assertIn(("foh-cl5", "mtx-3"), hops, "and the bus-to-matrix send")
+
+        # the next import re-apply keeps the spreadsheet entries
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/devices/foh-cl5/channels/apply", {}, {"X-Fathom": "1"})
+        self.assertEqual(st, 200, b[:300])
+        self.assertFalse(jbody(b)["changed"], "nothing pending: csv links count as hand-entered")
+        pv = self._preview([["console", "channel", "sends"], ["foh-cl5", "CH 12", "-MIX 2"]])
+        self.assertEqual((pv["errors"], pv["summary"]), ([], {"create": 0, "update": 1, "skip": 0}), "a - entry removes a send; the console may be given by id")
+        self.assertNotIn(("in-12", "mix-2"), [(ln["from"].get("channel"), ln["to"].get("channel")) for ln in pv["ops"][0]["value"]["channel_links"]])
+        problems = [p for p in requires("schema").validate_doc(read_json(self.pdir / "project.json")) if p["level"] == "error"]
+        self.assertEqual(problems, [])
+
+    def test_build_report_tables_and_csv(self):
+        """§5.9: the build gets a *Console channels* report section (per console, same tables as the device page) and ``console-channels.csv``."""
+        import csv
+        import io
+
+        export = requires("export")
+        run = Path(export.build_doc(str(self.pdir), run_dir=self.data / "runs" / "r1", discovery=False))
+        self.assertTrue((run / "console-channels.csv").is_file())
+        rows = list(csv.DictReader(io.StringIO((run / "console-channels.csv").read_text(encoding="utf-8"))))
+        self.assertEqual(list(rows[0]), ["Console", "Group", "Channel", "Name", "Fed by", "Goes to", "DCA / mute", "Members", "Source"])
+        kick = next(r for r in rows if r["Channel"] == "CH 17")
+        self.assertEqual((kick["Console"], kick["Group"], kick["Name"]), ("FOH CL5", "Inputs", "Kick In"))
+        self.assertTrue(kick["Fed by"].startswith("Dante Primary 1 “Vox 1”"), kick["Fed by"])
+        self.assertEqual(kick["Source"], "imported, not applied yet")
+        self.assertTrue(any(r["Group"] == "DCAs & mute groups" and r["Channel"] == "DCA 3" and r["Name"] == "BAND" for r in rows))
+        self.assertTrue(any(r["Group"] == "Buses" and r["Channel"] == "MIX 9" and "Dante Primary" in r["Goes to"] for r in rows), "bus output patches")
+        report = (run / "report.html").read_text(encoding="utf-8")
+        self.assertIn("<h2>Console channels</h2>", report)
+        self.assertIn('id="console-foh-cl5"', report)
+        self.assertIn("<h3>FOH CL5", report)
+        self.assertIn("console-channels.csv", report)
+        self.assertIn("No sends are recorded", report)
+        self.assertNotIn("data-trace=", report, "no trace buttons in a static report")
+        self.assertEqual(report.count('<article class="console-report"'), 1, "one block per console with channels")
+
+    def test_binary_console_file_is_explained(self):
+        """A .CLF (CL Editor console file) is proprietary and binary: the upload is refused with a note pointing at CSV export + template."""
+        import os
+
+        blob = b"CL [OSX, 5.8.1.27]\x00" + os.urandom(2048)
+        st, _, b = upload(self.app, "/api/v2/projects/campus/imports?kind=auto&room=main&device=foh-cl5", [("show.clf", blob, "application/octet-stream")])
+        self.assertEqual(st, 422, b[:300])
+        msg = jbody(b).get("error") or b.decode("utf-8", "replace")
+        self.assertIn("show.clf is a .CLF console file", msg)
+        self.assertIn("console CSV template", msg)
+        self.assertEqual(sorted(p.name for p in (self.pdir / "exports" / "yamaha").rglob("*.clf")), [], "the file is not kept")
+        from fathom.parsers import detect_kind, parse_yamaha
+
+        folder = self.pdir / "exports" / "yamaha" / "cl5"
+        (folder / "session.CLF").write_bytes(blob)
+        self.assertEqual(detect_kind(folder / "session.CLF"), "yamaha")
+        data = parse_yamaha(folder)
+        self.assertFalse(data.fatal, "a folder that also has the CSVs still parses")
+        self.assertEqual(len(data.inputs), 88, "72 mono + 8 stereo pairs")
+        self.assertTrue(any(".CLF console file" in n for n in data.notes))
 
 
 class TemplateRouting(unittest.TestCase):

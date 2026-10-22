@@ -2127,7 +2127,7 @@ def r_import_preview(req: Request) -> Response:
             raise ApiError(400, f"no one-shot importer for kind '{kind}'")
         result = imp.parse(target)
         room = req.query.get("room") or ""
-        out = imp.preview(result, doc, {"room": room, "device": req.query.get("device", ""), "import": None}) or {}
+        out = imp.preview(result, doc, {"room": room, "device": req.query.get("device", ""), "import": None, "project_dir": pdir}) or {}
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return Response.json({"kind": kind, "ops": out.get("ops") or [], "summary": out.get("summary") or {}, "warnings": out.get("warnings") or [],

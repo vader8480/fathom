@@ -634,6 +634,9 @@ table.t .none{color:#4a5368}
 .console-group>summary::before{content:"\\25B8";margin-right:6px;font-size:10px}
 .console-group[open]>summary::before{content:"\\25BE"}
 .console-group .sub{letter-spacing:0;text-transform:none;font-weight:400}
+.console-report{margin:14px 0 26px;break-inside:avoid-page}
+.console-report h3{margin:0 0 4px;font-size:16px}
+.console-report h3 .sub{font-size:12px;font-weight:400;margin-left:6px}
 .trace-link{border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--accent);font:inherit;font-size:12px;padding:2px 9px;min-height:28px;cursor:pointer;white-space:nowrap}
 .trace-link:hover{border-color:var(--accent)}
 .live{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:999px;padding:2px 10px;font-size:11.5px}
@@ -865,76 +868,65 @@ def _trace_bootstrap(base_url: str, project: str) -> str:
             f'bindTraceButtons(document, {{ base: {json.dumps(base_url)}, project: {json.dumps(project)} }});</script>')
 
 
-def _console_section_for_device(doc: Dict[str, Any], dev: Dict[str, Any], overlay: Optional[Dict[str, Any]], *, traceable: bool) -> str:
-    """Console channels, buses, DCAs and racks of a mixer (§4.3.17) as per-group tables; empty string for other devices."""
+NO_SENDS_NOTE = ("No sends are recorded (a console export carries no send levels), so traces stop at the input channel until sends are "
+                 "entered — in the inspector or with the console CSV template (Imports → Device / cable CSV → console).")
+
+
+def _console_section_for_device(doc: Dict[str, Any], dev: Dict[str, Any], overlay: Optional[Dict[str, Any]], *, traceable: bool, heading: str = "h2") -> str:
+    """Console channels, buses, DCAs and racks of a mixer (§4.3.17) as per-group tables; empty string for other devices.
+
+    ``heading`` is the tag of the *Console channels* title (``""`` for none, the report supplies its own per-device title).
+    """
     try:
         from . import console as C
     except Exception:  # pragma: no cover
         return ""
-    eff = C.effective_channels(doc, overlay, dev["id"])
-    if not eff["channels"]:
+    tbl = C.channel_table(doc, overlay, dev)
+    if not tbl["groups"]:
         return ""
-    chans = C.channel_map(eff["channels"])
-    ports = {str(p.get("id")): p for p in dev.get("ports") or [] if isinstance(p, dict) and p.get("id")}
-    labels = ((overlay or {}).get("channel_labels") or {}).get(dev["id"]) or {}
-
-    def ep_text(ep: Dict[str, Any], direction: str) -> str:
-        base = C.endpoint_text(ep, chans, ports)
-        if isinstance(ep, dict) and ep.get("port") and ep.get("ch"):
-            nm = ((labels.get(str(ep["port"])) or {}).get(direction) or {}).get(str(ep["ch"]))
-            if nm:
-                base += f" “{nm}”"
-        return base
-
-    feeds: Dict[str, List[str]] = {}
-    dests: Dict[str, List[str]] = {}
-    groups: Dict[str, List[str]] = {}
-    members: Dict[str, List[str]] = {}
-    for ln in eff["links"]:
-        f, t, kind = ln.get("from") or {}, ln.get("to") or {}, str(ln.get("kind") or "")
-        if kind in ("input_patch", "insert_return", "send", "output_patch", "direct_out", "insert_send"):
-            if t.get("channel"):
-                feeds.setdefault(str(t["channel"]), []).append(ep_text(f, "in") if not f.get("channel") else C.endpoint_text(f, chans, ports))
-            if f.get("channel"):
-                dests.setdefault(str(f["channel"]), []).append(ep_text(t, "out") if not t.get("channel") else C.endpoint_text(t, chans, ports))
-        elif kind in ("dca", "mute") and f.get("channel") and t.get("channel"):
-            groups.setdefault(str(f["channel"]), []).append(C.channel_title(chans.get(str(t["channel"])) or {"id": t["channel"], "kind": kind}))
-            members.setdefault(str(t["channel"]), []).append(C.channel_label(chans.get(str(f["channel"])) or {"id": f["channel"], "kind": "input"}))
-
-    GROUPS = (("Inputs", ("input", "stereo_input")), ("Buses", ("mix", "aux", "group", "matrix", "stereo", "mono", "monitor", "cue", "talkback", "oscillator")),
-              ("DCAs & mute groups", ("dca", "mute_group")), ("Racks", ("rack",)))
     out: List[str] = []
-    src = "imported, not applied yet" if eff["source"] == "overlay" else ("device · newer import pending" if eff.get("pending") else "device")
-    s = C.summary(eff["channels"], eff["links"])
-    out.append(f'<h2>Console channels</h2><div class="sub">{s["channels"]} channels · {s["links"]} patches · {s["sends"]} sends · {s["dca_members"]} DCA members · source: {esc(src)}</div>')
+    s = tbl["summary"]
+    title = f"<{heading}>Console channels</{heading}>" if heading else ""
+    out.append(f'{title}<div class="sub">{s["channels"]} channels · {s["links"]} patches · {s["sends"]} sends · {s["dca_members"]} DCA members · source: {esc(tbl["source"])}</div>')
     if not s["sends"]:
-        out.append('<p class="sub">No sends are recorded (a console export carries no send levels), so traces stop at the input channel until sends are entered.</p>')
-    for title, kinds in GROUPS:
-        rows = [c for c in eff["channels"] if c.get("kind") in kinds]
-        if not rows:
-            continue
-        is_group = kinds[0] == "dca"
+        out.append(f'<p class="sub">{esc(NO_SENDS_NOTE)}</p>')
+    for g in tbl["groups"]:
         trs = []
-        for c in rows:
-            cid = str(c["id"])
-            left = ", ".join(feeds.get(cid) or []) if not is_group else ", ".join(members.get(cid) or [])
-            right = ", ".join(dests.get(cid) or []) if not is_group else ""
-            grp = ", ".join(groups.get(cid) or [])
-            tr = (f'<tr><td><b>{esc(C.channel_label(c))}</b></td><td>{esc(c.get("name") or "")}</td>'
-                  f'<td>{esc(left) or "<span class=none>—</span>"}</td>')
-            if not is_group:
-                tr += f'<td>{esc(right) or "<span class=none>—</span>"}</td><td class="sub">{esc(grp)}</td>'
+        for r in g["rows"]:
+            left = r["members"] if g["control"] else r["fed_by"]
+            tr = f'<tr><td><b>{esc(r["channel"])}</b></td><td>{esc(r["name"])}</td><td>{esc(left) or "<span class=none>—</span>"}</td>'
+            if not g["control"]:
+                tr += f'<td>{esc(r["goes_to"]) or "<span class=none>—</span>"}</td><td class="sub">{esc(r["groups"])}</td>'
             if traceable:
-                ref = f"{dev['id']}:@{cid}"
-                tr += '<td class="no-print">' + _trace_btn(ref, C.channel_title(c), str(dev.get("name") or dev["id"]), "up" if kinds[0] in ("input", "stereo_input") else "down") + "</td>"
+                tr += '<td class="no-print">' + _trace_btn(f"{dev['id']}:@{r['id']}", r["title"], tbl["name"], r["trace_dir"]) + "</td>"
             trs.append(tr + "</tr>")
         head = '<th scope="col">Channel</th><th scope="col">Name</th>'
-        head += '<th scope="col">Members</th>' if is_group else '<th scope="col">Fed by</th><th scope="col">Goes to</th><th scope="col">DCA / mute</th>'
+        head += '<th scope="col">Members</th>' if g["control"] else '<th scope="col">Fed by</th><th scope="col">Goes to</th><th scope="col">DCA / mute</th>'
         if traceable:
             head += '<th scope="col" class="no-print"></th>'
-        out.append(f'<details class="console-group" open><summary>{esc(title)} <span class="sub">· {len(rows)}</span></summary>'
+        out.append(f'<details class="console-group" open><summary>{esc(g["title"])} <span class="sub">· {len(g["rows"])}</span></summary>'
                    f'<div class="scroll"><table class="t"><thead><tr>{head}</tr></thead><tbody>{"".join(trs)}</tbody></table></div></details>')
     return "".join(out)
+
+
+def render_console_report_section(doc: Dict[str, Any], overlay: Optional[Dict[str, Any]]) -> str:
+    """Report section *Console channels*: one block per console that has channels (persisted or imported), same tables as its
+    device page, no trace buttons; ``""`` when no device has channels (the section is then left out)."""
+    blocks = []
+    for dev in doc.get("devices") or []:
+        if not isinstance(dev, dict) or not dev.get("id") or dev.get("auto"):
+            continue
+        body = _console_section_for_device(doc, dev, overlay, traceable=False, heading="")
+        if not body:
+            continue
+        sub = " · ".join(x for x in (str(dev.get("manufacturer") or ""), str(dev.get("model") or "")) if x)
+        blocks.append(f'<article class="console-report" id="console-{esc(dev["id"])}"><h3>{esc(str(dev.get("name") or dev["id"]))}'
+                      f'{(" <span class=sub>" + esc(sub) + "</span>") if sub else ""}</h3>{body}</article>')
+    if not blocks:
+        return ""
+    return ('<p class="sub">Input channels, buses, DCAs and racks as patched inside each console: what feeds a channel, where it goes and which DCA / '
+            'mute group it belongs to. The same rows are in <code>console-channels.csv</code>; a per-channel trace is on the device pages.</p>'
+            + "".join(blocks))
 
 
 def _port_rows_for_device(doc: Dict[str, Any], dev: Dict[str, Any], L: _Links, overlay: Optional[Dict[str, Any]], *, traceable: bool = False) -> str:

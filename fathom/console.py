@@ -40,6 +40,16 @@ _ORDER = {"input": 0, "stereo_input": 1, "mix": 2, "aux": 2, "group": 3, "matrix
           "rack": 9, "monitor": 10, "cue": 11, "talkback": 12, "oscillator": 13}
 AUDIO_LINK_KINDS = ("input_patch", "send", "output_patch", "direct_out", "insert_send", "insert_return")
 CONTROL_LINK_KINDS = ("dca", "mute")
+BUS_KINDS = ("mix", "aux", "group", "matrix", "stereo", "mono")
+#: hand-entered sources (inspector, CSV template): an import re-apply keeps them, everything else is replaced
+MANUAL_SOURCES = ("user", "csv")
+#: table groups shared by the device page, the report and ``console-channels.csv``
+TABLE_GROUPS = (
+    ("Inputs", ("input", "stereo_input")),
+    ("Buses", ("mix", "aux", "group", "matrix", "stereo", "mono", "monitor", "cue", "talkback", "oscillator")),
+    ("DCAs & mute groups", ("dca", "mute_group")),
+    ("Racks", ("rack",)),
+)
 
 
 def channel_id(kind: str, index: Optional[int] = None, side: str = "", rack: str = "") -> str:
@@ -303,7 +313,7 @@ def effective_channels(doc: Doc, overlay: Optional[Dict[str, Any]], device_id: s
         pending = False
         if ov is not None:
             merged = _merge_sets(chans, links, ov.get("channels") or [], ov.get("links") or [])
-            pending = _canon(merged[0]) != _canon(chans) or _canon(merged[1]) != _canon(links)
+            pending = not _same_sets(merged, (chans, links))
         return {"channels": chans, "links": links, "source": "device", "pending": pending}
     if ov is not None:
         return {"channels": list(ov.get("channels") or []), "links": list(ov.get("links") or []), "source": "overlay", "pending": True}
@@ -311,13 +321,13 @@ def effective_channels(doc: Doc, overlay: Optional[Dict[str, Any]], device_id: s
 
 
 def _merge_sets(old_ch: List[Dict[str, Any]], old_ln: List[Dict[str, Any]], new_ch: List[Dict[str, Any]], new_ln: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Imported set on top of the persisted one: ``user`` channels / links survive, everything else is replaced."""
+    """Imported set on top of the persisted one: hand-entered (``MANUAL_SOURCES``) channels / links survive, everything else is replaced."""
     out: Dict[str, Dict[str, Any]] = {}
     for c in new_ch:
         if isinstance(c, dict) and c.get("id"):
             out[c["id"]] = copy.deepcopy(c)
     for c in old_ch:
-        if not isinstance(c, dict) or not c.get("id") or c.get("source") != "user":
+        if not isinstance(c, dict) or not c.get("id") or c.get("source") not in MANUAL_SOURCES:
             continue
         if c["id"] in out:  # user-edited name / colour wins, imported structure fills
             out[c["id"]].update({k: v for k, v in c.items() if k in ("name", "color", "icon", "note", "label", "source")})
@@ -330,7 +340,7 @@ def _merge_sets(old_ch: List[Dict[str, Any]], old_ln: List[Dict[str, Any]], new_
         return _canon({k: v for k, v in ln.items() if k not in ("source", "note")})
 
     for ln in old_ln:
-        if isinstance(ln, dict) and ln.get("source") == "user":
+        if isinstance(ln, dict) and ln.get("source") in MANUAL_SOURCES:
             links.append(copy.deepcopy(ln))
             seen.add(key(ln))
     for ln in new_ln:
@@ -338,6 +348,11 @@ def _merge_sets(old_ch: List[Dict[str, Any]], old_ln: List[Dict[str, Any]], new_
             links.append(copy.deepcopy(ln))
             seen.add(key(ln))
     return sort_channels(list(out.values())), links
+
+
+def _same_sets(a: Tuple[List[Dict[str, Any]], List[Dict[str, Any]]], b: Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]) -> bool:
+    """Same channels and links regardless of order (hand-entered links may sit anywhere in the list)."""
+    return sorted(map(_canon, a[0])) == sorted(map(_canon, b[0])) and sorted(map(_canon, a[1])) == sorted(map(_canon, b[1]))
 
 
 def apply_ops(doc: Doc, overlay: Optional[Dict[str, Any]], device_id: str) -> List[Dict[str, Any]]:
@@ -348,7 +363,7 @@ def apply_ops(doc: Doc, overlay: Optional[Dict[str, Any]], device_id: str) -> Li
         return []
     chans, links = device_channels(dev)
     merged_ch, merged_ln = _merge_sets(chans or [], links, ov.get("channels") or [], ov.get("links") or [])
-    if chans is not None and _canon(merged_ch) == _canon(chans) and _canon(merged_ln) == _canon(links):
+    if chans is not None and _same_sets((merged_ch, merged_ln), (chans, links)):
         return []
     return [{"op": "merge", "coll": "devices", "id": device_id, "value": {"channels": merged_ch, "channel_links": merged_ln}}]
 
@@ -372,3 +387,175 @@ def summary(channels: Sequence[Dict[str, Any]], links: Sequence[Dict[str, Any]])
         "named": sum(1 for c in channels if c.get("name")),
         "sends": by_link.get("send", 0), "dca_members": by_link.get("dca", 0),
     }
+
+
+# ------------------------------------------------- names people type
+
+_WORD_KINDS = {
+    "ch": "input", "in": "input", "input": "input", "channel": "input",
+    "stin": "stereo_input", "stereoin": "stereo_input", "stereoinput": "stereo_input",
+    "mix": "mix", "mixbus": "mix", "aux": "aux", "bus": "mix",
+    "grp": "group", "group": "group", "sub": "group", "subgroup": "group",
+    "mtx": "matrix", "matrix": "matrix", "mx": "matrix",
+    "st": "stereo", "stereo": "stereo", "main": "stereo", "lr": "stereo", "stlr": "stereo", "stereolr": "stereo", "mainlr": "stereo", "master": "stereo",
+    "mono": "mono", "m": "mono", "c": "mono", "monoc": "mono", "center": "mono", "centre": "mono",
+    "dca": "dca", "vca": "dca", "mute": "mute_group", "mutegroup": "mute_group", "mg": "mute_group",
+    "mon": "monitor", "monitor": "monitor", "cue": "cue", "tb": "talkback", "talkback": "talkback", "osc": "oscillator",
+}
+_ALT_KIND = {"mix": "aux", "aux": "mix", "group": "mix"}
+_RANGE_RE = re.compile(r"^(.*?[a-z])?\s*(\d+)\s*[-–—]\s*(\d+)$", re.I)
+
+
+def expand_ranges(text: str) -> List[str]:
+    """``"ST; MIX 1-3, DCA 2"`` → ``["ST", "MIX 1", "MIX 2", "MIX 3", "DCA 2"]`` (``;``, ``,``, ``|`` and newlines separate entries)."""
+    out: List[str] = []
+    for part in re.split(r"[;,|\n]+", text or ""):
+        part = part.strip()
+        if not part:
+            continue
+        m = _RANGE_RE.match(part)
+        if m and int(m.group(2)) <= int(m.group(3)) <= int(m.group(2)) + 128:
+            head = (m.group(1) or "").strip()
+            out.extend(f"{head} {i}".strip() for i in range(int(m.group(2)), int(m.group(3)) + 1))
+        else:
+            out.append(part)
+    return out
+
+
+def _parse_ref(key: str, kind_hint: str = "") -> Optional[Tuple[str, Optional[int], str]]:
+    """``"ch12"`` → ``("input", 12, "")``, ``"stl"`` → ``("stereo", None, "l")``, ``"mainlr"`` → ``("stereo", None, "")``,
+    ``"3"`` → ``(kind_hint or "input", 3, "")``; ``None`` when ``key`` is not a console-style reference."""
+    if key in _WORD_KINDS:
+        return _WORD_KINDS[key], None, ""
+    m = re.match(r"^([a-z]*?)(\d*)(l|r|lr|left|right)?$", key)
+    if not m:
+        return None
+    word, num, tail = m.group(1), m.group(2), m.group(3) or ""
+    kind = _WORD_KINDS.get(word, "") if word else (kind_hint or "input")
+    if not kind:
+        return None
+    side = tail[0] if tail in ("l", "r", "left", "right") else ""
+    return kind, (int(num) if num else None), side
+
+
+def resolve_channels(channels: Sequence[Dict[str, Any]], text: str, kind_hint: str = "") -> List[Dict[str, Any]]:
+    """Channels a typed cell means: ``CH 12`` / ``12`` / ``in-12`` / ``Bass`` → ``[in-12]``; ``ST`` / ``ST L/R`` / ``MAIN`` → ``[st-l, st-r]``;
+    ``ST IN 2`` → both sides; ``MATRIX 3`` / ``MTX 3`` → ``[mtx-3]``; ``DCA 1`` / ``Band`` → ``[dca-1]``. ``kind_hint`` resolves a
+    bare number or name in a typed column (``"dca"``: ``1`` → ``dca-1``). ``[]`` when nothing matches."""
+    t = (text or "").strip()
+    if not t:
+        return []
+    chans = [c for c in channels if isinstance(c, dict) and c.get("id")]
+    by_id = {str(c["id"]): c for c in chans}
+    if t in by_id:
+        return [by_id[t]]
+    key = norm_name(t)
+    if not key:
+        return []
+    exact = [c for c in chans if norm_name(channel_label(c)) == key]
+    if exact:
+        return exact
+    ref = _parse_ref(key, kind_hint)
+    if ref is not None:
+        kind, index, side = ref
+
+        def pick(k: str) -> List[Dict[str, Any]]:
+            hits = [c for c in chans if c.get("kind") == k and (index is None or int(c.get("index") or 0) == index)]
+            if side:
+                hits = [c for c in hits if str(c.get("side") or "").lower() == side]
+            return sort_channels(hits)
+
+        hits = pick(kind) or (pick(_ALT_KIND[kind]) if kind in _ALT_KIND else [])
+        if hits and (index is not None or kind in ("stereo", "mono")):
+            return hits
+    # a channel's console name (unique within the hinted kind, else overall)
+    named = [c for c in chans if norm_name(str(c.get("name") or "")) == key]
+    if kind_hint:
+        hinted = [c for c in named if c.get("kind") == kind_hint]
+        if len(hinted) == 1:
+            return hinted
+    if len(named) == 1:
+        return named
+    if len(named) == 2 and {str(c.get("side") or "").upper() for c in named} == {"L", "R"}:
+        return sort_channels(named)
+    # racks: ``FX 1``, ``PRFX 6``
+    rm = re.match(r"^([a-z]+)(\d+)$", key)
+    if rm:
+        racks = [c for c in chans if c.get("kind") == "rack" and norm_name(str(c.get("rack") or "")) == rm.group(1) and int(c.get("index") or 0) == int(rm.group(2))]
+        if racks:
+            return racks
+    return []
+
+
+# ------------------------------------------------------------ tables
+
+
+def endpoint_label(ep: Dict[str, Any], chans: Dict[str, Dict[str, Any]], ports: Dict[str, Dict[str, Any]], labels: Optional[Dict[str, Any]], direction: str) -> str:
+    """``endpoint_text`` plus the Dante channel name from ``overlay.channel_labels[dev]`` (``Dante Primary 17 “17 Bass”``)."""
+    base = endpoint_text(ep, chans, ports)
+    if isinstance(ep, dict) and ep.get("port") and ep.get("ch") and labels:
+        nm = (((labels.get(str(ep["port"])) or {}).get(direction)) or {}).get(str(ep["ch"]))
+        if nm:
+            base += f" “{nm}”"
+    return base
+
+
+def channel_table(doc: Doc, overlay: Optional[Dict[str, Any]], device: Dict[str, Any]) -> Dict[str, Any]:
+    """Per-group rows of a console for the device page, the report and ``console-channels.csv``.
+
+    ``{"device", "name", "source", "pending", "summary", "groups": [{"title", "kinds", "control", "rows": [...]}]}``; a row is
+    ``{"id", "channel", "name", "fed_by", "goes_to", "groups", "members", "trace_dir"}`` (text already joined with ``, ``).
+    ``groups`` is empty when the device has no channels.
+    """
+    eff = effective_channels(doc, overlay, device["id"])
+    chans = channel_map(eff["channels"])
+    ports = {str(p.get("id")): p for p in device.get("ports") or [] if isinstance(p, dict) and p.get("id")}
+    labels = ((overlay or {}).get("channel_labels") or {}).get(device["id"]) or {}
+    feeds: Dict[str, List[str]] = {}
+    dests: Dict[str, List[str]] = {}
+    groups: Dict[str, List[str]] = {}
+    members: Dict[str, List[str]] = {}
+    for ln in eff["links"]:
+        f, t, kind = ln.get("from") or {}, ln.get("to") or {}, str(ln.get("kind") or "")
+        if not isinstance(f, dict) or not isinstance(t, dict):
+            continue
+        if kind in AUDIO_LINK_KINDS:
+            if t.get("channel"):
+                feeds.setdefault(str(t["channel"]), []).append(endpoint_label(f, chans, ports, labels, "in"))
+            if f.get("channel"):
+                dests.setdefault(str(f["channel"]), []).append(endpoint_label(t, chans, ports, labels, "out"))
+        elif kind in CONTROL_LINK_KINDS and f.get("channel") and t.get("channel"):
+            groups.setdefault(str(f["channel"]), []).append(channel_title(chans.get(str(t["channel"])) or {"id": t["channel"], "kind": kind}))
+            members.setdefault(str(t["channel"]), []).append(channel_label(chans.get(str(f["channel"])) or {"id": f["channel"], "kind": "input"}))
+    out_groups = []
+    for title, kinds in TABLE_GROUPS:
+        rows = [c for c in eff["channels"] if c.get("kind") in kinds]
+        if not rows:
+            continue
+        control = kinds[0] == "dca"
+        out_groups.append({"title": title, "kinds": kinds, "control": control, "rows": [{
+            "id": str(c["id"]), "channel": channel_label(c), "title": channel_title(c), "name": str(c.get("name") or ""),
+            "fed_by": ", ".join(feeds.get(str(c["id"])) or []), "goes_to": ", ".join(dests.get(str(c["id"])) or []),
+            "groups": ", ".join(groups.get(str(c["id"])) or []), "members": ", ".join(members.get(str(c["id"])) or []),
+            "trace_dir": "up" if kinds[0] in ("input", "stereo_input") else "down",
+        } for c in rows]})
+    src = "imported, not applied yet" if eff["source"] == "overlay" else ("device · newer import pending" if eff.get("pending") else "device")
+    return {"device": device["id"], "name": str(device.get("name") or device["id"]), "source": src if eff["channels"] else "none",
+            "pending": bool(eff.get("pending")), "summary": summary(eff["channels"], eff["links"]), "groups": out_groups}
+
+
+def console_schedule(doc: Doc, overlay: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """``{"columns", "rows"}`` (``cables.to_csv`` shape) listing every console channel of every device that has channels."""
+    cols = [{"key": "console", "label": "Console"}, {"key": "group", "label": "Group"}, {"key": "channel", "label": "Channel"},
+            {"key": "name", "label": "Name"}, {"key": "fed_by", "label": "Fed by"}, {"key": "goes_to", "label": "Goes to"},
+            {"key": "groups", "label": "DCA / mute"}, {"key": "members", "label": "Members"}, {"key": "source", "label": "Source"}]
+    rows: List[Dict[str, Any]] = []
+    for dev in doc.get("devices") or []:
+        if not isinstance(dev, dict) or not dev.get("id"):
+            continue
+        tbl = channel_table(doc, overlay, dev)
+        for g in tbl["groups"]:
+            for r in g["rows"]:
+                rows.append({"console": tbl["name"], "group": g["title"], "channel": r["channel"], "name": r["name"], "fed_by": r["fed_by"],
+                             "goes_to": r["goes_to"], "groups": r["groups"], "members": r["members"], "source": tbl["source"]})
+    return {"columns": cols, "rows": rows}

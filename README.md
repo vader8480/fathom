@@ -294,7 +294,8 @@ A build folder holds `index.html` + `diagram.svg` + `patch-sheet.csv` (the
 `rooms/<room>/{index.html,diagram.svg,patch.html}`, `rooms/index.html`,
 `devices/<device>.html`, `patch-table.csv`, `cable-schedule.csv`,
 `cable-labels.html`, `ip-schedule.csv`, `dmx-schedule.csv`, `bom.csv`,
-`inventory.csv`, `racks/<rack>-{front,rear}.svg`, `floorplans/<plan>.svg`,
+`inventory.csv`, `console-channels.csv` (when a console has channels),
+`racks/<rack>-{front,rear}.svg`, `floorplans/<plan>.svg`,
 `qr/<device>.svg` (when a public URL is known), `report.html`, optional
 `report.pdf` / `diagram.png`, and `<run>.zip`. Every link is relative, so the
 folder works from `file://`.

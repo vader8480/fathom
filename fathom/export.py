@@ -399,6 +399,18 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
     _write(run_dir / "inventory.csv", cab_mod.to_csv(inv))
     sections["Inventory"] = _html_table(inv)
 
+    # ---- console channels (§4.3.17): one block per mixer with channels, plus a flat CSV
+    console_schedule = _optional("console", "console_schedule")
+    console_section = _optional("render_html", "render_console_report_section")
+    if console_schedule is not None:
+        try:
+            cc = console_schedule(sdoc, overlay)
+            if cc["rows"]:
+                _write(run_dir / "console-channels.csv", cab_mod.to_csv(cc))
+                sections["Console channels"] = console_section(sdoc, overlay) if console_section is not None else _html_table(cc)
+        except Exception as exc:
+            notes.append(f"console channels: {type(exc).__name__}: {exc}; section skipped")
+
     # ---- racks
     rack_svg = _optional("racks", "rack_svg")
     if rack_svg is None:

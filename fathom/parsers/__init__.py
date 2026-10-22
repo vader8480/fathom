@@ -17,7 +17,7 @@ from .. import plugins as _plugins
 from .common import ParseResult, read_text
 from .dante import DanteNetwork, parse_dante
 from .waves import SQLITE_MAGIC, WavesSession, parse_waves
-from .yamaha import ConsoleData, parse_yamaha
+from .yamaha import BINARY_CONSOLE_FILES, ConsoleData, parse_yamaha
 
 KINDS = ("yamaha", "dante", "waves")
 LEGACY_KINDS = KINDS
@@ -37,6 +37,8 @@ def detect_kind(path: Path) -> str:
         best = max(votes, key=votes.get)
         return best if votes[best] else "unknown"
     suffix = path.suffix.lower()
+    if suffix in BINARY_CONSOLE_FILES:
+        return "yamaha"  # parse_yamaha explains that the binary console file is not readable
     head_bytes = path.read_bytes()[:4096]
     if head_bytes.startswith(SQLITE_MAGIC) or suffix in (".sprk", ".xps", ".mrsession", ".emo"):
         return "waves"
@@ -119,8 +121,9 @@ def _register_builtins() -> None:
     Imp = _plugins.Importer
     _plugins.register_importer(Imp(
         kind="yamaha", label="Yamaha console CSV (CL/QL/TF/DM/RIVAGE Editor)", detect=_legacy_detect("yamaha"), parse=_parse_yamaha,
-        contribute=None, accepts=(".csv", ".txt"), folder=True,
-        help="Channel names, input and output patch from the console Editor's CSV export (a folder of CSVs or one file).",
+        contribute=None, accepts=(".csv", ".txt", ".clf", ".cle"), folder=True,
+        help="Channel names, input and output patch from the console Editor's CSV export (a folder of CSVs or one file). "
+             "Binary console files (.CLF / .CLE) are not readable: export CSV from the Editor and enter sends / DCAs with the console CSV template.",
     ))
     _plugins.register_importer(Imp(
         kind="dante", label="Dante Controller preset / tables", detect=_legacy_detect("dante"), parse=_parse_dante,
