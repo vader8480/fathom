@@ -154,7 +154,8 @@ def _components() -> Dict[str, Any]:
         "DiscoverySettings": {"type": "object", "properties": {
             "window": {"type": "integer"}, "room": {"type": "string"},
             "probes": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": True,
-                                                                  "description": "per-probe fields; secrets: string sets, empty string clears, null keeps"}}}},
+                                                                  "description": "per-probe fields (enabled, text / check / select values; list fields such as hosts as a string or array); "
+                                                                                 "secrets: string sets, empty string clears, null keeps"}}}},
         "DiscoveryTest": {"type": "object", "required": ["probe"], "properties": {"probe": {"type": "string", "enum": ["unifi", "mdns", "lldp", "arp", "snmp", "yamaha", "videohub", "qsys"]}, "settings": obj}},
     }
     return schemas
