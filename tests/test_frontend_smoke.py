@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-VIEWS = ["map", "patch", "table", "plan", "racks", "inventory", "schedules", "imports", "history", "builds", "settings", "sop", "json"]
+VIEWS = ["map", "patch", "table", "plan", "racks", "inventory", "schedules", "imports", "discovery", "history", "builds", "settings", "sop", "json"]
 HARNESSES = ["patchview", "floorplan", "rack", "schedules", "patchtable"]
 VIEWER_PAGES = ["/p/sunday-demo", "/p/sunday-demo/rooms", "/p/sunday-demo/d/atem-mini", "/p/sunday-demo/r/main/patch"]
 SHELL_IDS = ["app", "app-top", "app-project", "app-room", "app-views", "app-search", "app-assistant-btn", "app-save", "app-user",
@@ -321,7 +321,8 @@ def cdp_session(url: str, timeout: float = 60.0, mobile: Optional[Tuple[int, int
             cdp.call("Page.navigate", {"url": url})
             t0 = time.time()
             while time.time() - t0 < timeout:
-                val = cdp.eval("document.documentElement.getAttribute('data-smoke')")
+                # documentElement can be null for an instant while the navigation swaps documents
+                val = cdp.eval("document.documentElement ? document.documentElement.getAttribute('data-smoke') : null")
                 if val:
                     cdp.smoke = json.loads(val)
                     break

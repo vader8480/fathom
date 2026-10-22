@@ -21,18 +21,23 @@ dependencies = []
 [project.optional-dependencies]
 serve = ["gunicorn>=21"]
 yaml = ["pyyaml>=6"]
+# Network discovery: the mDNS / Dante browser needs zeroconf. The UniFi, LLDP
+# and ARP probes are stdlib-only; without this extra the Discovery view shows
+# an install hint and only those three probes are offered.
+discovery = ["zeroconf>=0.100"]
 dev = ["pytest>=7"]
 
 [project.scripts]
 fathom = "fathom.cli:main"
 
 [tool.setuptools]
-packages = ["fathom", "fathom.parsers", "fathom.library"]
+packages = ["fathom", "fathom.parsers", "fathom.library", "fathom.discovery", "fathom.discovery.probes"]
 include-package-data = true
 
 [tool.setuptools.package-data]
 fathom = ["static/**/*", "samples/**/*", "library/templates/*.json", "checklists/*.json"]
 "fathom.library" = ["templates/*.json"]
+"fathom.discovery" = ["oui.csv"]
 
 [tool.setuptools.dynamic]
 version = { attr = "fathom.__version__" }

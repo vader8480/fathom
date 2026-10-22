@@ -91,8 +91,8 @@ SHELL_ASSETS = [
     "static/js/app.js", "static/js/api.js", "static/js/model-core.js", "static/js/inspector.js", "static/js/assistant-ui.js",
     "static/js/patchtable.js", "static/js/patchtable-core.js", "static/js/patchview.js", "static/js/patchview-core.js",
     "static/js/floorplan.js", "static/js/floorplan-core.js", "static/js/rack.js", "static/js/rack-core.js",
-    "static/js/schedules.js", "static/js/inventory.js", "static/js/views-admin.js", "static/js/merge-ui.js", "static/js/views-sop.js",
-    "static/css/sop.css", "static/icons/icon-192.png", "manifest.webmanifest",
+    "static/js/schedules.js", "static/js/inventory.js", "static/js/views-admin.js", "static/js/merge-ui.js", "static/js/views-discovery.js",
+    "static/js/views-sop.js", "static/css/sop.css", "static/icons/icon-192.png", "manifest.webmanifest",
 ]
 SCHEDULE_KINDS = ("patch", "cables", "ip", "dmx", "bom", "inventory", "racks", "labels")
 _STATUS_TEXT = {
@@ -2082,6 +2082,164 @@ def r_import_template(req: Request) -> Response:
     text = imp.template(table, doc)
     fname = f"fathom-{table}-template.csv"
     return Response.text("\ufeff" + text, "text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+# ---- network discovery (passive, ad hoc runs — nothing here runs unless a request starts it)
+
+_RUN_ID = r"(?P<rid>run-\d{8}-\d{6}-[0-9a-f]{4})"
+
+
+def _discovery_error(exc: Exception) -> ApiError:
+    from . import discovery
+
+    if isinstance(exc, discovery.RunBusy):
+        return ApiError(409, str(exc), code="run_active", details={"run": exc.run_id})
+    if isinstance(exc, discovery.RunNotFound):
+        return ApiError(404, "discovery run not found")
+    if isinstance(exc, ValueError):
+        return ApiError(400, str(exc))
+    raise exc
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/discovery/runs", role="viewer", summary="Discovery runs for the project (latest first) and the active one", tags=["discovery"])
+def r_discovery_runs(req: Request) -> Response:
+    from . import discovery
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    return Response.json({"runs": discovery.list_runs(pdir), "active": discovery.active_run_id(pdir) or None, "sources": discovery.sources(doc, pdir),
+                          "capabilities": discovery.extra_installed(), "mode": discovery.MODE})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/discovery/runs", role="editor", summary="Start a passive discovery run (409 while one is active)", tags=["discovery"], body="DiscoveryRun")
+def r_discovery_run_start(req: Request) -> Response:
+    from . import discovery
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    body = req.json()
+    window = body.get("window")
+    if window is not None and not isinstance(window, (int, float)):
+        raise ApiError(400, "window must be a number of seconds")
+    probes = body.get("probes")
+    if probes is not None and not (isinstance(probes, list) and all(isinstance(p, str) for p in probes)):
+        raise ApiError(400, "probes must be a list of probe ids")
+    try:
+        run = discovery.start_run(pdir, doc, by=req.username, window=int(window) if window is not None else None, probes=probes)
+    except Exception as exc:
+        raise _discovery_error(exc)
+    return Response.json({"run": run}, 202)
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/discovery/runs/" + _RUN_ID, role="viewer", summary="Status, progress and log of a discovery run", tags=["discovery"])
+def r_discovery_run(req: Request) -> Response:
+    from . import discovery
+
+    pdir = _project_dir(req.params["name"])
+    try:
+        return Response.json({"run": discovery.get_run(pdir, req.params["rid"])})
+    except Exception as exc:
+        raise _discovery_error(exc)
+
+
+@route("DELETE", r"/api/v2/projects/" + _NAME + "/discovery/runs/" + _RUN_ID, role="editor", summary="Cancel a discovery run", tags=["discovery"])
+def r_discovery_run_cancel(req: Request) -> Response:
+    from . import discovery
+
+    pdir = _project_dir(req.params["name"])
+    try:
+        return Response.json({"run": discovery.cancel_run(pdir, req.params["rid"])})
+    except Exception as exc:
+        raise _discovery_error(exc)
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/discovery/runs/" + _RUN_ID + "/findings", role="viewer",
+       summary="Findings of a run, correlated against the current document", tags=["discovery"])
+def r_discovery_findings(req: Request) -> Response:
+    from . import discovery
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    try:
+        return Response.json(discovery.findings(pdir, doc, req.params["rid"]))
+    except Exception as exc:
+        raise _discovery_error(exc)
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/discovery/runs/" + _RUN_ID + "/findings/promote", role="editor",
+       summary="Promote findings: create devices, merge into existing, add cables / networks, ignore", tags=["discovery"], body="DiscoveryPromote")
+def r_discovery_promote(req: Request) -> Response:
+    from . import discovery
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    body = req.json()
+    try:
+        ops, summary = discovery.promote_ops(pdir, doc, req.params["rid"], body)
+    except Exception as exc:
+        raise _discovery_error(exc)
+    if len(ops) > MAX_OPS:
+        raise ApiError(413, f"too many changes in one promote ({len(ops)} > {MAX_OPS})")
+    revision = _rev(doc)
+    if ops:
+        parts = [f"{n} {k}" for k, n in summary.items() if n and k != "ignored"]
+        res = _server_ops(req, pdir, ops, "Discovery: " + (", ".join(parts) or "promote"), "discovery")
+        revision = res["revision"]
+    return Response.json({"ops": len(ops), "summary": summary, "revision": revision})
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/discovery/settings", role="viewer", summary="Discovery settings (secrets reported as *_set flags only)", tags=["discovery"])
+def r_discovery_settings(req: Request) -> Response:
+    from . import discovery
+    from .discovery import settings as dsettings
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    return Response.json({"settings": dsettings.public(doc, pdir), "sources": discovery.sources(doc, pdir), "limits": {"min_window": dsettings.MIN_WINDOW, "max_window": dsettings.MAX_WINDOW}})
+
+
+@route("PUT", r"/api/v2/projects/" + _NAME + "/discovery/settings", role="editor", summary="Update discovery settings (secrets go to a side file, never into the document)",
+       tags=["discovery"], body="DiscoverySettings")
+def r_discovery_settings_put(req: Request) -> Response:
+    from .discovery import settings as dsettings
+    from .project import project_lock
+
+    pdir = _project_dir(req.params["name"])
+    body = req.json()
+    with project_lock(pdir):
+        doc, _ = _load(pdir)
+        try:
+            value = dsettings.apply_update(doc, pdir, body)
+        except ValueError as exc:
+            raise ApiError(400, str(exc))
+        res = _server_ops(req, pdir, [{"op": "root", "key": "settings", "value": {"discovery": value}}], "Discovery settings", "discovery")
+    doc, _ = _load(pdir)
+    return Response.json({"settings": dsettings.public(doc, pdir), "revision": res["revision"]})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/discovery/test", role="editor", summary="Test one source (reachability / capability; never starts a listen window)",
+       tags=["discovery"], body="DiscoveryTest")
+def r_discovery_test(req: Request) -> Response:
+    from .discovery import settings as dsettings
+    from .discovery.probes import all_probes, probe_by_id
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    body = req.json()
+    mod = probe_by_id(str(body.get("probe") or ""))
+    if mod is None:
+        raise ApiError(400, "probe must be one of " + ", ".join(m.INFO.id for m in all_probes()))
+    cfg = dsettings.effective(doc, pdir)["probes"].get(mod.INFO.id) or {}
+    if isinstance(body.get("settings"), dict):  # unsaved form values; secrets only when typed
+        for k, v in body["settings"].items():
+            if isinstance(v, (str, bool, int, float)) and (v != "" or k not in dsettings.secret_keys(mod.INFO.id)):
+                cfg[k] = v
+    try:
+        result = mod.test(cfg)
+    except Exception as exc:
+        result = {"ok": False, "message": f"{type(exc).__name__}: {exc}"}
+    result["message"] = dsettings.redact(str(result.get("message") or ""), pdir)
+    return Response.json({"probe": mod.INFO.id, "result": result})
 
 
 # ---- files (attachments)
