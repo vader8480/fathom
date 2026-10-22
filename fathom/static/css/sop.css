@@ -261,9 +261,11 @@ body.sop-sheet-open{overflow:hidden}
 .sop-problem-actions{display:flex;gap:8px;flex-wrap:wrap}
 .sop-problem-actions button{min-height:40px;padding:0 14px;font-size:14px;border-radius:8px}
 .sop-badge-open{background:rgba(248,113,113,.18);color:#f87171}
+button.sop-problems-badge{border:0;cursor:pointer;font-family:inherit;min-height:28px;padding:0 10px;font-size:12px;line-height:1;display:inline-flex;align-items:center}
+.sop-chip-archived.on{border-color:var(--muted)}
 .sop-badge-resolved{background:rgba(52,211,153,.18);color:#6fe2b4}
 
-@media (pointer:coarse){.sop button,.sop a.sop-item-main,.sop select{min-height:44px}}
+@media (pointer:coarse){.sop button:not(.sop-problems-badge),.sop a.sop-item-main,.sop select{min-height:44px}}
 
 @media print{
   @page{margin:14mm}
