@@ -1,8 +1,9 @@
-// Discovery view (network discovery, Phase 1: passive, ad hoc).
-// Sources panel (per-probe mode / maturity / settings / Test), Run panel
-// (start, live progress + log via 1 s polling, cancel) and Findings panel
-// (new devices, matches, connections, networks, unresolved) with promote /
-// merge / ignore. Nothing runs unless the Run button is pressed.
+// Discovery view (network discovery: passive probes plus opt-in read-only active ones).
+// Sources panel (per-probe mode / maturity / settings / Test; active cards
+// are off by default and say what they send), Run panel (start, live
+// progress + log via 1 s polling, cancel) and Findings panel (new devices,
+// matches, connections, networks, unresolved) with promote / merge / ignore.
+// Nothing runs unless the Run button is pressed.
 
 function h(tag, attrs, children) {
   const el = document.createElement(tag);
@@ -73,8 +74,9 @@ export function mount(el, ctx) {
 
   root.appendChild(h('h2', null, 'Discovery'));
   root.appendChild(h('p', { class: 'muted disc-intro' }, [
-    'Passive network discovery: reads the UniFi controller you point it at and listens to what devices already announce (mDNS / Dante, LLDP / CDP) plus this host\u2019s ARP table. ',
-    h('strong', null, 'Nothing runs unless you start it here'), ' \u2014 there is no scheduler and no background listener \u2014 and nothing is ever sent to an AV device or written to any device.',
+    'Passive sources read the UniFi controller you point them at and listen to what devices already announce (mDNS / Dante, LLDP / CDP) plus this host\u2019s ARP table. ',
+    'Active sources (SNMP on your switches, Yamaha SCP, Videohub, Q-SYS) are ', h('strong', null, 'off until you enable them'), ', contact only the hosts you list, and send documented read-only queries. ',
+    h('strong', null, 'Nothing runs unless you start it here'), ' \u2014 there is no scheduler and no background listener \u2014 and nothing is ever written to any device.',
   ]));
 
   // ------------------------------------------------------------ sources
@@ -87,6 +89,21 @@ export function mount(el, ctx) {
     if (f.type === 'check') {
       const cb = h('input', { type: 'checkbox', id: 'disc-' + src.id + '-' + key, checked: !!cur[key] });
       return { el: h('div', { class: 'field check' }, [h('label', { for: cb.id }, f.label), cb]), read: function () { return cb.checked; }, input: cb };
+    }
+    if (f.type === 'select') {
+      const sel = h('select', { id: 'disc-' + src.id + '-' + key }, (f.options || []).map(function (o) { return h('option', { value: o, selected: String(cur[key] || f.default || '') === o ? true : null }, o); }));
+      const row = h('div', { class: 'field' }, [h('label', { for: sel.id }, f.label), sel]);
+      if (f.help) row.appendChild(h('div', { class: 'muted disc-help' }, f.help));
+      return { el: row, read: function () { return sel.value; }, input: sel };
+    }
+    if (f.type === 'list') {
+      const lines = String(cur[key] || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      const ta = h('textarea', { id: 'disc-' + src.id + '-' + key, rows: Math.max(2, Math.min(6, lines.length + 1)), spellcheck: 'false', autocapitalize: 'none',
+        placeholder: cur[key + '_env'] ? 'env: ' + cur[key + '_env'] : (f.placeholder || '') });
+      ta.value = lines.join('\n');
+      const row = h('div', { class: 'field disc-list' }, [h('label', { for: ta.id }, f.label), ta]);
+      row.appendChild(h('div', { class: 'muted disc-help' }, (f.help ? f.help + ' ' : '') + 'Only these hosts are contacted.'));
+      return { el: row, input: ta, read: function () { return ta.value.split(/[\n,;]+/).map(function (s) { return s.trim(); }).filter(Boolean); } };
     }
     const secret = !!f.secret;
     const isSet = !!cur[key + '_set'];
@@ -154,16 +171,20 @@ export function mount(el, ctx) {
         out.appendChild(h('div', { class: res.ok ? 'disc-ok' : 'imp-warn' }, (res.ok ? '\u2713 ' : '\u26a0 ') + (res.message || (res.ok ? 'OK' : 'Failed'))));
       }, function (e) { test.disabled = false; out.innerHTML = ''; out.appendChild(h('div', { class: 'imp-warn' }, msg(e))); });
     } }, 'Test');
+    const active = src.mode === 'active';
+    const maturityTitle = { experimental: 'Experimental: parser and protocol handling are new; expect gaps', tested: 'Tested: verified against recorded device captures and in use',
+      mature: 'Mature: stable protocol, long in use' }[src.maturity || 'experimental'];
     const chips = h('div', { class: 'row disc-chips' }, [
-      h('span', { class: 'chip disc-mode disc-mode-' + (src.mode || 'passive'), title: src.mode === 'active' ? 'Sends probe packets to devices' : 'Reads a controller or listens only' }, [h('i'), cap(src.mode || 'passive')]),
-      h('span', { class: 'chip disc-maturity disc-maturity-' + (src.maturity || 'experimental') }, cap(src.maturity || 'experimental')),
+      h('span', { class: 'chip disc-mode disc-mode-' + (src.mode || 'passive'), title: active ? 'Sends read-only queries to the hosts listed below (opt-in, off by default)' : 'Reads a controller or listens only; sends nothing to AV devices' }, [h('i'), cap(src.mode || 'passive')]),
+      h('span', { class: 'chip disc-maturity disc-maturity-' + (src.maturity || 'experimental'), title: maturityTitle }, cap(src.maturity || 'experimental')),
+      active && cur.enabled !== true ? h('span', { class: 'chip disc-optin', title: 'Active sources never run until enabled here' }, 'Off by default') : null,
       src.available ? null : h('span', { class: 'chip imp-chip-err' }, 'unavailable'),
     ]);
-    return h('div', { class: 'adm-card disc-card', 'data-probe': src.id }, [
+    return h('div', { class: 'adm-card disc-card' + (active ? ' disc-card-active' : ''), 'data-probe': src.id, 'data-mode': src.mode || 'passive' }, [
       h('div', { class: 'disc-card-head' }, [h('h4', null, src.label), h('label', { class: 'disc-enabled', for: enabled.id }, [enabled, ' enabled'])]),
       chips,
       h('div', { class: 'help' }, src.help || ''),
-      src.sends ? h('div', { class: 'muted disc-sends' }, [h('strong', null, 'On the wire: '), src.sends]) : null,
+      src.sends ? h('div', { class: 'muted disc-sends' + (active ? ' disc-sends-active' : '') }, [h('strong', null, active ? 'What this sends to the device: ' : 'On the wire: '), src.sends]) : null,
       src.available ? null : h('div', { class: 'imp-warn' }, src.unavailable_reason || 'Not available on this server.'),
       h('div', { class: 'disc-fields' }, fields.map(function (f) { return f.el; })),
       h('div', { class: 'row', style: { marginTop: '6px' } }, [save, test]),
@@ -228,7 +249,7 @@ export function mount(el, ctx) {
       h('label', { class: 'disc-window' }, ['Listen window', windowInp, h('span', { class: 'muted' }, 's')]),
       runBtn, cancelBtn,
     ]),
-    h('div', { class: 'muted disc-note' }, 'One run per project at a time. The enabled passive sources collect for the window (mDNS and LLDP listen for the whole window; UniFi and ARP are read once), then results are correlated against this project. Nothing keeps running afterwards.'),
+    h('div', { class: 'muted disc-note' }, 'One run per project at a time. The enabled sources collect for the window (mDNS and LLDP listen for the whole window; UniFi, ARP and the active sources are read once, one host at a time), then results are correlated against this project. Nothing keeps running afterwards.'),
     status, bar, log, runsWrap,
   ]));
 
@@ -243,6 +264,11 @@ export function mount(el, ctx) {
     fill.style.width = pct(r.progress);
     fill.className = 'disc-bar-fill disc-bar-' + (r.status || 'queued');
     const parts = [h('span', { class: 'chip disc-status-' + r.status }, [h('i'), cap(r.status)]), h('span', { class: 'mono muted' }, r.id)];
+    if (r.mode === 'active') {
+      const t = r.targets || {};
+      const hosts = Object.keys(t).map(function (k) { return k + ': ' + (t[k] || []).join(', '); }).join('; ');
+      parts.push(h('span', { class: 'chip disc-mode disc-mode-active', title: 'Read-only queries were sent to ' + (hosts || 'the listed hosts') }, [h('i'), 'Active']));
+    }
     if (active) parts.push(h('span', null, (r.stage || 'running') + (r.remaining !== undefined ? ' \u00b7 ' + Math.round(r.remaining) + ' s max left' : '')));
     else {
       if (r.finished) parts.push(h('span', { class: 'muted' }, fmtTime(r.finished) + (r.elapsed ? ' \u00b7 ' + Math.round(r.elapsed) + ' s' : '')));
@@ -262,7 +288,7 @@ export function mount(el, ctx) {
     if (!S.runs.length) return;
     const sel = h('select', { 'aria-label': 'Previous runs' }, S.runs.map(function (r) {
       const c = r.counts || {};
-      return h('option', { value: r.id, selected: r.id === S.runId ? true : null }, fmtTime(r.started || r.finished) + ' \u00b7 ' + (r.status || '') + (c.entities !== undefined ? ' \u00b7 ' + c.entities + ' hosts, ' + (c.connections || 0) + ' links' : ''));
+      return h('option', { value: r.id, selected: r.id === S.runId ? true : null }, fmtTime(r.started || r.finished) + ' \u00b7 ' + (r.status || '') + (r.mode === 'active' ? ' \u00b7 active' : '') + (c.entities !== undefined ? ' \u00b7 ' + c.entities + ' hosts, ' + (c.connections || 0) + ' links' : ''));
     }));
     sel.addEventListener('change', function () { showRun(sel.value); });
     runsWrap.appendChild(h('div', { class: 'row', style: { marginTop: '8px' } }, [h('span', { class: 'muted' }, 'Show run'), sel]));

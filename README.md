@@ -122,6 +122,8 @@ Without installing: `python -m fathom serve` from this folder.
 | `FATHOM_LLM_URL`, `FATHOM_LLM_MODEL`, `FATHOM_LLM_API_KEY`, `FATHOM_LLM_TIMEOUT`, `FATHOM_LLM_MAX_CONTEXT` | optional OpenAI-compatible endpoint that rewords assistant answers (the answer itself is always computed locally) |
 | `FATHOM_UNIFI_URL`, `FATHOM_UNIFI_SITE`, `FATHOM_UNIFI_API_KEY` (or `FATHOM_UNIFI_USER` / `FATHOM_UNIFI_PASSWORD`), `FATHOM_UNIFI_VERIFY_TLS` | server-wide defaults for the UniFi discovery probe; per-project settings in Discovery › Sources take precedence |
 | `FATHOM_DISCOVERY_INTERFACE`, `FATHOM_DISCOVERY_INTERFACE_IP` | interface the LLDP listener / mDNS browser bind to (default: all) |
+| `FATHOM_SNMP_HOSTS`, `FATHOM_SNMP_VERSION`, `FATHOM_SNMP_COMMUNITY`, `FATHOM_SNMP_USER`, `FATHOM_SNMP_AUTH_PROTOCOL`, `FATHOM_SNMP_AUTH_KEY`, `FATHOM_SNMP_PRIV_PROTOCOL`, `FATHOM_SNMP_PRIV_KEY` | server-wide defaults for the opt-in SNMP probe (switch list and read-only credentials); never turns the probe on by themselves |
+| `FATHOM_YAMAHA_HOSTS`, `FATHOM_VIDEOHUB_HOSTS`, `FATHOM_QSYS_HOSTS`, `FATHOM_QSYS_USER`, `FATHOM_QSYS_PASSWORD` | server-wide host lists (and QRC login) for the opt-in console / router probes |
 | `FATHOM_DISCOVERY_FIXTURES` | directory of recorded probe payloads to replay instead of touching the network (tests, demos) |
 
 Put it behind your reverse proxy with TLS for anything beyond a trusted LAN.
@@ -182,10 +184,11 @@ you can keep or promote.
 ### Network discovery
 
 The **Discovery** view looks at the network the server is on and reports
-what it finds as findings you promote by hand. It is strictly passive and
-on demand: nothing runs unless you press *Run*, a run lasts for the window
-you set (60 s by default, 5 minutes at most), there is no scheduler, no
-background listener and nothing is ever written to a device. Sources:
+what it finds as findings you promote by hand. It is on demand: nothing
+runs unless you press *Run*, a run lasts for the window you set (60 s by
+default, 5 minutes at most), there is no scheduler, no background listener
+and nothing is ever written to a device. The passive sources are on by
+default:
 
 | Source | What it does on the wire | What it yields |
 | --- | --- | --- |
@@ -194,23 +197,40 @@ background listener and nothing is ever written to a device. Sources:
 | **LLDP / CDP** | listens for frames the switches announce anyway (raw socket, `CAP_NET_RAW` from the systemd unit) | which switch and port this host is plugged into, switch model, management IP, VLAN |
 | **ARP / neighbour table** | reads the host's own neighbour cache (`ip neigh`, `/proc/net/arp`, `arp -a`) | MAC ↔ IP pairs with vendor from the bundled OUI list |
 
+Four **active** sources are off until you enable them per project and list
+the hosts they may talk to. They send documented read-only queries to those
+hosts only — one host at a time, with a pause between requests, a timeout
+per read and a time budget per host — and each card in *Sources* says
+exactly what goes on the wire. A run that includes one is marked *Active*:
+
+| Source | Maturity | What it sends (to the listed hosts only) | What it yields |
+| --- | --- | --- | --- |
+| **SNMP (managed switches)** | tested | SNMP v2c / v3 GET and GETBULK (UDP 161), 10 OIDs per request, 20 ms apart, 5 s timeout, 2 retries; never a SET | switch identity (`sysName`, location, ENTITY-MIB manufacturer / model / serial / firmware), every port with name, alias, link and speed, which MAC sits on which port and VLAN (BRIDGE / Q-BRIDGE), the switch's own LLDP neighbours (so switch-to-switch links are seen from both ends), VLAN names |
+| **Yamaha console (SCP)** | tested | TCP 49280: `devinfo productname / deviceid / devicename / protocolver`, `sscurrent_ex MIXER:Lib/Scene`, `get MIXER:Current/<InCh\|Mix\|Mtrx\|DCA>/Label/Name n 0` per channel (stops at the first error; at most 276 reads) | product, device name, MAC (the device id), current scene, input / mix / matrix / DCA channel names |
+| **Blackmagic Videohub** | mature | one TCP connection to 9990; nothing is written — the router sends its state on connect and the connection is closed after `END PRELUDE:` | model, friendly name, unique id (MAC), size, input / output labels, current routing |
+| **Q-SYS core (QRC)** | tested | TCP 1710 JSON-RPC: `StatusGet`, `Component.GetComponents` (`Logon` first when a user / password is set); no control values are read or written | platform, running design and state, component names and types (Dante components flagged) |
+
 Findings are correlated into one entity per device (by MAC, then IP within
 the run, then Dante name / hostname / serial), matched against the devices
 you already have (*Merge into …*), and switch port tables become proposed
 connections in cable-schedule form with a confidence (LLDP + client table
 high, a single MAC on a port medium, several MACs on a port flagged as an
-uplink or an unmanaged switch). The latest run also feeds the overlay like
-any import, so discovered devices and links show up in italics until you
-promote or ignore them. The mDNS probe needs `pip install
-"fathom-audio[discovery]"` (`zeroconf`); the other three are standard
-library only. On the Ubuntu VM, *Running on Ubuntu (VM)* above covers
-the capabilities (`CAP_NET_RAW` for LLDP), the ESXi port-group settings
+uplink or an unmanaged switch; a switch-to-switch link reported by both
+switches is folded into one *uplink* row). The latest run also feeds the
+overlay like any import, so discovered devices and links show up in
+italics until you promote or ignore them. The mDNS and SNMP probes need
+`pip install "fathom-audio[discovery]"` (`zeroconf`, `puresnmp`; SNMPv3
+privacy also `puresnmp[crypto]`); the other sources are standard library
+only. On the Ubuntu VM, *Running on Ubuntu (VM)* above covers the
+capabilities (`CAP_NET_RAW` for LLDP), the ESXi port-group settings
 (Promiscuous Mode = Accept) and one interface per audio VLAN for mDNS;
-`fathom discovery doctor` checks all three. Settings live per project (Discovery › Sources);
-secrets are kept in `projects/<name>/discovery-secrets.json`, never in the
-project file or its history. `FATHOM_UNIFI_URL` / `FATHOM_UNIFI_API_KEY` (or
-`_USER` / `_PASSWORD`), `FATHOM_UNIFI_SITE`, `FATHOM_UNIFI_VERIFY_TLS` and
-`FATHOM_DISCOVERY_INTERFACE` provide server-wide defaults.
+`fathom discovery doctor` checks all three. Settings live per project
+(Discovery › Sources); secrets (UniFi key, SNMP community / v3 keys, QRC
+password) are kept in `projects/<name>/discovery-secrets.json`, never in the
+project file or its history. `FATHOM_UNIFI_*`, `FATHOM_SNMP_*`,
+`FATHOM_YAMAHA_HOSTS`, `FATHOM_VIDEOHUB_HOSTS`, `FATHOM_QSYS_*` and
+`FATHOM_DISCOVERY_INTERFACE` provide server-wide defaults (an environment
+host list never turns an active source on by itself).
 
 ## CLI
 
@@ -251,7 +271,7 @@ $FATHOM_DATA/
   projects/<name>/project.v1.json            the original 0.2 file, kept once after migration
   projects/<name>/exports/<kind>/...         copies of imported exports
   projects/<name>/exports/discovery/<run>/   discovery runs (raw probe payloads, findings)
-  projects/<name>/discovery-secrets.json     UniFi credentials (mode 0600; excluded from the project file)
+  projects/<name>/discovery-secrets.json     UniFi / SNMP / QRC credentials (mode 0600; excluded from the project file)
   projects/<name>/files/<att-id>/<file>      photos, documents, floor-plan sources and renders
   projects/<name>/history/                   index.jsonl, ops/<rev>.json, snap/<rev>.json
   builds/<name>/<YYYY-MM-DD_HHMMSS>_<slug>/  build packages (below)
@@ -342,8 +362,10 @@ settings), `floorplan.py` (DXF / Draw.io / PDF / SVG), `cables.py`, `network.py`
 - Waves session files (`.sprk`) are undocumented; the CSV fallback is the
   reliable path. The console CSV carries names, colours and patching, not
   gain, sends or inserts.
-- Network discovery is passive and on demand (UniFi, mDNS / Dante, LLDP /
-  CDP, ARP). There is no monitoring, no scheduled scan and no active probing
-  (SNMP, Videohub TCP, sACN, Q-SYS); those are still import-from-dump paths.
+- Network discovery is on demand. The passive sources (UniFi, mDNS / Dante,
+  LLDP / CDP, ARP) send nothing to AV devices; the active ones (SNMP, Yamaha
+  SCP, Videohub, Q-SYS QRC) are opt-in, read-only and limited to the hosts
+  you list. There is no monitoring, no scheduled scan, no subnet sweep and
+  no sACN / Art-Net polling; lighting data is still an import-from-dump path.
 - Port counts of templates marked "not verified" come from general
   knowledge; check them against the datasheet.
