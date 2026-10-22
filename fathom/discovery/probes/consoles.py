@@ -89,7 +89,7 @@ class _Conn:
     def read_until(self, terminator: bytes, timeout: float = READ_TIMEOUT, max_bytes: int = 1 << 20) -> Optional[bytes]:
         """Bytes up to (excluding) ``terminator``; None on timeout / close."""
         end = time.time() + min(timeout, max(0.1, self._left()))
-        while True:
+        for _ in range(max_bytes // 1024 + 2):  # bounded: every pass either returns or adds data
             i = self.buf.find(terminator)
             if i >= 0:
                 out, self.buf = self.buf[:i], self.buf[i + len(terminator):]
@@ -107,6 +107,7 @@ class _Conn:
             if not chunk:
                 return None
             self.buf += chunk
+        return None
 
     def drain(self, idle: float = 1.0, total: float = 10.0, stop: bytes = b"") -> bytes:
         """Everything the peer sends on its own until ``stop`` appears, or ``idle`` s pass without data."""
@@ -227,11 +228,13 @@ class _ConsoleProbe:
                 failed += 1
                 res.notes.append(f"{self.INFO.id} {host}: {entry.get('error') or 'no data'}")
                 continue
+            before = len(res.observations)
             try:
                 self.parse_host(host, entry, seen, res)
             except Exception as exc:  # one odd device must not hide the others
-                failed += 1
                 res.notes.append(f"{self.INFO.id} {host}: could not parse the reply: {type(exc).__name__}: {exc}")
+            if len(res.observations) == before:
+                failed += 1  # answered, but not with anything usable
         res.stats.update({"hosts": len(hosts), "failed": failed})
         if failed == len(hosts):
             res.status = "error"
