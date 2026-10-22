@@ -169,6 +169,11 @@ _INS_SHORT_RE = re.compile(
 _DIRECT_RE = re.compile(r"^(?:DIR\s*CH|DI|DIRECT\s*(?:INPUT\s*)?CHANNEL)\s*(\d+)$")
 
 #: output connectors of the console itself (as opposed to internal racks / buses)
+#: console / editor session files: proprietary binary, undocumented, not parsed (see docs/SPEC.md §7.3 and the CSV template instead)
+BINARY_CONSOLE_FILES = (".clf", ".cle", ".qlf", ".qle", ".tff", ".tfe", ".ysm", ".yse", ".m7c", ".l9a", ".pm5", ".dm7f", ".rivagepm")
+BINARY_CONSOLE_NOTE = ("{name} is a {ext} console file: a proprietary binary format that holds send levels and DCA assignments but is not "
+                       "documented, so Fathom does not read it. Export the console's CSV files from the Editor (File → Export CSV: names and "
+                       "patches) and enter sends / DCA membership in the inspector or with the console CSV template.")
 PHYSICAL_OUTPUT_BUSES = ("DANTE", "OMNI", "SLOT", "REC")
 RACK_BUSES = ("GEQ", "FX", "PRFX")
 _BUS_KIND = {"MIX": "mix", "MATRIX": "matrix", "STEREO": "stereo", "MONO": "mono"}
@@ -439,6 +444,7 @@ class ConsoleData(ParseResult):
         self.files_by_role: Dict[str, List[str]] = {}
         self.sections: List[str] = []  # [SectionName] tags seen in console exports
         self.warnings: List[str] = []  # anomalies worth a look; never errors
+        self.fatal = ""  # set when the upload cannot be read at all (a binary console file)
 
     def warn(self, text: str) -> None:
         if text not in self.warnings:
@@ -1013,7 +1019,15 @@ def _finalize(data: ConsoleData) -> None:
 def parse_yamaha(path: Path) -> ConsoleData:
     """Parse one CSV or a folder of CSVs."""
     data = ConsoleData()
-    files = [path] if path.is_file() else sorted(p for p in path.rglob("*") if p.suffix.lower() in (".csv", ".txt", ".tsv"))
+    candidates = [path] if path.is_file() else sorted(path.rglob("*"))
+    binaries = [p for p in candidates if p.suffix.lower() in BINARY_CONSOLE_FILES]
+    files = [p for p in candidates if p not in binaries and (path.is_file() or p.suffix.lower() in (".csv", ".txt", ".tsv"))]
+    if binaries and not files:
+        data.fatal = BINARY_CONSOLE_NOTE.format(name=binaries[0].name, ext=binaries[0].suffix.upper())
+        data.note(data.fatal)
+        return data
+    if binaries:
+        data.note(BINARY_CONSOLE_NOTE.format(name=binaries[0].name, ext=binaries[0].suffix.upper()))
     if not files:
         data.note(f"no CSV files under {path}")
         return data

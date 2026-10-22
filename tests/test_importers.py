@@ -499,10 +499,12 @@ class CsvTemplates(unittest.TestCase):
         st, _, b = call(get_app(), "GET", "/api/v2/meta")
         imps = {i["kind"]: i for i in jbody(b)["importers"]}
         tpls = {t["name"]: t for t in imps["csv"]["templates"]}
-        self.assertEqual(sorted(tpls), ["cables", "devices"])
+        self.assertEqual(sorted(tpls), ["cables", "console", "devices"])
         req = [c["key"] for c in tpls["devices"]["columns"] if c["required"]]
         self.assertEqual(req, ["name"])
         self.assertEqual(sorted(c["key"] for c in tpls["cables"]["columns"] if c["required"]), ["from_device", "to_device"])
+        self.assertEqual(sorted(c["key"] for c in tpls["console"]["columns"] if c["required"]), ["channel", "console"])
+        self.assertTrue(all(c["key"] in requires("parsers.generic_csv").CONSOLE_COLS for c in tpls["console"]["columns"]))
         self.assertTrue(all(c["key"] in requires("parsers.generic_csv").DEVICE_COLS for c in tpls["devices"]["columns"]), "template headers are canonical")
         self.assertEqual(imps["magicq"]["templates"], [])
 

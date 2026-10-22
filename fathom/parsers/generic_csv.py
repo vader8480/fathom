@@ -87,6 +87,17 @@ CABLE_COLS: Dict[str, Tuple[str, ...]] = {
     "bundle": (),
 }
 
+#: console sends / DCA membership sheet (§5.7.4, FR-IMP-12): one row per console channel, lists separated by ``;``
+CONSOLE_COLS: Dict[str, Tuple[str, ...]] = {
+    "console": ("mixer", "desk", "console name"),
+    "channel": ("ch", "console channel", "input", "bus"),
+    "name": ("channel name", "new name"),
+    "sends": ("send", "send to", "sends to", "feeds", "buses"),
+    "dca": ("dcas", "dca group", "dca groups", "vca"),
+    "mute": ("mute group", "mute groups", "mutes"),
+    "note": ("notes",),
+}
+
 UNIT_M = {"m": 1.0, "meter": 1.0, "meters": 1.0, "metre": 1.0, "metres": 1.0, "ft": 0.3048, "feet": 0.3048, "foot": 0.3048, "'": 0.3048, "in": 0.0254, "inch": 0.0254, "inches": 0.0254, '"': 0.0254, "cm": 0.01, "mm": 0.001}
 
 
@@ -95,7 +106,7 @@ class CsvTable(ParseResult):
 
     def __init__(self) -> None:
         super().__init__()
-        self.table = ""  # devices | cables | ""
+        self.table = ""  # devices | cables | console | ""
         self.columns: Dict[str, int] = {}
         self.header: List[str] = []
         self.rows: List[Dict[str, str]] = []
@@ -119,9 +130,14 @@ def classify_header(header: List[str]) -> str:
     cells = [norm_header(c) for c in header]
     if _has(cells, "from_device", CABLE_COLS["from_device"]) and _has(cells, "to_device", CABLE_COLS["to_device"]):
         return "cables"
+    if _has(cells, "console", CONSOLE_COLS["console"]) and _has(cells, "channel", CONSOLE_COLS["channel"]):
+        return "console"
     if _has(cells, "name", DEVICE_COLS["name"]):
         return "devices"
     return ""
+
+
+_SPECS = {"devices": DEVICE_COLS, "cables": CABLE_COLS, "console": CONSOLE_COLS}
 
 
 def _numbered_rows(path: Path) -> List[Tuple[int, List[str]]]:
@@ -147,7 +163,7 @@ def parse_csv(path: Path, **_opts: Any) -> CsvTable:
         t = classify_header(r)
         if t:
             res.table, res.header = t, r
-            spec = CABLE_COLS if t == "cables" else DEVICE_COLS
+            spec = _SPECS[t]
             res.columns = header_map(r, spec)
             known = {norm_header(c) for k, syns in spec.items() for c in (k,) + syns}
             unknown = [c for c in r if c and norm_header(c) not in known]
@@ -175,7 +191,7 @@ def detect(path: Path) -> float:
     for line in first:
         cells = [c.strip().strip('"') for c in re.split(r"[,;\t]", line)]
         t = classify_header(cells)
-        if t == "cables":
+        if t in ("cables", "console"):
             return 0.7
         if t == "devices":
             # a plain "Name" column is weak evidence; console channel lists have one too
@@ -706,6 +722,161 @@ def _preview_cables(res: CsvTable, doc: Dict[str, Any], ctx: Dict[str, Any]) -> 
     return _result(res, port_ops + ops, summary, warnings, errs)
 
 
+# --------------------------------------------------------------- console
+
+_CHANNEL_HELP = "use CH 12 (or 12), ST IN 2, MIX 1, MATRIX 3, ST, MONO, DCA 1 or the channel's console name"
+_LIST_COLS = (("sends", "send", "mix", "ST, ST L, MONO, MIX 1, MIX 1-4, MATRIX 3 (prefix - to remove)"),
+              ("dca", "dca", "dca", "1, DCA 3, 1-4 or the DCA's name (prefix - to remove)"),
+              ("mute", "mute", "mute_group", "1, MUTE 2 or 1-3 (prefix - to remove)"))
+
+
+class _ConsoleSet:
+    """Working copy of one console's channels + links while rows are folded in."""
+
+    def __init__(self, dev: Dict[str, Any], eff: Dict[str, Any]) -> None:
+        self.dev = dev
+        self.channels: List[Dict[str, Any]] = copy.deepcopy(eff["channels"])
+        self.links: List[Dict[str, Any]] = copy.deepcopy(eff["links"])
+        self.source = eff["source"]
+        self.added: Dict[str, int] = {}
+        self.removed: Dict[str, int] = {}
+        self.renamed = 0
+        self.changed = False
+
+    def _key(self, ln: Dict[str, Any]) -> str:
+        from ..console import _canon
+
+        return _canon({k: v for k, v in ln.items() if k not in ("source", "note")})
+
+    def link(self, kind: str, src: str, dst: str, on: bool) -> bool:
+        ln = {"from": {"channel": src}, "to": {"channel": dst}, "kind": kind}
+        key = self._key(ln)
+        have = [l for l in self.links if isinstance(l, dict) and self._key(l) == key]
+        if on and not have:
+            self.links.append(dict(ln, source="csv"))
+            self.added[kind] = self.added.get(kind, 0) + 1
+            self.changed = True
+            return True
+        if not on and have:
+            self.links = [l for l in self.links if not (isinstance(l, dict) and self._key(l) == key)]
+            self.removed[kind] = self.removed.get(kind, 0) + len(have)
+            self.changed = True
+            return True
+        return False
+
+    def patch(self, cid: str, **fields: str) -> bool:
+        ch = next((c for c in self.channels if c.get("id") == cid), None)
+        if ch is None:
+            return False
+        diff = {k: v for k, v in fields.items() if v and str(ch.get(k) or "") != v}
+        if not diff:
+            return False
+        ch.update(diff)
+        ch["source"] = "csv"
+        self.renamed += 1
+        self.changed = True
+        return True
+
+    def report(self) -> str:
+        bits = [f"+{n} {k.replace('_', ' ')}" for k, n in sorted(self.added.items())]
+        bits += [f"−{n} {k.replace('_', ' ')}" for k, n in sorted(self.removed.items())]
+        if self.renamed:
+            bits.append(f"{self.renamed} channel(s) renamed / annotated")
+        return ", ".join(bits) or "no change"
+
+
+def _console_sets(doc: Dict[str, Any], ctx: Dict[str, Any]) -> Any:
+    """Lazy ``effective_channels`` with the project's overlay when a console has nothing persisted yet."""
+    from ..console import effective_channels
+
+    state: Dict[str, Any] = {"overlay": None, "tried": False}
+
+    def eff_for(dev: Dict[str, Any]) -> Dict[str, Any]:
+        eff = effective_channels(doc, None, dev["id"])
+        if eff["source"] == "device" or state["tried"] and state["overlay"] is None:
+            return eff
+        if not state["tried"]:
+            state["tried"] = True
+            pdir = (ctx or {}).get("project_dir")
+            if pdir:
+                try:
+                    from ..merge import build_overlay
+
+                    state["overlay"] = build_overlay(doc, Path(pdir))
+                except Exception:  # pragma: no cover - a broken import must not break the preview
+                    state["overlay"] = None
+        return effective_channels(doc, state["overlay"], dev["id"]) if state["overlay"] else eff
+
+    return eff_for
+
+
+def _preview_console(res: CsvTable, doc: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+    from ..console import BUS_KINDS, channel_label, expand_ranges, resolve_channels, sort_channels
+
+    lk = _Lookup(doc)
+    eff_for = _console_sets(doc, ctx)
+    sets: Dict[str, _ConsoleSet] = {}
+    errs = _Errors(res)
+    warnings: List[str] = []
+    summary = {"create": 0, "update": 0, "skip": 0}
+    for n, row in _rows(res):
+        dev = lk.device(row.get("console", ""))
+        if dev is None:
+            errs.add(n, "console", row.get("console", ""), "console not found in the project; use the device's name or id")
+            summary["skip"] += 1
+            continue
+        cs = sets.get(dev["id"])
+        if cs is None:
+            cs = sets[dev["id"]] = _ConsoleSet(dev, eff_for(dev))
+        if not cs.channels:
+            errs.add(n, "console", row.get("console", ""), f"{dev.get('name', dev['id'])} has no console channels yet; import the console's export or add channels in the inspector first")
+            summary["skip"] += 1
+            continue
+        chans = resolve_channels(cs.channels, row.get("channel", ""))
+        if not chans:
+            errs.add(n, "channel", row.get("channel", ""), f"channel not found on {dev.get('name', dev['id'])}; {_CHANNEL_HELP}")
+        elif any(c.get("kind") in ("dca", "mute_group") for c in chans):
+            errs.add(n, "channel", row.get("channel", ""), "a DCA / mute group is not a channel; list it in the dca / mute column of its members instead")
+        todo: List[Tuple[str, str, bool]] = []
+        for col, kind, hint, help_text in _LIST_COLS:
+            for item in expand_ranges(row.get(col, "")):
+                on = not item.startswith("-")
+                target = item.lstrip("-").strip()
+                hits = resolve_channels(cs.channels, target, hint)
+                ok_kinds = BUS_KINDS if col == "sends" else (hint,)
+                if not hits or any(h.get("kind") not in ok_kinds for h in hits):
+                    what = "bus" if col == "sends" else ("DCA" if col == "dca" else "mute group")
+                    errs.add(n, col, item, f"{what} not found on {dev.get('name', dev['id'])}; {help_text}")
+                    continue
+                todo.extend((kind, h["id"], on) for h in hits)
+        if errs.has(n):
+            summary["skip"] += 1
+            continue
+        changed = False
+        for src in chans:
+            for kind, dst, on in todo:
+                if dst == src["id"]:
+                    continue
+                changed = cs.link(kind, src["id"], dst, on) or changed
+            fields = {"name": (row.get("name") or "").strip(), "note": (row.get("note") or "").strip()}
+            changed = cs.patch(src["id"], **fields) or changed
+        if changed:
+            summary["create" if any(on for _, _, on in todo) else "update"] += 1
+        else:
+            summary["skip"] += 1
+            warnings.append(f"row {n}: nothing to change on {', '.join(channel_label(c) for c in chans)} (the entries listed are already recorded, or already absent)")
+    ops: List[Dict[str, Any]] = []
+    for did, cs in sets.items():
+        if not cs.changed:
+            continue
+        ops.append({"op": "merge", "coll": "devices", "id": did, "value": {"channels": sort_channels(cs.channels), "channel_links": cs.links}})
+        note = f"{cs.dev.get('name', did)}: {cs.report()}"
+        if cs.source == "overlay":
+            note += " — the imported channel set is applied to the device together with these rows"
+        warnings.append(note)
+    return _result(res, ops, summary, warnings, errs)
+
+
 def _result(res: CsvTable, ops: List[Dict[str, Any]], summary: Dict[str, int], warnings: List[str], errs: _Errors) -> Dict[str, Any]:
     notes = list(res.notes) + [f"row {n}: more cells than header columns; the extra cells were ignored" for n in res.extra_cells]
     return {"ops": ops, "summary": summary, "warnings": notes + errs.as_warnings() + warnings, "errors": errs.items}
@@ -716,8 +887,10 @@ def preview(result: CsvTable, doc: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[
         return _preview_devices(result, doc, ctx or {})
     if result.table == "cables":
         return _preview_cables(result, doc, ctx or {})
+    if result.table == "console":
+        return _preview_console(result, doc, ctx or {})
     return {"ops": [], "summary": {"create": 0, "update": 0, "skip": len(result.rows)}, "errors": [],
-            "warnings": list(result.notes) or ["not a device or cable CSV"]}
+            "warnings": list(result.notes) or ["not a device, cable or console CSV"]}
 
 
 # ------------------------------------------------------------- templates
@@ -770,6 +943,18 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
             ("status", False, "installed, planned, spare or retired"),
             ("note", False, ""),
             ("id", False, "Leave blank for new cables"),
+        ],
+    },
+    "console": {
+        "label": "Console sends & DCAs",
+        "columns": [
+            ("console", True, "Name or id of the mixer whose channels the row describes (it must already have channels: a console export import or channels added in the inspector)"),
+            ("channel", True, "Channel as the console shows it: CH 12 (or just 12), ST IN 2, MIX 1, MATRIX 3, ST, MONO — or the channel's console name when it is unique"),
+            ("name", False, "New console name for the channel; blank keeps the current one"),
+            ("sends", False, "Buses the channel feeds, separated by ; — ST (both sides), ST L, MONO, MIX 1, MIX 1-4, MATRIX 3. Rows add to what is recorded; prefix an entry with - to remove it (-MIX 3)"),
+            ("dca", False, "DCA groups: 1; 3, DCA 2, 1-4 or the DCA's name (prefix - to remove)"),
+            ("mute", False, "Mute groups: 1; 2 or MUTE 1 (prefix - to remove)"),
+            ("note", False, "Note kept on the channel"),
         ],
     },
 }
@@ -832,9 +1017,39 @@ def template_csv(table: str, doc: Optional[Dict[str, Any]] = None) -> str:
              "to_port": "Dante Secondary", "medium": "dante", "type": "Cat6A", "length": "150", "length_unit": "ft", "color": "red",
              "status": "installed"},
         ]
+    if table == "console":
+        examples = _console_examples(doc)
     buf = io.StringIO()
     w = csv.writer(buf, lineterminator="\r\n")
     w.writerow(cols)
     for ex in examples:
         w.writerow([ex.get(c, "") for c in cols])
     return buf.getvalue()
+
+
+def _console_examples(doc: Optional[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """Example rows built from the project's first console that has channels (so the unedited template previews cleanly);
+    a generic CL-style example when there is none yet."""
+    from ..console import channel_label, sort_channels
+
+    devs = [d for d in (doc or {}).get("devices") or [] if isinstance(d, dict) and not d.get("auto")]
+    dev = next((d for d in devs if isinstance(d.get("channels"), list) and d["channels"]), None)
+    name = str((dev or next((d for d in devs if d.get("kind") == "console"), None) or {}).get("name") or "FOH Console")
+    chans = sort_channels([c for c in (dev or {}).get("channels") or [] if isinstance(c, dict) and c.get("id")])
+
+    def first(kind: str, default: str, n: int = 0) -> str:
+        hits = [c for c in chans if c.get("kind") == kind]
+        return channel_label(hits[n]) if len(hits) > n else default
+
+    stereo = "ST" if any(c.get("kind") == "stereo" for c in chans) or not chans else first("mono", "ST")
+    mix1, mix2 = first("mix", "MIX 1"), first("mix", "MIX 2", 1)
+    in1, in2 = first("input", "CH 1"), first("input", "CH 2", 1)
+    dca = first("dca", "DCA 1")
+    rows = [
+        {"console": name, "channel": in1, "sends": f"{stereo}; {mix1}; {mix2}", "dca": dca, "note": "Example row: edit or delete"},
+        {"console": name, "channel": in2, "sends": f"{stereo}; {mix1}", "dca": dca},
+    ]
+    mtx = first("matrix", "")
+    if mtx:
+        rows.append({"console": name, "channel": first("stereo", stereo) if any(c.get("kind") == "stereo" for c in chans) else mix1, "sends": mtx})
+    return rows
