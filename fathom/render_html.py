@@ -1192,7 +1192,7 @@ SOP_REPORT_JS = r"""
   var btn=document.getElementById('sop-report'),sheet=document.getElementById('sop-sheet');
   if(!btn||!sheet)return;
   var form=sheet.querySelector('form'),status=sheet.querySelector('.sop-sheet-status'),mail=sheet.querySelector('.sop-sheet-mail');
-  var action=form.getAttribute('data-action')||'',email=mail?mail.getAttribute('data-email'):'',submit=form.querySelector('button[type=submit]');
+  var action=form.getAttribute('data-action')||'',email=form.getAttribute('data-email')||'',submit=form.querySelector('button[type=submit]');
   var title=(document.getElementById('sop-title')||{}).textContent||document.title;
   function open(){sheet.hidden=false;document.body.classList.add('sop-sheet-open');status.textContent='';setTimeout(function(){var t=form.querySelector('textarea');if(t)t.focus();},60);}
   function close(){sheet.hidden=true;document.body.classList.remove('sop-sheet-open');}
@@ -1341,11 +1341,10 @@ def _report_sheet(data: Dict[str, Any], report: Dict[str, Any]) -> str:
     for d in devices:
         sel = " selected" if len(devices) == 1 else ""
         opts.append(f'<option value="{esc(d["id"])}"{sel}>{esc(d["name"])}</option>')
-    mail = (f'<a class="sop-sheet-mail" href="mailto:{esc(email)}" data-email="{esc(email)}">'
-            + ("Email the AV team instead" if action else "Send by email") + "</a>") if email else ""
+    mail = f'<a class="sop-sheet-mail" href="mailto:{esc(email)}">Email the AV team instead</a>' if email else ""
     return (
         '<div class="sop-sheet" id="sop-sheet" hidden><div class="sop-sheet-backdrop"></div>'
-        f'<form class="sop-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sop-sheet-title" data-action="{esc(action)}" novalidate>'
+        f'<form class="sop-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sop-sheet-title" data-action="{esc(action)}" data-email="{esc(email)}" novalidate>'
         '<div class="sop-sheet-grip" aria-hidden="true"></div><h2 id="sop-sheet-title">Report a problem</h2>'
         f'<input type="hidden" name="page" value="{esc(p["slug"])}">'
         f'<label class="sop-field"><span>Device</span><select name="device">{"".join(opts)}</select></label>'

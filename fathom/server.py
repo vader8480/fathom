@@ -1786,8 +1786,10 @@ def _create_problem(req: Request, pdir: Path, via: str) -> Dict[str, Any]:
         raise ApiError(400, f"unknown page '{page}'", "dangling_ref")
     name = re.sub(r"\s+", " ", str(body.get("name") or "")).strip()[:80]
     now = utc_now()
-    # Public / share reporters are identified by the name they typed; app users by their login.
-    by = (name if via != "app" else "") or req.username or name or "anonymous"
+    # App users are identified by their login; public / share reporters by the name they typed (a real login still
+    # counts, the implicit "local" admin of a login-less server does not).
+    login = req.username if req.auth_via != "local" else ""
+    by = (req.username if via == "app" else (name or login)) or name or "anonymous"
     ent: Dict[str, Any] = {"id": "pr-" + secrets.token_hex(4), "text": text, "status": "open", "created": now, "by": by, "via": via}
     if device:
         ent["device"] = device
@@ -1841,6 +1843,8 @@ def r_problems(req: Request) -> Response:
     items = [r for r in doc.get("problems") or [] if isinstance(r, dict) and r.get("id")
              and (not status or (r.get("status") or "open") == status)
              and (not device or r.get("device") == device) and (not page or r.get("page") == page)]
+    # newest first; reports filed within the same second keep their insertion order (later entries first)
+    items.reverse()
     items.sort(key=lambda r: str(r.get("created") or ""), reverse=True)
     return Response.json({"problems": [_problem_view(doc, r, pdir.name) for r in items],
                           "open": sum(1 for r in doc.get("problems") or [] if isinstance(r, dict) and (r.get("status") or "open") == "open"),

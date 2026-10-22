@@ -527,6 +527,7 @@ Types: `str`, `int`, `num` (float), `bool`, `obj`, `[T]` array of T. "Req" = req
 | `cable_tag_pattern` | str | `"{D}-{n:03}"` | §4.8 |
 | `currency` | str | `"USD"` | ISO 4217 code for BOM/inventory. |
 | `public_url` | str | `""` | Base URL used in QR codes, e.g. `https://av.example.org`. No trailing slash. |
+| `problem_email` | str | `""` | Address offered as the e-mail fallback of "Report a problem" (§5.16) on SOP pages and the only channel in the offline bundle. Empty → no e-mail option. |
 | `autosave` | bool | `true` | |
 | `labels` | obj | `{"cols":3,"rows":10,"width_in":2.625,"height_in":1.0,"page":"letter"}` | Label sheet grid. |
 | `assistant` | obj | `{"llm": true}` | `llm:false` disables the LLM bridge for this project even if configured. |
@@ -684,6 +685,23 @@ Standard operating procedures, troubleshooting guides, checklists and reference 
 | `tags`, `rooms`, `devices`, `attachments` | `[str]` | no | `[]` | Explicit "applies to" links (unknown ids are warnings `dangling_link`). Body refs count too (§5.15 backlinks). |
 | `review_due` | str | no | — | ISO date (warning `bad_date`). |
 | `owner`, `created`, `updated`, `updated_by` | str | no | — | Set by the server/editor. |
+| `completions` | `[{at, by}]` | no | `[]` | "Mark complete" records by editors (§5.16), newest last, capped at 20. |
+
+Archived pages are hidden from viewers and volunteers everywhere (app tree, inspector "Procedures", public routes, QR sheets, report section, offline bundle); editors see them under the tree's "Archived" filter (or when searching) and can restore them (`status: published`). Deleting a page that has children archives it instead (§5.15 DELETE).
+
+#### 4.3.16 `problems[]` — problem reports
+
+"Report a problem" entries filed from SOP pages (app, public `/p/` pages, share links). Small on purpose: a problem is a line of text tied to a device and/or page, with its reporter and channel, until an editor resolves it. A doc with problems is v2-only.
+
+| Field | Type | Req | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | str | yes | — | Generated `pr-` + 8 hex. |
+| `text` | str | yes | — | Description (error `missing_field` when empty; the server caps at 2000 chars). |
+| `status` | str | no | `open` | `open`, `resolved` (error `bad_enum`). |
+| `device`, `room`, `page` | str | no | — | Device id, its room at report time, page slug (unknown ids are warnings `dangling_link`). |
+| `attachment` | str | no | — | Photo uploaded with the report (`attachments[]` entry with `kind: photo`, `note: "Problem report <id>"`; warning `dangling_link`). |
+| `created`, `by`, `via` | str | no | — | Set by the server: UTC time, reporter (login, or the typed name, or `anonymous`), channel `app` / `public` / `share`. |
+| `resolved`, `resolved_by`, `note` | str | no | — | Set when resolved (cleared on reopen). |
 
 ### 4.4 Semantics
 
@@ -1355,6 +1373,22 @@ Pages are stored in `pages[]` (§4.3.15) and edited like any collection (`/chang
 Ref hrefs produced by the server are fallbacks for chrome-less pages (`p/<project>/d/<device>`, `p/<project>/r/<room>`, `#/<project>/*/sop?page=<slug>`, `api/v2/projects/<project>/files/<att>/<name>`); the app intercepts clicks on `a[data-ref]` and opens the inspector / navigates instead. A resolver may also return `{"href": "", "label"}` for a ref that is known but not navigable (procedures-only share links): it renders as `<span class="md-ref md-ref-<kind>" data-ref=…>` without `md-missing`. `render_html.sop_link_resolver(doc, device=, room=, page=, attachment=)` builds resolvers for the public pages (relative hrefs) and for builds (`devices/<id>.html`, `rooms/<id>/index.html`, `#sop-<slug>`, `files/<att>/<name>`).
 
 **Report section.** `export.write_build` adds a "Standard operating procedures" section to `report.html` (hence `report.pdf`) when the project has published pages: `render_html.render_sop_report_section` renders them in tree order (`render_html.sop_tree`), each page as `<article class="sop-report-page" id="sop-<slug>">` starting on a new printed page with title, kind, "Applies to", review-due / updated line, summary and the `.md` body (checkboxes unticked, `disabled` look). Images referenced as `att:` are copied to `files/<att>/<name>` in the run folder; `static/css/sop.css` is inlined via `render_report(extra_css=…)`. A build scoped to some rooms keeps only pages that apply to those rooms or to no room. Drafts and archived pages never appear.
+
+### 5.16 Problem reports, checklist completion, offline bundle (server section "problem reports")
+
+Every SOP page — in the app, under `/p/<n>/sop/<slug>` and through share links — has a **Report a problem** button opening a phone-first bottom sheet (`render_html._report_sheet` + `SOP_REPORT_JS` on server pages; `views-sop.js reportSheet` in the app): the devices the page applies to (pre-selected when there is exactly one), a short description, an optional name (anonymous channels), an optional photo (`<input type=file accept=image/* capture=environment>` → the phone camera), and for editors in the app an optional new device status. The sheet posts `multipart/form-data` (or JSON) and always creates a `problems[]` entry (§4.3.16); when `settings.problem_email` is set it also offers a `mailto:` built from the form, which is the only channel in the offline bundle and the fallback when the POST fails.
+
+| Method | Path | Role | Notes |
+| --- | --- | --- | --- |
+| POST | `/api/v2/projects/{name}/problems` | viewer | Body `ProblemReport` (`text`, `device`, `page`, `name`, `device_status`) as JSON or multipart with a `photo` part (images only, 400 `bad_type`). 201 `{problem, noted, revision}`. Channel `app`. For **editor+** callers with a `device`, the device additionally gets a timestamped line appended to `note` (`[YYYY-MM-DD HH:MM user] Problem: <text>`) and, with `device_status`, a new `status` (§4.3.5 enum, 400 `bad_enum`); `noted: true`. 400 `missing_field` (empty text), `dangling_ref` (unknown device/page). One revision, history source `problems`. |
+| GET | `/api/v2/projects/{name}/problems` | viewer | `{problems: [...], open, revision}`, newest first; filters `?status=`, `?device=`, `?page=`. Each entry adds `device_name`, `page_title`, `photo` (relative file URL) when resolvable. |
+| PATCH | `/api/v2/projects/{name}/problems/{pid}` | editor | Body `ProblemPatch` `{status, note}`; `resolved` sets `resolved`/`resolved_by`, `open` clears them. 404 unknown, 400 `bad_enum`. |
+| POST | `/p/{name}/problems` | viewer | Same as the API POST, channel `public`; never touches the device (an anonymous or viewer channel). Reporter = typed `name`, else the login (not the implicit local admin), else `anonymous`. |
+| POST | `/s/{token}/problems` | public | Same through a share link (any scope), channel `share`. 404 for unknown tokens. |
+| POST | `/api/v2/projects/{name}/pages/{slug}/complete` | editor | Appends `{at, by}` to `page.completions` (last 20 kept). `{completion, completions, revision}`. |
+| GET | `/api/v2/projects/{name}/sop/bundle.zip` | editor | `export.sop_bundle_zip`: standalone offline copy of the **published** pages (`<project>-procedures/index.html`, `pages/<slug>.html`, `files/<att>/<name>` for embedded images). The same renderers as the public pages with CSS/JS inlined, no manifest/service worker (works from `file://`), relative page links (`page_href`), device/room chips as plain text, an "Offline copy from <stamp>" banner, sessionStorage checklists, and the report sheet as mailto-only when `problem_email` is set. CLI: `fathom sop-bundle <project> [-o out.zip | -o folder]`. |
+
+**App surfaces.** `views-sop.js`: the page has the report button under the body and in the ⋯ menu; the tree head shows an "N open" badge and a ⋯ menu with **Problems** (list view `#/<p>/<room>/sop?problems=1`: open first, device / page chips, photo, Resolve / Reopen for editors) and **Download offline bundle** (editors); the page menu adds **Mark complete**, **Reset checklist**, **Download offline bundle** and, for archived pages, **Restore page**. Checklist progress reads "n of m done"; **Mark complete** ticks everything and, for editors, calls `/complete` (the footer then shows "Last completed <date> by <user>"); for viewers and on public pages it is session-only (`sessionStorage` key `fathom.sop.done.<project>.<slug>`, shown as "Marked complete at <time> on this device"). `inspector.js`: a device with open reports shows a red "⚠ N open" badge in its header (tap → the **Problems** section, which lists the device's reports with Resolve / Reopen) and hides archived pages from the "Procedures" section for read-only users. Settings (`views-admin.js`) exposes `problem_email`.
 
 **Starter templates and review badges (app).** `views-sop.js` offers templates on page create (System power-up, System shut-down, Troubleshooting: no audio, Troubleshooting: no video, Weekly checks); when the page is started from a device the `{{device}}` placeholders become `[[device:<id>]]`. `reviewState(page)` → `"overdue"` / `"soon"` (≤30 days) drives the `sop-badge-due` / `sop-badge-soon` badges in the tree, page header and server-rendered pages. The page menu has Print (`window.print()`, print CSS in `sop.css`) and QR label (dialog: code, link choice — project viewer or a share link, "New procedures-only link" creating a `scope: "sop"` share, URL, Open SVG / Open public page, QR sheet per room); the editor topbar has the same QR label action for published pages.
 
