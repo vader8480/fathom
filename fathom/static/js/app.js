@@ -18,6 +18,7 @@ export const VIEWS = {
   inventory: { label: 'Inventory', module: './inventory.js', export: 'mount', css: 'plan.css' },
   schedules: { label: 'Schedules', module: './schedules.js', export: 'mount', css: 'plan.css' },
   imports: { label: 'Imports', module: './views-admin.js', export: 'mountImports' },
+  discovery: { label: 'Discovery', module: './views-discovery.js', export: 'mount' },
   history: { label: 'History', module: './views-admin.js', export: 'mountHistory' },
   builds: { label: 'Builds', module: './views-admin.js', export: 'mountBuilds' },
   settings: { label: 'Settings', module: './views-admin.js', export: 'mountSettings' },

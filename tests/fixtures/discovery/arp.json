@@ -1,0 +1,11 @@
+{
+ "format": "proc",
+ "text": "IP address       HW type     Flags       HW address            Mask     Device\n10.30.0.1        0x1         0x2       78:45:58:aa:00:00     *        eth0\n10.30.0.10       0x1         0x2       00:60:74:12:34:56     *        eth0\n10.30.0.40       0x1         0x2       7c:2e:0d:aa:bb:01     *        eth0\n10.30.0.60       0x1         0x2       00:0e:dd:44:55:66     *        eth0\n10.30.0.120      0x1         0x2       3c:22:fb:01:02:03     *        eth0\n10.30.0.122      0x1         0x2       b8:27:eb:11:22:33     *        eth0\n10.30.0.121      0x1         0x2       00:17:c8:0a:0b:0c     *        eth0\n10.30.0.77       0x1         0x2       a4:5e:60:00:11:22     *        eth0\n10.30.0.78       0x1         0x0       00:00:00:00:00:00     *        eth0\n10.30.0.99       0x1         0x2       d8:3a:dd:12:34:56     *        eth0\n224.0.0.251      0x1         0x2       01:00:5e:00:00:fb     *        eth0\n",
+ "rdns": {
+  "10.30.0.1": "gateway.campus.local",
+  "10.30.0.122": "companion-pi.local",
+  "10.30.0.77": "lx-node-1.campus.local",
+  "10.30.0.99": "pi-signage.local"
+ },
+ "fetched": "2026-10-20T14:05:00Z"
+}

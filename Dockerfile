@@ -21,6 +21,12 @@
 #                                     optional OpenAI-compatible bridge for assistant notes
 #   FATHOM_PLUGINS / FATHOM_LIBRARY / FATHOM_CHECKLISTS   extension directories (os.pathsep-separated)
 #   FATHOM_PDF_RASTERIZER, FATHOM_ODA, FATHOM_ODA_XVFB    floor-plan converters
+#   FATHOM_UNIFI_URL / FATHOM_UNIFI_SITE / FATHOM_UNIFI_API_KEY (or _USER / _PASSWORD) / FATHOM_UNIFI_VERIFY_TLS
+#   FATHOM_DISCOVERY_INTERFACE        network discovery defaults (per-project settings win)
+#
+# The container is optional: the reference deployment is an Ubuntu VM with
+# deploy/fathom.service (README › Running on Ubuntu). Passive discovery probes
+# (mDNS, LLDP, ARP) only see the container's network unless it shares the host's.
 
 FROM python:3.12-slim
 
@@ -36,7 +42,7 @@ RUN set -e; pkgs=""; \
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY fathom ./fathom
-RUN pip install --no-cache-dir ".[serve]"
+RUN pip install --no-cache-dir ".[serve,discovery]"
 
 ENV FATHOM_DATA=/data \
     FATHOM_CHROME=/usr/bin/chromium \

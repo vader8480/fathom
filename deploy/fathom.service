@@ -1,23 +1,53 @@
-# Fathom over plain HTTP on the LAN. Install with: sudo deploy/install-service.sh
+# Fathom on a dedicated Ubuntu server / VM (plain HTTP on the LAN).
+# Install with: sudo deploy/install-service.sh   (creates the `fathom` system user,
+# the data dir and this unit; override FATHOM_USER / FATHOM_DIR / FATHOM_DATA / FATHOM_PORT).
+#
 # Session cookies get the Secure flag only on HTTPS requests (or X-Forwarded-Proto: https),
 # so login works over http:// without extra settings. Once TLS is in front, change
 # FATHOM_PUBLIC_URL to the https:// address.
+#
+# Network discovery: the LLDP / CDP listener needs CAP_NET_RAW and binding :80 / :443
+# needs CAP_NET_BIND_SERVICE. AmbientCapabilities hands exactly those two to the
+# non-root `fathom` user; CapabilityBoundingSet keeps the service from ever holding
+# more. No root, no setcap on the interpreter required. (Alternative without systemd:
+# `sudo setcap cap_net_raw,cap_net_bind_service+eip /opt/fathom/.venv/bin/python3`
+# on a venv created with `--copies`.)
 [Unit]
 Description=Fathom AVL documentation server
+Documentation=https://github.com/vader8480/fathom
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=cccadmin
-Group=cccadmin
-WorkingDirectory=/home/cccadmin/Code/fathom
-Environment=FATHOM_DATA=/home/cccadmin/.fathom
-Environment=FATHOM_PUBLIC_URL=http://10.6.9.239:8080
+User=fathom
+Group=fathom
+WorkingDirectory=/opt/fathom
+Environment=FATHOM_DATA=/var/lib/fathom
+Environment=FATHOM_PUBLIC_URL=http://fathom.example.org:8080
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/cccadmin/Code/fathom/.venv/bin/gunicorn --bind 0.0.0.0:8080 --workers 2 --threads 4 --timeout 180 --access-logfile - fathom.server:app
+# Discovery defaults (optional; per-project settings in Discovery › Sources win):
+# Environment=FATHOM_UNIFI_URL=https://10.0.0.1
+# Environment=FATHOM_UNIFI_API_KEY=...
+# Environment=FATHOM_DISCOVERY_INTERFACE=ens192
+ExecStart=/opt/fathom/.venv/bin/gunicorn --bind 0.0.0.0:8080 --workers 2 --threads 4 --timeout 180 --access-logfile - fathom.server:app
 Restart=on-failure
 RestartSec=3
+
+# Capabilities for passive discovery (LLDP / CDP raw socket) and low ports, nothing else.
+AmbientCapabilities=CAP_NET_RAW CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+# Hardening that does not get in the way of raw sockets or multicast.
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/fathom
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_PACKET AF_NETLINK
 
 [Install]
 WantedBy=multi-user.target

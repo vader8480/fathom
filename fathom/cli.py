@@ -25,6 +25,7 @@
   fathom history <project> | restore <project> <rev>        revisions
   fathom vocab [--json]                                     kinds, media, disciplines
   fathom plugins                                            importers and plugin errors
+  fathom discovery doctor [--seconds N] [--interface IF]    CAP_NET_RAW, interfaces / VLANs, foreign LLDP heard?
 
 Data lives in FATHOM_DATA (default ~/.fathom): projects/<name>/ and builds/<name>/.
 """
@@ -864,6 +865,20 @@ def cmd_plugins(_a: argparse.Namespace) -> None:
 # ------------------------------------------------------------------ main
 
 
+def cmd_discovery_doctor(a: argparse.Namespace) -> None:
+    from .discovery import doctor
+
+    do_listen = a.seconds > 0
+    if do_listen and not a.json:
+        print(f"listening for LLDP / CDP for {a.seconds:.0f} s (nothing is sent) …", file=sys.stderr)
+    rep = doctor.report(seconds=a.seconds, interface=a.interface, do_listen=do_listen)
+    if a.json:
+        print(json.dumps(rep, indent=2))
+    else:
+        print(doctor.format_report(rep))
+    sys.exit(1 if rep["advice"] else 0)
+
+
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="fathom", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--version", action="version", version=f"fathom {__version__}")
@@ -1047,6 +1062,14 @@ def main(argv=None) -> None:
 
     s = sub.add_parser("plugins", help="importers and plugin errors")
     s.set_defaults(func=cmd_plugins)
+
+    s = sub.add_parser("discovery", help="network discovery helpers")
+    ds = s.add_subparsers(dest="discovery_cmd", required=True)
+    d = ds.add_parser("doctor", help="can this host see the AV network? capabilities, interfaces / VLANs, LLDP listen")
+    d.add_argument("--seconds", type=float, default=35.0, help="how long to listen for LLDP / CDP (default 35; 0 skips the listen)")
+    d.add_argument("--interface", default="", help="listen on one interface only")
+    d.add_argument("--json", action="store_true")
+    d.set_defaults(func=cmd_discovery_doctor)
 
     a = p.parse_args(argv)
     a.func(a)
