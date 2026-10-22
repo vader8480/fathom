@@ -572,6 +572,37 @@ class Passwords(unittest.TestCase):
             st, _, _ = call(app, "GET", "/api/v2/projects", headers={"Cookie": cookies["viewer"]})
             self.assertEqual(st, 401, "5.3 disabled user's session invalid")
 
+    def test_login_flow_and_stale_duplicate_cookies(self):
+        """Login over plain http and a stale duplicate fathom_session cookie must not cause a /login <-> / loop."""
+        with users_env() as (app, data, cookies, pw):
+            html = {"Accept": "text/html,application/xhtml+xml,*/*;q=0.8"}
+            st, h, _ = call(app, "GET", "/", headers=html)
+            self.assertEqual(st, 302)
+            self.assertEqual(h.get("location"), "/login?next=%2F")
+            st, h, b = call(app, "GET", "/login?next=%2F", headers=html)
+            self.assertEqual(st, 200, "login page is public")
+            self.assertIn(b'id="login-form"', b)
+            self.assertIn(b"static/js/app.js", b)
+            st, h, b = call(app, "POST", "/api/v2/session", {"username": "eve", "password": pw["eve"]}, {"Content-Type": "application/json"})
+            self.assertEqual(st, 200)
+            sc = [c for c in h.all("set-cookie") if c.startswith("fathom_session=")][0]
+            value = sc.split(";")[0].split("=", 1)[1]
+            self.assertNotIn("secure", [a.strip().lower() for a in sc.split(";")], "cookie usable over http://")
+            # browsers send every cookie of that name, most specific Path first; a stale one must not win
+            for header in ("fathom_session=stale.sig; fathom_session=" + value,
+                           "fathom_session=" + value + "; fathom_session=stale.sig",
+                           "fathom_session=; other=1; fathom_session=" + value):
+                st, h, _ = call(app, "GET", "/", headers=dict(html, Cookie=header))
+                self.assertEqual(st, 200, "app page with cookies %r" % header)
+                st, _, b = call(app, "GET", "/api/v2/session", headers={"Cookie": header})
+                self.assertTrue(jbody(b)["authenticated"], "session with cookies %r" % header)
+            st, h, _ = call(app, "GET", "/login", headers=dict(html, Cookie="fathom_session=" + value))
+            self.assertEqual(st, 200, "login page never redirects server-side (the client decides)")
+            st, _, b = call(app, "GET", "/api/v2/session", headers={"Cookie": "fathom_session=stale.sig; fathom_session=also.bad"})
+            self.assertFalse(jbody(b)["authenticated"])
+            st, _, _ = call(app, "GET", "/", headers=dict(html, Cookie="fathom_session=stale.sig"))
+            self.assertEqual(st, 302)
+
     def test_basic_auth_users_and_env(self):
         app = get_app()
         users = requires("users")
