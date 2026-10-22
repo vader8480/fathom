@@ -285,6 +285,32 @@ class Correlation(unittest.TestCase):
         e = self.corr.Entity(id="x", serial="SER-12345")
         self.assertGreaterEqual(idx.score(e)[0]["d1"], 0.6)
 
+    def test_doc_index_reuses_dedupe_signals(self):
+        """Signals and penalties come from fathom.dedupe.score_pair; weights stay discovery's own."""
+        from fathom import dedupe
+
+        idx = self.corr.DocIndex({"devices": [
+            {"id": "foh", "name": "FOH console", "dante_name": "FOH-CL5", "model": "CL5", "manufacturer": "Yamaha", "kind": "console", "inventory": {"serial": "CL5-0001"},
+             "interfaces": [{"mac": "AC:44:F2:A1:00:10", "ip": "10.20.0.10"}]},
+            {"id": "mic-1", "name": "Lectern mic", "kind": "mic"}, {"id": "mic-2", "name": "Choir mic", "kind": "mic"}]})
+        e = self.corr.Entity(id="x", macs=["00:a0:de:50:00:05"], dante_name="FOH-CL5", model="CL5", manufacturer="Yamaha", kind="console")
+        dev = self.corr.entity_as_device(e)
+        _, reasons = dedupe.score_pair(dev, idx.devices["foh"])
+        self.assertIn("dante_name", {r["signal"] for r in reasons}, "dedupe sees the Dante name")
+        scores, why = idx.score(e)
+        self.assertAlmostEqual(scores["foh"], 0.45)
+        self.assertEqual(why["foh"], ["Dante name FOH-CL5", "model CL5"])
+        e = self.corr.Entity(id="x", macs=["ac:44:f2:a1:00:10"], serial="CL5-9999", model="CL5")
+        scores, why = idx.score(e)
+        self.assertLess(scores["foh"], 0.35, "a different serial on both sides pulls a MAC hit down to 'new'")
+        self.assertIn("but the serial numbers differ", why["foh"])
+        e = self.corr.Entity(id="x", ips=["10.20.0.10"], hostname="foh-ql5", model="QL5")
+        scores, why = idx.score(e)
+        self.assertAlmostEqual(scores["foh"], 0.30, msg="a differing model is noted, not penalised (documents go stale on models)")
+        self.assertIn("model differs (QL5 vs CL5)", why["foh"])
+        e = self.corr.Entity(id="x", name="Lectern mic 2", kind="mic")
+        self.assertEqual(idx.score(e)[0], {}, "dedupe's fuzzy name similarity is not used for discovered hosts")
+
 
 # --------------------------------------------------------------------------- topology
 

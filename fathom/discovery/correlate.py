@@ -31,11 +31,18 @@ Match-to-existing score against a document device:
    +0.60  MAC equals an interface MAC          +0.60  serial equals inventory serial
    +0.30  IP equals an interface IP            +0.35  name / hostname / Dante name / alias equal (loose key)
    +0.10  model equal (only counts with another hit)
+   ×0.20  both sides know a serial and they differ (a differing model is only noted: documents go stale on models)
 
 ``match`` ≥ 0.60, ``possible`` ≥ 0.35; the best-scoring device wins.
 
-This is Fathom's own scoring: the device-merge work (separate PR) had not
-landed when discovery was written, so there is nothing to share yet.
+The *signals* come from :mod:`fathom.dedupe` (:func:`~fathom.dedupe.score_pair`
+on the entity rendered as a device): the same key normalisation, exact-name /
+alias / Dante-name / hostname detection and disagreement penalties the
+device-merge UI uses, so a discovered host and a duplicate device are judged
+by one rule book. Only the *weights* differ: a discovered sighting is weaker
+evidence than two hand-entered devices (an IP alone is a lease, not an
+identity), and dedupe's fuzzy name-similarity signals are left out here so a
+``Lectern mic`` is never offered as a match for a ``Choir mic``.
 """
 
 from __future__ import annotations
@@ -371,36 +378,102 @@ class DocIndex:
         if did not in lst:
             lst.append(did)
 
-    def score(self, e: Entity) -> Tuple[Dict[str, float], Dict[str, List[str]]]:
-        scores: Dict[str, float] = {}
-        why: Dict[str, List[str]] = {}
+    def candidates(self, e: Entity) -> List[str]:
+        """Document devices worth scoring: anything sharing a MAC, serial, IP, name key or model with the entity."""
+        out: List[str] = []
 
-        def hit(did: str, pts: float, reason: str) -> None:
-            scores[did] = scores.get(did, 0.0) + pts
-            why.setdefault(did, []).append(reason)
+        def add(did: Optional[str]) -> None:
+            if did and did not in out:
+                out.append(did)
 
         for m in e.macs:
-            if m in self.by_mac:
-                hit(self.by_mac[m], 0.60, f"MAC {m}")
-        if e.serial and e.serial.strip().lower() in self.by_serial:
-            hit(self.by_serial[e.serial.strip().lower()], 0.60, f"serial {e.serial}")
+            add(self.by_mac.get(m))
+        if e.serial:
+            add(self.by_serial.get(e.serial.strip().lower()))
         for ip in e.ips:
-            if ip in self.by_ip:
-                hit(self.by_ip[ip], 0.30, f"IP {ip}")
-        named: Dict[str, str] = {}
-        for label, val in (("Dante name", e.dante_name), ("hostname", e.hostname), ("name", e.name)):
-            key = loose(val)
-            if val and _good_host(val) and key not in named:
-                named[key] = f"{label} {val}"
-        for key, reason in named.items():
-            for did in self.by_name.get(key, []):
-                if not any(r.startswith(("Dante name", "hostname", "name")) for r in why.get(did, [])):
-                    hit(did, 0.35, reason)
+            add(self.by_ip.get(ip))
+        for val in (e.dante_name, e.hostname, e.name):
+            if val and _good_host(val):
+                for did in self.by_name.get(loose(val), []):
+                    add(did)
         if e.model:
             for did in self.by_model.get(loose(e.model), []):
-                if did in scores:
-                    hit(did, 0.10, f"model {e.model}")
+                add(did)
+        return out
+
+    def score(self, e: Entity) -> Tuple[Dict[str, float], Dict[str, List[str]]]:
+        """Discovery weights applied to the signals :func:`fathom.dedupe.score_pair` finds between the entity and each candidate."""
+        from .. import dedupe
+
+        scores: Dict[str, float] = {}
+        why: Dict[str, List[str]] = {}
+        edev = entity_as_device(e)
+        ke = dedupe._keys(edev)
+        for did in self.candidates(e):
+            dev = self.devices[did]
+            _, reasons = dedupe.score_pair(edev, dev)
+            signals = {r["signal"] for r in reasons}
+            kd = dedupe._keys(dev)
+            pts, reason_list = 0.0, []
+            for m in e.macs:
+                if m in (ke["mac"] & kd["mac"]):
+                    pts += 0.60
+                    reason_list.append(f"MAC {m}")
+            if "serial" in signals:
+                pts += 0.60
+                reason_list.append(f"serial {e.serial}")
+            for ip in e.ips:
+                if ip in (ke["ip"] & kd["ip"]):
+                    pts += 0.30
+                    reason_list.append(f"IP {ip}")
+            named = _name_signal(e, signals, ke, kd)
+            if named:
+                pts += 0.35
+                reason_list.append(named)
+            if "model" in signals and pts > 0:
+                pts += 0.10
+                reason_list.append(f"model {e.model}")
+            if pts <= 0:
+                continue  # model alone (or a fuzzy name) never matches
+            if "serial_differs" in signals:
+                pts *= 0.20
+                reason_list.append("but the serial numbers differ")
+            if "model_differs" in signals:  # the document is often out of date on exactly this; say so, do not punish it
+                reason_list.append(f"model differs ({e.model} vs {dev.get('model')})")
+            scores[did] = round(pts, 2)
+            why[did] = reason_list
         return scores, why
+
+
+def entity_as_device(e: Entity) -> Dict[str, Any]:
+    """The entity in document-device shape, so :mod:`fathom.dedupe` can compare it with real devices."""
+    itfs: List[Dict[str, Any]] = []
+    for mac in e.macs:
+        itfs.append({"mac": mac, "hostname": e.hostname})
+    for ip in e.ips:
+        itfs.append({"ip": ip, "hostname": e.hostname})
+    if not itfs and e.hostname:
+        itfs.append({"hostname": e.hostname})
+    aliases = [x for x in (e.hostname, e.dante_name) if x and _good_host(x) and loose(x) != loose(e.name)]
+    dev: Dict[str, Any] = {"id": e.id, "name": e.name or e.hostname or e.dante_name, "kind": e.kind, "manufacturer": e.manufacturer, "model": e.model,
+                           "dante_name": e.dante_name, "aliases": aliases, "interfaces": itfs}
+    if e.serial and len(e.serial.strip()) >= 4:
+        dev["inventory"] = {"serial": e.serial}
+    return dev
+
+
+def _name_signal(e: Entity, signals: set, ke: Dict[str, set], kd: Dict[str, set]) -> str:
+    """One reason string for an exact name-family hit (Dante name, hostname, alias, name), or ``""``."""
+    doc_names = kd["name"] | kd["aliases"] | kd["dante_name"]
+    if "dante_name" in signals and e.dante_name and _good_host(e.dante_name):
+        return f"Dante name {e.dante_name}"
+    if "hostname" in signals or (e.hostname and _good_host(e.hostname) and loose(e.hostname) in doc_names):
+        return f"hostname {e.hostname}"
+    if ("alias" in signals or "name" in signals) and e.name and _good_host(e.name) and loose(e.name) in doc_names:
+        return f"name {e.name}"
+    if "alias" in signals and e.dante_name and _good_host(e.dante_name) and loose(e.dante_name) in doc_names:
+        return f"Dante name {e.dante_name}"
+    return ""
 
 
 def match_entities(entities: List[Entity], doc: Doc) -> None:
@@ -435,4 +508,4 @@ def correlate(results: Iterable[ProbeResult], doc: Optional[Doc] = None) -> List
     return entities
 
 
-__all__ = ["DocIndex", "Entity", "KIND_FOR_HINT", "build_entities", "correlate", "infer_kind", "level_for", "loose", "match_entities", "score_entity"]
+__all__ = ["DocIndex", "Entity", "KIND_FOR_HINT", "build_entities", "correlate", "entity_as_device", "infer_kind", "level_for", "loose", "match_entities", "score_entity"]

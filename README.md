@@ -319,10 +319,11 @@ python -m fathom serve --open
 Module map: `vocab.py` (kinds, media, disciplines), `schema.py` (model v2,
 migration, ops, validation), `project.py` / `history.py` / `users.py`
 (storage, revisions, logins), `plugins.py` + `parsers/` (importers),
-`merge.py` (0.2 merge + import overlay), `library/` (templates),
+`merge.py` (0.2 merge + import overlay), `dedupe.py` (duplicate-device
+suggestions and merge plans), `library/` (templates),
 `presets.py` (generic device type presets), `jobs.py` (in-process job
-runner), `discovery/` (passive network discovery: probes, correlation,
-topology, settings), `floorplan.py` (DXF / Draw.io / PDF / SVG), `cables.py`, `network.py`,
+runner), `discovery/` (network discovery: probes, correlation, topology,
+settings), `floorplan.py` (DXF / Draw.io / PDF / SVG), `cables.py`, `network.py`,
 `bom.py`, `qr.py`, `racks.py`, `dmx.py`, `patch.py`, `trace.py`, `search.py`,
 `assistant.py` / `llm.py`, `layout.py` / `render_html.py` / `render_svg.py`
 (maps and viewer pages), `export.py` (builds), `server.py` (WSGI app),

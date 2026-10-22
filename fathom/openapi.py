@@ -132,6 +132,12 @@ def _components() -> Dict[str, Any]:
                                                                               "use_llm": {"type": "boolean"}, "history": {"type": "array"}}},
         "BackupCreate": {"type": "object", "properties": {"include_builds": {"type": "boolean"}, "label": {"type": "string"}}},
         "BackupRestore": {"type": "object", "required": ["confirm"], "properties": {"confirm": {"type": "string", "description": "the backup name"}}},
+        "MergeRequest": {"type": "object", "required": ["survivor", "duplicates"], "properties": {
+            "survivor": {"type": "string", "description": "id of the device that is kept"},
+            "duplicates": {"type": "array", "items": {"type": "string"}, "maxItems": 20, "description": "ids merged into the survivor"},
+            "choices": {"type": "object", "additionalProperties": {"type": "string"},
+                        "description": "field key → device id whose value wins (or 'union' for list / text fields)"},
+            "base_revision": {"type": "integer", "description": "merge only; defaults to the current revision"}}},
         "Template": obj, "V1Project": obj,
         "DiscoveryRun": {"type": "object", "properties": {
             "window": {"type": "integer", "minimum": 10, "maximum": 300, "description": "listen window in seconds (default from settings, 60)"},
