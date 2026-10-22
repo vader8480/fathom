@@ -435,6 +435,11 @@ a.btn.small{padding:2px 9px;font-size:12px;min-height:26px}
 .disc-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .disc-conn{min-width:960px}
 .badge-discovered{display:inline-block;padding:0 6px;border-radius:4px;font-size:10px;border:1px dashed var(--ok);color:var(--ok);margin-left:6px;vertical-align:middle}
+.disc-diff .chip.warn{color:var(--warn);border-color:rgba(255,149,72,.5)}
+.disc-against{gap:8px;font-size:12px;color:var(--muted)}
+.disc-against select{max-width:min(420px,70vw)}
+.disc-diff-h{margin:14px 0 2px;font-size:13px;display:flex;align-items:center;gap:6px}
+.disc-diff-hint{font-size:12px;margin-bottom:6px}
 @media (max-width:699px){
   .disc-table thead{display:none}
   .disc-table tr{display:block;padding:8px 6px;border-bottom:1px solid var(--border)}

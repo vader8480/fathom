@@ -58,7 +58,7 @@ SPEC_ROLES = {
     ("GET", "/api/v2/projects/{}/discovery/runs"): "viewer", ("POST", "/api/v2/projects/{}/discovery/runs"): "editor",
     ("GET", "/api/v2/projects/{}/discovery/runs/{}"): "viewer", ("DELETE", "/api/v2/projects/{}/discovery/runs/{}"): "editor",
     ("GET", "/api/v2/projects/{}/discovery/runs/{}/findings"): "viewer", ("POST", "/api/v2/projects/{}/discovery/runs/{}/findings/promote"): "editor",
-    ("GET", "/api/v2/projects/{}/discovery/settings"): "viewer", ("PUT", "/api/v2/projects/{}/discovery/settings"): "editor",
+    ("GET", "/api/v2/projects/{}/discovery/runs/{}/diff"): "viewer", ("GET", "/api/v2/projects/{}/discovery/settings"): "viewer", ("PUT", "/api/v2/projects/{}/discovery/settings"): "editor",
     ("POST", "/api/v2/projects/{}/discovery/test"): "editor",
     ("POST", "/api/v2/projects/{}/files"): "editor", ("GET", "/api/v2/projects/{}/files/{}/{}"): "viewer",
     ("DELETE", "/api/v2/projects/{}/files/{}"): "editor", ("POST", "/api/v2/projects/{}/floorplans"): "editor",

@@ -3,6 +3,8 @@
 // are off by default and say what they send), Run panel (start, live
 // progress + log via 1 s polling, cancel) and Findings panel (new devices,
 // matches, connections, networks, unresolved) with promote / merge / ignore.
+// The Changes tab diffs the shown run against an earlier completed run
+// (new / missing / moved devices, changed addresses, new / lost links).
 // Nothing runs unless the Run button is pressed.
 
 function h(tag, attrs, children) {
@@ -46,7 +48,9 @@ function thead(cols) { return h('thead', null, h('tr', null, cols.map(function (
 function addrs(e) {
   const parts = [];
   (e.ips || []).forEach(function (ip) { parts.push(h('div', { class: 'mono' }, ip)); });
-  (e.macs || []).forEach(function (m) { parts.push(h('div', { class: 'mono muted' }, m)); });
+  const macs = e.macs || [];
+  macs.slice(0, 3).forEach(function (m) { parts.push(h('div', { class: 'mono muted' }, m)); });
+  if (macs.length > 3) parts.push(h('div', { class: 'muted small' }, '+' + (macs.length - 3) + ' more MAC addresses'));
   if (e.hostname && e.hostname !== e.label) parts.push(h('div', { class: 'muted' }, e.hostname));
   return parts;
 }
@@ -70,12 +74,13 @@ export function mount(el, ctx) {
   const store = ctx.store;
   const ro = function () { return !!store.readOnly; };
   const S = { sources: [], settings: null, limits: { min_window: 10, max_window: 300 }, runs: [], active: '', run: null, findings: null, runId: '', tab: 'new',
-    selected: {}, timer: null, caps: null, destroyed: false, loadingFindings: false };
+    selected: {}, timer: null, caps: null, destroyed: false, loadingFindings: false, diff: null, diffAgainst: '', loadingDiff: false };
 
   root.appendChild(h('h2', null, 'Discovery'));
   root.appendChild(h('p', { class: 'muted disc-intro' }, [
     'Passive sources read the UniFi controller you point them at and listen to what devices already announce (mDNS / Dante, LLDP / CDP) plus this host\u2019s ARP table. ',
-    'Active sources (SNMP on your switches, Yamaha SCP, Videohub, Q-SYS) are ', h('strong', null, 'off until you enable them'), ', contact only the hosts you list, and send documented read-only queries. ',
+    'Active sources (SNMP on your switches, Yamaha SCP, Videohub, Q-SYS, Dante Domain Manager) are ', h('strong', null, 'off until you enable them'), ', contact only the hosts you list, and send documented read-only queries. ',
+    'Dante Controller has no API: without a DDM, Dante routing comes from the preset-XML import. ',
     h('strong', null, 'Nothing runs unless you start it here'), ' \u2014 there is no scheduler and no background listener \u2014 and nothing is ever written to any device.',
   ]));
 
@@ -226,6 +231,8 @@ export function mount(el, ctx) {
       S.runId = r.run.id;
       S.active = r.run.id;
       S.findings = null;
+      S.diff = null;
+      S.diffAgainst = '';
       S.selected = {};
       drawRun();
       drawFindings();
@@ -288,7 +295,8 @@ export function mount(el, ctx) {
     if (!S.runs.length) return;
     const sel = h('select', { 'aria-label': 'Previous runs' }, S.runs.map(function (r) {
       const c = r.counts || {};
-      return h('option', { value: r.id, selected: r.id === S.runId ? true : null }, fmtTime(r.started || r.finished) + ' \u00b7 ' + (r.status || '') + (r.mode === 'active' ? ' \u00b7 active' : '') + (c.entities !== undefined ? ' \u00b7 ' + c.entities + ' hosts, ' + (c.connections || 0) + ' links' : ''));
+      const dc = r.diff && r.diff.against && r.diff.counts ? r.diff.counts.changes : null;
+      return h('option', { value: r.id, selected: r.id === S.runId ? true : null }, fmtTime(r.started || r.finished) + ' \u00b7 ' + (r.status || '') + (r.mode === 'active' ? ' \u00b7 active' : '') + (c.entities !== undefined ? ' \u00b7 ' + c.entities + ' hosts, ' + (c.connections || 0) + ' links' : '') + (dc !== null && dc !== undefined ? ' \u00b7 ' + dc + (dc === 1 ? ' change' : ' changes') : ''));
     }));
     sel.addEventListener('change', function () { showRun(sel.value); });
     runsWrap.appendChild(h('div', { class: 'row', style: { marginTop: '8px' } }, [h('span', { class: 'muted' }, 'Show run'), sel]));
@@ -319,6 +327,8 @@ export function mount(el, ctx) {
   function showRun(rid) {
     S.runId = rid;
     S.findings = null;
+    S.diff = null;
+    S.diffAgainst = '';
     S.selected = {};
     ctx.api.discoveryRun(ctx.project, rid).then(function (r) {
       S.run = r.run;
@@ -336,6 +346,7 @@ export function mount(el, ctx) {
   function loadFindings() {
     if (!S.runId || !S.run || S.run.active) { drawFindings(); return Promise.resolve(); }
     S.loadingFindings = true;
+    S.diff = null; // the diff is computed against the live document too
     drawFindings();
     return ctx.api.discoveryFindings(ctx.project, S.runId).then(function (f) {
       S.loadingFindings = false;
@@ -559,6 +570,138 @@ export function mount(el, ctx) {
     ]);
   }
 
+  // ------------------------------------------------------------ changes (run-to-run diff)
+  function loadDiff(against) {
+    if (!S.runId) return Promise.resolve();
+    S.loadingDiff = true;
+    S.diffAgainst = against || '';
+    drawFindings();
+    return ctx.api.discoveryDiff(ctx.project, S.runId, against).then(function (d) {
+      if (S.destroyed) return;
+      S.loadingDiff = false;
+      S.diff = d;
+      drawFindings();
+    }, function (e) {
+      if (S.destroyed) return;
+      S.loadingDiff = false;
+      S.diff = { error: msg(e), candidates: [] };
+      drawFindings();
+    });
+  }
+  function runLabel(id) {
+    const r = S.runs.filter(function (x) { return x.id === id; })[0];
+    return r ? fmtTime(r.started || r.finished) + ' \u00b7 ' + id : id;
+  }
+  function whereCell(loc) {
+    if (!loc) return h('span', { class: 'muted' }, '\u2014');
+    return [h('div', null, (loc.switch || loc.switch_mac || '?') + ' \u00b7 ' + (loc.port || '')), loc.evidence === 'uplink' ? h('div', { class: 'muted disc-reasons' }, 'reported by the controller') : null];
+  }
+  function diffDeviceTable(list, whereLabel) {
+    const tb = h('tbody');
+    list.forEach(function (e) {
+      tb.appendChild(h('tr', { class: 'disc-row' }, [
+        td('Device', [h('div', { class: 'disc-name' }, e.label), h('div', { class: 'muted' }, [e.manufacturer, e.model].filter(Boolean).join(' '))]),
+        td('Kind', e.kind || ''),
+        td('Addresses', addrs(e)),
+        td(whereLabel, whereCell(e.location)),
+        td('Sources', sourcesChips(e.sources)),
+        td('Confidence', conf(e.level, e.confidence)),
+        td('Project', e.status === 'match' ? h('span', { class: 'chip on' }, 'in project') : h('span', { class: 'chip' }, e.status || '')),
+      ]));
+    });
+    return h('div', { class: 'disc-scroll' }, h('table', { class: 'adm-table disc-table' }, [thead(['Device', 'Kind', 'Addresses', whereLabel, 'Sources', 'Confidence', 'Project']), tb]));
+  }
+  function diffLinkTable(list) {
+    const tb = h('tbody');
+    list.forEach(function (l) {
+      tb.appendChild(h('tr', { class: 'disc-row' + (l.flag ? ' disc-flagged' : '') }, [
+        td('Switch', l.switch || l.switch_mac || ''), td('Port', l.port || ''),
+        td('Device', [h('div', null, l.peer || l.peer_mac || ''), l.peer_mac ? h('div', { class: 'mono muted' }, l.peer_mac) : null]),
+        td('Device port', l.peer_port || h('span', { class: 'muted' }, '\u2014')),
+        td('Medium', l.medium || ''),
+        td('Confidence', [conf(l.level, l.confidence), h('div', { class: 'muted disc-reasons' }, (l.methods || []).join(' + '))]),
+        td('Flags', [l.flag ? h('span', { class: 'chip disc-flag disc-flag-' + l.flag }, l.flag) : null, l.status === 'exists' ? h('span', { class: 'chip' }, 'in schedule') : null]),
+      ]));
+    });
+    return h('div', { class: 'disc-scroll' }, h('table', { class: 'adm-table disc-table' }, [thead(['Switch', 'Port', 'Device', 'Device port', 'Medium', 'Confidence', 'Flags']), tb]));
+  }
+  function diffMovedTable(list) {
+    const tb = h('tbody');
+    list.forEach(function (m) {
+      tb.appendChild(h('tr', { class: 'disc-row' }, [
+        td('Device', [h('div', { class: 'disc-name' }, m.label), (m.macs || []).length ? h('div', { class: 'mono muted' }, m.macs[0]) : null]),
+        td('Kind', m.kind || ''),
+        td('Was on', whereCell(m.from)),
+        td('Now on', whereCell(m.to)),
+      ]));
+    });
+    return h('div', { class: 'disc-scroll' }, h('table', { class: 'adm-table disc-table' }, [thead(['Device', 'Kind', 'Was on', 'Now on']), tb]));
+  }
+  function diffChangedTable(list) {
+    const tb = h('tbody');
+    const fmt = function (v) { return Array.isArray(v) ? v.join(', ') : (v === null || v === undefined ? '\u2014' : String(v)); };
+    list.forEach(function (c) {
+      tb.appendChild(h('tr', { class: 'disc-row' }, [
+        td('Device', h('div', { class: 'disc-name' }, c.label)),
+        td('Field', cap(c.field_label || c.field)),
+        td('Before', h('span', { class: 'mono' }, fmt(c.before))),
+        td('After', h('span', { class: 'mono' }, fmt(c.after))),
+      ]));
+    });
+    return h('div', { class: 'disc-scroll' }, h('table', { class: 'adm-table disc-table' }, [thead(['Device', 'Field', 'Before', 'After']), tb]));
+  }
+  function diffTab() {
+    if (!S.diff && !S.loadingDiff) { loadDiff(S.diffAgainst); }
+    if (S.loadingDiff || !S.diff) return h('div', { class: 'muted' }, 'Comparing runs\u2026');
+    const r = S.diff;
+    const wrap = h('div', { class: 'disc-diff' });
+    const cands = r.candidates || [];
+    const sel = h('select', { 'aria-label': 'Compare with run', disabled: cands.length ? null : true }, cands.length
+      ? cands.map(function (c) {
+        const cc = c.counts || {};
+        return h('option', { value: c.id, selected: c.id === r.against ? true : null }, fmtTime(c.started || c.finished) + (c.mode === 'active' ? ' \u00b7 active' : '') + (cc.entities !== undefined ? ' \u00b7 ' + cc.entities + ' hosts, ' + (cc.connections || 0) + ' links' : ''));
+      })
+      : [h('option', { value: '' }, 'no earlier completed run')]);
+    sel.addEventListener('change', function () { loadDiff(sel.value); });
+    wrap.appendChild(h('div', { class: 'row disc-toolbar' }, [
+      h('label', { class: 'row disc-against' }, ['Compared with', sel]),
+      r.against && r.diff && r.diff.computed ? h('span', { class: 'muted' }, 'both runs correlated against the current project' + (r.persisted ? ' \u00b7 stored with the run' : '')) : null,
+    ]));
+    if (r.error) { wrap.appendChild(h('div', { class: 'imp-warn' }, r.error)); return wrap; }
+    if (!r.against) {
+      wrap.appendChild(h('div', { class: 'muted' }, 'This is the first completed run of the project; start another run later and it will be compared with this one here.'));
+      return wrap;
+    }
+    const d = r.diff || {};
+    const c = d.counts || {};
+    wrap.appendChild(h('div', { class: 'row disc-summary' }, [
+      h('span', { class: 'chip ' + (c.new_devices ? 'on' : '') }, '+' + (c.new_devices || 0) + ' devices'),
+      h('span', { class: 'chip ' + (c.missing_devices ? 'warn' : '') }, '\u2212' + (c.missing_devices || 0) + ' devices'),
+      h('span', { class: 'chip ' + (c.moved ? 'on' : '') }, (c.moved || 0) + ' moved'),
+      h('span', { class: 'chip ' + (c.changed ? 'on' : '') }, (c.changed || 0) + ' changed'),
+      h('span', { class: 'chip ' + (c.new_links ? 'on' : '') }, '+' + (c.new_links || 0) + ' links'),
+      h('span', { class: 'chip ' + (c.lost_links ? 'warn' : '') }, '\u2212' + (c.lost_links || 0) + ' links'),
+      h('span', { class: 'muted' }, (c.paired || 0) + ' devices seen in both runs, ' + (c.unchanged || 0) + ' unchanged'),
+    ]));
+    if (!c.changes) {
+      wrap.appendChild(h('div', { class: 'muted' }, 'No changes since ' + runLabel(r.against) + '.'));
+      return wrap;
+    }
+    const section = function (title, n, body, hint) {
+      if (!n) return;
+      wrap.appendChild(h('h4', { class: 'disc-diff-h' }, [title, ' ', h('span', { class: 'chip' }, String(n))]));
+      if (hint) wrap.appendChild(h('div', { class: 'muted disc-diff-hint' }, hint));
+      wrap.appendChild(body);
+    };
+    section('New devices', c.new_devices, diffDeviceTable(d.new_devices || [], 'Where'), 'Seen in this run but not in the earlier one. Promote them from the New devices tab.');
+    section('Missing devices', c.missing_devices, diffDeviceTable(d.missing_devices || [], 'Was on'), 'Seen in the earlier run but not in this one: unplugged, powered down, or outside this run\u2019s sources.');
+    section('Moved', c.moved, diffMovedTable(d.moved || []), 'Same device (by MAC, serial or name), different switch port.');
+    section('Changed', c.changed, diffChangedTable(d.changed || []), 'IP, VLAN, hostname or Dante name differs from the earlier run.');
+    section('New links', c.new_links, diffLinkTable(d.new_links || []), 'Switch-port connections that were not reported in the earlier run.');
+    section('Lost links', c.lost_links, diffLinkTable(d.lost_links || []), 'Switch-port connections the earlier run reported and this one did not.');
+    return wrap;
+  }
+
   function drawFindings() {
     findWrap.innerHTML = '';
     bulkBar = null;
@@ -567,12 +710,13 @@ export function mount(el, ctx) {
     const f = S.findings;
     if (!f) { findWrap.appendChild(h('div', { class: 'muted' }, S.runs.length ? 'Pick a run above to see its findings.' : 'Run discovery to see what is on the network.')); return; }
     const c = f.counts || {};
+    const dc = S.diff && S.diff.diff && S.diff.diff.counts ? S.diff.diff.counts.changes : (S.run && S.run.diff && S.run.diff.against && S.run.diff.counts ? S.run.diff.counts.changes : null);
     const tabs = [
       ['new', 'New devices', c.new || 0], ['match', 'Matches existing', (c.matched || 0) + (c.possible || 0)], ['conn', 'Connections', c.connections || 0],
-      ['net', 'Networks / VLANs', c.networks || 0], ['unres', 'Unresolved', (c.unresolved || 0) + (c.ignored || 0)],
+      ['net', 'Networks / VLANs', c.networks || 0], ['unres', 'Unresolved', (c.unresolved || 0) + (c.ignored || 0)], ['diff', 'Changes', dc],
     ];
     const bar = h('div', { class: 'adm-tabs disc-tabs', role: 'tablist' }, tabs.map(function (t) {
-      return h('button', { type: 'button', role: 'tab', class: 'small', 'aria-selected': S.tab === t[0] ? 'true' : 'false', 'data-tab': t[0], onclick: function () { S.tab = t[0]; S.selected = {}; drawFindings(); } }, t[1] + ' (' + t[2] + ')');
+      return h('button', { type: 'button', role: 'tab', class: 'small', 'aria-selected': S.tab === t[0] ? 'true' : 'false', 'data-tab': t[0], onclick: function () { S.tab = t[0]; S.selected = {}; drawFindings(); } }, t[1] + (t[2] === null || t[2] === undefined ? '' : ' (' + t[2] + ')'));
     }));
     findWrap.appendChild(h('div', { class: 'row disc-summary' }, [
       h('span', { class: 'chip' }, (c.entities || 0) + ' hosts seen'), h('span', { class: 'chip' }, (c.cables || 0) + ' cables proposed'),
@@ -581,7 +725,7 @@ export function mount(el, ctx) {
     findWrap.appendChild(bar);
     const body = h('div', { class: 'disc-tab-body', role: 'tabpanel' });
     findWrap.appendChild(body);
-    body.appendChild({ new: newDevicesTab, match: matchesTab, conn: connectionsTab, net: networksTab, unres: unresolvedTab }[S.tab](f));
+    body.appendChild(S.tab === 'diff' ? diffTab() : { new: newDevicesTab, match: matchesTab, conn: connectionsTab, net: networksTab, unres: unresolvedTab }[S.tab](f));
     (f.notes || []).slice(0, 12).forEach(function (n) { findWrap.appendChild(h('div', { class: 'muted', style: { fontSize: '12px' } }, n)); });
   }
 
