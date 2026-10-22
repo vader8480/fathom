@@ -19,6 +19,32 @@ Python WSGI server (`fathom/server.py`) plus a no-build ES-module frontend in
 - All data lives under `FATHOM_DATA` (default `~/.fathom`; `/data` in Docker).
   Writes are atomic and per-project locked (`project.project_lock`).
 
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request and on pushes to
+`main` (Ubuntu, Python 3.12, Node LTS, Google Chrome stable as
+`FATHOM_CHROME`): `python -m unittest discover -s tests`,
+`node --test tests/js/*.test.mjs` and `fathom selftest`, about 2 minutes
+end to end. Logs are uploaded as an artifact when a step fails. The `Tests`
+job installs `.[serve,discovery]` when the `discovery` extra exists in
+`pyproject.toml`, else `.[serve]`.
+
+- **Approve PR** posts an approving review from `github-actions[bot]` on
+  same-repo PRs once tests pass (skipped if one is already there). Needs
+  Settings → Actions → General → Workflow permissions → "Allow GitHub Actions
+  to create and approve pull requests".
+- **Auto-merge worker PR** squash-merges non-draft PRs from `cursor/*`
+  branches (deleting the branch) after the approval. It is on by default;
+  switch it off with the repository variable `AUTO_MERGE_WORKER_PRS=false`
+  (Settings → Secrets and variables → Actions → Variables). It uses
+  GitHub-native auto-merge when "Allow auto-merge" (Settings → General →
+  Pull Requests) and required status checks on the base branch exist, and
+  merges directly otherwise. Merges made by the workflow token do not start
+  a `push` run on `main`; the PR run is the record.
+- A PR only gets a run once the workflow file is in its base branch (GitHub
+  reads workflows from the PR merge commit); push a commit or close/reopen
+  an older PR to start its first run.
+
 ## Application server
 
 `ccc-apps01` (`10.6.9.239`) is the application server. The checkout is

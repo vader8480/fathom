@@ -1,0 +1,175 @@
+# Fathom CI: unit tests (incl. headless-Chrome frontend smoke), node tests and
+# `fathom selftest`, then an approving review and (for cursor/* worker
+# branches) a squash merge once everything is green.
+#
+# Repo settings this workflow depends on (Settings → Actions → General →
+# Workflow permissions): "Allow GitHub Actions to create and approve pull
+# requests" must be ON for the auto-approve job. Settings → General → Pull
+# Requests → "Allow auto-merge" must be ON for GitHub-native auto-merge; without
+# it (or without required status checks on the base branch) the auto-merge
+# job squash-merges directly, since the tests already passed in this run.
+#
+# Switch the merge job off by creating a repository variable
+# AUTO_MERGE_WORKER_PRS=false (Settings → Secrets and variables → Actions →
+# Variables). Unset or any other value means ON.
+
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install Fathom
+        run: |
+          set -euo pipefail
+          extras="serve"
+          # The `discovery` extra (zeroconf) only exists on some branches.
+          if grep -Eq '^discovery\s*=' pyproject.toml; then
+            extras="serve,discovery"
+          fi
+          echo "Installing .[${extras}]"
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[${extras}]"
+
+      - name: Install Google Chrome
+        run: |
+          set -euo pipefail
+          if ! command -v google-chrome-stable >/dev/null 2>&1; then
+            curl -fsSL -o /tmp/chrome.deb \
+              https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq /tmp/chrome.deb
+          fi
+          chrome="$(command -v google-chrome-stable)"
+          "$chrome" --version
+          echo "FATHOM_CHROME=${chrome}" >> "$GITHUB_ENV"
+
+      - name: Python tests (unittest, incl. headless-Chrome smoke)
+        run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          python -m unittest discover -s tests -v 2>&1 | tee ci-logs/unittest.log
+
+      - name: Frontend tests (node --test)
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          node --test tests/js/*.test.mjs 2>&1 | tee ci-logs/node-test.log
+
+      - name: fathom selftest
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          fathom selftest 2>&1 | tee ci-logs/selftest.log
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  auto-approve:
+    name: Approve PR
+    needs: tests
+    # Same-repo PRs only: a fork's GITHUB_TOKEN is read-only anyway.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Approve unless already approved by github-actions[bot]
+        run: |
+          set -euo pipefail
+          existing="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
+            --jq '[.[] | select(.user.login == "github-actions[bot]" and .state == "APPROVED")] | length')"
+          if [ "${existing}" != "0" ]; then
+            echo "PR #${PR_NUMBER} already has an approving review from github-actions[bot]; skipping."
+            exit 0
+          fi
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
+            -f event=APPROVE \
+            -f body="CI passed on ${GITHUB_SHA} (run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}). Approved automatically." \
+            --jq '"Approved: review " + (.id|tostring) + " state " + .state'
+
+  auto-merge:
+    name: Auto-merge worker PR
+    needs: [tests, auto-approve]
+    # ON by default for non-draft, same-repo PRs from cursor/* branches.
+    # Switch off with repository variable AUTO_MERGE_WORKER_PRS=false.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.draft == false &&
+      startsWith(github.event.pull_request.head.ref, 'cursor/') &&
+      vars.AUTO_MERGE_WORKER_PRS != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+    steps:
+      - name: Enable auto-merge (squash, delete branch)
+        run: |
+          set -uo pipefail
+          # GitHub-native auto-merge needs "Allow auto-merge" plus required
+          # status checks on the base branch. If either is missing, it fails
+          # with "Pull request is in clean status" / "not enabled"; in that
+          # case merge now, since the tests already passed in this run.
+          out="$(gh pr merge --auto --squash --delete-branch "${PR_URL}" 2>&1)"
+          rc=$?
+          echo "${out}"
+          if [ "${rc}" -eq 0 ]; then
+            echo "Auto-merge enabled; GitHub merges when the remaining checks pass."
+            exit 0
+          fi
+          case "${out,,}" in
+            *"clean status"*|*"not allowed"*|*"not enabled"*|*"auto merge"*|*"auto-merge"*)
+              echo "Native auto-merge unavailable; squash-merging directly."
+              gh pr merge --squash --delete-branch "${PR_URL}"
+              ;;
+            *)
+              exit "${rc}"
+              ;;
+          esac

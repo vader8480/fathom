@@ -1,5 +1,7 @@
 # Fathom
 
+[![CI](https://github.com/vader8480/fathom/actions/workflows/ci.yml/badge.svg)](https://github.com/vader8480/fathom/actions/workflows/ci.yml)
+
 **Know your AV system.** Fathom documents audio, video and lighting
 systems room by room: every device with its real ports, every cable
 port-to-port with its tag, the network, DMX patch, racks, floor plans and
