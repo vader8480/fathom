@@ -13,11 +13,16 @@ Every probe module exposes
 - ``test(settings) -> dict`` — a quick capability / reachability check used
   by the Test button; never starts a listen window.
 
-Phase 1 ships passive probes only. They read from a controller that already
-holds the data (UniFi), or listen to what devices already broadcast (mDNS,
-LLDP / CDP, the host's ARP table). None of them sends a packet to an audio
-device; the mDNS browse is the same standard multicast query Dante Controller
-issues.
+Passive probes (Phase 1) read from a controller that already holds the data
+(UniFi), or listen to what devices already broadcast (mDNS, LLDP / CDP, the
+host's ARP table). None of them sends a packet to an audio device; the mDNS
+browse is the same standard multicast query Dante Controller issues.
+
+Active probes (Phase 2: SNMP, Yamaha SCP, Blackmagic Videohub, Q-SYS QRC)
+send read-only queries to the hosts the user lists — and only to those. They
+are off by default (``ProbeInfo.default_enabled``), declare what they put on
+the wire (``sends``), run one host at a time with a pause between requests
+and a timeout per request, and never issue a write / set command.
 """
 
 from __future__ import annotations
@@ -42,8 +47,10 @@ class ProbeInfo:
     maturity: str = "experimental"
     help: str = ""
     sends: str = ""  # what the probe puts on the wire, in one line
-    needs: List[str] = field(default_factory=list)  # capabilities: zeroconf, net_raw, linux
-    fields: List[Dict[str, Any]] = field(default_factory=list)  # settings fields shown in the UI
+    needs: List[str] = field(default_factory=list)  # capabilities: zeroconf, net_raw, linux, puresnmp
+    fields: List[Dict[str, Any]] = field(default_factory=list)  # settings fields shown in the UI (types: text, check, secret, list, select)
+    default_enabled: bool = True  # active probes are opt-in
+    targets: str = ""  # active probes: the settings key that lists the hosts they may contact
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -178,10 +185,33 @@ def fixture_delay(window: float) -> float:
 
 
 def all_probes() -> List[Any]:
-    """Probe modules in UI order."""
-    from . import arp, lldp, mdns, unifi
+    """Probe modules / objects in UI order: passive first, then the opt-in active ones."""
+    from . import arp, consoles, lldp, mdns, snmp, unifi
 
-    return [unifi, mdns, lldp, arp]
+    return [unifi, mdns, lldp, arp, snmp, consoles.YAMAHA, consoles.VIDEOHUB, consoles.QSYS]
+
+
+def host_list(value: Any) -> List[str]:
+    """Normalise a ``list`` field (comma / newline / space separated text, or a JSON list) to unique host strings."""
+    if isinstance(value, (list, tuple)):
+        items = [str(x) for x in value]
+    else:
+        items = str(value or "").replace(";", ",").replace("\n", ",").replace(" ", ",").split(",")
+    out: List[str] = []
+    for it in items:
+        it = it.strip()
+        if it and it not in out:
+            out.append(it)
+    return out
+
+
+def split_host_port(item: str, default_port: int) -> Any:
+    """``"10.0.0.1:1611"`` -> ``("10.0.0.1", 1611)``; bare hosts get ``default_port``."""
+    host, port = item.strip(), default_port
+    if host.count(":") == 1 and host.rsplit(":", 1)[1].isdigit():
+        host, p = host.rsplit(":", 1)
+        port = int(p)
+    return host, port
 
 
 def probe_by_id(probe_id: str) -> Optional[Any]:
@@ -193,5 +223,5 @@ def probe_by_id(probe_id: str) -> Optional[Any]:
 
 __all__ = [
     "ACTIVE", "MATURITIES", "PASSIVE", "Neighbour", "NetworkObs", "Observation", "ProbeInfo", "ProbeResult",
-    "all_probes", "fixture_delay", "fixture_dir", "fixture_payload", "probe_by_id",
+    "all_probes", "fixture_delay", "fixture_dir", "fixture_payload", "host_list", "probe_by_id", "split_host_port",
 ]

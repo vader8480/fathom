@@ -21,10 +21,12 @@ dependencies = []
 [project.optional-dependencies]
 serve = ["gunicorn>=21"]
 yaml = ["pyyaml>=6"]
-# Network discovery: the mDNS / Dante browser needs zeroconf. The UniFi, LLDP
-# and ARP probes are stdlib-only; without this extra the Discovery view shows
-# an install hint and only those three probes are offered.
-discovery = ["zeroconf>=0.100"]
+# Network discovery: the mDNS / Dante browser needs zeroconf and the opt-in
+# SNMP probe needs puresnmp (SNMPv3 privacy additionally needs
+# puresnmp[crypto]). The UniFi, LLDP, ARP and console probes are stdlib-only;
+# without this extra the Discovery view shows an install hint and offers only
+# those sources.
+discovery = ["zeroconf>=0.100", "puresnmp>=2.0"]
 dev = ["pytest>=7"]
 
 [project.scripts]

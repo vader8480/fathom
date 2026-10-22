@@ -1,0 +1,537 @@
+{
+ "fetched": "2026-10-21T14:05:00Z",
+ "hosts": {
+  "10.20.0.5": {
+   "host": "10.20.0.5",
+   "port": 49280,
+   "status": "ok",
+   "error": "",
+   "elapsed": 6.4,
+   "responses": [
+    {
+     "cmd": "devinfo productname",
+     "reply": "OK devinfo productname \"CL5\""
+    },
+    {
+     "cmd": "devinfo deviceid",
+     "reply": "OK devinfo deviceid \"0x00A0DE500005\""
+    },
+    {
+     "cmd": "devinfo devicename",
+     "reply": "OK devinfo devicename \"FOH-CL5\""
+    },
+    {
+     "cmd": "devinfo protocolver",
+     "reply": "OK devinfo protocolver \"1.7.0\""
+    },
+    {
+     "cmd": "sscurrent_ex MIXER:Lib/Scene",
+     "reply": "OK sscurrent_ex MIXER:Lib/Scene 12"
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 0 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 0 0 \"Kick In\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 1 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 1 0 \"Kick Out\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 2 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 2 0 \"Snare Top\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 3 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 3 0 \"Snare Btm\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 4 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 4 0 \"Hi-Hat\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 5 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 5 0 \"Tom 1\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 6 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 6 0 \"Tom 2\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 7 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 7 0 \"Floor\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 8 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 8 0 \"OH L\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 9 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 9 0 \"OH R\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 10 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 10 0 \"Bass DI\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 11 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 11 0 \"Bass Mic\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 12 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 12 0 \"EGtr 1\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 13 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 13 0 \"EGtr 2\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 14 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 14 0 \"AGtr\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 15 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 15 0 \"Keys L\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 16 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 16 0 \"Keys R\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 17 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 17 0 \"Pads L\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 18 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 18 0 \"Pads R\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 19 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 19 0 \"Vox 1\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 20 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 20 0 \"Vox 2\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 21 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 21 0 \"Vox 3\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 22 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 22 0 \"Vox 4\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 23 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 23 0 \"WL HH 1\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 24 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 24 0 \"WL HH 2\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 25 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 25 0 \"Lectern\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 26 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 26 0 \"Choir L\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 27 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 27 0 \"Choir R\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 28 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 28 0 \"PB L\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 29 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 29 0 \"PB R\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 30 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 30 0 \"Click\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 31 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 31 0 \"Talkback\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 32 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 32 0 \"ch 33\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 33 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 33 0 \"ch 34\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 34 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 34 0 \"ch 35\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 35 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 35 0 \"ch 36\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 36 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 36 0 \"ch 37\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 37 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 37 0 \"ch 38\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 38 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 38 0 \"ch 39\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 39 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 39 0 \"ch 40\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 40 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 40 0 \"ch 41\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 41 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 41 0 \"ch 42\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 42 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 42 0 \"ch 43\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 43 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 43 0 \"ch 44\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 44 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 44 0 \"ch 45\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 45 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 45 0 \"ch 46\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 46 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 46 0 \"ch 47\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 47 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 47 0 \"ch 48\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 48 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 48 0 \"ch 49\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 49 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 49 0 \"ch 50\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 50 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 50 0 \"ch 51\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 51 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 51 0 \"ch 52\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 52 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 52 0 \"ch 53\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 53 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 53 0 \"ch 54\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 54 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 54 0 \"ch 55\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 55 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 55 0 \"ch 56\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 56 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 56 0 \"ch 57\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 57 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 57 0 \"ch 58\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 58 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 58 0 \"ch 59\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 59 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 59 0 \"ch 60\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 60 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 60 0 \"ch 61\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 61 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 61 0 \"ch 62\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 62 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 62 0 \"ch 63\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 63 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 63 0 \"ch 64\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 64 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 64 0 \"ch 65\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 65 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 65 0 \"ch 66\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 66 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 66 0 \"ch 67\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 67 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 67 0 \"ch 68\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 68 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 68 0 \"ch 69\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 69 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 69 0 \"ch 70\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 70 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 70 0 \"ch 71\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 71 0",
+     "reply": "OK get MIXER:Current/InCh/Label/Name 71 0 \"ch 72\""
+    },
+    {
+     "cmd": "get MIXER:Current/InCh/Label/Name 72 0",
+     "reply": "ERROR get InvalidArgument"
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 0 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 0 0 \"IEM Drums\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 1 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 1 0 \"IEM Bass\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 2 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 2 0 \"IEM Gtr\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 3 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 3 0 \"IEM Keys\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 4 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 4 0 \"IEM Vox 1\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 5 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 5 0 \"IEM Vox 2\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 6 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 6 0 \"Wedge FOH\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 7 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 7 0 \"Fills\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 8 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 8 0 \"Subs\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 9 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 9 0 \"Lobby\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 10 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 10 0 \"Stream L\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 11 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 11 0 \"Stream R\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 12 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 12 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 13 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 13 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 14 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 14 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 15 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 15 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 16 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 16 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 17 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 17 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 18 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 18 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 19 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 19 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 20 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 20 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 21 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 21 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 22 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 22 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 23 0",
+     "reply": "OK get MIXER:Current/Mix/Label/Name 23 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mix/Label/Name 24 0",
+     "reply": "ERROR get InvalidArgument"
+    },
+    {
+     "cmd": "get MIXER:Current/Mtrx/Label/Name 0 0",
+     "reply": "OK get MIXER:Current/Mtrx/Label/Name 0 0 \"Main L\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mtrx/Label/Name 1 0",
+     "reply": "OK get MIXER:Current/Mtrx/Label/Name 1 0 \"Main R\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mtrx/Label/Name 2 0",
+     "reply": "OK get MIXER:Current/Mtrx/Label/Name 2 0 \"Record L\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mtrx/Label/Name 3 0",
+     "reply": "OK get MIXER:Current/Mtrx/Label/Name 3 0 \"Record R\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mtrx/Label/Name 4 0",
+     "reply": "OK get MIXER:Current/Mtrx/Label/Name 4 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mtrx/Label/Name 5 0",
+     "reply": "OK get MIXER:Current/Mtrx/Label/Name 5 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mtrx/Label/Name 6 0",
+     "reply": "OK get MIXER:Current/Mtrx/Label/Name 6 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mtrx/Label/Name 7 0",
+     "reply": "OK get MIXER:Current/Mtrx/Label/Name 7 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/Mtrx/Label/Name 8 0",
+     "reply": "ERROR get InvalidArgument"
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 0 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 0 0 \"Drums\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 1 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 1 0 \"Band\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 2 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 2 0 \"Vox\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 3 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 3 0 \"Speech\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 4 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 4 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 5 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 5 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 6 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 6 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 7 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 7 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 8 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 8 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 9 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 9 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 10 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 10 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 11 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 11 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 12 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 12 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 13 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 13 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 14 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 14 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 15 0",
+     "reply": "OK get MIXER:Current/DCA/Label/Name 15 0 \"\""
+    },
+    {
+     "cmd": "get MIXER:Current/DCA/Label/Name 16 0",
+     "reply": "ERROR get InvalidArgument"
+    }
+   ]
+  },
+  "10.20.0.80": {
+   "host": "10.20.0.80",
+   "port": 49280,
+   "status": "error",
+   "error": "10.20.0.80:49280: cannot connect: timed out",
+   "elapsed": 4.0
+  }
+ }
+}
