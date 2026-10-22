@@ -91,7 +91,7 @@ SHELL_ASSETS = [
     "static/js/app.js", "static/js/api.js", "static/js/model-core.js", "static/js/inspector.js", "static/js/assistant-ui.js",
     "static/js/patchtable.js", "static/js/patchtable-core.js", "static/js/patchview.js", "static/js/patchview-core.js",
     "static/js/floorplan.js", "static/js/floorplan-core.js", "static/js/rack.js", "static/js/rack-core.js",
-    "static/js/schedules.js", "static/js/inventory.js", "static/js/views-admin.js", "static/js/merge-ui.js", "static/js/views-discovery.js",
+    "static/js/schedules.js", "static/js/inventory.js", "static/js/views-admin.js", "static/js/merge-ui.js", "static/js/views-discovery.js", "static/js/suggest-ui.js",
     "static/js/views-sop.js", "static/css/sop.css", "static/icons/icon-192.png", "manifest.webmanifest",
 ]
 SCHEDULE_KINDS = ("patch", "cables", "ip", "dmx", "bom", "inventory", "racks", "labels")
@@ -926,6 +926,16 @@ def r_library(req: Request) -> Response:
     doc = _doc_for_query(req)
     ts = list_templates(q=req.query.get("q", ""), discipline=req.query.get("discipline", ""), kind=req.query.get("kind", ""), doc=doc)
     return Response.json({"templates": [_template_summary(t) for t in ts]})
+
+
+@route("GET", "/api/v2/library/suggest", role="viewer", summary="Suggest library models for manufacturer / model / name strings (?manufacturer=&model=&text=&kind=&project=&limit=)", tags=["library"])
+def r_library_suggest(req: Request) -> Response:
+    from .library.suggest import suggest_models
+
+    limit = _int(req.query.get("limit"), 5)
+    q = {k: str(req.query.get(k) or "")[:200] for k in ("manufacturer", "model", "text", "kind")}
+    out = suggest_models(q["manufacturer"], q["model"], q["text"], kind=q["kind"], doc=_doc_for_query(req), limit=max(1, min(limit, 20)))
+    return Response.json({"query": q, "suggestions": out})
 
 
 @route("GET", r"/api/v2/library/(?P<tid>[A-Za-z0-9][A-Za-z0-9._-]{0,127})", role="viewer", summary="Get a template", tags=["library"])
@@ -2075,7 +2085,21 @@ def r_import_preview(req: Request) -> Response:
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return Response.json({"kind": kind, "ops": out.get("ops") or [], "summary": out.get("summary") or {}, "warnings": out.get("warnings") or [],
-                          "errors": out.get("errors") or [], "base_revision": _rev(doc)})
+                          "errors": out.get("errors") or [], "base_revision": _rev(doc), "suggestions": _op_suggestions(out.get("ops") or [], doc)})
+
+
+def _op_suggestions(ops: List[Dict[str, Any]], doc: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
+    """Model suggestions for the devices a one-shot import would create without a template (device id → suggestions)."""
+    from .library.suggest import suggest_for_device
+
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for op in ops:
+        if not isinstance(op, dict) or op.get("coll") != "devices" or op.get("op") != "put" or not isinstance(op.get("value"), dict):
+            continue
+        sug = suggest_for_device(op["value"], doc)
+        if sug:
+            out[str(op.get("id") or op["value"].get("id"))] = sug
+    return out
 
 
 @route("GET", r"/api/v2/projects/" + _NAME + r"/imports/templates/(?P<kind>" + _EID + r")/(?P<table>[a-z0-9_-]{1,32})\.csv", role="viewer",

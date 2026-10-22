@@ -221,7 +221,8 @@ def _check_v2(check, skip, sample: Path, tmpd: Path) -> None:
     lib = library.load_library(refresh=True)
     bad = [tid for tid, t in lib.items() if library.validate_template(t)]
     check(len(lib) >= 48 and not bad, f"library: {len(lib)} templates, {len(bad)} invalid")
-    check([t["id"] for t in library.list_templates("rio")] == ["yamaha-rio1608-d2", "yamaha-rio3224-d2"], "library: search 'rio'")
+    check([t["id"] for t in library.list_templates("rio")] == ["yamaha-rio1608-d", "yamaha-rio1608-d2", "yamaha-rio3224-d", "yamaha-rio3224-d2"],
+          "library: search 'rio'")
 
     # ---- QR
     m1 = qr.matrix_text(qr.encode("FATHOM", "M", mask=2)).split()

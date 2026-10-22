@@ -6,6 +6,11 @@
 // The Changes tab diffs the shown run against an earlier completed run
 // (new / missing / moved devices, changed addresses, new / lost links).
 // Nothing runs unless the Run button is pressed.
+// Each new / matched host carries the server's library model suggestions
+// (findings[].model_suggestions); the chosen template travels with promote /
+// merge as body.templates so the device is set up like Add gear would.
+
+import { suggestionControl } from './suggest-ui.js';
 
 function h(tag, attrs, children) {
   const el = document.createElement(tag);
@@ -74,7 +79,7 @@ export function mount(el, ctx) {
   const store = ctx.store;
   const ro = function () { return !!store.readOnly; };
   const S = { sources: [], settings: null, limits: { min_window: 10, max_window: 300 }, runs: [], active: '', run: null, findings: null, runId: '', tab: 'new',
-    selected: {}, timer: null, caps: null, destroyed: false, loadingFindings: false, diff: null, diffAgainst: '', loadingDiff: false };
+    selected: {}, timer: null, caps: null, destroyed: false, loadingFindings: false, diff: null, diffAgainst: '', loadingDiff: false, models: {} };
 
   root.appendChild(h('h2', null, 'Discovery'));
   root.appendChild(h('p', { class: 'muted disc-intro' }, [
@@ -355,8 +360,27 @@ export function mount(el, ctx) {
     }, function (e) { S.loadingFindings = false; findWrap.innerHTML = ''; findWrap.appendChild(h('div', { class: 'imp-warn' }, msg(e))); });
   }
 
+  // Model suggestion controls per entity (rebuilt with the findings); their choice rides along with promote / merge.
+  function modelControl(e) {
+    const list = e.model_suggestions || [];
+    if (!list.length || e.status === 'unresolved' || e.status === 'ignored') return null;
+    const c = suggestionControl(list, { label: e.label, readOnly: ro(), pickTemplate: ctx.pickTemplate ? function () { return ctx.pickTemplate({}); } : null });
+    S.models[e.id] = c;
+    return c.el;
+  }
+  function templatesFor(ids) {
+    const out = {};
+    (ids || []).forEach(function (id) { const c = S.models[id]; if (c && c.value()) out[id] = c.value(); });
+    return Object.keys(out).length ? out : undefined;
+  }
+
   function promote(body, label) {
     if (ro()) { ctx.toast('Read-only', 'warn'); return Promise.resolve(); }
+    if (!body.templates) {
+      const ids = (body.entities || []).concat(Object.keys(body.merge || {}));
+      const t = templatesFor(ids);
+      if (t) body.templates = t;
+    }
     const flush = ctx.flush ? ctx.flush() : Promise.resolve();
     return flush.then(function () { return ctx.api.discoveryPromote(ctx.project, S.runId, body); }).then(function (r) {
       const s = r.summary || {};
@@ -393,9 +417,9 @@ export function mount(el, ctx) {
 
   function entityRow(e, cols, actions) {
     const key = 'e:' + e.id;
-    const tr = h('tr', { class: 'disc-row disc-' + e.status }, [
+    const tr = h('tr', { class: 'disc-row disc-' + e.status, 'data-entity': e.id }, [
       h('td', { class: 'disc-sel' }, actions ? selBox(key) : null),
-      td('Device', [h('div', { class: 'disc-name' }, e.label), h('div', { class: 'muted' }, [e.manufacturer, e.model].filter(Boolean).join(' ') || (e.kind_hint ? e.kind_hint : ''))]),
+      td('Device', [h('div', { class: 'disc-name' }, e.label), h('div', { class: 'muted' }, [e.manufacturer, e.model].filter(Boolean).join(' ') || (e.kind_hint ? e.kind_hint : '')), modelControl(e)]),
       td('Kind', e.kind || ''),
     ].concat(cols).concat([
       td('Addresses', addrs(e)),
@@ -705,6 +729,7 @@ export function mount(el, ctx) {
   function drawFindings() {
     findWrap.innerHTML = '';
     bulkBar = null;
+    S.models = {};
     if (S.run && S.run.active) { findWrap.appendChild(h('div', { class: 'muted' }, 'Findings appear when the run finishes.')); return; }
     if (S.loadingFindings) { findWrap.appendChild(h('div', { class: 'muted' }, 'Loading findings\u2026')); return; }
     const f = S.findings;

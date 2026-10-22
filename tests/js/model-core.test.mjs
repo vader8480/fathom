@@ -374,6 +374,32 @@ T('addDeviceFromTemplateOps', () => {
   assert.ok(!device(d, r.id), 'input doc untouched');
 });
 
+T('applyTemplateToDevice (model suggestions: accepting a suggestion sets what Add gear sets)', () => {
+  const applyT = need(mc, 'applyTemplateToDevice', 'FR-PV-11', S);
+  const tpl = {
+    id: 'yamaha-rio1608-d', manufacturer: 'Yamaha', model: 'Rio1608-D', name: 'Rio1608-D', kind: 'stage_io', brand: 'yamaha', dante: true,
+    ports: [
+      { group: 'Analog In', dir: 'in', medium: 'analog', connector: 'XLR3F', count: 16 },
+      { group: 'Analog Out', dir: 'out', medium: 'analog', connector: 'XLR3M', count: 8 },
+      { group: 'Dante', dir: 'io', medium: 'dante', connector: 'etherCON', names: ['Primary', 'Secondary'], channels: 16 },
+    ],
+  };
+  const dev = {
+    id: 'y004', name: 'Y004-Yamaha-Rio1608-STG', kind: 'other', room: 'main', manufacturer: 'Yamaha Corporation', model: 'Rio1608-D',
+    interfaces: [{ ip: '10.20.0.23' }], note: 'from dante',
+    ports: [{ id: 'in-1', medium: 'analog', dir: 'in', index: 1, label: 'Stage 1' }, { id: 'out-1', medium: 'analog', dir: 'out', index: 1, label: 'Mon 1' }],
+  };
+  const out = applyT(dev, clone(tpl), vocab);
+  assert.equal(out, dev, 'in place, returns the device');
+  assert.equal(dev.template, 'yamaha-rio1608-d');
+  assert.deepEqual([dev.kind, dev.manufacturer, dev.model, dev.brand, dev.dante], ['stage_io', 'Yamaha', 'Rio1608-D', 'yamaha', true]);
+  assert.equal(dev.ports.length, 16 + 8 + 2, "the template's expanded ports replace the imported ones");
+  assert.deepEqual(dev.ports.filter((p) => p.label).map((p) => [p.id, p.label]), [['analog-in-1', 'Stage 1'], ['analog-out-1', 'Mon 1']],
+    'labels carry over by medium + direction + index');
+  assert.deepEqual([dev.id, dev.name, dev.room, dev.note, dev.interfaces], ['y004', 'Y004-Yamaha-Rio1608-STG', 'main', 'from dante', [{ ip: '10.20.0.23' }]], 'identity kept');
+  assert.equal(dev.discipline, undefined, 'no discipline override when the template agrees with the kind');
+});
+
 T('setPortsOps', () => {
   const ports = [{ id: 'in-a', name: 'In A', dir: 'in', medium: 'analog' }];
   const d2 = apply(fx(), asOps(need(mc, 'setPortsOps', 'FR-PORT-06', S)(fx(), 'sub-x2', ports)));

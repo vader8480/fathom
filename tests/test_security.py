@@ -42,6 +42,7 @@ SPEC_ROLES = {
     ("GET", "/api/v2/backups/{}"): "admin", ("DELETE", "/api/v2/backups/{}"): "admin", ("POST", "/api/v2/backups/{}/restore"): "admin",
     ("GET", "/healthz"): "public", ("GET", "/api/v2/schema.json"): "public",
     ("GET", "/api/v2/meta"): "viewer", ("GET", "/api/v2/library"): "viewer", ("GET", "/api/v2/library/{}"): "viewer",
+    ("GET", "/api/v2/library/suggest"): "viewer",
     ("POST", "/api/v2/library"): "editor", ("DELETE", "/api/v2/library/{}"): "editor", ("GET", "/api/v2/presets"): "viewer",
     ("GET", "/api/v2/projects"): "viewer", ("POST", "/api/v2/projects"): "editor", ("GET", "/api/v2/projects/{}"): "viewer",
     ("PUT", "/api/v2/projects/{}"): "editor", ("POST", "/api/v2/projects/{}/changes"): "editor", ("DELETE", "/api/v2/projects/{}"): "admin",

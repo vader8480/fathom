@@ -447,6 +447,24 @@ a.btn.small{padding:2px 9px;font-size:12px;min-height:26px}
 .disc-conn{min-width:960px}
 .badge-discovered{display:inline-block;padding:0 6px;border-radius:4px;font-size:10px;border:1px dashed var(--ok);color:var(--ok);margin-left:6px;vertical-align:middle}
 .disc-diff .chip.warn{color:var(--warn);border-color:rgba(255,149,72,.5)}
+.ms-suggest{margin-top:6px;font-size:12px;max-width:420px}
+.ms-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ms-label{flex-basis:100%;color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap}
+.ms-select{flex:1 1 180px;min-width:0;max-width:320px;width:auto}
+.ms-conf{font-size:10.5px;min-height:20px;padding:0 6px;white-space:nowrap}
+.ms-conf[hidden]{display:none}
+.ms-evidence{font-size:11px;margin-top:2px;overflow-wrap:anywhere}
+.ms-suggest[data-choice=none] .ms-evidence{opacity:.8}
+.imp-sugg{margin-top:8px;display:grid;gap:6px}
+.imp-sugg-row{display:grid;grid-template-columns:minmax(0,180px) minmax(0,1fr);gap:8px;align-items:start}
+.imp-sugg-dev{font-weight:600;font-size:12.5px;padding-top:4px;overflow-wrap:anywhere}
+@media (max-width:699px){
+  .ms-suggest{max-width:none}
+  .ms-select{max-width:none;flex:1 1 160px;min-height:44px}
+  .ms-row .ms-conf{margin-left:auto}
+  .imp-sugg-row{grid-template-columns:1fr}
+}
+@media (pointer:coarse){.ms-conf{min-height:26px}}
 .disc-against{gap:8px;font-size:12px;color:var(--muted)}
 .disc-against select{max-width:min(420px,70vw)}
 .disc-diff-h{margin:14px 0 2px;font-size:13px;display:flex;align-items:center;gap:6px}

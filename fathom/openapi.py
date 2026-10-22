@@ -163,6 +163,8 @@ def _components() -> Dict[str, Any]:
         "DiscoveryPromote": {"type": "object", "properties": {
             "entities": {"type": "array", "items": {"type": "string"}, "description": "entity ids to create as new devices"},
             "merge": {"type": "object", "additionalProperties": {"type": "string"}, "description": "entity id -> existing device id"},
+            "templates": {"type": "object", "additionalProperties": {"type": "string"},
+                          "description": "entity id -> library template id (an accepted model suggestion): new devices are set up from it like Add gear; merged devices get it when they have none"},
             "connections": {"type": "array", "items": {"type": "string"}, "description": "connection ids to add as cables"},
             "networks": {"type": "array", "items": {"type": "string"}},
             "ignore": {"type": "object", "properties": {"entities": {"type": "array", "items": {"type": "string"}}, "connections": {"type": "array", "items": {"type": "string"}},
