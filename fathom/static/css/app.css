@@ -373,7 +373,7 @@ a.btn.small{padding:2px 9px;font-size:12px;min-height:26px}
 .disc-maturity-tested{color:var(--text)}
 .disc-maturity-mature{color:var(--ok)}
 .disc-maturity-experimental{color:var(--warn);border-style:dashed}
-.disc-sends{font-size:11.5px;margin-bottom:6px}
+.disc-sends{font-size:11.5px;margin-bottom:6px;overflow-wrap:anywhere}
 .disc-sends-active{border-left:3px solid rgba(255,149,72,.6);padding-left:8px}
 .disc-card-active{border-color:rgba(255,149,72,.35)}
 .disc-optin{color:var(--muted);border-style:dashed}
