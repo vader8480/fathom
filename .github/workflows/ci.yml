@@ -125,11 +125,11 @@ jobs:
             echo "PR #${PR_NUMBER} already has an approving review from github-actions[bot]; skipping."
             exit 0
           fi
+          rc=0
           out="$(gh api -X POST "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
             -f event=APPROVE \
             -f body="CI passed on ${GITHUB_SHA} (run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}). Approved automatically." \
-            --jq '"Approved: review " + (.id|tostring) + " state " + .state' 2>&1)"
-          rc=$?
+            --jq '"Approved: review " + (.id|tostring) + " state " + .state' 2>&1)" || rc=$?
           echo "${out}"
           if [ "${rc}" -ne 0 ] && [[ "${out}" == *"not permitted to approve"* ]]; then
             echo "::error title=Repo setting required::Turn on Settings → Actions → General → Workflow permissions → 'Allow GitHub Actions to create and approve pull requests' (repo ${GITHUB_REPOSITORY}), then re-run this job."
@@ -163,8 +163,8 @@ jobs:
           # status checks on the base branch. If either is missing, it fails
           # with "Pull request is in clean status" / "not enabled"; in that
           # case merge now, since the tests already passed in this run.
-          out="$(gh pr merge --auto --squash --delete-branch "${PR_URL}" 2>&1)"
-          rc=$?
+          rc=0
+          out="$(gh pr merge --auto --squash --delete-branch "${PR_URL}" 2>&1)" || rc=$?
           echo "${out}"
           if [ "${rc}" -eq 0 ]; then
             echo "Auto-merge enabled; GitHub merges when the remaining checks pass."
