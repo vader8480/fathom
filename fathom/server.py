@@ -2776,12 +2776,14 @@ def r_trace_v2(req: Request) -> Response:
         paths = T.upstream_paths(g, node(src), max_depth=depth, limit=limit)
     else:
         paths = T.downstream_paths(g, node(src), max_depth=depth, limit=limit)
+    names = {d["id"]: str(d.get("name") or d["id"]) for d in T.doc_devices(doc, overlay) if isinstance(d, dict) and d.get("id")}
     out = []
     for p in paths:
         if dca:
             p = T.with_dca_hops(p)
         labels = T.hop_labels(doc, p, overlay)
-        hops = [dict(h, label=labels[i] if i < len(labels) else "") for i, h in enumerate(p.get("hops") or [])]
+        hops = [dict(h, label=labels[i] if i < len(labels) else "", device_name=names.get(str(h.get("device")), str(h.get("device") or "")))
+                for i, h in enumerate(p.get("hops") or [])]
         item = {"hops": hops, "cables": list(p.get("cables") or []), "via": list(p.get("via") or []), "text": T.path_text(doc, p, overlay)}
         if p.get("incomplete"):
             item["incomplete"] = p["incomplete"]

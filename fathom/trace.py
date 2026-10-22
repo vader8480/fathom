@@ -1199,6 +1199,12 @@ def _resolve_sub(doc: Doc, overlay: Optional[Dict[str, Any]], dev: Dict[str, Any
     """Port id / label / name first, then a console channel, then a stream-port sub-channel
     (``Dante 1`` is channel 1 of the Dante port, not the port whose group index is 1), then the
     group-index port rule."""
+    if text.startswith("~") and len(text) > 1:  # text node ref as returned by the API
+        return text
+    if text.startswith("@") and len(text) > 1:  # channel node ref as returned by the API (``@in-12``, ``@fx-1.A``)
+        cid = text[1:].partition(".")[0]
+        chans, _ = _console_sets(doc, overlay, dev["id"])
+        return text if any(c.get("id") == cid for c in chans or []) else None
     key = norm_name(text)
     for p in device_ports(dev):
         if p["id"] == text or (key and key in (norm_name(str(p.get("label") or "")), norm_name(str(p.get("name") or "")))):

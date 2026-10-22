@@ -362,6 +362,42 @@ class Overlay(unittest.TestCase):
         self.assertEqual((kick["name"], kick["source"]), ("Bass DI", "user"))
         self.assertEqual(requires("schema").validate_doc(doc) and [p for p in requires("schema").validate_doc(doc) if p["level"] == "error"], [])
 
+    def test_public_device_page_lists_channels_with_trace_buttons(self):
+        """§6.8.6 / §6.8.7: the viewer device page shows the console tables and trace buttons; builds (no API) get neither buttons nor the drawer."""
+        st, h, b = call(self.app, "GET", "/p/campus/d/foh-cl5")
+        self.assertEqual(st, 200, b[:300])
+        html = b.decode("utf-8")
+        self.assertIn("<h2>Console channels</h2>", html)
+        self.assertIn("source: imported, not applied yet", html)
+        self.assertIn("No sends are recorded", html)
+        for title in ("Inputs", "Buses", "DCAs &amp; mute groups", "Racks"):
+            self.assertIn(f"<summary>{title} ", html, title)
+        self.assertIn('data-trace="foh-cl5:@in-17"', html)
+        self.assertIn('data-trace-title="CH 17 · Kick In"', html)
+        self.assertIn('data-trace="foh-cl5:dante-primary"', html, "ports get a trace button too")
+        self.assertIn('data-trace="foh-cl5"', html, "and the whole device")
+        self.assertIn("static/js/trace-ui.js", html)
+        self.assertIn("static/css/trace.css", html)
+        self.assertIn("Dante Primary 1 “Vox 1”", html, "the Dante receive name decorates the input patch")
+        st, _, b = call(self.app, "GET", "/p/campus/d/rio-sl")
+        self.assertEqual(st, 200)
+        self.assertNotIn("<h2>Console channels</h2>", b.decode("utf-8"), "stage boxes have no console section")
+
+        from fathom.render_html import render_device_page
+
+        doc = read_json(self.pdir / "project.json")
+        built = render_device_page(doc, "foh-cl5", project="campus", overlay=None, link_style="build")
+        self.assertNotIn("data-trace=", built)
+        self.assertNotIn("trace-ui.js", built)
+        self.assertNotIn("<h2>Console channels</h2>", built, "nothing applied and no overlay → no section")
+        st, _, b = call(self.app, "POST", "/api/v2/projects/campus/devices/foh-cl5/channels/apply", {}, {"X-Fathom": "1"})
+        self.assertEqual(st, 200, b[:300])
+        doc = read_json(self.pdir / "project.json")
+        built = render_device_page(doc, "foh-cl5", project="campus", overlay=None, link_style="build")
+        self.assertIn("<h2>Console channels</h2>", built, "applied channels render in builds from the doc alone")
+        self.assertIn("source: device", built)
+        self.assertNotIn("data-trace=", built)
+
     def test_promote_copies_channels(self):
         requires("merge")
         from fathom import merge as M

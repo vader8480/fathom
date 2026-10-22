@@ -106,6 +106,8 @@ export function createApi(opts) {
     mergeDevices: function (name, survivor, duplicates, choices, baseRevision) {
       return send('POST', proj(name) + '/devices/merge', { survivor: survivor, duplicates: duplicates, choices: choices || {}, base_revision: baseRevision });
     },
+    channels: function (name, device) { return get(proj(name) + '/devices/' + enc(device) + '/channels'); },
+    applyChannels: function (name, device) { return send('POST', proj(name) + '/devices/' + enc(device) + '/channels/apply', {}); },
     offlineManifest: function (name) { return get(proj(name) + '/offline-manifest'); },
     history: function (name, o) { o = o || {}; return get(proj(name) + '/history', { limit: o.limit, before: o.before }); },
     historyDoc: function (name, rev) { return get(proj(name) + '/history/' + enc(rev)); },

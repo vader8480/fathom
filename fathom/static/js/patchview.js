@@ -1584,6 +1584,10 @@ export function mount(el, ctx) {
       if (sel.type === 'port' && (sel.port || sel.id)) {
         const pid = sel.port || sel.id.split(':')[1];
         selectPort(id, pid);
+      } else if (sel.type === 'channel') {
+        // a console channel lives inside the card: highlight the console, keep the channel selected
+        S.sel = new Set([id]); S.selWire = null; S.selPort = null;
+        applySelection();
       } else selectDevice(id, false);
       restoreFocus({device: id, port: sel.type === 'port' ? (sel.port || sel.id.split(':')[1]) : null});
     },

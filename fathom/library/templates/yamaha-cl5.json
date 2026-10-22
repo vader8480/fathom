@@ -46,6 +46,7 @@
       "group": "MY Slot",
       "dir": "io",
       "medium": "other",
+      "channels": 16,
       "count": 3
     },
     {
