@@ -118,17 +118,23 @@ jobs:
     steps:
       - name: Approve unless already approved by github-actions[bot]
         run: |
-          set -euo pipefail
-          existing="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
-            --jq '[.[] | select(.user.login == "github-actions[bot]" and .state == "APPROVED")] | length')"
+          set -uo pipefail
+          existing="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
+            --jq '[.[] | select(.user.login == "github-actions[bot]" and .state == "APPROVED")] | length')" || exit 1
           if [ "${existing}" != "0" ]; then
             echo "PR #${PR_NUMBER} already has an approving review from github-actions[bot]; skipping."
             exit 0
           fi
-          gh api -X POST "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
+          out="$(gh api -X POST "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
             -f event=APPROVE \
             -f body="CI passed on ${GITHUB_SHA} (run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}). Approved automatically." \
-            --jq '"Approved: review " + (.id|tostring) + " state " + .state'
+            --jq '"Approved: review " + (.id|tostring) + " state " + .state' 2>&1)"
+          rc=$?
+          echo "${out}"
+          if [ "${rc}" -ne 0 ] && [[ "${out}" == *"not permitted to approve"* ]]; then
+            echo "::error title=Repo setting required::Turn on Settings → Actions → General → Workflow permissions → 'Allow GitHub Actions to create and approve pull requests' (repo ${GITHUB_REPOSITORY}), then re-run this job."
+          fi
+          exit "${rc}"
 
   auto-merge:
     name: Auto-merge worker PR
