@@ -1,0 +1,304 @@
+{
+ "window": 60,
+ "zeroconf": "0.132.2",
+ "fetched": "2026-10-20T14:05:00Z",
+ "types": [
+  "_netaudio-arc._udp.local.",
+  "_netaudio-chan._udp.local.",
+  "_netaudio-cmc._udp.local.",
+  "_blackmagic._tcp.local.",
+  "_http._tcp.local.",
+  "_ssh._tcp.local.",
+  "_shure._tcp.local."
+ ],
+ "records": [
+  {
+   "type": "_netaudio-arc._udp.local.",
+   "name": "RIO-SL._netaudio-arc._udp.local.",
+   "server": "Rio3224-D-102021.local.",
+   "addresses": [
+    "10.20.0.21",
+    "10.21.0.21"
+   ],
+   "port": 4440,
+   "properties": {
+    "arcp_vers": "2.7.0",
+    "arcp_min": "1.1.1",
+    "router_vers": "4.2.6",
+    "router_info": "\"Rio3224-D\""
+   },
+   "heard": 2.1
+  },
+  {
+   "type": "_netaudio-chan._udp.local.",
+   "name": "RIO-SL._netaudio-chan._udp.local.",
+   "server": "Rio3224-D-102021.local.",
+   "addresses": [
+    "10.20.0.21",
+    "10.21.0.21"
+   ],
+   "port": 4440,
+   "properties": {},
+   "heard": 2.1
+  },
+  {
+   "type": "_netaudio-cmc._udp.local.",
+   "name": "RIO-SL._netaudio-cmc._udp.local.",
+   "server": "Rio3224-D-102021.local.",
+   "addresses": [
+    "10.20.0.21",
+    "10.21.0.21"
+   ],
+   "port": 4440,
+   "properties": {
+    "mf": "Yamaha",
+    "model": "Rio3224-D",
+    "id": "001DC1102021",
+    "process": "cmc",
+    "vers": "4.2.6"
+   },
+   "heard": 2.1
+  },
+  {
+   "type": "_netaudio-arc._udp.local.",
+   "name": "RIO-SR._netaudio-arc._udp.local.",
+   "server": "Rio3224-D-102022.local.",
+   "addresses": [
+    "10.20.0.22"
+   ],
+   "port": 4440,
+   "properties": {
+    "arcp_vers": "2.7.0",
+    "arcp_min": "1.1.1",
+    "router_vers": "4.2.6",
+    "router_info": "\"Rio3224-D\""
+   },
+   "heard": 2.1
+  },
+  {
+   "type": "_netaudio-chan._udp.local.",
+   "name": "RIO-SR._netaudio-chan._udp.local.",
+   "server": "Rio3224-D-102022.local.",
+   "addresses": [
+    "10.20.0.22"
+   ],
+   "port": 4440,
+   "properties": {},
+   "heard": 2.1
+  },
+  {
+   "type": "_netaudio-cmc._udp.local.",
+   "name": "RIO-SR._netaudio-cmc._udp.local.",
+   "server": "Rio3224-D-102022.local.",
+   "addresses": [
+    "10.20.0.22"
+   ],
+   "port": 4440,
+   "properties": {
+    "mf": "Yamaha",
+    "model": "Rio3224-D",
+    "id": "001DC1102022",
+    "process": "cmc",
+    "vers": "4.2.6"
+   },
+   "heard": 2.1
+  },
+  {
+   "type": "_netaudio-arc._udp.local.",
+   "name": "FOH-CL5._netaudio-arc._udp.local.",
+   "server": "CL5-FOH.local.",
+   "addresses": [
+    "10.20.0.5"
+   ],
+   "port": 4440,
+   "properties": {
+    "arcp_vers": "2.7.0",
+    "arcp_min": "1.1.1",
+    "router_vers": "4.2.6",
+    "router_info": "\"CL5\""
+   },
+   "heard": 2.1
+  },
+  {
+   "type": "_netaudio-chan._udp.local.",
+   "name": "FOH-CL5._netaudio-chan._udp.local.",
+   "server": "CL5-FOH.local.",
+   "addresses": [
+    "10.20.0.5"
+   ],
+   "port": 4440,
+   "properties": {},
+   "heard": 2.1
+  },
+  {
+   "type": "_netaudio-cmc._udp.local.",
+   "name": "FOH-CL5._netaudio-cmc._udp.local.",
+   "server": "CL5-FOH.local.",
+   "addresses": [
+    "10.20.0.5"
+   ],
+   "port": 4440,
+   "properties": {
+    "mf": "Yamaha",
+    "model": "CL5",
+    "id": "00A0DE500005",
+    "process": "cmc",
+    "vers": "4.2.6"
+   },
+   "heard": 2.1
+  },
+  {
+   "type": "_netaudio-arc._udp.local.",
+   "name": "QSYS-Core110f._netaudio-arc._udp.local.",
+   "server": "QSYS-Core110f.local.",
+   "addresses": [
+    "10.30.0.10"
+   ],
+   "port": 4440,
+   "properties": {
+    "arcp_vers": "2.7.0",
+    "arcp_min": "1.1.1",
+    "router_vers": "4.2.6",
+    "router_info": "\"Core_110f\""
+   },
+   "heard": 2.1
+  },
+  {
+   "type": "_netaudio-chan._udp.local.",
+   "name": "QSYS-Core110f._netaudio-chan._udp.local.",
+   "server": "QSYS-Core110f.local.",
+   "addresses": [
+    "10.30.0.10"
+   ],
+   "port": 4440,
+   "properties": {},
+   "heard": 2.1
+  },
+  {
+   "type": "_netaudio-cmc._udp.local.",
+   "name": "QSYS-Core110f._netaudio-cmc._udp.local.",
+   "server": "QSYS-Core110f.local.",
+   "addresses": [
+    "10.30.0.10"
+   ],
+   "port": 4440,
+   "properties": {
+    "mf": "QSC",
+    "model": "Core 110f",
+    "id": "006074123456",
+    "process": "cmc",
+    "vers": "4.2.6"
+   },
+   "heard": 2.1
+  },
+  {
+   "type": "_netaudio-arc._udp.local.",
+   "name": "ULXD4Q-STAGE._netaudio-arc._udp.local.",
+   "server": "ULXD4Q-STAGE.local.",
+   "addresses": [
+    "10.30.0.60"
+   ],
+   "port": 4440,
+   "properties": {
+    "arcp_vers": "2.7.0",
+    "arcp_min": "1.1.1",
+    "router_vers": "4.2.6",
+    "router_info": "\"ULXD4Q\""
+   },
+   "heard": 2.1
+  },
+  {
+   "type": "_netaudio-chan._udp.local.",
+   "name": "ULXD4Q-STAGE._netaudio-chan._udp.local.",
+   "server": "ULXD4Q-STAGE.local.",
+   "addresses": [
+    "10.30.0.60"
+   ],
+   "port": 4440,
+   "properties": {},
+   "heard": 2.1
+  },
+  {
+   "type": "_netaudio-cmc._udp.local.",
+   "name": "ULXD4Q-STAGE._netaudio-cmc._udp.local.",
+   "server": "ULXD4Q-STAGE.local.",
+   "addresses": [
+    "10.30.0.60"
+   ],
+   "port": 4440,
+   "properties": {
+    "mf": "Shure",
+    "model": "ULXD4Q",
+    "id": "000EDD445566",
+    "process": "cmc",
+    "vers": "4.2.6"
+   },
+   "heard": 2.1
+  },
+  {
+   "type": "_blackmagic._tcp.local.",
+   "name": "ATEM Mini Pro ISO._blackmagic._tcp.local.",
+   "server": "ATEM-Mini-Pro-ISO.local.",
+   "addresses": [
+    "10.30.0.40"
+   ],
+   "port": 9990,
+   "properties": {
+    "class": "AtemSwitcher",
+    "name": "ATEM Mini Pro ISO",
+    "protocol version": "2.30",
+    "unique id": "7c2e0daabb01"
+   },
+   "heard": 1.4
+  },
+  {
+   "type": "_ssh._tcp.local.",
+   "name": "companion-pi._ssh._tcp.local.",
+   "server": "companion-pi.local.",
+   "addresses": [
+    "10.30.0.122"
+   ],
+   "port": 22,
+   "properties": {},
+   "heard": 3.0
+  },
+  {
+   "type": "_http._tcp.local.",
+   "name": "Companion._http._tcp.local.",
+   "server": "companion-pi.local.",
+   "addresses": [
+    "10.30.0.122"
+   ],
+   "port": 8000,
+   "properties": {
+    "path": "/"
+   },
+   "heard": 3.1
+  },
+  {
+   "type": "_shure._tcp.local.",
+   "name": "ULXD4Q-STAGE._shure._tcp.local.",
+   "server": "ULXD4Q-STAGE.local.",
+   "addresses": [
+    "10.30.0.60"
+   ],
+   "port": 2202,
+   "properties": {
+    "model": "ULXD4Q",
+    "serial": "ULXD4Q-9001"
+   },
+   "heard": 2.7
+  },
+  {
+   "type": "_http._tcp.local.",
+   "name": "Fathom Dev._http._tcp.local.",
+   "server": "fathom-dev.local.",
+   "addresses": [
+    "10.30.0.200"
+   ],
+   "port": 8080,
+   "properties": {},
+   "heard": 5.0
+  }
+ ]
+}
