@@ -1,0 +1,13 @@
+{
+ "fetched": "2026-10-21T14:05:00Z",
+ "hosts": {
+  "10.30.0.90": {
+   "host": "10.30.0.90",
+   "port": 9990,
+   "status": "ok",
+   "error": "",
+   "elapsed": 0.6,
+   "text": "PROTOCOL PREAMBLE:\nVersion: 2.8\n\nVIDEOHUB DEVICE:\nDevice present: true\nModel name: Blackmagic Videohub 20x20 12G\nFriendly name: Broadcast Router\nUnique ID: 7C2E0D900090\nVideo inputs: 20\nVideo processing units: 0\nVideo outputs: 20\nVideo monitoring outputs: 0\nSerial ports: 0\n\nINPUT LABELS:\n0 CAM 1\n1 CAM 2\n2 CAM 3\n3 ATEM PGM\n4 ATEM PVW\n5 ATEM AUX 1\n6 Lyrics\n7 Graphics\n8 Replay A\n9 Replay B\n10 Chapel ATEM\n11 Hyperdeck 1\n12 Hyperdeck 2\n13 Test Pattern\n14 Spare 15\n15 Spare 16\n16 Spare 17\n17 Spare 18\n18 Spare 19\n19 Spare 20\n\nOUTPUT LABELS:\n0 Program Mon\n1 MV Converter\n2 Encoder\n3 Record Enc\n4 ATEM In 5\n5 ATEM In 6\n6 ATEM In 7\n7 ATEM In 8\n8 Lobby TV\n9 Green Room\n10 Confidence\n11 Hyperdeck 1 In\n12 Hyperdeck 2 In\n13 Spare 14\n14 Spare 15\n15 Spare 16\n16 Spare 17\n17 Spare 18\n18 Spare 19\n19 Spare 20\n\nVIDEO OUTPUT LOCKS:\n0 L\n1 U\n2 L\n3 U\n4 U\n5 U\n6 U\n7 U\n8 U\n9 U\n10 U\n11 U\n12 U\n13 U\n14 U\n15 U\n16 U\n17 U\n18 U\n19 U\n\nVIDEO OUTPUT ROUTING:\n0 3\n1 3\n2 3\n3 3\n4 0\n5 1\n6 2\n7 6\n8 3\n9 3\n10 4\n11 3\n12 10\n13 13\n14 13\n15 13\n16 13\n17 13\n18 13\n19 13\n\nCONFIGURATION:\nTake Mode: true\n\nEND PRELUDE:\n\n"
+  }
+ }
+}

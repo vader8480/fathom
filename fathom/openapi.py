@@ -141,7 +141,7 @@ def _components() -> Dict[str, Any]:
         "Template": obj, "V1Project": obj,
         "DiscoveryRun": {"type": "object", "properties": {
             "window": {"type": "integer", "minimum": 10, "maximum": 300, "description": "listen window in seconds (default from settings, 60)"},
-            "probes": {"type": "array", "items": {"type": "string", "enum": ["unifi", "mdns", "lldp", "arp"]}, "description": "subset of the enabled probes"}}},
+            "probes": {"type": "array", "items": {"type": "string", "enum": ["unifi", "mdns", "lldp", "arp", "snmp", "yamaha", "videohub", "qsys"]}, "description": "subset of the enabled probes"}}},
         "DiscoveryPromote": {"type": "object", "properties": {
             "entities": {"type": "array", "items": {"type": "string"}, "description": "entity ids to create as new devices"},
             "merge": {"type": "object", "additionalProperties": {"type": "string"}, "description": "entity id -> existing device id"},
@@ -155,7 +155,7 @@ def _components() -> Dict[str, Any]:
             "window": {"type": "integer"}, "room": {"type": "string"},
             "probes": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": True,
                                                                   "description": "per-probe fields; secrets: string sets, empty string clears, null keeps"}}}},
-        "DiscoveryTest": {"type": "object", "required": ["probe"], "properties": {"probe": {"type": "string", "enum": ["unifi", "mdns", "lldp", "arp"]}, "settings": obj}},
+        "DiscoveryTest": {"type": "object", "required": ["probe"], "properties": {"probe": {"type": "string", "enum": ["unifi", "mdns", "lldp", "arp", "snmp", "yamaha", "videohub", "qsys"]}, "settings": obj}},
     }
     return schemas
 

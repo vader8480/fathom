@@ -1506,7 +1506,7 @@ def r_import_template(req: Request) -> Response:
     return Response.text("\ufeff" + text, "text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
-# ---- network discovery (passive, ad hoc runs — nothing here runs unless a request starts it)
+# ---- network discovery (ad hoc runs — nothing here runs unless a request starts it; active probes are opt-in per project)
 
 _RUN_ID = r"(?P<rid>run-\d{8}-\d{6}-[0-9a-f]{4})"
 
@@ -1533,7 +1533,7 @@ def r_discovery_runs(req: Request) -> Response:
                           "capabilities": discovery.extra_installed(), "mode": discovery.MODE})
 
 
-@route("POST", r"/api/v2/projects/" + _NAME + "/discovery/runs", role="editor", summary="Start a passive discovery run (409 while one is active)", tags=["discovery"], body="DiscoveryRun")
+@route("POST", r"/api/v2/projects/" + _NAME + "/discovery/runs", role="editor", summary="Start a discovery run (409 while one is active); active probes only when enabled for the project", tags=["discovery"], body="DiscoveryRun")
 def r_discovery_run_start(req: Request) -> Response:
     from . import discovery
 
