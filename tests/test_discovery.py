@@ -1699,6 +1699,75 @@ class RunDiff(unittest.TestCase):
         self.assertEqual(self.d.empty_diff("run-b", everything)["counts"]["entities"], c["entities"])
 
 
+class RunOrdering(unittest.TestCase):
+    """Runs are listed newest first by their persisted creation time, not by the random id suffix.
+
+    Run ids are ``run-YYYYMMDD-HHMMSS-<4 hex>``; two runs started within the same second share the
+    prefix and the suffix order is arbitrary, so the id alone cannot order them.
+    """
+
+    SECOND = "run-20260301-120000-"
+
+    def _write_run(self, root, suffix, created, status="done"):
+        rid = self.SECOND + suffix
+        d = root / rid
+        d.mkdir(parents=True)
+        (d / "run.json").write_text(json.dumps({"id": rid, "status": status, "active": False, "created": created, "started": created + 0.01,
+                                                "finished": created + 1, "window": 10, "probes": ["unifi"], "counts": {}}), encoding="utf-8")
+        return rid
+
+    def test_same_second_runs_order_by_created(self):
+        discovery = requires("discovery")
+        with temp_data_dir() as data:
+            pdir = install_campus(data, "campus")
+            root = discovery.runs_root(pdir)
+            # the lexicographically *smallest* suffix is the *newest* run, and a stray dir without run.json is ignored
+            newest = self._write_run(root, "0a1b", created=1_772_000_000.9)
+            middle = self._write_run(root, "ffff", created=1_772_000_000.5)
+            oldest = self._write_run(root, "9c9c", created=1_772_000_000.2, status="cancelled")
+            (root / (self.SECOND + "dead")).mkdir()
+            earlier_second = "run-20260301-115959-0000"
+            (root / earlier_second).mkdir()
+            (root / earlier_second / "run.json").write_text(json.dumps({"id": earlier_second, "status": "done", "created": 1_771_999_999.7}), encoding="utf-8")
+
+            ids = [r["id"] for r in discovery.list_runs(pdir)]
+            self.assertEqual(ids, [newest, middle, oldest, earlier_second])
+            self.assertNotEqual(ids, sorted(ids, reverse=True), "the plain id order would be wrong here")
+            self.assertEqual(discovery.latest_run_id(pdir), newest)
+            self.assertEqual(discovery.latest_completed_run_id(pdir), newest)
+            self.assertEqual([r["id"] for r in discovery.completed_runs(pdir)], [newest, middle, earlier_second])
+            # "previous completed" skips the cancelled run and follows creation time, not the id
+            self.assertEqual(discovery.previous_completed_run_id(pdir, newest), middle)
+            self.assertEqual(discovery.previous_completed_run_id(pdir, middle), earlier_second)
+            self.assertEqual(discovery.previous_completed_run_id(pdir, earlier_second), "")
+            self.assertEqual(discovery.previous_completed_run_id(pdir, self.SECOND + "dead"), "")
+            self.assertEqual(discovery.list_runs(pdir, limit=2), discovery.list_runs(pdir)[:2])
+
+    def test_prune_keeps_the_newest_by_created(self):
+        discovery = requires("discovery")
+        with temp_data_dir() as data:
+            pdir = install_campus(data, "campus")
+            root = discovery.runs_root(pdir)
+            newest = self._write_run(root, "0000", created=2_000_000_000.9)
+            older = [self._write_run(root, "%04x" % (0xf000 + i), created=2_000_000_000.1 + i / 100) for i in range(3)]
+            (root / (self.SECOND + "dead")).mkdir()  # an interrupted start: no run.json, pruned first
+            discovery._prune_runs(pdir, keep=2)
+            kept = sorted(p.name for p in root.iterdir() if p.is_dir())
+            self.assertEqual(kept, sorted([newest, older[-1]]))
+
+    def test_api_lists_newest_first_within_one_second(self):
+        discovery = requires("discovery")
+        app = get_app()
+        with temp_data_dir() as data:
+            pdir = install_campus(data, "campus")
+            root = discovery.runs_root(pdir)
+            newest = self._write_run(root, "0001", created=1_772_000_000.9)
+            self._write_run(root, "fffe", created=1_772_000_000.1)
+            st, _, b = call(app, "GET", "/api/v2/projects/campus/discovery/runs")
+            self.assertEqual(st, 200, b)
+            self.assertEqual(jbody(b)["runs"][0]["id"], newest)
+
+
 class RunDiffApi(unittest.TestCase):
     """Two ad hoc runs → diff persisted with the second, served by GET …/diff, prior run selectable (FR-DISC-11)."""
 
@@ -1722,7 +1791,6 @@ class RunDiffApi(unittest.TestCase):
             d = jbody(b)
             self.assertEqual((d["run"], d["against"], d["candidates"], d["diff"]["counts"]["changes"], d["persisted"]), (r1["id"], None, [], 0, True))
 
-            time.sleep(1.1)  # run ids carry a second resolution; "previous" is by id order
             r2 = self.api.run_and_wait(base, {"window": 10})
             self.assertEqual(r2["status"], "done", r2)
             self.assertEqual(r2["diff"]["against"], r1["id"])
