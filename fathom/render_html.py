@@ -6,8 +6,10 @@ No external assets: system fonts, inline CSS / JS, data embedded as JSON.
 
 from __future__ import annotations
 
+import datetime
 import json
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 from .layout import GROUP_HEADER_H, GROUP_PAD, KEY_ROW_H, Layout
@@ -737,12 +739,14 @@ class _Links:
         return self._up() + f"d/{_q(dev)}"
 
 
-def _page(title: str, body: str, *, base_url: str = "", sw: bool = False) -> str:
+def _page(title: str, body: str, *, base_url: str = "", sw: bool = False, extra_css: str = "", body_class: str = "", wrap: bool = True) -> str:
+    cls = f' class="{esc(body_class)}"' if body_class else ""
+    inner = f'<div class="wrap">{body}</div>' if wrap else body
     return (
         f'<!doctype html>\n<html lang="en"{_root_attr(base_url, sw)}><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
-        f"<title>{esc(title)}</title>{_head_extra(base_url, sw)}<script>{SMOKE_JS}</script><style>{_view_css()}</style></head>"
-        f'<body><div class="wrap">{body}</div>'
+        f"<title>{esc(title)}</title>{_head_extra(base_url, sw)}<script>{SMOKE_JS}</script><style>{_view_css()}{extra_css}</style></head>"
+        f"<body{cls}>{inner}"
         + (f"<script>{SW_JS}</script>" if sw else "")
         + "</body></html>"
     )
@@ -1042,7 +1046,7 @@ def render_patch_page(doc: Dict[str, Any], room_id: str, blocks: List[Dict[str, 
     return _page(f"Patch table · {room.get('name') or room_id} · {meta.get('org') or project}", "".join(out), base_url=base_url, sw=sw)
 
 
-def render_report(doc: Dict[str, Any], *, project: str, sections: Dict[str, str]) -> str:
+def render_report(doc: Dict[str, Any], *, project: str, sections: Dict[str, str], extra_css: str = "") -> str:
     meta = doc.get("meta") or {}
     toc = "".join(f'<li><a href="#sec-{i}">{esc(title)}</a></li>' for i, title in enumerate(sections))
     body = [
@@ -1053,4 +1057,360 @@ def render_report(doc: Dict[str, Any], *, project: str, sections: Dict[str, str]
     for i, (title, html_part) in enumerate(sections.items()):
         brk = "" if i == 0 else "page-break-before:always;break-before:page;"
         body.append(f'<section id="sec-{i}" style="{brk}"><h2>{esc(title)}</h2>{html_part}</section>')
-    return _page(f"Report · {meta.get('org') or project}", "".join(body))
+    return _page(f"Report · {meta.get('org') or project}", "".join(body), extra_css=extra_css)
+
+
+# ===================================================================== SOP pages (§4.3.15, §5.15)
+#
+# The public page, the QR sheet and the report section share the `.md` rules of
+# static/css/sop.css (inlined so builds and share links work offline) plus the
+# small shell below. Everything is phone-first: 17px body text, 44px targets,
+# sticky "Applies to" chips, collapsible contents, tap-to-toggle checklists kept
+# in sessionStorage and tap-to-zoom images, with no edit controls.
+
+PAGE_KIND_LABELS = {"sop": "SOP", "troubleshooting": "Troubleshooting", "checklist": "Checklist", "reference": "Reference"}
+
+SOP_SHELL_CSS = """
+:root{--panel-2:#161d2e;--border-2:#2a3550;--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--sal:env(safe-area-inset-left,0px);--sar:env(safe-area-inset-right,0px)}
+body.sop-pub{font-size:17px;line-height:1.5}
+.sop-pub .sop-main{overflow:visible;max-width:820px;margin:0 auto}
+.sop-pub .grow{flex:1}
+.sop-pub .muted{color:var(--muted)}
+.sop-pub .chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--text);text-decoration:none;font:inherit}
+.sop-pub .sop-topbar button,.sop-pub .sop-topbar a.btn{min-height:44px;min-width:44px;padding:0 14px;border:1px solid var(--border);border-radius:8px;background:var(--panel-2);color:var(--text);font:inherit;font-size:15px;text-decoration:none;display:inline-flex;align-items:center;cursor:pointer}
+.sop-pub .sop-topbar{padding-top:var(--sat)}
+.sop-pub .sop-back{text-decoration:none}
+.sop-pub .md h1,.sop-pub .md h2,.sop-pub .md h3,.sop-pub .md h4{text-transform:none;letter-spacing:0;color:var(--text)}
+.sop-pub .sop-head h1{font-size:26px;margin:0 0 6px}
+.sop-pub .sop-applies{top:calc(48px + var(--sat))}
+.sop-pub .sop-applies span.chip{opacity:.9}
+.sop-pub .sop-index h1{font-size:26px;margin:14px 0 2px}
+.sop-pub .sop-index .sop-list{margin-top:10px;border-top:1px solid var(--border)}
+.sop-pub .sop-list .sop-item-main{padding-left:calc(16px + var(--sal) + var(--depth,0)*18px)}
+.sop-pub .sop-item-main{color:var(--text)}
+.sop-pub .sop-progress-bar{min-width:60px}
+.sop-pub footer.sop-foot{color:var(--muted);font-size:13px;padding:16px 0 calc(8px + var(--sab))}
+.sop-pub .sop-progress-reset{min-height:36px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font:inherit;font-size:14px}
+.sop-pub .sop-lightbox-close{cursor:pointer}
+@media print{
+  .sop-pub .sop-topbar,.sop-pub .sop-prevnext,.sop-pub .sop-progress,.sop-pub .sop-toc{display:none!important}
+  .sop-pub .sop-applies{position:static;border:0;padding-left:0}
+  body.sop-pub{font-size:12pt}
+  .sop-pub .sop-head h1{font-size:20pt}
+  .sop-pub .md,.sop-pub .md h1,.sop-pub .md h2,.sop-pub .md h3,.sop-pub .md h4,.sop-pub .sop-head h1{color:#000}
+  .sop-pub .md .md-task-label input[type=checkbox]{border-color:#000;background:#fff}
+  .sop-pub .md a.md-ref{border-color:#999;background:#fff;color:#000}
+}
+"""
+
+SOP_REPORT_CSS = """
+.sop-report-page{break-before:page;page-break-before:always;padding-top:6px}
+.sop-report-page:first-of-type{break-before:auto;page-break-before:auto}
+.sop-report-page h3{font-size:20px;margin:0 0 4px}
+.sop-report-page .md h1,.sop-report-page .md h2,.sop-report-page .md h3,.sop-report-page .md h4{text-transform:none;letter-spacing:0;color:var(--text)}
+.sop-report-page .sop-report-sub{color:var(--muted);font-size:13px;margin:0 0 12px}
+.sop-report-page .md{font-size:14px;line-height:1.5;max-width:820px}
+.sop-report-page .md .md-task-label{min-height:0;padding:3px 0;cursor:default}
+.sop-report-page .md .md-task-label input[type=checkbox]{width:18px;height:18px;border-radius:4px}
+.sop-report-page .md li.md-task{border-bottom:0}
+.sop-report-page .md img{max-width:420px;cursor:default}
+.sop-report-toc li{margin:3px 0}
+@media print{
+  .sop-report-page .md,.sop-report-page .md h1,.sop-report-page .md h2,.sop-report-page .md h3,.sop-report-page .md h4,.sop-report-page .md strong{color:#000}
+  .sop-report-page .md h2{border-color:#999}
+  .sop-report-page .md .md-task-label input[type=checkbox]{border-color:#000;background:#fff}
+  .sop-report-page .md a.md-ref{border-color:#999;background:#fff;color:#000}
+  .sop-report-page .md .md-callout{background:#fff;border-color:#999}
+}
+"""
+
+SOP_PUB_JS = r"""
+(function(){
+  var root=document.querySelector('[data-sop-page]');
+  if(!root)return;
+  var project=root.getAttribute('data-sop-project')||'',slug=root.getAttribute('data-sop-page')||'';
+  var key='fathom.sop.tasks.'+project+'.'+slug;
+  function read(){try{var v=JSON.parse(sessionStorage.getItem(key)||'[]');return Array.isArray(v)?v:[]}catch(e){return[]}}
+  function write(l){try{if(l.length)sessionStorage.setItem(key,JSON.stringify(l));else sessionStorage.removeItem(key)}catch(e){}}
+  var boxes=root.querySelectorAll('input[data-task]'),prog=document.getElementById('sop-progress');
+  function paint(){
+    var done=0;
+    Array.prototype.forEach.call(boxes,function(b){var li=b.closest('li');if(li)li.classList.toggle('done',b.checked);if(b.checked)done++;});
+    if(prog){
+      prog.querySelector('.sop-progress-text').textContent=done+' of '+boxes.length+' done';
+      prog.querySelector('.sop-progress-bar i').style.width=Math.round(100*done/Math.max(1,boxes.length))+'%';
+      prog.querySelector('.sop-progress-reset').hidden=!done;
+    }
+  }
+  var done=read();
+  Array.prototype.forEach.call(boxes,function(b){
+    b.disabled=false;b.checked=done.indexOf(Number(b.getAttribute('data-task')))>=0;
+    b.addEventListener('change',function(){
+      var n=Number(b.getAttribute('data-task')),cur=read().filter(function(x){return x!==n});
+      if(b.checked)cur.push(n);write(cur);paint();
+    });
+  });
+  if(prog){prog.querySelector('.sop-progress-reset').addEventListener('click',function(){write([]);Array.prototype.forEach.call(boxes,function(b){b.checked=false});paint();});}
+  paint();
+  var pr=document.getElementById('sop-print');if(pr)pr.addEventListener('click',function(){window.print();});
+  root.addEventListener('click',function(e){
+    var img=e.target.closest?e.target.closest('.md img'):null;
+    if(!img)return;
+    e.preventDefault();
+    var box=document.createElement('div');box.className='sop-lightbox';box.setAttribute('role','dialog');
+    var big=document.createElement('img');big.src=img.getAttribute('src');big.alt=img.alt||'';box.appendChild(big);
+    var x=document.createElement('button');x.type='button';x.className='sop-lightbox-close';x.setAttribute('aria-label','Close');x.textContent='\u00d7';box.appendChild(x);
+    if(img.alt){var c=document.createElement('div');c.className='sop-lightbox-cap';c.textContent=img.alt;box.appendChild(c);}
+    function close(){box.remove();document.removeEventListener('keydown',onKey);}
+    function onKey(ev){if(ev.key==='Escape')close();}
+    box.addEventListener('click',close);document.addEventListener('keydown',onKey);document.body.appendChild(box);
+  });
+  var toc=document.querySelector('.sop-toc');
+  if(toc)toc.addEventListener('click',function(e){var a=e.target.closest?e.target.closest('a'):null;if(!a)return;var id=(a.getAttribute('href')||'').slice(1);var t=id&&document.getElementById(id);if(t){e.preventDefault();t.scrollIntoView({behavior:'smooth',block:'start'});}});
+})();
+"""
+
+
+def sop_css() -> str:
+    """The SOP stylesheet (``static/css/sop.css``) for inlining into chrome-free pages and builds."""
+    try:
+        return (Path(__file__).resolve().parent / "static" / "css" / "sop.css").read_text(encoding="utf-8")
+    except OSError:  # pragma: no cover - packaging without static files
+        return ""
+
+
+def sop_pages(doc: Dict[str, Any], *, published_only: bool = True) -> List[Dict[str, Any]]:
+    return [p for p in doc.get("pages") or [] if isinstance(p, dict) and p.get("id") and p.get("slug")
+            and (not published_only or (p.get("status") or "published") == "published")]
+
+
+def sop_order_key(p: Dict[str, Any]) -> Tuple[int, str]:
+    o = p.get("order")
+    return (int(o) if isinstance(o, int) and not isinstance(o, bool) else 10 ** 6, str(p.get("title") or "").casefold())
+
+
+def sop_tree(doc: Dict[str, Any], *, published_only: bool = True) -> List[Tuple[Dict[str, Any], int]]:
+    """Pages in tree order (depth-first, siblings by ``order`` then title) with their depth.
+    Children of hidden (draft/archived) parents are hoisted to the top level so nothing published is lost."""
+    pages = sop_pages(doc, published_only=published_only)
+    ids = {p["id"] for p in pages}
+    out: List[Tuple[Dict[str, Any], int]] = []
+    seen: set = set()
+
+    def walk(parent: Optional[str], depth: int) -> None:
+        for p in sorted([x for x in pages if (x.get("parent") or None) == parent], key=sop_order_key):
+            if p["id"] in seen:
+                continue
+            seen.add(p["id"])
+            out.append((p, depth))
+            if depth < 50:
+                walk(p["id"], depth + 1)
+
+    walk(None, 0)
+    for p in sorted([x for x in pages if x.get("parent") and x["parent"] not in ids], key=sop_order_key):
+        if p["id"] not in seen:
+            seen.add(p["id"])
+            out.append((p, 0))
+            walk(p["id"], 1)
+    return out
+
+
+def sop_link_resolver(doc: Dict[str, Any], *, device: Optional[Callable[[str, Dict[str, Any]], Optional[str]]] = None,
+                      room: Optional[Callable[[str, Dict[str, Any]], Optional[str]]] = None,
+                      page: Optional[Callable[[str, Dict[str, Any]], Optional[str]]] = None,
+                      attachment: Optional[Callable[[str, Dict[str, Any]], Optional[str]]] = None) -> Callable[[str, str], Optional[Dict[str, Any]]]:
+    """Markdown ``[[kind:id]]`` resolver; each callback returns an href, ``""`` for a plain chip, or ``None`` for unresolved."""
+    devs = {d.get("id"): d for d in doc.get("devices") or [] if isinstance(d, dict)}
+    rooms = {r.get("id"): r for r in doc.get("rooms") or [] if isinstance(r, dict)}
+    pages = {p.get("slug"): p for p in sop_pages(doc, published_only=False)}
+    atts = {a.get("id"): a for a in doc.get("attachments") or [] if isinstance(a, dict)}
+    table = {"device": (devs, device, "name"), "room": (rooms, room, "name"), "page": (pages, page, "title"), "attachment": (atts, attachment, "name")}
+
+    def resolve(kind: str, ref: str) -> Optional[Dict[str, Any]]:
+        items, fn, label_key = table.get(kind) or ({}, None, "name")
+        obj = items.get(ref)
+        if obj is None or fn is None:
+            return None
+        href = fn(ref, obj)
+        if href is None:
+            return None
+        return {"href": href, "label": str(obj.get(label_key) or ref)}
+
+    return resolve
+
+
+def attachment_filename(att: Dict[str, Any]) -> str:
+    return Path(str(att.get("file") or att.get("name") or "file")).name
+
+
+def _kind_badge(p: Dict[str, Any]) -> str:
+    kind = str(p.get("kind") or "sop")
+    return f'<span class="sop-kind sop-kind-{esc(kind)}">{esc(PAGE_KIND_LABELS.get(kind, kind))}</span>'
+
+
+def _review_badge(p: Dict[str, Any], today: Optional[str] = None) -> str:
+    due = str(p.get("review_due") or "")
+    if not due:
+        return ""
+    today = today or datetime.date.today().isoformat()
+    if due < today:
+        return '<span class="sop-badge sop-badge-due">Review overdue</span>'
+    try:
+        soon = (datetime.date.fromisoformat(due) - datetime.date.fromisoformat(today)).days <= 30
+    except ValueError:
+        return ""
+    return '<span class="sop-badge sop-badge-soon">Review due soon</span>' if soon else ""
+
+
+def _fmt_date(s: Any) -> str:
+    text = str(s or "")
+    return text[:10] if len(text) >= 10 else text
+
+
+def _sop_shell(title: str, body: str, *, base_url: str, sw: bool, js: str = "") -> str:
+    return _page(title, body + (f"<script>{js}</script>" if js else ""), base_url=base_url, sw=sw,
+                 extra_css=sop_css() + SOP_SHELL_CSS, body_class="sop-pub", wrap=False)
+
+
+def render_sop_page(doc: Dict[str, Any], data: Dict[str, Any], *, project: str, base_url: str = "", sw: bool = False,
+                    rel: str = "../", sop_only: bool = False) -> str:
+    """Chrome-free, phone-first page for ``/p/<n>/sop/<slug>`` (and share links).
+
+    ``data`` is the pages API payload (``page``, ``html``, ``toc``, ``tasks``, ``links``, ``breadcrumbs``, ``prev``/``next``,
+    ``children``, ``backlinks``); ``rel`` is the relative prefix back to the viewer root (``../`` from a page URL).
+    With ``sop_only`` (procedures-only share links) device and room chips are plain text."""
+    p = data["page"]
+    meta = doc.get("meta") or {}
+    crumbs = data.get("breadcrumbs") or []
+    back_label = crumbs[-1]["title"] if crumbs else "Procedures"
+    back_href = f"{rel}sop/{_q(crumbs[-1]['slug'])}" if crumbs else f"{rel}sop"
+    out: List[str] = [f'<main class="sop-main sop-page" data-sop-page="{esc(p["slug"])}" data-sop-project="{esc(project)}">']
+    out.append('<div class="sop-topbar">'
+               f'<a class="sop-back" href="{esc(back_href)}">\u2039 {esc(back_label)}</a><span class="grow"></span>'
+               '<button type="button" id="sop-print" class="no-print">Print</button></div>')
+    if crumbs:
+        out.append('<nav class="sop-crumbs" aria-label="Breadcrumb">' + " / ".join(f'<a href="{esc(rel)}sop/{_q(c["slug"])}">{esc(c["title"])}</a>' for c in crumbs) + "</nav>")
+    badges = _kind_badge(p) + _review_badge(p)
+    out.append(f'<header class="sop-head"><div class="eyebrow">{esc(_org_eyebrow(doc, "Procedures"))}</div><div class="sop-head-badges">{badges}</div>'
+               f'<h1 id="sop-title">{esc(p.get("title") or p["slug"])}</h1>'
+               + (f'<p class="sop-summary">{esc(p["summary"])}</p>' if p.get("summary") else "") + "</header>")
+    chips: List[str] = []
+    links = data.get("links") or {}
+    for r in links.get("rooms") or []:
+        chips.append(f'<span class="chip sop-chip-room">\u25A3 {esc(r["name"])}</span>' if sop_only
+                     else f'<a class="chip sop-chip-room" href="{esc(rel)}r/{_q(r["id"])}">\u25A3 {esc(r["name"])}</a>')
+    for d in links.get("devices") or []:
+        chips.append(f'<span class="chip sop-chip-device">{esc(d["name"])}</span>' if sop_only
+                     else f'<a class="chip sop-chip-device" href="{esc(rel)}d/{_q(d["id"])}">{esc(d["name"])}</a>')
+    if chips:
+        out.append('<div class="sop-applies" aria-label="Applies to"><span class="sop-applies-label">Applies to</span>'
+                   f'<div class="sop-applies-chips">{"".join(chips)}</div></div>')
+    if data.get("tasks"):
+        out.append('<div class="sop-progress" id="sop-progress" role="status"><span class="sop-progress-text"></span>'
+                   '<span class="sop-progress-bar" aria-hidden="true"><i style="width:0"></i></span>'
+                   '<button type="button" class="sop-progress-reset" hidden>Reset</button></div>')
+    toc = data.get("toc") or []
+    if len(toc) > 1:
+        items = "".join(f'<li class="lvl-{int(t.get("level") or 2)}"><a href="#{esc(t["id"])}">{esc(t["text"])}</a></li>' for t in toc)
+        out.append(f'<details class="sop-toc"><summary>Contents</summary><ol>{items}</ol></details>')
+    out.append(f'<article class="sop-body md">{data.get("html") or ""}</article>')
+    kids = data.get("children") or []
+    if kids:
+        out.append('<section class="sop-related"><h2>In this section</h2><ul class="sop-list">'
+                   + "".join(f'<li class="sop-item"><a class="sop-item-main" href="{esc(rel)}sop/{_q(c["slug"])}"><span class="sop-item-title">{esc(c["title"])}</span></a></li>' for c in kids)
+                   + "</ul></section>")
+    back = data.get("backlinks") or []
+    if back:
+        out.append('<section class="sop-related"><h2>Referenced by</h2><ul class="sop-links">'
+                   + "".join(f'<li><a href="{esc(rel)}sop/{_q(c["slug"])}">{esc(c["title"])}</a></li>' for c in back) + "</ul></section>")
+    prev, nxt = data.get("prev"), data.get("next")
+    if prev or nxt:
+        out.append('<nav class="sop-prevnext" aria-label="Previous and next page">'
+                   + (f'<a class="sop-prev" href="{esc(rel)}sop/{_q(prev["slug"])}"><small>\u2039 Previous</small><span>{esc(prev["title"])}</span></a>' if prev else "<span></span>")
+                   + (f'<a class="sop-next" href="{esc(rel)}sop/{_q(nxt["slug"])}"><small>Next \u203a</small><span>{esc(nxt["title"])}</span></a>' if nxt else "<span></span>")
+                   + "</nav>")
+    foot = []
+    if p.get("updated"):
+        foot.append("Updated " + _fmt_date(p["updated"]) + (f' by {p["updated_by"]}' if p.get("updated_by") else ""))
+    if p.get("review_due"):
+        foot.append("Review due " + _fmt_date(p["review_due"]))
+    if data.get("revision"):
+        foot.append(f'r{data["revision"]}')
+    out.append(f'<footer class="sop-foot">{esc(" · ".join(foot))}</footer></main>')
+    return _sop_shell(f'{p.get("title") or p["slug"]} · {meta.get("org") or project}', "".join(out), base_url=base_url, sw=sw, js=SOP_PUB_JS)
+
+
+def render_sop_index(doc: Dict[str, Any], *, project: str, base_url: str = "", sw: bool = False, rel: str = "",
+                     sop_only: bool = False) -> str:
+    """Published procedures as a drill-down list (``/p/<n>/sop``)."""
+    meta = doc.get("meta") or {}
+    rows = sop_tree(doc)
+    out: List[str] = ['<main class="sop-main sop-index">']
+    nav = "" if sop_only else f'<a class="btn" href="{esc(rel)}rooms">Rooms</a>'
+    out.append(f'<div class="sop-topbar"><span class="grow"></span>{nav}</div>')
+    out.append(f'<div class="eyebrow">{esc(_org_eyebrow(doc, "Procedures"))}</div><h1>{esc(meta.get("title") or project)}</h1>'
+               f'<p class="muted">{len(rows)} published page{"s" if len(rows) != 1 else ""}. Tap a page to open it; checklists remember your place on this device.</p>')
+    if rows:
+        items = []
+        for p, depth in rows:
+            sub = _kind_badge(p) + _review_badge(p) + (f'<span class="sop-item-sum">{esc(p["summary"])}</span>' if p.get("summary") else "")
+            items.append(f'<li class="sop-item" style="--depth:{depth}"><a class="sop-item-main" href="{esc(rel)}sop/{_q(p["slug"])}">'
+                         f'<span class="sop-item-title">{esc(p.get("title") or p["slug"])}</span><span class="sop-item-sub">{sub}</span></a></li>')
+        out.append(f'<ul class="sop-list" role="list">{"".join(items)}</ul>')
+    else:
+        out.append('<p class="sop-empty">No published procedures yet.</p>')
+    out.append("</main>")
+    return _sop_shell(f"Procedures · {meta.get('org') or project}", "".join(out), base_url=base_url, sw=sw)
+
+
+def render_sop_qr_sheet(doc: Dict[str, Any], items: List[Dict[str, Any]], *, project: str, room: str = "", share: bool = False) -> str:
+    """Printable sheet of QR labels, one per published page (``items``: ``page``, ``url``, ``svg``)."""
+    meta = doc.get("meta") or {}
+    css = """
+.qr-sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:14px}
+.qr-card{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--panel);display:flex;flex-direction:column;gap:8px;break-inside:avoid;page-break-inside:avoid}
+.qr-card .qr{max-width:100%;padding:10px;align-self:center;width:100%}
+.qr-card h3{margin:0;font-size:16px;line-height:1.3}
+.qr-card .url{font-size:11px;color:var(--muted);word-break:break-all;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.qr-card .kind{font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted)}
+@media print{.qr-sheet{grid-template-columns:repeat(3,1fr);gap:10mm}.qr-card{border-color:#999;background:#fff}.qr-card h3,.qr-card .url,.qr-card .kind{color:#000}.qr-card .url{color:#333}}
+"""
+    out = [f'<div class="eyebrow">{esc(_org_eyebrow(doc, "QR labels"))}</div>',
+           f'<h1>{esc(room or meta.get("title") or project)} · Procedures</h1>',
+           f'<p class="sub">{len(items)} label{"s" if len(items) != 1 else ""}. Each code opens the published procedure on a phone'
+           + (" through a procedures-only share link" if share else "") + ". Print, cut, and stick next to the gear.</p>",
+           '<div class="nav no-print"><button type="button" id="qr-print">Print</button></div>']
+    if items:
+        cards = []
+        for it in items:
+            p = it["page"]
+            kind = str(p.get("kind") or "sop")
+            cards.append(f'<div class="qr-card"><div class="qr">{it["svg"]}</div><div class="kind">{esc(PAGE_KIND_LABELS.get(kind, kind))}</div>'
+                         f'<h3>{esc(p.get("title") or p["slug"])}</h3><div class="url">{esc(it["url"])}</div></div>')
+        out.append(f'<div class="qr-sheet">{"".join(cards)}</div>')
+    else:
+        out.append('<p class="sub">No published procedures' + (" for this room" if room else "") + ".</p>")
+    out.append("<script>(function(){var b=document.getElementById('qr-print');if(b)b.addEventListener('click',function(){window.print();});})();</script>")
+    return _page(f"QR labels · {room or project}", "".join(out), extra_css=css)
+
+
+def render_sop_report_section(doc: Dict[str, Any], entries: List[Dict[str, Any]]) -> str:
+    """Report section body: every entry (``page``, ``html``, ``depth``, ``applies``) on its own printed page, in tree order."""
+    toc = "".join(f'<li style="margin-left:{int(e.get("depth") or 0) * 16}px"><a href="#sop-{esc(e["page"]["slug"])}">{esc(e["page"].get("title") or e["page"]["slug"])}</a></li>' for e in entries)
+    out = [f'<p class="sub">{len(entries)} published procedure{"s" if len(entries) != 1 else ""}. Checklists are printed unticked for use on paper.</p>',
+           f'<ol class="sop-report-toc no-print">{toc}</ol>']
+    for e in entries:
+        p = e["page"]
+        kind = str(p.get("kind") or "sop")
+        sub = [PAGE_KIND_LABELS.get(kind, kind)]
+        if e.get("applies"):
+            sub.append("Applies to: " + ", ".join(e["applies"]))
+        if p.get("review_due"):
+            sub.append("Review due " + _fmt_date(p["review_due"]))
+        if p.get("updated"):
+            sub.append("Updated " + _fmt_date(p["updated"]))
+        out.append(f'<article class="sop-report-page" id="sop-{esc(p["slug"])}"><h3>{esc(p.get("title") or p["slug"])}</h3>'
+                   f'<p class="sop-report-sub">{esc(" · ".join(sub))}</p>'
+                   + (f'<p class="sop-summary">{esc(p["summary"])}</p>' if p.get("summary") else "")
+                   + f'<div class="md">{e.get("html") or ""}</div></article>')
+    return "".join(out)

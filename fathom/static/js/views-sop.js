@@ -9,6 +9,20 @@ import { deviceTitle } from './model-core.js';
 
 const KINDS = [['sop', 'SOP'], ['troubleshooting', 'Troubleshooting'], ['checklist', 'Checklist'], ['reference', 'Reference']];
 const STATUSES = [['draft', 'Draft'], ['published', 'Published'], ['archived', 'Archived']];
+// Starter templates offered on page create. `{{device}}` becomes a [[device:…]]
+// link when the page is started from a device (inspector → Procedures → New).
+const TEMPLATES = [
+  { id: 'power-up', title: 'System power-up', kind: 'sop', summary: 'Switch the system on in the correct order.', tags: ['power'],
+    body: 'Follow the steps in order. Amplifiers always come on **last**.\n\n> [!WARNING]\n> Never power the amps while the console is still booting.\n\n## 1. Power\n\n- [ ] Switch on the main power distribution ({{device}}).\n- [ ] Wait for the network switches to show green link lights.\n\n## 2. Audio\n\n- [ ] Power on the stage boxes, then the console.\n- [ ] Load the house scene and check the master fader is at **-inf**.\n- [ ] Power on the amplifiers.\n\n## 3. Video\n\n- [ ] Power on the switcher, then the displays / projector.\n- [ ] Confirm the programme output appears on the main screen.\n\n## 4. Lighting\n\n- [ ] Power on the lighting console and load the show file.\n- [ ] Run the *house full* cue.\n\n## Done\n\nPlay a track at a low level and walk the room.\n' },
+  { id: 'shut-down', title: 'System shut-down', kind: 'sop', summary: 'End-of-day shut-down. Amps first, then console, video, power.', tags: ['power'],
+    body: 'The reverse of power-up. Allow 5 minutes.\n\n> [!IMPORTANT]\n> Do not cut power until the projector fan has stopped.\n\n## 1. Audio\n\n- [ ] Pull the master fader to **-inf**.\n- [ ] Power off the amplifiers.\n- [ ] Save the scene if anything changed, then power off the console.\n\n## 2. Video and lighting\n\n- [ ] Power off the projector / displays and wait for the fan to stop.\n- [ ] Power off the switcher.\n- [ ] Set the lighting console to the *work lights* cue, then power it off.\n\n## 3. Power\n\n- [ ] Switch off the power distribution ({{device}}).\n- [ ] Lock the rack and return keys.\n' },
+  { id: 'no-audio', title: 'Troubleshooting: no audio', kind: 'troubleshooting', summary: 'Work from the stage to the speakers to find where the signal stops.', tags: ['audio', 'troubleshooting'],
+    body: 'Start at the top and stop when sound returns.\n\n## 1. Is the console seeing the input?\n\n- [ ] Select the channel and check the input meter is moving.\n- [ ] No meter: check the mic is on and the cable is seated at the stage box.\n- [ ] Still nothing: check the sync LED on the stage box ({{device}}).\n\n## 2. Is the console sending to the PA?\n\n- [ ] Channel fader up and **not muted**?\n- [ ] Channel assigned to the main bus?\n- [ ] Master fader up and the main meters moving?\n\n## 3. Are the amps on?\n\n| Symptom | Check |\n|---|---|\n| No LEDs | Power distribution off, or breaker tripped |\n| *Protect* LED | Power-cycle the amp; if it returns, leave it off and tell the AV lead |\n| *Ready* but no sound | Confirm the amp input / routing |\n\n## 4. Still nothing\n\n> [!CAUTION]\n> Do not change routing during a service.\n\nSwitch to the backup input so the event can continue, then log the fault on the device page.\n' },
+  { id: 'no-video', title: 'Troubleshooting: no video', kind: 'troubleshooting', summary: 'Nothing on the screen: source, switcher, display.', tags: ['video', 'troubleshooting'],
+    body: 'Check in this order: source → switcher → display.\n\n## 1. Source\n\n- [ ] Is the computer awake and showing the presentation on its own screen?\n- [ ] Is the right output selected (extend / duplicate)?\n- [ ] Reseat the cable at the computer.\n\n## 2. Switcher\n\n- [ ] Does the switcher ({{device}}) show the input as *live*?\n- [ ] Is the correct input selected on programme?\n- [ ] Try another input to prove the output path.\n\n## 3. Display\n\n- [ ] Is the projector / display on and on the right input?\n- [ ] *No signal* message: reseat the cable at the display end.\n- [ ] Lamp or power LED flashing: note the pattern and tell the AV lead.\n\n## Still nothing\n\nSwitch to the backup display path or use the stage monitors so the event can continue.\n' },
+  { id: 'weekly-checks', title: 'Weekly checks', kind: 'checklist', summary: 'Five-minute walk-through to catch problems before the weekend.', tags: ['maintenance', 'weekly'],
+    body: '## Audio\n\n- [ ] All radio mics on charge; batteries rotated.\n- [ ] Stage box ({{device}}) sync LED solid.\n- [ ] Main PA and fills pass a test track.\n\n## Video\n\n- [ ] Projector lamp hours noted: ____\n- [ ] Lyrics computer updated and rebooted.\n- [ ] Streaming encoder reachable.\n\n## Lighting\n\n- [ ] House and stage cues run without missing fixtures.\n- [ ] Dead lamps / fixtures logged on their device pages.\n\n## Infrastructure\n\n- [ ] UPS shows *normal*; no alarms.\n- [ ] Network switches: no amber link lights.\n- [ ] Racks locked, cables tidy, labels legible.\n' },
+];
 const KIND_LABEL = {};
 KINDS.forEach(function (k) { KIND_LABEL[k[0]] = k[1]; });
 
@@ -64,6 +78,20 @@ function statusBadge(p) {
 }
 function kindBadge(p) {
   return h('span', { class: 'sop-kind sop-kind-' + (p.kind || 'sop') }, KIND_LABEL[p.kind || 'sop'] || p.kind);
+}
+// Review-due badge: overdue, or due within 30 days.
+export function reviewState(p, now) {
+  if (!p || !p.review_due) return '';
+  const due = new Date(p.review_due + (p.review_due.length === 10 ? 'T00:00:00' : ''));
+  if (isNaN(due.getTime())) return '';
+  const t = now || new Date();
+  if (due < t) return 'overdue';
+  return (due - t) <= 30 * 86400000 ? 'soon' : '';
+}
+function reviewBadge(p) {
+  const st = reviewState(p);
+  if (!st) return null;
+  return h('span', { class: 'sop-badge ' + (st === 'overdue' ? 'sop-badge-due' : 'sop-badge-soon'), title: 'Review due ' + fmtDate(p.review_due) }, st === 'overdue' ? 'Review overdue' : 'Review due soon');
 }
 
 // ---------------------------------------------------------------- task state
@@ -165,7 +193,7 @@ export function mount(el, ctx) {
   function listItem(p, opts) {
     opts = opts || {};
     const kids = childrenOf(store.doc, p.id).length;
-    const sub = [kindBadge(p), statusBadge(p)];
+    const sub = [kindBadge(p), statusBadge(p), reviewBadge(p)];
     if (p.summary) sub.push(h('span', { class: 'sop-item-sum' }, p.summary));
     const main = h('button', { type: 'button', class: 'sop-item-main', onclick: function () {
       if (kids && narrow() && !opts.flat) { state.parent = p.id; state.query = ''; renderTree(); }
@@ -293,8 +321,11 @@ export function mount(el, ctx) {
     const main = h('article', { class: 'sop-main sop-page', 'data-page': p.slug, 'aria-labelledby': 'sop-title' });
 
     const menuItems = [];
+    menuItems.push({ label: 'Print', action: function () { window.print(); } });
+    menuItems.push({ label: 'QR label', action: function () { qrDialog(p); } });
     menuItems.push({ label: 'Versions', action: function () { versionsDialog(p); } });
     if (canEdit) {
+      menuItems.push({ sep: true });
       menuItems.push({ label: 'New child page', action: function () { openNew({ parent: p.slug }); } });
       menuItems.push({ label: 'Duplicate', action: function () { openNew({ from: p.slug }); } });
       menuItems.push({ sep: true });
@@ -317,7 +348,7 @@ export function mount(el, ctx) {
       })));
     }
     const headEl = h('header', { class: 'sop-head' }, [
-      h('div', { class: 'sop-head-badges' }, [kindBadge(p), statusBadge(p), p.review_due && new Date(p.review_due) < new Date() ? h('span', { class: 'sop-badge sop-badge-due' }, 'Review overdue') : null]),
+      h('div', { class: 'sop-head-badges' }, [kindBadge(p), statusBadge(p), reviewBadge(p)]),
       h('h1', { id: 'sop-title' }, p.title),
       p.summary ? h('p', { class: 'sop-summary' }, p.summary) : null,
     ]);
@@ -499,6 +530,71 @@ export function mount(el, ctx) {
     }, err);
   }
 
+  // ---------------------------------------------------------- QR label
+
+  // QR code for the public page. The code can carry a share link so a phone
+  // without a login opens the procedure; "procedures only" links expose nothing else.
+  function qrDialog(p) {
+    if ((p.status || 'published') !== 'published') {
+      ctx.toast('Publish the page first: only published pages have a public URL', 'warn');
+      return;
+    }
+    const sel = h('select', { 'aria-label': 'Link the QR code opens' }, [h('option', { value: '' }, 'Project viewer link (needs a login when login is on)')]);
+    const img = h('img', { class: 'sop-qr-img', alt: 'QR code for ' + p.title });
+    const urlOut = h('input', { type: 'text', readonly: true, class: 'sop-qr-url', 'aria-label': 'Public URL' });
+    const hint = h('div', { class: 'muted small sop-qr-hint' });
+    const sheetLinks = h('div', { class: 'row sop-qr-sheets' });
+    let shares = [];
+    function current() { return sel.value; }
+    function refresh() {
+      const share = current();
+      img.src = api.pageQrUrl(project, p.slug, { share: share, scale: 6 });
+      urlOut.value = new URL(api.publicPageUrl(project, p.slug, share), location.href).href;
+      sheetLinks.innerHTML = '';
+      const rooms = (p.rooms || []).map(function (id) { return (store.doc.rooms || []).filter(function (r) { return r.id === id; })[0]; }).filter(Boolean);
+      (rooms.length ? rooms : [null]).forEach(function (r) {
+        sheetLinks.appendChild(h('a', { class: 'chip', href: api.pagesQrSheetUrl(project, { room: r ? r.id : '', share: share }), target: '_blank', rel: 'noopener' }, 'QR sheet: ' + (r ? (r.name || r.id) : 'all procedures')));
+      });
+    }
+    img.addEventListener('error', function () { hint.textContent = 'The QR code could not be generated. Set a public URL in Settings so codes point at an address phones can reach.'; });
+    img.addEventListener('load', function () { hint.textContent = ''; });
+    sel.addEventListener('change', refresh);
+    function loadShares() {
+      return api.shares(project).then(function (r) {
+        shares = r.shares || [];
+        while (sel.options.length > 1) sel.remove(1);
+        shares.forEach(function (s) {
+          sel.appendChild(h('option', { value: s.token }, (s.label || s.token) + (s.scope === 'sop' ? ' (procedures only)' : ' (whole viewer)')));
+        });
+      }, function () { shares = []; });
+    }
+    const newShare = canEdit ? h('button', { type: 'button', 'data-action': 'new-sop-share', onclick: function () {
+      api.createShare(project, { label: 'Procedure QR labels', scope: 'sop' }).then(function (r) {
+        return loadShares().then(function () { sel.value = r.share.token; refresh(); ctx.toast('Procedures-only share link created', 'ok'); });
+      }, err);
+    } }, 'New procedures-only link') : null;
+    const body = h('div', { class: 'sop-qr' }, [
+      h('div', { class: 'sop-qr-code' }, img),
+      h('div', { class: 'sop-field' }, [h('label', { for: 'sop-qr-sel' }, 'Opens'), sel, hint]),
+      h('div', { class: 'sop-field' }, [h('label', { for: 'sop-qr-url' }, 'URL'), urlOut]),
+      h('div', { class: 'row' }, [
+        h('a', { class: 'chip', href: '#', 'data-action': 'download-svg', onclick: function (e) { e.preventDefault(); window.open(api.pageQrUrl(project, p.slug, { share: current(), scale: 8 }), '_blank', 'noopener'); } }, 'Open SVG'),
+        h('a', { class: 'chip', href: urlOut.value || '#', target: '_blank', rel: 'noopener', onclick: function (e) { e.currentTarget.href = urlOut.value; } }, 'Open public page'),
+        newShare,
+      ]),
+      h('div', { class: 'muted small' }, 'Print a sheet of labels for every published procedure in a room:'),
+      sheetLinks,
+    ]);
+    sel.id = 'sop-qr-sel'; urlOut.id = 'sop-qr-url';
+    loadShares().then(function () {
+      const sop = shares.filter(function (s) { return s.scope === 'sop'; })[0];
+      if (sop) sel.value = sop.token;
+      refresh();
+    });
+    refresh();
+    ctx.openDialog({ title: 'QR label \u00b7 ' + p.title, body: body, buttons: [{ label: 'Close', value: null }] });
+  }
+
   // ---------------------------------------------------------- editor
 
   function draftKey(id) { return 'fathom.sop.draft.' + project + '.' + id; }
@@ -525,7 +621,6 @@ export function mount(el, ctx) {
       page.devices = [dev];
       if (d && d.room && page.rooms.indexOf(d.room) < 0) page.rooms.push(d.room);
       if (d && !page.title) { page.title = deviceTitle(d) + ': '; }
-      if (!page.body) page.body = '## Steps\n\n- [ ] On [[device:' + dev + ']], \u2026\n';
     }
     return page;
   }
@@ -761,8 +856,35 @@ export function mount(el, ctx) {
     main.appendChild(h('div', { class: 'sop-topbar' }, [
       h('button', { type: 'button', class: 'sop-back', onclick: cancel }, '\u2039 ' + (isNew ? 'Procedures' : (orig.title || 'Page'))),
       h('span', { class: 'grow' }),
+      !isNew && (orig.status || 'published') === 'published' ? h('button', { type: 'button', 'data-action': 'qr', onclick: function () { qrDialog(orig); } }, 'QR label') : null,
       h('h2', { class: 'sop-editor-title' }, isNew ? 'New page' : 'Edit page'),
     ]));
+    if (isNew && !(cur.body || '').trim()) {
+      // Starter templates: one tap fills title, kind, summary, tags and body; the author then edits.
+      const dev = cur.devices[0] || '';
+      const tplBox = h('div', { class: 'sop-templates', role: 'group', 'aria-label': 'Start from a template' }, [
+        h('div', { class: 'sop-pane-title' }, 'Start from a template'),
+        h('div', { class: 'sop-chips' }, TEMPLATES.map(function (t) {
+          return h('button', { type: 'button', class: 'chip', 'data-template': t.id, onclick: function () {
+            cur.kind = t.kind; kindSel.value = t.kind;
+            if (!cur.title.trim()) cur.title = t.title;
+            else if (/:\s*$/.test(cur.title)) cur.title = t.title + ': ' + cur.title.replace(/:\s*$/, '');
+            title.value = cur.title;
+            if (!slugTouched) { cur.slug = slugify(cur.title); slugIn.value = cur.slug; }
+            if (!cur.summary) { cur.summary = t.summary; summary.value = cur.summary; }
+            t.tags.forEach(function (tag) { if (cur.tags.indexOf(tag) < 0) cur.tags.push(tag); });
+            tags.value = cur.tags.join(', ');
+            cur.body = t.body.replace(/ \(\{\{device\}\}\)/g, dev ? ' ([[device:' + dev + ']])' : '').replace(/\{\{device\}\}/g, dev ? '[[device:' + dev + ']]' : 'the device');
+            ta.value = cur.body;
+            tplBox.remove();
+            mark();
+            refreshPreview();
+            ta.focus();
+          } }, [h('span', { class: 'sop-kind sop-kind-' + t.kind }, KIND_LABEL[t.kind]), ' ', t.title]);
+        }).concat([h('button', { type: 'button', class: 'chip', onclick: function () { tplBox.remove(); ta.focus(); } }, 'Blank page')])),
+      ]);
+      main.appendChild(tplBox);
+    }
     if (draft && JSON.stringify(draft) !== JSON.stringify(orig)) {
       const bar = h('div', { class: 'sop-warn sop-draft-bar', role: 'status' }, [
         h('span', null, 'You have unsaved changes from an earlier session on this device.'),

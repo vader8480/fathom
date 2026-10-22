@@ -627,6 +627,75 @@ class FrontendSmoke(unittest.TestCase):
             procs = cdp.eval("document.querySelectorAll('#app-inspector [data-section=procedures] .ins-procs li').length")
             self.assertGreaterEqual(procs, 1, "SOP-UI-05: device inspector lists the procedures that reference the device")
 
+    def test_public_sop_page_on_a_phone_via_share_link(self) -> None:
+        """Procedures-only share link → chrome-free SOP page at 390×844: large type, tappable checklist, zoomable image, no edit controls."""
+        if not self.campus_rooms:
+            self.skipTest("campus-demo sample not present")
+        import urllib.request
+
+        req = urllib.request.Request(self.base + "/api/v2/projects/campus-demo/shares", data=json.dumps({"label": "qr", "scope": "sop"}).encode("utf-8"),
+                                     headers={"Content-Type": "application/json", "X-Fathom": "1"}, method="POST")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            token = json.loads(resp.read().decode("utf-8"))["share"]["token"]
+        url = self.base + smoke_url("/s/%s/sop/power-up" % token)
+        with cdp_session(url, mobile=(390, 844)) as cdp:
+            cdp.wait("document.querySelectorAll('input[data-task]').length")
+            cdp.eval("var b = document.querySelectorAll('input[data-task]'); b[0].click(); b[2].click(); 1")
+            page = cdp.eval("""({
+              title: document.querySelector('h1').textContent,
+              font: parseFloat(getComputedStyle(document.querySelector('.sop-body')).fontSize),
+              checked: document.querySelectorAll('input[data-task]:checked').length,
+              done: document.querySelectorAll('li.md-task.done').length,
+              stored: sessionStorage.getItem('fathom.sop.tasks.campus-demo.power-up'),
+              progress: (document.querySelector('#sop-progress .sop-progress-text') || {}).textContent,
+              taskTap: Math.min.apply(null, Array.from(document.querySelectorAll('.md-task-label')).map(function (b) { return b.getBoundingClientRect().height; })),
+              topTap: Math.min.apply(null, Array.from(document.querySelectorAll('.sop-topbar a, .sop-topbar button')).map(function (b) { return b.getBoundingClientRect().height; })),
+              applies: document.querySelectorAll('.sop-applies .chip').length,
+              appliesLinks: document.querySelectorAll('.sop-applies a').length,
+              appliesSticky: getComputedStyle(document.querySelector('.sop-applies')).position,
+              toc: !!document.querySelector('details.sop-toc'),
+              hscroll: document.documentElement.scrollWidth > window.innerWidth,
+              edit: !!document.querySelector('[data-action=edit], textarea, .sop-editor'),
+              print: !!document.getElementById('sop-print'),
+              next: (document.querySelector('.sop-prevnext .sop-next') || {}).getAttribute ? document.querySelector('.sop-prevnext .sop-next').getAttribute('href') : null,
+              back: document.querySelector('.sop-back').getAttribute('href'),
+              deviceLinks: document.querySelectorAll('.md a.md-ref-device').length,
+              deviceChips: document.querySelectorAll('.md span.md-ref-device').length,
+            })""")
+            self.assertIn("Power-up", page["title"])
+            self.assertGreaterEqual(page["font"], 17, "SOP-PUB-01: body text ≥17px on the public page")
+            self.assertEqual(page["checked"], 2, "SOP-PUB-02: checkboxes toggle by tap without a login")
+            self.assertEqual(page["done"], 2)
+            self.assertEqual(json.loads(page["stored"] or "[]"), [0, 2], "SOP-PUB-02: state kept in sessionStorage under the app's key")
+            self.assertIn("2 of", page["progress"] or "")
+            self.assertGreaterEqual(page["taskTap"], 44)
+            self.assertGreaterEqual(page["topTap"], 44)
+            self.assertGreater(page["applies"], 0)
+            self.assertEqual(page["appliesLinks"], 0, "SOP-PUB-03: a procedures-only link exposes no device/room pages")
+            self.assertEqual(page["deviceLinks"], 0)
+            self.assertGreater(page["deviceChips"], 0, "…device refs are plain chips")
+            self.assertEqual(page["appliesSticky"], "sticky")
+            self.assertTrue(page["toc"])
+            self.assertFalse(page["hscroll"], "SOP-PUB-01: no horizontal scrolling at 390px")
+            self.assertFalse(page["edit"], "SOP-PUB-01: no edit controls")
+            self.assertTrue(page["print"])
+            self.assertEqual(page["next"], "../sop/shut-down")
+            self.assertEqual(page["back"], "../sop/main-auditorium")
+            # a reload keeps the operator's place
+            cdp.eval("location.reload(); 1")
+            cdp.wait("document.querySelectorAll('input[data-task]:checked').length === 2")
+            # the reference page has a table that scrolls inside its container; tapping an image opens the lightbox
+            cdp.eval("location.href = location.href.replace('power-up', 'no-audio'); 1")
+            cdp.wait("!!document.querySelector('.md-table')")
+            tbl = cdp.eval("({wrap: getComputedStyle(document.querySelector('.md-table')).overflowX, hscroll: document.documentElement.scrollWidth > window.innerWidth})")
+            self.assertEqual(tbl["wrap"], "auto")
+            self.assertFalse(tbl["hscroll"])
+            cdp.eval("var i = document.createElement('img'); i.src = '../files/att-b249b8bb7f21/chapel.png'; i.alt = 'Chapel'; document.querySelector('.md').appendChild(i); i.click(); 1")
+            self.assertTrue(cdp.wait("!!document.querySelector('.sop-lightbox img')"), "SOP-PUB-04: tap-to-zoom lightbox")
+            # the same link refuses anything but procedures
+            cdp.eval("location.href = location.href.replace(/\\/sop\\/.*$/, '/rooms'); 1")
+            cdp.wait("document.body.textContent.indexOf('share_scope') >= 0")
+
     def test_view_error_card(self) -> None:
         path = "/?debug_missing_view=racks#/sunday-demo/main/racks"
         p = self.page(path)

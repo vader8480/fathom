@@ -327,7 +327,8 @@ settings), `floorplan.py` (DXF / Draw.io / PDF / SVG), `cables.py`, `network.py`
 `bom.py`, `qr.py`, `racks.py`, `dmx.py`, `patch.py`, `trace.py`, `search.py`,
 `markdown.py` (SOP wiki renderer + sanitizer),
 `assistant.py` / `llm.py`, `layout.py` / `render_html.py` / `render_svg.py`
-(maps and viewer pages), `export.py` (builds), `server.py` (WSGI app),
+(maps, viewer pages, public SOP pages, QR sheets, report sections),
+`export.py` (builds), `server.py` (WSGI app),
 `static/` (app). Samples: `samples/rrc-littleton` (0.2 project),
 `samples/campus-demo` (three rooms, audio/video/lighting, every importer),
 `samples/floorplans` (one file per supported format).
