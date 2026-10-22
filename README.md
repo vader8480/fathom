@@ -237,7 +237,8 @@ python -m fathom serve --open
 Module map: `vocab.py` (kinds, media, disciplines), `schema.py` (model v2,
 migration, ops, validation), `project.py` / `history.py` / `users.py`
 (storage, revisions, logins), `plugins.py` + `parsers/` (importers),
-`merge.py` (0.2 merge + import overlay), `library/` (templates),
+`merge.py` (0.2 merge + import overlay), `dedupe.py` (duplicate-device
+suggestions and merge plans), `library/` (templates),
 `presets.py` (generic device type presets),
 `floorplan.py` (DXF / Draw.io / PDF / SVG), `cables.py`, `network.py`,
 `bom.py`, `qr.py`, `racks.py`, `dmx.py`, `patch.py`, `trace.py`, `search.py`,

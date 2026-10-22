@@ -3,6 +3,7 @@
 // form (serial, asset tag, location / rack / RU, IP, firmware, dates, vendor,
 // cost, status, photos, notes). mount(el, ctx) (§6.4, §6.7).
 import {fits, rackUnits} from './rack-core.js';
+import {openDuplicatesDialog, openMergeDialog} from './merge-ui.js';
 
 const STATUSES = ['installed', 'planned', 'spare', 'retired'];
 
@@ -109,15 +110,17 @@ export function mount(el, ctx) {
   const groupCb = h('input', {id: 'inv-group', type: 'checkbox'});
   const colsBox = h('details', {id: 'inv-columns', class: 'inv-columns'});
   const csv = h('a', {id: 'inv-csv', class: 'inv-btn', role: 'button', text: 'CSV'});
+  const dupsBtn = ctx.api ? h('button', {id: 'inv-dups', type: 'button', class: 'inv-btn', text: 'Duplicates', title: 'Find devices that are probably the same unit'}) : null;
   const filters = h('div', {class: 'inv-toolbar'}, [roomSel, statusSel, locSel, kindSel, sysSel, textIn, qWarranty, qSerial,
-    h('span', {class: 'inv-check'}, [groupCb, h('label', {for: 'inv-group', text: 'Group by location'})]), colsBox, csv]);
+    h('span', {class: 'inv-check'}, [groupCb, h('label', {for: 'inv-group', text: 'Group by location'})]), colsBox, csv, dupsBtn]);
   const selCount = h('span', {class: 'inv-selcount', role: 'status'});
   const bulkStatus = h('select', {id: 'inv-bulk-status', 'aria-label': 'Set status of selected devices'});
   const bulkRoom = h('select', {id: 'inv-bulk-room', 'aria-label': 'Move selected devices to room'});
   const bulkLoc = h('select', {id: 'inv-bulk-location', 'aria-label': 'Set location of selected devices'});
   const markInstalled = h('button', {id: 'inv-mark-installed', type: 'button', class: 'inv-btn', text: 'Mark installed'});
+  const mergeSel = h('button', {id: 'inv-merge', type: 'button', class: 'inv-btn', text: 'Merge\u2026', title: 'Merge the selected devices into one'});
   const clearSel = h('button', {type: 'button', class: 'inv-btn', text: 'Clear selection'});
-  const bulk = h('div', {class: 'inv-bulk', role: 'group', 'aria-label': 'Bulk actions'}, [selCount, bulkStatus, bulkRoom, bulkLoc, markInstalled, clearSel]);
+  const bulk = h('div', {class: 'inv-bulk', role: 'group', 'aria-label': 'Bulk actions'}, [selCount, bulkStatus, bulkRoom, bulkLoc, markInstalled, mergeSel, clearSel]);
   const tableWrap = h('div', {class: 'inv-scroll'});
   const formHost = h('div', {class: 'inv-formhost'});
   root.appendChild(filters);
@@ -213,6 +216,7 @@ export function mount(el, ctx) {
     selCount.textContent = nSel ? nSel + ' selected' : rows.length + ' device' + (rows.length === 1 ? '' : 's');
     bulk.classList.toggle('inv-has-sel', nSel > 0);
     [bulkStatus, bulkRoom, bulkLoc, markInstalled, clearSel].forEach(function (b) { b.hidden = !nSel; });
+    mergeSel.hidden = nSel < 2 || readOnly() || !ctx.api;
     const columns = INV_COLUMNS.filter(function (c) { return S.visible.indexOf(c[0]) >= 0; });
     const table = h('table', {id: 'inv-table', class: 'inv-table'});
     table.appendChild(h('caption', {class: 'inv-sr', text: 'Inventory'}));
@@ -533,6 +537,12 @@ export function mount(el, ctx) {
   on(bulkRoom, 'change', function () { bulkApply('room', bulkRoom.value); });
   on(bulkLoc, 'change', function () { bulkApply('location', bulkLoc.value); });
   on(markInstalled, 'click', markAllInstalled);
+  on(mergeSel, 'click', function () {
+    const ids = selectedIds();
+    if (ids.length > 21) { ctx.toast('Merge at most 21 devices at a time.', 'warn'); return; }
+    openMergeDialog(ctx, ids).then(function (done) { if (done) { S.selected = {}; render(); } });
+  });
+  if (dupsBtn) on(dupsBtn, 'click', function () { openDuplicatesDialog(ctx); });
   on(clearSel, 'click', function () { S.selected = {}; render(); });
   on(tableWrap, 'click', function (e) {
     const s = e.target.closest('[data-sort]');

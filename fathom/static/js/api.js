@@ -101,6 +101,11 @@ export function createApi(opts) {
     },
     postChanges: function (name, baseRevision, ops, summary) { return send('POST', proj(name) + '/changes', { base_revision: baseRevision, ops: ops, summary: summary || '' }); },
     overlay: function (name) { return get(proj(name) + '/overlay'); },
+    duplicates: function (name, o) { o = o || {}; return get(proj(name) + '/devices/duplicates', { device: o.device, min: o.min, limit: o.limit }); },
+    mergePreview: function (name, survivor, duplicates, choices) { return send('POST', proj(name) + '/devices/merge/preview', { survivor: survivor, duplicates: duplicates, choices: choices || {} }); },
+    mergeDevices: function (name, survivor, duplicates, choices, baseRevision) {
+      return send('POST', proj(name) + '/devices/merge', { survivor: survivor, duplicates: duplicates, choices: choices || {}, base_revision: baseRevision });
+    },
     offlineManifest: function (name) { return get(proj(name) + '/offline-manifest'); },
     history: function (name, o) { o = o || {}; return get(proj(name) + '/history', { limit: o.limit, before: o.before }); },
     historyDoc: function (name, rev) { return get(proj(name) + '/history/' + enc(rev)); },

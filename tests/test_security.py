@@ -45,6 +45,8 @@ SPEC_ROLES = {
     ("POST", "/api/v2/library"): "editor", ("DELETE", "/api/v2/library/{}"): "editor", ("GET", "/api/v2/presets"): "viewer",
     ("GET", "/api/v2/projects"): "viewer", ("POST", "/api/v2/projects"): "editor", ("GET", "/api/v2/projects/{}"): "viewer",
     ("PUT", "/api/v2/projects/{}"): "editor", ("POST", "/api/v2/projects/{}/changes"): "editor", ("DELETE", "/api/v2/projects/{}"): "admin",
+    ("GET", "/api/v2/projects/{}/devices/duplicates"): "viewer", ("POST", "/api/v2/projects/{}/devices/merge/preview"): "editor",
+    ("POST", "/api/v2/projects/{}/devices/merge"): "editor",
     ("GET", "/api/v2/projects/{}/doc.json"): "viewer", ("GET", "/api/v2/projects/{}/history"): "viewer",
     ("GET", "/api/v2/projects/{}/history/{}"): "viewer", ("GET", "/api/v2/projects/{}/history/{}/diff"): "viewer",
     ("POST", "/api/v2/projects/{}/history/{}/restore"): "editor", ("GET", "/api/v2/projects/{}/overlay"): "viewer",
