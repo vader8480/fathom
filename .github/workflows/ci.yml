@@ -4,8 +4,10 @@
 #
 # Repo settings this workflow depends on (Settings → Actions → General →
 # Workflow permissions): "Allow GitHub Actions to create and approve pull
-# requests" must be ON for the auto-approve job. Settings → General → Pull
-# Requests → "Allow auto-merge" must be ON for GitHub-native auto-merge; without
+# requests" must be ON for the auto-approve job to post a review. While it is
+# OFF the job succeeds with a warning annotation instead of failing, so the
+# tests stay the only gating check. Settings → General → Pull Requests →
+# "Allow auto-merge" must be ON for GitHub-native auto-merge; without
 # it (or without required status checks on the base branch) the auto-merge
 # job squash-merges directly, since the tests already passed in this run.
 #
@@ -131,9 +133,34 @@ jobs:
             -f body="CI passed on ${GITHUB_SHA} (run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}). Approved automatically." \
             --jq '"Approved: review " + (.id|tostring) + " state " + .state' 2>&1)" || rc=$?
           echo "${out}"
-          if [ "${rc}" -ne 0 ] && [[ "${out}" == *"not permitted to approve"* ]]; then
-            echo "::error title=Repo setting required::Turn on Settings → Actions → General → Workflow permissions → 'Allow GitHub Actions to create and approve pull requests' (repo ${GITHUB_REPOSITORY}), then re-run this job."
+          if [ "${rc}" -eq 0 ]; then
+            exit 0
           fi
+          # Two 422s are repo preconditions, not CI failures: the Actions
+          # setting that allows approvals is off, or the PR was opened by the
+          # same actor as the token (an actor cannot approve its own PR).
+          # Tests are the gating check, so warn visibly and succeed instead of
+          # failing the run (which would also skip the auto-merge job).
+          settings_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/settings/actions"
+          case "${out}" in
+            *"not permitted to approve"*)
+              msg="Not approved: repo ${GITHUB_REPOSITORY} has 'Allow GitHub Actions to create and approve pull requests' switched OFF. Turn it on under Settings → Actions → General → Workflow permissions (${settings_url}) and this job approves PRs automatically from the next run on."
+              echo "::warning title=Approve PR skipped (repo setting)::${msg}"
+              {
+                echo "### Approve PR: skipped"
+                echo
+                echo "${msg}"
+              } >> "${GITHUB_STEP_SUMMARY}"
+              exit 0
+              ;;
+            *"own pull request"*)
+              msg="Not approved: PR #${PR_NUMBER} was opened by the same actor as GITHUB_TOKEN, which cannot approve its own pull request."
+              echo "::notice title=Approve PR skipped::${msg}"
+              echo "${msg}" >> "${GITHUB_STEP_SUMMARY}"
+              exit 0
+              ;;
+          esac
+          echo "::error title=Approve PR failed::Unexpected error from the reviews API (exit ${rc}); see the log above."
           exit "${rc}"
 
   auto-merge:
