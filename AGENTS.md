@@ -34,7 +34,8 @@ job installs `.[serve,discovery]` when the `discovery` extra exists in
   Settings → Actions → General → Workflow permissions → "Allow GitHub Actions
   to create and approve pull requests".
 - **Auto-merge worker PR** squash-merges non-draft PRs from `cursor/*`
-  branches (deleting the branch) after the approval. It is on by default;
+  branches into `main` (deleting the branch) after the approval; stacked
+  PRs whose base is another branch are left alone. It is on by default;
   switch it off with the repository variable `AUTO_MERGE_WORKER_PRS=false`
   (Settings → Secrets and variables → Actions → Variables). It uses
   GitHub-native auto-merge when "Allow auto-merge" (Settings → General →
