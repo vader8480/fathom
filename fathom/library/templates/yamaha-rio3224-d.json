@@ -1,0 +1,69 @@
+{
+  "id": "yamaha-rio3224-d",
+  "manufacturer": "Yamaha",
+  "model": "Rio3224-D",
+  "name": "Rio3224-D",
+  "kind": "stage_io",
+  "brand": "yamaha",
+  "ru": 5,
+  "width": "full",
+  "depth_mm": 368,
+  "power_w": 120,
+  "weight_kg": 13.5,
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "routing": "matrix",
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Analog In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 32
+    },
+    {
+      "group": "Analog Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 16
+    },
+    {
+      "group": "AES Out",
+      "dir": "out",
+      "medium": "aes3",
+      "connector": "XLR3M",
+      "names": [
+        "1/2",
+        "3/4",
+        "5/6",
+        "7/8"
+      ],
+      "channels": 2
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "etherCON",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 32
+    }
+  ],
+  "dante_channels": {
+    "tx": 32,
+    "rx": 24
+  },
+  "tags": [
+    "stagebox",
+    "dante",
+    "r-series"
+  ],
+  "source_url": "https://usa.yamaha.com/products/proaudio/interfaces/r_series_adda/specs.html",
+  "notes": "First-generation R series (Rio3224-D). The Rio3224-D2 is a separate model: same I/O count, revised preamps and display, different firmware line."
+}

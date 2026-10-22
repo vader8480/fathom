@@ -1,0 +1,44 @@
+{
+  "id": "yamaha-ri8-d",
+  "manufacturer": "Yamaha",
+  "model": "Ri8-D",
+  "name": "Ri8-D",
+  "kind": "stage_io",
+  "brand": "yamaha",
+  "ru": 1,
+  "width": "full",
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Analog In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 8
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "etherCON",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 8
+    }
+  ],
+  "dante_channels": {
+    "tx": 8,
+    "rx": 0
+  },
+  "tags": [
+    "stagebox",
+    "dante",
+    "r-series"
+  ],
+  "source_url": "https://usa.yamaha.com/products/proaudio/interfaces/r_series_adda/specs.html"
+}

@@ -1,0 +1,44 @@
+{
+  "id": "yamaha-ro8-d",
+  "manufacturer": "Yamaha",
+  "model": "Ro8-D",
+  "name": "Ro8-D",
+  "kind": "stage_io",
+  "brand": "yamaha",
+  "ru": 1,
+  "width": "full",
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Analog Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 8
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "etherCON",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 8
+    }
+  ],
+  "dante_channels": {
+    "tx": 0,
+    "rx": 8
+  },
+  "tags": [
+    "stagebox",
+    "dante",
+    "r-series"
+  ],
+  "source_url": "https://usa.yamaha.com/products/proaudio/interfaces/r_series_adda/specs.html"
+}

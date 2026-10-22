@@ -593,6 +593,31 @@ export function addDeviceFromTemplateOps(doc, template, opts) {
   return { ops: [{ op: 'put', coll: 'devices', id: id, value: dev }], id: id };
 }
 
+// Set an existing (overlay / proposed / imported) device up from a library template the way
+// addDeviceFromTemplateOps does for a new one: kind, discipline, manufacturer, model, brand,
+// template, Dante flag, DMX footprint and the expanded ports come from the template; labels on
+// the old ports carry over to the template port with the same medium, direction and index. Identity
+// (id, name, room, interfaces, inventory, note) is kept. Mirrors fathom.library.suggest.apply_template_to_device.
+export function applyTemplateToDevice(dev, template, vocab) {
+  const t = template || {};
+  dev.kind = t.kind || dev.kind || 'other';
+  if (t.discipline && vocab && vocab.kinds && vocab.kinds[dev.kind] && vocab.kinds[dev.kind].discipline !== t.discipline) dev.discipline = t.discipline;
+  else delete dev.discipline;
+  ['manufacturer', 'model', 'brand'].forEach(function (k) { if (t[k]) dev[k] = t[k]; });
+  if (t.id) dev.template = t.id;
+  if (t.dante) dev.dante = true;
+  if (t.dmx_footprint) dev.dmx = Object.assign({}, dev.dmx || {}, { footprint: t.dmx_footprint });
+  const labels = {};
+  const key = function (p) { return (p.medium || '') + '/' + (p.dir || '') + '#' + p.index; };
+  (dev.ports || []).forEach(function (p) { if (p && p.label && p.index !== undefined && p.index !== null) labels[key(p)] = p.label; });
+  dev.ports = expandPortGroups(t.ports || []).map(function (p) {
+    const lab = labels[key(p)];
+    if (lab && !p.label) p.label = lab;
+    return p;
+  });
+  return dev;
+}
+
 // ------------------------------------------------------------ filtering
 
 export function stateIncludes(status, state) {

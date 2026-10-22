@@ -567,6 +567,7 @@ def compute_findings(run_id: str, results: List[ProbeResult], doc: Doc, decision
         d["device_id"] = device_ids.get(e.id, "")
         d["label"] = e.label
         d["proposed"] = proposed.get(e.id)
+        d["model_suggestions"] = _model_suggestions(e, devices.get(device_ids.get(e.id, "")) if e.status == "match" else None, doc)
         d["interfaces"] = [{k: v for k, v in itf.items() if not k.startswith("_")} for itf in (proposed.get(e.id) or {}).get("interfaces") or entity_interfaces(e)]
         if e.match:
             d["interfaces"] = _matched_interfaces(e, devices.get(str(e.match["device"])), by_mac, device_ids, devices, proposed)
@@ -584,6 +585,20 @@ def compute_findings(run_id: str, results: List[ProbeResult], doc: Doc, decision
         "connections": [c.to_dict() for c in connections], "rows": connection_rows(connections, doc, {d["id"]: d for d in proposed.values()}), "networks": networks,
         "notes": [n for r in results for n in r.notes], "probes": [r.summary() for r in results],
     }
+
+
+def _model_suggestions(e: Entity, matched: Optional[Dict[str, Any]], doc: Doc) -> List[Dict[str, Any]]:
+    """Library models for what the probes reported (mDNS / Dante TXT, Yamaha devinfo product, SNMP ENTITY-MIB,
+    UniFi model, LLDP system description). A matched document device that already has a template needs none."""
+    if e.status == "unresolved" or (matched is not None and matched.get("template")):
+        return []
+    from ..library.suggest import suggest_models
+
+    text = " ".join(x for x in (e.name, e.dante_name, e.hostname) if x)
+    try:
+        return suggest_models(e.manufacturer, e.model, text, kind=e.kind, doc=doc)
+    except Exception:  # a broken custom template must not break findings
+        return []
 
 
 def _resolve_uplink(itf: Dict[str, Any], by_mac: Dict[str, str], device_ids: Dict[str, str], devices: Dict[str, Dict[str, Any]], proposed: Dict[str, Dict[str, Any]]) -> None:
@@ -727,7 +742,9 @@ def promote_ops(pdir: Path, doc: Doc, run_id: str, body: Dict[str, Any]) -> Tupl
     """Change ops for a promote request.
 
     ``body``: ``{"entities": [ids], "merge": {entity: device}, "connections": [ids], "networks": [ids],
-    "ignore": {"entities": [...], "connections": [...], "networks": [...]}, "room": ""}``.
+    "templates": {entity: template id}, "ignore": {"entities": [...], "connections": [...], "networks": [...]}, "room": ""}``.
+    ``templates`` accepts a model suggestion: a promoted entity is set up from that library template the way the
+    "Add gear" dialog would; a merged entity gives the target the template (and its missing ports) when it has none.
     Ignore decisions are persisted here (they are not document changes).
     """
     f = findings(pdir, doc, run_id)
@@ -740,6 +757,23 @@ def promote_ops(pdir: Path, doc: Doc, run_id: str, body: Dict[str, Any]) -> Tupl
     taken = set(devices)
     room = str(body.get("room") or "")
     created: Dict[str, str] = {}  # entity -> device id created in this request
+    templates = body.get("templates") or {}
+    if not isinstance(templates, dict):
+        raise ValueError("templates must be an object (entity id -> template id)")
+    tpl_cache: Dict[str, Dict[str, Any]] = {}
+
+    def template_for(eid: str) -> Optional[Dict[str, Any]]:
+        tid = str(templates.get(eid) or "")
+        if not tid:
+            return None
+        if tid not in tpl_cache:
+            from ..library import get_template
+
+            t = get_template(tid, doc)
+            if t is None:
+                raise ValueError(f"unknown template {tid}")
+            tpl_cache[tid] = t
+        return tpl_cache[tid]
 
     for eid in body.get("entities") or []:
         e = ents.get(str(eid))
@@ -758,6 +792,11 @@ def promote_ops(pdir: Path, doc: Doc, run_id: str, body: Dict[str, Any]) -> Tupl
         if room:
             dev["room"] = room
         dev["interfaces"] = [{k: v for k, v in itf.items() if not k.startswith("_") and k != "known"} for itf in dev.get("interfaces") or []]
+        t = template_for(str(eid))
+        if t is not None:
+            from ..library.suggest import apply_template_to_device
+
+            apply_template_to_device(dev, t)
         created[str(eid)] = dev["id"]
         ops.append({"op": "put", "coll": "devices", "id": dev["id"], "value": dev})
         summary["devices"] += 1
@@ -806,6 +845,16 @@ def promote_ops(pdir: Path, doc: Doc, run_id: str, body: Dict[str, Any]) -> Tupl
         if e.get("dante_name") and not target.get("dante_name"):
             patch["dante_name"] = e["dante_name"]
             patch["dante"] = True
+        t = template_for(str(eid))
+        if t is not None and not target.get("template"):
+            from ..library import apply_template_ops
+
+            for top in apply_template_ops(doc, str(did), t):  # template id, missing ports, manufacturer / model when blank
+                patch.update(top["value"])
+            patch["template"] = t["id"]
+            for k in ("manufacturer", "model", "brand"):
+                if t.get(k) and not target.get(k):
+                    patch[k] = t[k]
         ops.append({"op": "merge", "coll": "devices", "id": str(did), "value": patch})
         created[str(eid)] = str(did)
         summary["merged"] += 1

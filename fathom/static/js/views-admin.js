@@ -2,6 +2,7 @@
 // Imports, History, Builds, Settings.
 
 import { slug, newId, deepClone } from './model-core.js';
+import { suggestionControl, applyChoice } from './suggest-ui.js';
 
 function h(tag, attrs, children) {
   const el = document.createElement(tag);
@@ -149,14 +150,33 @@ export function mountImports(el, ctx) {
             out.appendChild(errorTable(errors));
           }
           (r.warnings || []).filter(function (w) { return !errText[w]; }).forEach(function (w) { out.appendChild(h('div', { class: 'imp-warn' }, w)); });
+          const controls = {};
+          const sugg = r.suggestions || {};
+          const devOps = (r.ops || []).filter(function (op) { return op.coll === 'devices' && op.op === 'put' && op.value && sugg[op.id]; });
+          if (devOps.length) {
+            out.appendChild(h('div', { class: 'imp-sugg' }, [h('div', { class: 'muted', style: { fontSize: '12px' } }, 'The library knows gear like these rows. Accept a model to create the device from its template (kind, model, ports), or keep the row as typed.')]
+              .concat(devOps.map(function (op) {
+                controls[op.id] = suggestionControl(sugg[op.id], { label: op.value.name || op.id, pickTemplate: ctx.pickTemplate ? function () { return ctx.pickTemplate({}); } : null });
+                return h('div', { class: 'imp-sugg-row', 'data-device': op.id }, [h('div', { class: 'imp-sugg-dev' }, [op.value.name || op.id, h('div', { class: 'muted', style: { fontWeight: 400 } }, [op.value.manufacturer, op.value.model].filter(Boolean).join(' '))]), controls[op.id].el]);
+              }))));
+          }
           if ((r.ops || []).length) {
-            out.appendChild(h('button', { type: 'button', class: 'primary small', style: { marginTop: '8px' }, onclick: function () {
-              if (r.base_revision !== undefined && r.base_revision !== store.revision) ctx.toast('The project changed since the preview; applying on the latest revision.', 'warn');
-              ctx.commit(r.ops, 'Import ' + (fs[0].name || imp.label));
-              ctx.toast('Applied ' + r.ops.length + ' changes', 'ok');
-              out.classList.add('hidden');
-              el.classList.remove('wide');
-            } }, 'Apply ' + r.ops.length + ' changes'));
+            const apply = h('button', { type: 'button', class: 'primary small', style: { marginTop: '8px' }, onclick: function () {
+              apply.disabled = true;
+              const ops = deepClone(r.ops);
+              Promise.all(ops.map(function (op) {
+                const c = controls[op.id];
+                return c && op.coll === 'devices' && op.op === 'put' ? applyChoice(ctx, c, op.value) : Promise.resolve(null);
+              })).then(function () {
+                apply.disabled = false;
+                if (r.base_revision !== undefined && r.base_revision !== store.revision) ctx.toast('The project changed since the preview; applying on the latest revision.', 'warn');
+                ctx.commit(ops, 'Import ' + (fs[0].name || imp.label));
+                ctx.toast('Applied ' + ops.length + ' changes', 'ok');
+                out.classList.add('hidden');
+                el.classList.remove('wide');
+              }, function (e) { apply.disabled = false; ctx.toast(msg(e), 'err'); });
+            } }, 'Apply ' + r.ops.length + ' changes');
+            out.appendChild(apply);
           } else {
             out.appendChild(h('div', { class: 'muted', style: { marginTop: '6px' } }, 'Nothing to apply.'));
           }
@@ -229,18 +249,31 @@ export function mountImports(el, ctx) {
     const autos = (o.devices || []).filter(function (d) { return d.auto; });
     if (autos.length) {
       const tb = h('tbody');
+      const sugg = o.suggestions || {};
       autos.forEach(function (d) {
-        tb.appendChild(h('tr', null, [h('td', null, d.name || d.id), h('td', null, d.kind || ''), h('td', null, d.source || ''), h('td', null, store.readOnly ? null : h('button', { type: 'button', class: 'small', onclick: function () {
+        const sub = [d.manufacturer, d.model].filter(Boolean).join(' ') || d.sub || '';
+        const control = suggestionControl(sugg[d.id] || [], { label: d.name || d.id, readOnly: store.readOnly, pickTemplate: ctx.pickTemplate ? function () { return ctx.pickTemplate({}); } : null });
+        const promote = h('button', { type: 'button', class: 'small primary', onclick: function () {
           const dev = deepClone(d);
           delete dev.auto;
           delete dev.source;
           (dev.ports || []).forEach(function (p) { delete p.auto; });
           if ((store.doc.devices || []).some(function (x) { return x.id === dev.id; })) { ctx.toast(dev.id + ' already exists', 'warn'); return; }
-          ctx.commit([{ op: 'put', coll: 'devices', id: dev.id, value: dev }], 'Promote ' + (d.name || d.id));
-          ctx.toast('Promoted ' + (d.name || d.id) + ' into the model', 'ok');
-        } }, 'Promote'))]));
+          promote.disabled = true;
+          applyChoice(ctx, control, dev).then(function () {
+            promote.disabled = false;
+            ctx.commit([{ op: 'put', coll: 'devices', id: dev.id, value: dev }], 'Promote ' + (d.name || d.id));
+            ctx.toast('Promoted ' + (d.name || d.id) + (dev.template ? ' as ' + ((dev.manufacturer ? dev.manufacturer + ' ' : '') + (dev.model || dev.template)) : ' into the model'), 'ok');
+          }, function (e) { promote.disabled = false; ctx.toast(msg(e), 'err'); });
+        } }, 'Promote');
+        tb.appendChild(h('tr', { class: 'ovl-row', 'data-device': d.id }, [
+          h('td', { 'data-label': 'Device' }, [h('div', { class: 'disc-name' }, d.name || d.id), sub ? h('div', { class: 'muted' }, sub) : null, control.el]),
+          h('td', { 'data-label': 'Kind' }, d.kind || ''), h('td', { 'data-label': 'From' }, d.source || ''),
+          h('td', { 'data-label': '', class: 'disc-actions' }, store.readOnly ? null : promote),
+        ]));
       });
-      ovlWrap.appendChild(h('table', { class: 'adm-table', style: { marginTop: '8px' } }, [h('thead', null, h('tr', null, ['Device', 'Kind', 'From', ''].map(function (t) { return h('th', { scope: 'col' }, t); }))), tb]));
+      ovlWrap.appendChild(h('table', { class: 'adm-table disc-table ovl-table', style: { marginTop: '8px' } }, [h('thead', null, h('tr', null, ['Device', 'Kind', 'From', ''].map(function (t) { return h('th', { scope: 'col' }, t); }))), tb]));
+      ovlWrap.appendChild(h('div', { class: 'muted', style: { fontSize: '12px', marginTop: '4px' } }, 'Suggested models come from the library, matched on what the import reported (manufacturer, model, device name). Accepting one sets kind, model and ports the way Add gear does; "No model" keeps the device as imported.'));
     }
     (o.notes || []).slice(0, 20).forEach(function (n) { ovlWrap.appendChild(h('div', { class: 'muted', style: { fontSize: '12px' } }, n)); });
   }

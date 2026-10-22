@@ -150,6 +150,7 @@ export function createApi(opts) {
     deleteBuild: function (name, run) { return send('DELETE', proj(name) + '/builds/' + enc(run)); },
     library: function (params) { return get('api/v2/library', params); },
     presets: function () { return get('api/v2/presets'); },
+    suggestModels: function (q) { return get('api/v2/library/suggest', q || {}); },
     template: function (id, project) { return get('api/v2/library/' + enc(id), { project: project }); },
     saveTemplate: function (t, override) { return send('POST', 'api/v2/library', t, { override: override ? 1 : '' }); },
     deleteTemplate: function (id) { return send('DELETE', 'api/v2/library/' + enc(id)); },

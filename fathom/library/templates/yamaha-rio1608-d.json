@@ -1,0 +1,55 @@
+{
+  "id": "yamaha-rio1608-d",
+  "manufacturer": "Yamaha",
+  "model": "Rio1608-D",
+  "name": "Rio1608-D",
+  "kind": "stage_io",
+  "brand": "yamaha",
+  "ru": 3,
+  "width": "full",
+  "depth_mm": 368,
+  "power_w": 65,
+  "weight_kg": 9.5,
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Analog In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 16
+    },
+    {
+      "group": "Analog Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 8
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "etherCON",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 16
+    }
+  ],
+  "dante_channels": {
+    "tx": 16,
+    "rx": 8
+  },
+  "tags": [
+    "stagebox",
+    "dante",
+    "r-series"
+  ],
+  "source_url": "https://usa.yamaha.com/products/proaudio/interfaces/r_series_adda/specs.html",
+  "notes": "First-generation R series (Rio1608-D). The Rio1608-D2 is a separate model: same I/O count, revised preamps and display, different firmware line."
+}

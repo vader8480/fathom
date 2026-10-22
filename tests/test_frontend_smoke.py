@@ -866,6 +866,92 @@ class FrontendSmoke(unittest.TestCase):
         self.assertRegex(main.text().lower(), r"error|fail|could not|couldn't|unable", "FR-UX-03: inline error card with the message in #app-main")
         self.assertIsNotNone(p.by_id("app-views"), "FR-UX-03: the rest of the app keeps working")
 
+    def test_model_suggestion_in_imports_overlay_on_a_phone(self) -> None:
+        """A Dante preset brings in "Y004-Yamaha-Rio1608-STG" (Yamaha Corporation / Rio1608-D): the Imports overlay shows
+        "Suggested model: Yamaha Rio1608-D · High", ≥44px controls at 390×844, and Promote creates the device from that template."""
+        if not self.campus_rooms:
+            self.skipTest("campus-demo sample not present")
+        import urllib.request
+
+        projects = Path(self.data) / "projects"
+        if not (projects / "campus-sugg").exists():
+            shutil.copytree(str(projects / "campus-demo"), str(projects / "campus-sugg"))
+        preset = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?><preset version=\"3.0.0\"><name>Stage</name>"
+                  "<device><name>Y004-Yamaha-Rio1608-STG</name><manufacturer_name>Yamaha Corporation</manufacturer_name><model_name>Rio1608-D</model_name>"
+                  "<ipv4_address>10.20.0.23</ipv4_address><txchannel danteId=\"1\"><label>Stage 1</label></txchannel></device></preset>").encode("utf-8")
+        boundary = "----fathomsmoke"
+        body = (("--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"stage.xml\"\r\nContent-Type: text/xml\r\n\r\n" % boundary).encode("utf-8")
+                + preset + ("\r\n--%s--\r\n" % boundary).encode("utf-8"))
+        req = urllib.request.Request(self.base + "/api/v2/projects/campus-sugg/imports?kind=dante", data=body,
+                                     headers={"Content-Type": "multipart/form-data; boundary=" + boundary, "X-Fathom": "1"}, method="POST")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            self.assertEqual(resp.status, 201)
+
+        def devices() -> Dict[str, Dict[str, Any]]:
+            with urllib.request.urlopen(self.base + "/api/v2/projects/campus-sugg", timeout=10) as resp:
+                doc = json.loads(resp.read().decode("utf-8"))["doc"]
+            return {d["id"]: d for d in doc["devices"]}
+
+        self.assertNotIn("y004-yamaha-rio1608-stg", devices())
+        url = self.base + smoke_url(self.app_path("imports", project="campus-sugg", room=self.campus_rooms[0]))
+        row = ".ovl-row[data-device=y004-yamaha-rio1608-stg]"
+        with cdp_session(url, mobile=(390, 844)) as cdp:
+            cdp.wait("!!document.querySelector('%s .ms-suggest select')" % row, timeout=30)
+            page = cdp.eval("""(function () {
+              var row = document.querySelector('%s');
+              var sel = row.querySelector('.ms-suggest select');
+              var chip = row.querySelector('.ms-conf');
+              var btn = row.querySelector('.disc-actions button');
+              return {
+                label: row.querySelector('.ms-label').textContent,
+                value: sel.value,
+                text: sel.options[sel.selectedIndex].textContent,
+                options: Array.from(sel.options).map(function (o) { return o.value; }),
+                chip: chip.textContent,
+                level: row.querySelector('.ms-suggest').getAttribute('data-level'),
+                evidence: row.querySelector('.ms-evidence').textContent,
+                selTap: sel.getBoundingClientRect().height,
+                btnTap: btn.getBoundingClientRect().height,
+                hscroll: document.documentElement.scrollWidth > window.innerWidth,
+                sub: row.querySelector('.muted').textContent,
+              };
+            })()""" % row)
+            self.assertEqual(page["label"], "Suggested model")
+            self.assertEqual(page["value"], "yamaha-rio1608-d", "FR-MS-01: the exact library model is preselected")
+            self.assertIn("Yamaha Rio1608-D", page["text"])
+            self.assertIn("100%", page["text"])
+            self.assertEqual(page["level"], "high")
+            self.assertIn("High", page["chip"])
+            self.assertIn("yamaha-rio1608-d2", page["options"], "the -D2 stays available as an alternative")
+            self.assertLess(page["options"].index("yamaha-rio1608-d"), page["options"].index("yamaha-rio1608-d2"))
+            self.assertIn("__other", page["options"], "…and so does 'Choose from library'")
+            self.assertIn("", page["options"], "…and 'No model'")
+            self.assertIn("Rio1608-D", page["evidence"])
+            self.assertIn("Rio1608-D", page["sub"])
+            self.assertGreaterEqual(page["selTap"], 44, "FR-MS-02: the model picker is a comfortable tap target at 390px")
+            self.assertGreaterEqual(page["btnTap"], 44)
+            self.assertFalse(page["hscroll"], "no horizontal scrolling at 390px")
+            # choosing "No model" then back to the suggestion keeps the control coherent
+            cdp.eval("var s = document.querySelector('%s .ms-suggest select'); s.value = ''; s.dispatchEvent(new Event('change')); 1" % row)
+            self.assertEqual(cdp.eval("document.querySelector('%s .ms-suggest').getAttribute('data-choice')" % row), "none")
+            self.assertTrue(cdp.eval("document.querySelector('%s .ms-conf').hidden" % row))
+            cdp.eval("var s = document.querySelector('%s .ms-suggest select'); s.value = 'yamaha-rio1608-d'; s.dispatchEvent(new Event('change')); 1" % row)
+            self.assertEqual(cdp.eval("document.querySelector('%s .ms-suggest').getAttribute('data-choice')" % row), "yamaha-rio1608-d")
+            cdp.eval("document.querySelector('%s .disc-actions button').click(); 1" % row)
+            cdp.wait("document.body.textContent.indexOf('Promoted Y004-Yamaha-Rio1608-STG as Yamaha Rio1608-D') >= 0", timeout=20)
+            cdp.eval("var b = document.getElementById('app-save'); if (b) b.click(); 1")
+            t0 = time.time()
+            while time.time() - t0 < 20 and "y004-yamaha-rio1608-stg" not in devices():
+                time.sleep(0.25)
+        dev = devices().get("y004-yamaha-rio1608-stg")
+        self.assertIsNotNone(dev, "FR-MS-03: Promote writes the device")
+        self.assertEqual(dev["template"], "yamaha-rio1608-d")
+        self.assertEqual((dev["kind"], dev["manufacturer"], dev["model"], dev["name"]), ("stage_io", "Yamaha", "Rio1608-D", "Y004-Yamaha-Rio1608-STG"))
+        self.assertTrue(dev.get("dante"))
+        self.assertEqual(len(dev["ports"]), 16 + 8 + 2, "the template's ports, as the Add gear dialog would give")
+        self.assertNotIn("auto", dev)
+        self.assertNotIn("source", dev)
+
 
 @unittest.skipUnless(CHROME, "Chrome not found (fathom.export.find_chrome() returned None): login flow smoke skipped")
 class LoginFlow(unittest.TestCase):

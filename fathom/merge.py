@@ -218,6 +218,8 @@ def merge_dante(project: Project, net: DanteNetwork, elsewhere: Optional[Dict[st
         info = {
             "name": dev.name,
             "model": dev.model_text,
+            "manufacturer": dev.manufacturer,
+            "product": dev.model,
             "tx": len(dev.tx),
             "rx": len(dev.rx),
             "rx_subscribed": sum(1 for c in dev.rx if c.subscribed),
@@ -845,7 +847,7 @@ def _empty_overlay(doc: Doc, ihash: str) -> Dict[str, Any]:
     return {
         "revision": doc.get("revision", 0), "imports_hash": ihash,
         "devices": [], "detail": {}, "routes": [], "port_labels": {}, "interfaces": {},
-        "dmx": {}, "patch_rows": [], "appendix": {}, "notes": [],
+        "dmx": {}, "patch_rows": [], "appendix": {}, "notes": [], "suggestions": {},
     }
 
 
@@ -911,6 +913,10 @@ def _lift_legacy(doc: Doc, room: str, project: Project, info: Dict[str, Any]) ->
             v = getattr(n, k)
             if v:
                 dev[k] = v
+        if dd.get("manufacturer"):  # what the Dante preset / Device Info said; feeds the model suggestion
+            dev["manufacturer"] = str(dd["manufacturer"])
+        if dd.get("product"):
+            dev["model"] = str(dd["product"])
         if n.dante:
             dev["dante"] = True
             dev["dante_name"] = n.dante_name or n.label
@@ -1042,7 +1048,28 @@ def build_overlay(doc: Doc, project_dir: Path) -> Dict[str, Any]:
             merge_contribution(ov, c or {}, room)
         except Exception as exc:
             ov["notes"].append(f"import {imp.get('id', imp.get('path'))} ({kind}) failed: {type(exc).__name__}: {exc}")
+    ov["suggestions"] = model_suggestions(doc, ov)
     return ov
+
+
+def model_suggestions(doc: Doc, ov: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
+    """Library models suggested for the overlay's auto devices (device id → ranked suggestions), from the
+    manufacturer / model strings the importer saw plus the device name and subtitle."""
+    try:
+        from .library.suggest import suggest_for_device
+    except Exception:  # pragma: no cover - library optional in the engine
+        return {}
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for dev in ov.get("devices") or []:
+        if not isinstance(dev, dict) or not dev.get("id") or dev.get("template"):
+            continue
+        try:
+            sug = suggest_for_device(dev, doc)
+        except Exception:
+            sug = []
+        if sug:
+            out[str(dev["id"])] = sug
+    return out
 
 
 def promote_ops(doc: Doc, overlay: Dict[str, Any], device_ids: List[str]) -> List[Dict[str, Any]]:

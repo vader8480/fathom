@@ -1,0 +1,52 @@
+{
+  "id": "yamaha-tio1608-d",
+  "manufacturer": "Yamaha",
+  "model": "Tio1608-D",
+  "name": "Tio1608-D",
+  "kind": "stage_io",
+  "brand": "yamaha",
+  "ru": 1,
+  "width": "full",
+  "cost": null,
+  "currency": "USD",
+  "dante": true,
+  "dmx_footprint": null,
+  "ports": [
+    {
+      "group": "Analog In",
+      "dir": "in",
+      "medium": "analog",
+      "connector": "XLR3F",
+      "count": 16
+    },
+    {
+      "group": "Analog Out",
+      "dir": "out",
+      "medium": "analog",
+      "connector": "XLR3M",
+      "count": 8
+    },
+    {
+      "group": "Dante",
+      "dir": "io",
+      "medium": "dante",
+      "connector": "etherCON",
+      "names": [
+        "Primary",
+        "Secondary"
+      ],
+      "channels": 16
+    }
+  ],
+  "dante_channels": {
+    "tx": 16,
+    "rx": 8
+  },
+  "tags": [
+    "stagebox",
+    "dante",
+    "tf-series"
+  ],
+  "source_url": "https://usa.yamaha.com/products/proaudio/interfaces/tio1608_d/specs.html",
+  "notes": "TF-series I/O rack (pairs with the NY64-D card). Port counts not verified against the datasheet; please check."
+}
