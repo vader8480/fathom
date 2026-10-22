@@ -48,7 +48,9 @@ function thead(cols) { return h('thead', null, h('tr', null, cols.map(function (
 function addrs(e) {
   const parts = [];
   (e.ips || []).forEach(function (ip) { parts.push(h('div', { class: 'mono' }, ip)); });
-  (e.macs || []).forEach(function (m) { parts.push(h('div', { class: 'mono muted' }, m)); });
+  const macs = e.macs || [];
+  macs.slice(0, 3).forEach(function (m) { parts.push(h('div', { class: 'mono muted' }, m)); });
+  if (macs.length > 3) parts.push(h('div', { class: 'muted small' }, '+' + (macs.length - 3) + ' more MAC addresses'));
   if (e.hostname && e.hostname !== e.label) parts.push(h('div', { class: 'muted' }, e.hostname));
   return parts;
 }

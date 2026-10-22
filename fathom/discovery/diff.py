@@ -20,7 +20,8 @@ from .topology import canonical_port
 Findings = Dict[str, Any]
 
 #: entity fields whose change is reported (label, before, after)
-CHANGE_FIELDS: Tuple[Tuple[str, str], ...] = (("ips", "IP"), ("vlan", "VLAN"), ("hostname", "hostname"), ("dante_name", "Dante name"), ("name", "name"))
+CHANGE_FIELDS: Tuple[Tuple[str, str], ...] = (("ips", "IP"), ("vlan", "VLAN"), ("hostname", "hostname"), ("dante_name", "Dante name"))
+# ``name`` is whichever source's label won and changes whenever a better source joins; hostname and Dante name are the identities
 #: connection flags that count as a link between two boxes (``via`` rows are derived, not links)
 LINK_FLAGS = ("", "uplink", "unmanaged", "host")
 
@@ -216,7 +217,7 @@ def compute_diff(cur: Findings, prev: Findings, cur_id: str = "", prev_id: str =
             elif key == "hostname":
                 if _host_key(a) == _host_key(b) or not a or not b:
                     continue
-            elif key in ("dante_name", "name"):
+            elif key == "dante_name":
                 if loose(str(a or "")) == loose(str(b or "")) or not a or not b:
                     continue
             elif a == b or a is None or b is None:
@@ -234,11 +235,15 @@ def compute_diff(cur: Findings, prev: Findings, cur_id: str = "", prev_id: str =
     ident_prev = {str(p.get("id")): pairs.get(absorbed.get(str(p.get("id")), ""), str(p.get("id"))) for p in prev_ents}
     cur_links = {_link_key(c, ident_cur): c for c in cur.get("connections") or [] if c.get("flag", "") in LINK_FLAGS and c.get("status") != "ignored"}
     prev_links = {_link_key(c, ident_prev): c for c in prev.get("connections") or [] if c.get("flag", "") in LINK_FLAGS and c.get("status") != "ignored"}
+    # a peer that was "on port 24" (several MACs, unmanaged) and is now reached *via* an uplink on port 24 is the same
+    # observation reclassified by better evidence, so via rows count as present when deciding what is new or lost
+    cur_seen = cur_links.keys() | {_link_key(c, ident_cur) for c in cur.get("connections") or [] if c.get("flag") == "via"}
+    prev_seen = prev_links.keys() | {_link_key(c, ident_prev) for c in prev.get("connections") or [] if c.get("flag") == "via"}
     for k, c in cur_links.items():
-        if k not in prev_links:
+        if k not in prev_seen:
             out["new_links"].append(_link_summary(c))
     for k, c in prev_links.items():
-        if k not in cur_links:
+        if k not in cur_seen:
             out["lost_links"].append(_link_summary(c))
     out["new_links"].sort(key=lambda l: (l["switch"], l["port"], l["peer"]))
     out["lost_links"].sort(key=lambda l: (l["switch"], l["port"], l["peer"]))
