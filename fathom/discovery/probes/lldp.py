@@ -24,7 +24,7 @@ from . import PASSIVE, Neighbour, Observation, ProbeInfo, ProbeResult, fixture_d
 INFO = ProbeInfo(
     id="lldp", label="LLDP / CDP sniff", mode=PASSIVE, maturity="experimental",
     help="Listens for LLDP and CDP announcements for the run window: switch chassis, system name, management IP, model and the port this host is on; AV devices that announce themselves on a shared segment.",
-    sends="Nothing. Raw-socket listen only (needs CAP_NET_RAW / --cap-add NET_RAW and the host network in Docker).",
+    sends="Nothing. Raw-socket listen only (needs CAP_NET_RAW: AmbientCapabilities in the systemd unit, or setcap on the venv's python; on ESXi the port group needs Promiscuous Mode = Accept).",
     needs=["net_raw", "linux"],
     fields=[
         {"key": "interface", "label": "Interface", "placeholder": "all (eth0, enp3s0 …)", "env": "FATHOM_DISCOVERY_INTERFACE"},
@@ -52,7 +52,7 @@ def capability() -> Tuple[bool, str]:
     try:
         s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_ALL))  # type: ignore[attr-defined]
     except PermissionError:
-        return False, "no CAP_NET_RAW: run as root, `setcap cap_net_raw+ep` on the python binary, or Docker --cap-add NET_RAW"
+        return False, "no CAP_NET_RAW: add AmbientCapabilities=CAP_NET_RAW to the systemd unit, or `setcap cap_net_raw,cap_net_bind_service+eip` on the venv's python (run `fathom discovery doctor`)"
     except OSError as exc:
         return False, f"cannot open a packet socket: {exc}"
     s.close()
@@ -113,7 +113,16 @@ def test(settings: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": True, "message": f"fixture replay: {len(fx.get('frames') or [])} frames", "fixture": True}
     ok, why = capability()
     iface = str((settings or {}).get("interface") or "")
-    return {"ok": ok, "message": (f"{why}; will listen on {iface or 'all interfaces'} for the run window" if ok else why), "capability": ok}
+    try:
+        from .. import doctor
+
+        itfs = [i for i in doctor.interfaces() if i["kind"] in ("physical", "vlan") and i.get("up")]
+    except Exception:
+        itfs = []
+    desc = ", ".join(i["name"] + (f" (VLAN {i['vlan']})" if i.get("vlan") is not None else "") for i in itfs) or "no interface found"
+    hint = "" if len(itfs) > 1 else "; one interface only: mDNS sees just its VLAN, add a NIC or 8021q sub-interface per audio VLAN"
+    msg = f"{why}; will listen on {iface or 'all interfaces'} for the run window. Interfaces: {desc}{hint}. `fathom discovery doctor` checks for foreign LLDP frames." if ok else f"{why}. Interfaces: {desc}."
+    return {"ok": ok, "message": msg, "capability": ok, "interfaces": itfs}
 
 
 # ------------------------------------------------------------------ parse

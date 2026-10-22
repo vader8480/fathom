@@ -180,7 +180,7 @@ def test(settings: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": True, "message": f"fixture replay: {len(fx.get('records') or [])} service records", "fixture": True}
     ok, version = available()
     if not ok:
-        return {"ok": False, "message": "zeroconf is not installed on the server: pip install 'fathom-audio[discovery]' (Docker image: already included).", "install": True}
+        return {"ok": False, "message": "zeroconf is not installed on the server: pip install 'fathom-audio[discovery]' into the server's venv and restart fathom.service.", "install": True}
     n = len(default_types(settings))
     iface = str((settings or {}).get("interface_ip") or "").strip()
     return {"ok": True, "message": f"zeroconf {version} ready; will browse {n} service types on {iface or 'all interfaces'} for the run window."}

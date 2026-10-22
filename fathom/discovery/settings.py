@@ -10,7 +10,7 @@ only ever reports ``<field>_set: true`` for them, and every value is also
 redacted from log lines and snapshots by :func:`redact`.
 
 Environment variables (``FATHOM_UNIFI_URL`` …, declared per field by the
-probe) fill in anything the project leaves empty, so a Docker deployment can
+probe) fill in anything the project leaves empty, so a systemd unit can
 be configured without touching the UI.
 """
 

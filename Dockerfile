@@ -22,15 +22,11 @@
 #   FATHOM_PLUGINS / FATHOM_LIBRARY / FATHOM_CHECKLISTS   extension directories (os.pathsep-separated)
 #   FATHOM_PDF_RASTERIZER, FATHOM_ODA, FATHOM_ODA_XVFB    floor-plan converters
 #   FATHOM_UNIFI_URL / FATHOM_UNIFI_SITE / FATHOM_UNIFI_API_KEY (or _USER / _PASSWORD) / FATHOM_UNIFI_VERIFY_TLS
-#                                     server-wide defaults for the UniFi discovery probe (per-project
-#                                     settings in Discovery › Sources win)
-#   FATHOM_DISCOVERY_INTERFACE        interface the LLDP listener and mDNS browser bind to (default: all)
+#   FATHOM_DISCOVERY_INTERFACE        network discovery defaults (per-project settings win)
 #
-# Network discovery (Discovery view) is passive and only runs when a user
-# presses Run. For mDNS / LLDP / ARP to see the AV network the container must
-# share the host's network namespace (`--network host`); the LLDP frame
-# listener additionally needs CAP_NET_RAW (`--cap-add NET_RAW`). Without
-# them only the UniFi controller probe has anything to report.
+# The container is optional: the reference deployment is an Ubuntu VM with
+# deploy/fathom.service (README › Running on Ubuntu). Passive discovery probes
+# (mDNS, LLDP, ARP) only see the container's network unless it shares the host's.
 
 FROM python:3.12-slim
 

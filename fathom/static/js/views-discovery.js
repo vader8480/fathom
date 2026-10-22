@@ -181,7 +181,7 @@ export function mount(el, ctx) {
         h('h4', null, 'Optional extra not installed'),
         h('div', { class: 'help' }, 'mDNS / Dante listening needs the zeroconf package. Install the discovery extra on the server and restart it:'),
         h('div', { class: 'adm-pre' }, S.caps.install_hint || "pip install 'fathom-audio[discovery]'"),
-        h('div', { class: 'muted', style: { fontSize: '12px' } }, 'The Docker image already includes it. UniFi and ARP work without it.'),
+        h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Into the venv the service runs from (`.venv/bin/pip install "fathom-audio[discovery]"`), then restart fathom.service. UniFi, LLDP and ARP work without it.'),
       ]));
     }
   }

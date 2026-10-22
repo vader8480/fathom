@@ -955,6 +955,106 @@ class PassiveGuard(unittest.TestCase):
         self.assertNotIn("while True", text.replace("while True:\n                job.check()", ""), "no unbounded loops in the discovery package")
 
 
+# --------------------------------------------------------------------------- doctor
+
+
+class Doctor(unittest.TestCase):
+    """``fathom discovery doctor``: capabilities, interfaces with VLANs, foreign-LLDP listen (sends nothing)."""
+
+    def setUp(self):
+        self.doctor = requires("discovery.doctor")
+
+    def test_capabilities_shape(self):
+        caps = self.doctor.capabilities()
+        for k in ("user", "root", "cap_net_raw", "cap_net_bind_service", "ambient", "packet_socket", "packet_socket_message", "python"):
+            self.assertIn(k, caps)
+        self.assertEqual(sorted(caps["ambient"]), ["cap_net_bind_service", "cap_net_raw"])
+        if caps["root"]:
+            self.assertTrue(caps["cap_net_raw"])
+        if caps["packet_socket"]:
+            self.assertTrue(caps["cap_net_raw"], "a packet socket implies CAP_NET_RAW")
+
+    def test_cap_bits_from_proc_status(self):
+        d = self.doctor
+        text = "CapInh:\t0000000000000000\nCapPrm:\t0000000000002400\nCapEff:\t0000000000002400\nCapBnd:\t0000000000002400\nCapAmb:\t0000000000002400\n"
+        with mock.patch.object(Path, "read_text", lambda self, *a, **k: text if str(self) == "/proc/self/status" else ""):
+            caps = d._cap_sets()
+        self.assertEqual(caps["CapEff"], 0x2400)
+        self.assertTrue(caps["CapEff"] >> d.CAP_NET_RAW & 1)
+        self.assertTrue(caps["CapEff"] >> d.CAP_NET_BIND_SERVICE & 1)
+        self.assertFalse(caps["CapEff"] >> 12 & 1)
+
+    def test_interfaces_shape_and_vlan_parsing(self):
+        d = self.doctor
+        rows = d.interfaces()
+        for r in rows:
+            self.assertEqual(sorted(r), ["addresses", "carrier", "kind", "mac", "mtu", "name", "parent", "promisc", "state", "up", "vlan"])
+            self.assertIn(r["kind"], ("physical", "vlan", "virtual", "bridge", "loopback"))
+        if rows:
+            self.assertEqual(rows[-1]["kind"], "loopback", "loopback sorts last")
+        vlan_cfg = "VLAN Dev name\t | VLAN ID\nName-Type: VLAN_NAME_TYPE_RAW_PLUS_VID_NO_PAD\neth0.30        | 30  | eth0\neth0.40        | 40  | eth0\n"
+        with mock.patch.object(d, "_read", lambda p: vlan_cfg if p == d._VLAN_CONFIG else ""):
+            self.assertEqual(d._vlan_map(), {"eth0.30": {"vlan": 30, "parent": "eth0"}, "eth0.40": {"vlan": 40, "parent": "eth0"}})
+
+    def test_listen_classifies_foreign_announcers_from_fixture(self):
+        with temp_env(**FAST):
+            lst = self.doctor.listen(seconds=1)
+        self.assertGreaterEqual(lst["frames"], 2)
+        self.assertEqual(len(lst["announcers"]), lst["frames"])
+        self.assertEqual(lst["foreign"], len([a for a in lst["announcers"] if a["foreign"]]))
+        self.assertGreaterEqual(lst["foreign"], 1, "the recorded switches are not this host")
+        macs = {a["mac"] for a in lst["announcers"]}
+        self.assertIn(SW_STAGE, macs)
+
+    def test_report_and_advice(self):
+        d = self.doctor
+        with temp_env(**FAST):
+            rep = d.report(seconds=1)
+        self.assertEqual(sorted(rep), ["advice", "capabilities", "interfaces", "listen"])
+        self.assertIsNotNone(rep["listen"])
+        self.assertNotIn("Promiscuous", " ".join(rep["advice"]), "foreign frames seen: no promiscuous-mode advice")
+        text = d.format_report(rep)
+        self.assertIn("CAP_NET_RAW:", text)
+        self.assertIn("LLDP / CDP listen", text)
+        # No foreign frame -> ESXi promiscuous-mode advice; no capability -> setcap / AmbientCapabilities advice.
+        with mock.patch.object(d, "listen", return_value={"status": "ok", "notes": [], "frames": 0, "foreign": 0, "announcers": [], "seconds": 1, "requested": 1, "fixture": False}), \
+                mock.patch.object(d, "capabilities", return_value={"user": "fathom", "root": False, "cap_net_raw": False, "cap_net_bind_service": False,
+                                                                   "ambient": {"cap_net_raw": False, "cap_net_bind_service": False}, "packet_socket": False,
+                                                                   "packet_socket_message": "no CAP_NET_RAW", "python": "/opt/fathom/.venv/bin/python", "known": True}), \
+                temp_env(**FAST):
+            rep = d.report(seconds=1)
+        joined = " ".join(rep["advice"])
+        self.assertIn("AmbientCapabilities=CAP_NET_RAW", joined)
+        self.assertIn("setcap cap_net_raw,cap_net_bind_service+eip", joined)
+        self.assertIn("Promiscuous Mode = Accept", joined)
+        self.assertIn("!", d.format_report(rep))
+
+    def test_report_without_listen_sends_nothing(self):
+        with temp_env(FATHOM_DISCOVERY_FIXTURES=None), _SocketGuard() as g:
+            rep = self.doctor.report(do_listen=False)
+        self.assertIsNone(rep["listen"])
+        self.assertEqual((g.connects, g.sendto, g.sends, g.lookups), ([], [], [], []))
+
+    def test_cli(self):
+        import io
+        from contextlib import redirect_stdout
+
+        from fathom import cli
+
+        buf = io.StringIO()
+        with temp_env(**FAST), redirect_stdout(buf), self.assertRaises(SystemExit) as cm:
+            cli.main(["discovery", "doctor", "--seconds", "1", "--json"])
+        rep = json.loads(buf.getvalue())
+        self.assertIn("capabilities", rep)
+        self.assertIn(cm.exception.code, (0, 1))
+        self.assertEqual(cm.exception.code, 1 if rep["advice"] else 0)
+        buf = io.StringIO()
+        with temp_env(**FAST), redirect_stdout(buf), self.assertRaises(SystemExit):
+            cli.main(["discovery", "doctor", "--seconds", "0"])
+        self.assertTrue(buf.getvalue().startswith("fathom discovery doctor"))
+        self.assertNotIn("LLDP / CDP listen (", buf.getvalue())
+
+
 # --------------------------------------------------------------------------- importer registration
 
 

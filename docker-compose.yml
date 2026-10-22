@@ -10,14 +10,10 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
-    # Network discovery (Discovery view) is passive and on demand, but the
-    # mDNS / LLDP / ARP probes can only see the AV network from the host's
-    # network namespace. To enable them, replace the `ports:` block with
-    #   network_mode: host
-    # and, for the LLDP / CDP frame listener (raw socket), add
-    #   cap_add:
-    #     - NET_RAW
-    # The UniFi controller probe works through the normal bridged network.
+    # Optional. The reference deployment is a plain Ubuntu VM with deploy/fathom.service
+    # (see README › Running on Ubuntu); in a container the passive discovery probes only
+    # see the container's own network unless it shares the host's (network_mode: host,
+    # plus cap_add: [NET_RAW] for the LLDP listener).
     volumes:
       - fathom-data:/data
     environment:
@@ -46,13 +42,9 @@ services:
       # FATHOM_PDF_RASTERIZER: "pdftoppm -f {page} -l {page} -r {dpi} -png -singlefile {in} {out}"
       # FATHOM_ODA: "/opt/oda/ODAFileConverter"
       # FATHOM_ODA_XVFB: "1"
-      # Network discovery: server-wide UniFi defaults (per-project settings in Discovery › Sources win)
-      # and the interface the LLDP listener / mDNS browser bind to.
+      # Network discovery: server-wide UniFi defaults (per-project settings in Discovery › Sources win).
       # FATHOM_UNIFI_URL: "https://10.0.0.1"
-      # FATHOM_UNIFI_SITE: "default"
       # FATHOM_UNIFI_API_KEY: "..."
-      # FATHOM_UNIFI_VERIFY_TLS: "0"
-      # FATHOM_DISCOVERY_INTERFACE: "eth0"
 
 volumes:
   fathom-data:
