@@ -231,16 +231,43 @@ def _job_key(pdir: Path) -> str:
     return "discovery:" + str(Path(pdir).resolve())
 
 
-def list_runs(pdir: Path, limit: int = MAX_RUNS_KEPT) -> List[Dict[str, Any]]:
+def run_order_key(data: Dict[str, Any]) -> Tuple[float, str]:
+    """Chronological key for a run record: the persisted creation (or start) time, then the id.
+
+    Run ids only carry a second resolution and end in a random suffix, so two runs started within the
+    same second would otherwise be ordered by that suffix.
+    """
+    ts = data.get("created") or data.get("started") or 0.0
+    try:
+        ts = float(ts)
+    except (TypeError, ValueError):
+        ts = 0.0
+    return (ts, str(data.get("id") or ""))
+
+
+def _run_records(pdir: Path) -> List[Tuple[Path, Optional[Dict[str, Any]]]]:
+    """``(dir, run.json or None)`` for every run directory of the project, newest first.
+
+    Directories without a readable ``run.json`` sort last (they are leftovers from an interrupted start).
+    """
     root = runs_root(pdir)
     if not root.is_dir():
         return []
-    out = []
-    for p in sorted(root.iterdir(), reverse=True):
+    recs = []
+    for p in root.iterdir():
         if p.is_dir() and RUN_ID_RE.match(p.name):
             data = _read_json(p / "run.json", None)
-            if isinstance(data, dict):
-                out.append(_brief(data))
+            recs.append((p, data if isinstance(data, dict) else None))
+    recs.sort(key=lambda pd: run_order_key(pd[1] if pd[1] is not None else {"id": pd[0].name}), reverse=True)
+    return recs
+
+
+def list_runs(pdir: Path, limit: int = MAX_RUNS_KEPT) -> List[Dict[str, Any]]:
+    out = []
+    for _p, data in _run_records(pdir):
+        if data is None:
+            continue
+        out.append(_brief(data))
         if len(out) >= limit:
             break
     return out
@@ -335,9 +362,7 @@ def cancel_run(pdir: Path, run_id: str) -> Dict[str, Any]:
 def _prune_runs(pdir: Path, keep: int = MAX_RUNS_KEPT) -> None:
     import shutil
 
-    root = runs_root(pdir)
-    dirs = sorted((p for p in root.iterdir() if p.is_dir() and RUN_ID_RE.match(p.name)), reverse=True)
-    for p in dirs[keep:]:
+    for p, _data in _run_records(pdir)[keep:]:
         try:
             shutil.rmtree(p)
         except OSError:
@@ -642,9 +667,14 @@ def latest_completed_run_id(pdir: Path) -> str:
 
 
 def previous_completed_run_id(pdir: Path, run_id: str) -> str:
-    """The completed run just before ``run_id`` (by id, which sorts by start time), or ``""``."""
-    for r in completed_runs(pdir, exclude=run_id):
-        if str(r.get("id")) < run_id:
+    """The completed run created just before ``run_id`` (see :func:`run_order_key`), or ``""``."""
+    runs = {str(r.get("id")): r for r in list_runs(pdir)}
+    cur = runs.get(run_id)
+    if cur is None:
+        return ""
+    key = run_order_key(cur)
+    for r in completed_runs(pdir, exclude=run_id):  # newest first
+        if run_order_key(r) < key:
             return str(r["id"])
     return ""
 
@@ -935,6 +965,6 @@ def register() -> None:
 
 __all__ = [
     "IMPORT_KIND", "LISTEN_PROBES", "MODE", "RunBusy", "RunNotFound", "RunSnapshot", "active_run_id", "active_targets", "cancel_run", "completed_runs", "compute_findings",
-    "extra_installed", "findings", "get_run", "latest_completed_run_id", "latest_run_id", "list_runs", "previous_completed_run_id", "run_diff", "parse_results", "promote_ops", "read_decisions", "register", "run_dir", "run_mode",
+    "extra_installed", "findings", "get_run", "latest_completed_run_id", "latest_run_id", "list_runs", "previous_completed_run_id", "run_diff", "run_order_key", "parse_results", "promote_ops", "read_decisions", "register", "run_dir", "run_mode",
     "runs_root", "sources", "start_run", "write_decisions",
 ]
