@@ -351,14 +351,14 @@ def _trace_ports(a: argparse.Namespace) -> None:
         overlay = build_overlay(doc, pdir)
     except Exception:
         overlay = None
-    ref = T.resolve_ref(doc, a.source)
+    ref = T.resolve_ref(doc, a.source, overlay)
     if ref is None:
-        raise SystemExit(f"error: no device or port matches '{a.source}' (use <device>:<port>)")
+        raise SystemExit(f"error: no device or port matches '{a.source}' (use <device>:<port>, <device>:<channel> or '<device> · CH 12')")
     start = f"{ref[0]}:{ref[1]}" if ref[1] else ref[0]
     depth = max(a.max_depth, 24) if a.max_depth == 8 else a.max_depth
     g = T.port_graph(doc, overlay, discipline=a.discipline or None)
     if a.dest:
-        ref2 = T.resolve_ref(doc, a.dest)
+        ref2 = T.resolve_ref(doc, a.dest, overlay)
         if ref2 is None:
             raise SystemExit(f"error: no device or port matches '{a.dest}'")
         end = f"{ref2[0]}:{ref2[1]}" if ref2[1] else ref2[0]
@@ -375,7 +375,9 @@ def _trace_ports(a: argparse.Namespace) -> None:
         return
     print(f"{len(paths)} path(s) {label}{' (' + a.discipline + ')' if a.discipline else ''}:")
     for p in paths[:50]:
-        print("  " + T.path_text(doc, p))
+        if getattr(a, "dca", False):
+            p = T.with_dca_hops(p)
+        print("  " + T.path_text(doc, p, overlay))
         if p.get("cables"):
             print("      cables: " + ", ".join(p["cables"]))
 
@@ -961,6 +963,7 @@ def main(argv=None) -> None:
     s.add_argument("--max-depth", type=int, default=8)
     s.add_argument("--discipline", help="audio, video, lighting, network, control, power")
     s.add_argument("--up", action="store_true", help="trace upstream (toward the sources)")
+    s.add_argument("--dca", action="store_true", help="show DCA membership as hops: (via DCA 1 · BAND)")
     s.set_defaults(func=cmd_trace)
 
     s = sub.add_parser("patch", help="patch sheet in the terminal")

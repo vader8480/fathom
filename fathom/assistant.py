@@ -555,7 +555,7 @@ def _has_incoming_cable(g: T.PortGraph, node: str) -> bool:
 
 
 def _nodes_of(path: Dict[str, Any]) -> List[str]:
-    return [T.node_ref(h["device"], h.get("port")) for h in path["hops"]]
+    return [T.hop_ref(h) for h in path["hops"]]
 
 
 def _seg_path(g: T.PortGraph, nodes: List[str]) -> Dict[str, Any]:
