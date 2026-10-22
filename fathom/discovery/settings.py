@@ -4,7 +4,12 @@ Non-secret settings (controller URL, site, user, listen window, which probes
 are enabled …) live in ``project.json`` under ``settings.discovery`` so they
 travel with the project and show up in history like any other setting.
 
-Secrets (UniFi API key / password) never enter the document or its history:
+Active probes (SNMP, consoles) are stored ``enabled: false`` unless a person
+turns them on; their host lists (``list`` fields) are kept as comma-separated
+strings.
+
+Secrets (UniFi API key / password, SNMP community and v3 keys, QRC password)
+never enter the document or its history:
 they are kept in ``<project>/discovery-secrets.json`` (mode 0600). The API
 only ever reports ``<field>_set: true`` for them, and every value is also
 redacted from log lines and snapshots by :func:`redact`.
@@ -47,7 +52,7 @@ def secret_keys(probe_id: str) -> List[str]:
 def defaults() -> Dict[str, Any]:
     out: Dict[str, Any] = {"window": DEFAULT_WINDOW, "room": "", "probes": {}}
     for m in all_probes():
-        p: Dict[str, Any] = {"enabled": True}
+        p: Dict[str, Any] = {"enabled": bool(getattr(m.INFO, "default_enabled", True))}  # active probes are opt-in
         for f in m.INFO.fields:
             if f.get("secret"):
                 continue
@@ -214,6 +219,14 @@ def apply_update(doc: Doc, pdir: Path, body: Dict[str, Any]) -> Dict[str, Any]:
                 out["probes"][pid][k] = bool(v)
             elif v is None:
                 out["probes"][pid][k] = ""
+            elif f.get("type") == "select":
+                if not isinstance(v, str) or (v and v not in (f.get("options") or [])):
+                    raise ValueError(f"{pid}.{k} must be one of " + ", ".join(str(o) for o in f.get("options") or []))
+                out["probes"][pid][k] = v
+            elif f.get("type") == "list":
+                from .probes import host_list
+
+                out["probes"][pid][k] = ",".join(host_list(v)) if isinstance(v, (str, list)) else ""
             elif isinstance(v, (str, int, float)):
                 out["probes"][pid][k] = str(v) if not isinstance(v, str) else v.strip()
             elif isinstance(v, list):

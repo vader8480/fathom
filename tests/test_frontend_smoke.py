@@ -349,6 +349,100 @@ def measure_realtime(url: str, timeout: float = 60.0) -> Dict[str, Any]:
         return cdp.smoke
 
 
+class Browser(object):
+    """A real-time headless Chrome page with event capture (navigations, responses, console) for flow tests."""
+
+    def __init__(self) -> None:
+        self.ud = tempfile.mkdtemp(prefix="t2-browser-")
+        self.proc = subprocess.Popen([CHROME or "chrome", "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+                                      "--disable-extensions", "--user-data-dir=" + self.ud, "--remote-debugging-port=0", "about:blank"],
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.events = []  # type: List[Dict[str, Any]]
+        port_file = Path(self.ud) / "DevToolsActivePort"
+        t0 = time.time()
+        while not port_file.exists() or not port_file.read_text().strip():
+            if time.time() - t0 > 30:
+                self.close()
+                raise RuntimeError("Chrome did not open a DevTools port")
+            time.sleep(0.1)
+        port = int(port_file.read_text().split()[0])
+        targets = json.loads(urllib.request.urlopen("http://127.0.0.1:%d/json/list" % port, timeout=10).read().decode())
+        page = [t for t in targets if t.get("type") == "page"][0]
+        self.cdp = CDP(page["webSocketDebuggerUrl"])
+        for domain in ("Page", "Network", "Runtime"):
+            self.call(domain + ".enable")
+
+    def call(self, method: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        c = self.cdp
+        c.next_id += 1
+        mid = c.next_id
+        c._send(json.dumps({"id": mid, "method": method, "params": params or {}}))
+        while True:
+            msg = json.loads(c._recv())
+            if msg.get("id") == mid:
+                return msg
+            self.events.append(msg)
+
+    def pump(self, seconds: float) -> None:
+        """Collect events for a while (the page keeps running)."""
+        self.cdp.sock.settimeout(0.25)
+        t0 = time.time()
+        try:
+            while time.time() - t0 < seconds:
+                try:
+                    self.events.append(json.loads(self.cdp._recv()))
+                except (socket.timeout, OSError):
+                    pass
+        finally:
+            self.cdp.sock.settimeout(30)
+
+    def navigate(self, url: str) -> None:
+        self.call("Page.navigate", {"url": url})
+
+    def eval(self, expression: str) -> Any:
+        r = self.call("Runtime.evaluate", {"expression": expression, "returnByValue": True, "awaitPromise": True})
+        return ((r.get("result") or {}).get("result") or {}).get("value")
+
+    def wait_for(self, expression: str, timeout: float = 20.0) -> Any:
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            val = self.eval(expression)
+            if val:
+                return val
+            time.sleep(0.2)
+        raise AssertionError("timed out waiting for %s (location=%r)" % (expression, self.eval("location.href")))
+
+    def set_cookie(self, **cookie: Any) -> None:
+        r = self.call("Network.setCookie", cookie)
+        if not (r.get("result") or {}).get("success"):
+            raise RuntimeError("setCookie failed: %r" % r)
+
+    def navigations(self) -> List[str]:
+        return [e["params"]["frame"].get("url", "") for e in self.events
+                if e.get("method") == "Page.frameNavigated" and not e["params"]["frame"].get("parentId")]
+
+    def console_errors(self) -> List[str]:
+        out = []
+        for e in self.events:
+            if e.get("method") == "Runtime.exceptionThrown":
+                out.append(json.dumps(e["params"].get("exceptionDetails", {}).get("exception", {}).get("description", e["params"]))[:300])
+            elif e.get("method") == "Runtime.consoleAPICalled" and e["params"].get("type") == "error":
+                out.append(" ".join(str(a.get("value", a.get("description"))) for a in e["params"].get("args", []))[:300])
+        return out
+
+    def close(self) -> None:
+        try:
+            if getattr(self, "cdp", None) is not None:
+                self.cdp.close()
+        finally:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+            shutil.rmtree(self.ud, ignore_errors=True)
+
+
 # ---------------------------------------------------------------------- server
 
 class _ThreadingWSGIServer(ThreadingMixIn, WSGIServer):
@@ -771,6 +865,97 @@ class FrontendSmoke(unittest.TestCase):
         self.assertIsNotNone(main, "FR-UX-03: #app-main missing")
         self.assertRegex(main.text().lower(), r"error|fail|could not|couldn't|unable", "FR-UX-03: inline error card with the message in #app-main")
         self.assertIsNotNone(p.by_id("app-views"), "FR-UX-03: the rest of the app keeps working")
+
+
+@unittest.skipUnless(CHROME, "Chrome not found (fathom.export.find_chrome() returned None): login flow smoke skipped")
+class LoginFlow(unittest.TestCase):
+    """Auth on, plain http://127.0.0.1 (no secure context, no service worker): sign-in works and never loops (FR-USER-03)."""
+
+    USER, PASSWORD = "admin", "admin-password-1"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._old_env = {k: os.environ.get(k) for k in ("FATHOM_DATA", "FATHOM_AUTH", "FATHOM_PUBLIC_VIEW")}
+        cls.data = tempfile.mkdtemp(prefix="t2-login-data-")
+        os.environ["FATHOM_DATA"] = cls.data
+        os.environ.pop("FATHOM_AUTH", None)
+        os.environ.pop("FATHOM_PUBLIC_VIEW", None)
+        projects = Path(cls.data) / "projects"
+        (projects / "sunday-demo").mkdir(parents=True)
+        shutil.copy(str(ROOT / "fathom" / "static" / "dev" / "fixture-v2.json"), str(projects / "sunday-demo" / "project.json"))
+        from fathom import users
+        from fathom.server import app
+
+        users.add_user(cls.USER, cls.PASSWORD, role="admin")
+        cls.server = make_server("127.0.0.1", 0, app, server_class=_ThreadingWSGIServer, handler_class=_QuietHandler)
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+        cls.base = "http://127.0.0.1:%d" % cls.server.server_address[1]
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        try:
+            cls.server.shutdown()
+            cls.server.server_close()
+        finally:
+            for k, v in cls._old_env.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+            shutil.rmtree(cls.data, ignore_errors=True)
+
+    def setUp(self) -> None:
+        self.browser = Browser()
+        self.addCleanup(self.browser.close)
+
+    def sign_in(self, b: Browser) -> None:
+        b.wait_for("!!document.getElementById('login-form') && !document.getElementById('login-submit').disabled")
+        b.eval("document.getElementById('login-user').value = %s; document.getElementById('login-pass').value = %s;"
+               "document.getElementById('login-submit').click(); true" % (json.dumps(self.USER), json.dumps(self.PASSWORD)))
+        b.wait_for("location.pathname === '/' && !!document.getElementById('app-main') && (document.getElementById('app-user') || {}).title.indexOf(%s) === 0" % json.dumps(self.USER))
+
+    def test_login_over_http(self) -> None:
+        b = self.browser
+        b.navigate(self.base + "/")
+        b.wait_for("location.pathname === '/login' && !!document.getElementById('login-form')")
+        b.pump(1.5)
+        self.assertEqual(b.eval("location.search"), "?next=%2F", "FR-USER-03: / redirects to /login?next=/")
+        self.assertEqual(b.eval("(document.getElementById('login-error') || {}).textContent"), "", "no error before typing")
+        self.sign_in(b)
+        cookies = b.call("Network.getCookies", {"urls": [self.base + "/"]})["result"]["cookies"]
+        sess = [c for c in cookies if c["name"] == "fathom_session"]
+        self.assertEqual(len(sess), 1, "one session cookie after sign-in: %r" % cookies)
+        self.assertFalse(sess[0]["secure"], "FR-USER-03: no Secure flag on plain http (the browser would drop it)")
+        self.assertEqual(sess[0]["path"], "/")
+        self.assertEqual(sess[0]["sameSite"], "Lax")
+        self.assertEqual(b.console_errors(), [], "no console errors during sign-in")
+        # reload keeps the session, /login sends a signed-in user straight to the app
+        b.navigate(self.base + "/login")
+        b.wait_for("location.pathname === '/' && !!document.getElementById('app-main')")
+
+    def test_no_redirect_loop_with_stale_cookie_scopes(self) -> None:
+        """A session cookie the API sees but the app page does not (another Path scope) used to bounce
+        /login -> / -> /login forever; the form must stay usable and a fresh sign-in must win."""
+        from fathom import users
+
+        b = self.browser
+        valid = users.make_session(users.get_user(self.USER))
+        b.set_cookie(name="fathom_session", value=valid, domain="127.0.0.1", path="/api", httpOnly=True, sameSite="Lax")
+        b.set_cookie(name="fathom_session", value="stale.signature", domain="127.0.0.1", path="/", httpOnly=True, sameSite="Lax")
+        b.navigate(self.base + "/")
+        b.pump(6)
+        navs = b.navigations()
+        logins = [u for u in navs if "/login" in u]
+        self.assertLess(len(logins), 6, "FR-USER-03: redirect loop between /login and / (%d login loads in 6s): %s" % (len(logins), navs[:12]))
+        self.assertTrue(b.eval("!!document.getElementById('login-form') && !document.getElementById('login-submit').disabled"),
+                        "FR-USER-03: the login form must be usable (location=%r)" % b.eval("location.href"))
+        self.assertIn("sign in again", (b.eval("(document.getElementById('login-error') || {}).textContent") or "").lower())
+        self.sign_in(b)
+        b.navigate(self.base + "/")
+        b.wait_for("location.pathname === '/' && !!document.getElementById('app-main')")
+        b.pump(1.5)
+        self.assertEqual(b.eval("location.pathname"), "/", "stays in the app after the fresh sign-in")
 
 
 if __name__ == "__main__":

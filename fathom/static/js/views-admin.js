@@ -323,6 +323,8 @@ export function mountBuilds(el, ctx) {
   const state = h('select', { 'aria-label': 'State' }, [['all', 'Everything current'], ['as_built', 'As built (installed only)'], ['planned', 'Planned + installed']].map(function (o) { return h('option', { value: o[0] }, o[1]); }));
   const pdf = h('input', { type: 'checkbox', id: 'bld-pdf', disabled: caps.chrome ? null : true });
   const png = h('input', { type: 'checkbox', id: 'bld-png', disabled: caps.chrome ? null : true });
+  const disc = h('input', { type: 'checkbox', id: 'bld-disc' });
+  disc.checked = true;
   const rooms = h('div', { class: 'row' }, (store.doc.rooms || []).map(function (r) {
     const b = h('input', { type: 'checkbox', 'data-room': r.id, id: 'bld-room-' + r.id });
     b.checked = true;
@@ -335,7 +337,7 @@ export function mountBuilds(el, ctx) {
     go.disabled = true;
     go.textContent = 'Building\u2026';
     const flush = ctx.flush ? ctx.flush() : Promise.resolve();
-    flush.then(function () { return ctx.api.build(ctx.project, { state: state.value, pdf: pdf.checked, png: png.checked, rooms: sel.length === (store.doc.rooms || []).length ? null : sel }); }).then(function (r) {
+    flush.then(function () { return ctx.api.build(ctx.project, { state: state.value, pdf: pdf.checked, png: png.checked, discovery: disc.checked, rooms: sel.length === (store.doc.rooms || []).length ? null : sel }); }).then(function (r) {
       ctx.toast('Built ' + r.build + ' (' + (r.files || []).length + ' files)', 'ok');
       load();
     }, function (e) { ctx.toast(msg(e), 'err'); }).then(function () { go.disabled = false; go.textContent = 'Build package'; });
@@ -346,6 +348,7 @@ export function mountBuilds(el, ctx) {
     fld('State', state),
     h('div', { class: 'field' }, [h('label', null, 'Rooms'), rooms]),
     h('div', { class: 'row' }, [h('label', { class: 'row', for: 'bld-pdf' }, [pdf, 'PDF']), h('label', { class: 'row', for: 'bld-png' }, [png, 'PNG']), caps.chrome ? null : h('span', { class: 'muted' }, 'PDF/PNG need Chrome on the server.')]),
+    h('div', { class: 'field' }, [h('label', null, 'Report sections'), h('label', { class: 'row', for: 'bld-disc' }, [disc, 'Discovered connections (latest completed discovery run and promoted discovered cables)'])]),
     h('div', { class: 'row', style: { marginTop: '8px' } }, go),
   ]));
   root.appendChild(h('h3', null, 'Previous builds'));

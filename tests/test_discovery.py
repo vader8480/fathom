@@ -37,12 +37,20 @@ SW_STAGE = "28:c6:8e:11:22:33"
 BC_SWITCH = "00:1b:54:ab:cd:ef"
 
 
-def _results():
-    """Parsed ProbeResults of the four fixtures."""
+PASSIVE_PROBES = ["unifi", "mdns", "lldp", "arp"]
+ACTIVE_PROBES = ["snmp", "yamaha", "videohub", "qsys"]
+API_PROBES = ["ddm"]  # phase 3: active probes that contact one configured server (``targets`` is a URL field)
+ALL_PROBES = PASSIVE_PROBES + ACTIVE_PROBES + API_PROBES
+
+
+def _results(ids=None):
+    """Parsed ProbeResults of the fixtures (the four passive probes unless ``ids`` says otherwise)."""
     probes = requires("discovery.probes")
+    wanted = list(ids) if ids is not None else PASSIVE_PROBES
     out = []
     for m in probes.all_probes():
-        out.append(m.parse(json.loads((DISC_FIXTURES / (m.INFO.id + ".json")).read_text(encoding="utf-8"))))
+        if m.INFO.id in wanted:
+            out.append(m.parse(json.loads((DISC_FIXTURES / (m.INFO.id + ".json")).read_text(encoding="utf-8"))))
     return out
 
 
@@ -86,13 +94,29 @@ class ProbeFixtures(unittest.TestCase):
         self.probes = requires("discovery.probes")
         self.by_id = {m.INFO.id: m for m in self.probes.all_probes()}
 
-    def test_all_probes_are_passive_and_declare_maturity(self):
-        self.assertEqual(sorted(self.by_id), ["arp", "lldp", "mdns", "unifi"])
+    def test_probe_catalogue_modes_and_maturity(self):
+        self.assertEqual(sorted(self.by_id), sorted(ALL_PROBES))
         for m in self.by_id.values():
-            self.assertEqual(m.INFO.mode, "passive", m.INFO.id)
             self.assertIn(m.INFO.maturity, ("experimental", "tested", "mature"), m.INFO.id)
             self.assertTrue(m.INFO.sends, "%s must say what it puts on the wire" % m.INFO.id)
             self.assertTrue(callable(m.collect) and callable(m.parse) and callable(m.test), m.INFO.id)
+            d = m.INFO.to_dict()
+            self.assertEqual((d["mode"], d["default_enabled"]), (m.INFO.mode, m.INFO.default_enabled))
+        for pid in PASSIVE_PROBES:
+            self.assertEqual(self.by_id[pid].INFO.mode, "passive", pid)
+            self.assertTrue(self.by_id[pid].INFO.default_enabled, pid)
+        for pid in ACTIVE_PROBES:
+            info = self.by_id[pid].INFO
+            self.assertEqual(info.mode, "active", pid)
+            self.assertFalse(info.default_enabled, "%s is opt-in" % pid)
+            self.assertEqual(info.targets, "hosts", "an active probe names the field that lists what it may contact")
+            self.assertTrue(any(f["key"] == "hosts" and f.get("type") == "list" for f in info.fields), pid)
+            self.assertTrue(len(info.sends) > 60, "%s: the Sources card needs a real 'what this sends' note" % pid)
+        for pid in API_PROBES:
+            info = self.by_id[pid].INFO
+            self.assertEqual((info.mode, info.default_enabled, info.targets, info.maturity), ("active", False, "url", "experimental"), pid)
+            self.assertTrue(any(f["key"] == "url" for f in info.fields), pid)
+            self.assertTrue(len(info.sends) > 60 and "mutation" in info.sends, "%s: says it is read-only GraphQL" % pid)
 
     def test_unifi(self):
         r = self.by_id["unifi"].parse(json.loads((DISC_FIXTURES / "unifi.json").read_text()))
@@ -614,8 +638,11 @@ class DiscoveryApi(unittest.TestCase):
             self.assertEqual(st, 200, b)
             listing = jbody(b)
             self.assertEqual((listing["runs"], listing["active"], listing["mode"]), ([], None, "passive"))
-            self.assertEqual([s["id"] for s in listing["sources"]], ["unifi", "mdns", "lldp", "arp"])
-            self.assertTrue(all(s["mode"] == "passive" and s["available"] for s in listing["sources"]))
+            self.assertEqual([s["id"] for s in listing["sources"]], ALL_PROBES)
+            self.assertTrue(all(s["available"] for s in listing["sources"]), "fixture replay makes every source available")
+            modes = {s["id"]: (s["mode"], s["settings"]["enabled"]) for s in listing["sources"]}
+            self.assertTrue(all(modes[p] == ("passive", True) for p in PASSIVE_PROBES), modes)
+            self.assertTrue(all(modes[p] == ("active", False) for p in ACTIVE_PROBES + API_PROBES), "active sources are off until enabled: %r" % (modes,))
 
             st, _, b = self.req("POST", base + "/discovery/runs", {"window": 10})
             self.assertEqual(st, 202, b)
@@ -981,6 +1008,453 @@ class PassiveGuard(unittest.TestCase):
         self.assertNotIn("while True", text.replace("while True:\n                job.check()", ""), "no unbounded loops in the discovery package")
 
 
+# --------------------------------------------------------------------------- active probes (phase 2)
+
+SNMP_HOSTS = ["10.99.0.3", "10.99.0.4", "10.99.0.9"]
+ACTIVE_SETTINGS = {"snmp": {"enabled": True, "hosts": SNMP_HOSTS, "community": "public-ro"}, "yamaha": {"enabled": True, "hosts": ["10.20.0.5", "10.20.0.80"]},
+                   "videohub": {"enabled": True, "hosts": "10.30.0.90"}, "qsys": {"enabled": True, "hosts": ["10.30.0.10"]}}
+VIDEOHUB_MAC = "7c:2e:0d:90:00:90"
+DM7_MAC = "00:a0:de:80:00:80"
+ETC_GATEWAY_MAC = "00:c0:16:40:00:20"
+
+
+class ActiveProbeFixtures(unittest.TestCase):
+    """What each opt-in, read-only probe yields from a recorded exchange (FR-DISC-10)."""
+
+    def setUp(self):
+        self.probes = requires("discovery.probes")
+        self.by_id = {m.INFO.id: m for m in self.probes.all_probes()}
+
+    def test_host_list_and_ports(self):
+        self.assertEqual(self.probes.host_list("10.0.0.1, 10.0.0.2\n10.0.0.1;10.0.0.3:1161 "), ["10.0.0.1", "10.0.0.2", "10.0.0.3:1161"])
+        self.assertEqual(self.probes.host_list(["a", "b", "a", ""]), ["a", "b"])
+        self.assertEqual(self.probes.host_list(None), [])
+        self.assertEqual(self.probes.split_host_port("10.0.0.3:1161", 161), ("10.0.0.3", 1161))
+        self.assertEqual(self.probes.split_host_port(" sw-stage ", 161), ("sw-stage", 161))
+
+    def test_snmp_switch_identity_ports_and_inventory(self):
+        r = self.by_id["snmp"].parse(json.loads((DISC_FIXTURES / "snmp.json").read_text()))
+        self.assertEqual(r.status, "ok", "one unreachable switch does not fail the probe")
+        st = r.summary()["stats"]
+        self.assertEqual((st["hosts"], st["failed"], st["switches"], st["lldp"], st["vlans"]), (3, 1, 2, 3, 5))
+        self.assertTrue(any("10.99.0.9" in n and "no SNMP answer" in n for n in r.notes), r.notes)
+        by_mac = {o.mac: o for o in r.observations}
+        sw = by_mac[SW_STAGE]
+        self.assertEqual((sw.name, sw.ip, sw.kind_hint, len(sw.ports)), ("sw-stage", "10.99.0.3", "switch", 26))
+        self.assertEqual((sw.manufacturer, sw.model, sw.serial), ("NETGEAR", "M4250-26G4F-PoE+", "6AF2C5X12345"), "ENTITY-MIB chassis row")
+        self.assertEqual(sw.evidence["sysLocation"], "Stage rack, row 2")
+        self.assertEqual(sw.ports[0]["name"], "gi1")
+        cisco = by_mac[BC_SWITCH]
+        self.assertEqual((cisco.name, cisco.model, cisco.serial), ("bc-switch.campus.local", "WS-C2960X-24PS-L", "FOC2130X1AB"))
+        self.assertEqual([p["name"] for p in cisco.ports][:2], ["Gi1/0/1", "Gi1/0/2"], "ifName is preferred over ifDescr")
+        self.assertTrue(all(p["ifindex"] == 10100 + p["idx"] for p in cisco.ports if p["idx"] <= 24), "Cisco ifIndex numbering is kept per port")
+
+    def test_snmp_lldp_mac_table_and_vlans(self):
+        snmp = self.by_id["snmp"]
+        r = snmp.parse(json.loads((DISC_FIXTURES / "snmp.json").read_text()))
+        lldp = {(n.local_name, n.local_port): n for n in r.neighbours if n.method == "snmp_lldp"}
+        self.assertEqual(sorted(lldp), [("bc-switch.campus.local", "Gi1/0/24"), ("sw-stage", "gi25"), ("sw-stage", "gi26")])
+        core = lldp[("sw-stage", "gi26")]
+        self.assertEqual((core.remote_mac, core.remote_name, core.remote_port, core.remote_ip), (AV_CORE, "AV Core", "Port 24", "10.99.0.2"))
+        self.assertEqual(core.remote_capabilities, ["bridge", "router"])
+        back = lldp[("bc-switch.campus.local", "Gi1/0/24")]
+        self.assertEqual((back.remote_mac, back.remote_port), (SW_STAGE, "gi25"), "both switches see each other")
+        table = {(n.local_name, n.remote_mac): n for n in r.neighbours if n.method == "mac_table"}
+        etc = table[("sw-stage", ETC_GATEWAY_MAC)]
+        self.assertEqual((etc.local_port, etc.vlan), ("gi3", 40), "Q-BRIDGE: VLAN from dot1qVlanFdbId")
+        self.assertEqual(table[("sw-stage", "00:1d:c1:40:71:60")].vlan, 20)
+        self.assertEqual(table[("bc-switch.campus.local", VIDEOHUB_MAC)].local_port, "Gi1/0/5")
+        self.assertEqual(table[("bc-switch.campus.local", VIDEOHUB_MAC)].vlan, None, "BRIDGE-MIB fallback has no VLAN")
+        self.assertTrue(any("BRIDGE-MIB used" in n for n in r.notes), r.notes)
+        self.assertNotIn(("sw-stage", SW_STAGE), table, "the switch's own addresses are not clients")
+        clients = {o.mac: o for o in r.observations if o.kind_hint == "client"}
+        self.assertEqual(sorted(clients), sorted(["00:0e:dd:44:55:66", RIO_SL_SEC, ETC_GATEWAY_MAC, "00:1d:c1:40:71:60", VIDEOHUB_MAC, DM7_MAC, "00:10:7f:96:00:96"]),
+                         "hosts on edge ports only; MACs behind the uplinks belong to the other switch")
+        self.assertEqual((clients[DM7_MAC].manufacturer, clients[DM7_MAC].uplink_port, clients[DM7_MAC].uplink_mac), ("YAMAHA", "Gi1/0/6", BC_SWITCH))
+        self.assertEqual(clients[ETC_GATEWAY_MAC].manufacturer, "ELECTRONIC THEATRE CONTROLS")
+        self.assertEqual(sorted((n.vlan, n.name) for n in r.networks), [(20, "Dante-Pri"), (21, "Dante-Sec"), (30, "AV-Control"), (40, "Lighting"), (99, "Mgmt")])
+        self.assertEqual(snmp._encode(b"\x28\xc6\x8e\x11\x22\x33"), "0x28c68e112233")
+        self.assertEqual(snmp._encode(b"sw-stage"), "sw-stage")
+        self.assertEqual(snmp._encode(b"Port 1", snmp.IF_PHYS + ".1"), "0x506f72742031", "ifPhysAddress is always hex")
+        self.assertEqual(snmp._caps("0x2800"), ["bridge", "router"])
+        self.assertEqual(snmp._chassis(4, "0x784558aa0001"), (AV_CORE, ""))
+        self.assertEqual(snmp._chassis(5, "0x010a630002"), ("", "10.99.0.2"))
+        empty = snmp.parse({"fetched": "x", "hosts": {"10.0.0.1": {"host": "10.0.0.1", "status": "error", "error": "boom"}}})
+        self.assertEqual(empty.status, "error")
+
+    def test_yamaha_scp(self):
+        r = self.by_id["yamaha"].parse(json.loads((DISC_FIXTURES / "yamaha.json").read_text()))
+        self.assertEqual(r.status, "ok")
+        self.assertEqual((r.stats["hosts"], r.stats["failed"], r.stats["consoles"]), (2, 1, 1))
+        self.assertTrue(any("10.20.0.80" in n and "cannot connect" in n for n in r.notes), r.notes)
+        o = r.observations[0]
+        self.assertEqual((o.mac, o.ip, o.name, o.manufacturer, o.model, o.kind_hint, o.services), (CL5, "10.20.0.5", "FOH-CL5", "Yamaha", "CL5", "console", ["scp"]))
+        self.assertEqual(o.serial, "", "the 12-hex device id is the MAC, not a serial")
+        self.assertEqual((o.evidence["scene"], o.evidence["protocol"]), ("12", "1.7.0"))
+        names = o.evidence["channel_names"]
+        self.assertEqual(names["inputs"][:2], [[1, "Kick In"], [2, "Kick Out"]])
+        self.assertEqual(len(names["inputs"]), 32, "generic 'CH33' style defaults are dropped")
+        self.assertEqual((len(names["mixes"]), len(names["matrix"]), len(names["dca"])), (12, 4, 4))
+        self.assertEqual(o.evidence["channels"], {"inputs": 72, "mixes": 24, "matrix": 8, "dca": 16})
+
+    def test_videohub(self):
+        r = self.by_id["videohub"].parse(json.loads((DISC_FIXTURES / "videohub.json").read_text()))
+        self.assertEqual(r.status, "ok")
+        o = r.observations[0]
+        self.assertEqual((o.mac, o.ip, o.name, o.manufacturer, o.model, o.kind_hint), (VIDEOHUB_MAC, "10.30.0.90", "Broadcast Router", "Blackmagic Design", "Videohub 20x20 12G", "video_router"))
+        self.assertEqual((o.evidence["inputs"], o.evidence["outputs"], o.evidence["routes"]), (20, 20, 20))
+        self.assertEqual(o.evidence["input_labels"][0], [1, "CAM 1"])
+        self.assertEqual(len(o.evidence["routing"]), 20)
+        self.assertEqual(r.stats["routes"], 20)
+
+    def test_qsys_qrc(self):
+        r = self.by_id["qsys"].parse(json.loads((DISC_FIXTURES / "qsys.json").read_text()))
+        self.assertEqual(r.status, "ok")
+        o = r.observations[0]
+        self.assertEqual((o.mac, o.ip, o.manufacturer, o.model, o.kind_hint), ("", "10.30.0.10", "QSC", "Core 110f", "processor"))
+        self.assertEqual(sorted(o.services), ["dante", "qrc"])
+        self.assertEqual((o.evidence["design"], o.evidence["state"], o.evidence["components"]), ("Campus Main 2026", "Active", 12))
+        self.assertEqual(o.evidence["dante_components"], ["Dante_RX_1", "Dante_TX_1"])
+        self.assertEqual(o.evidence["component_types"]["amplifier_output_section"], 2)
+
+    def test_console_payload_errors_are_per_host(self):
+        qsys = self.by_id["qsys"]
+        r = qsys.parse({"fetched": "x", "hosts": {"a": {"host": "10.0.0.1", "status": "ok", "status_get": "garbage"}, "b": {"host": "10.0.0.2", "status": "error", "error": "refused"}}})
+        self.assertEqual(r.status, "error")
+        self.assertEqual(r.observations, [])
+        self.assertEqual(qsys.parse([]).status, "error")
+        self.assertEqual(qsys.parse({"hosts": {}}).status, "skipped")
+
+
+class ActiveCorrelation(unittest.TestCase):
+    """Active observations join the passive picture: same entities, SNMP-derived links, mirrored uplinks."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.corr = requires("discovery.correlate")
+        cls.topo = requires("discovery.topology")
+        cls.results = _results(PASSIVE_PROBES + ACTIVE_PROBES)
+        cls.doc = _campus_doc()
+        cls.entities = cls.corr.correlate(cls.results, cls.doc)
+        cls.conns = cls.topo.build_connections(cls.entities, cls.results, cls.doc, _device_ids(cls.topo, cls.entities, cls.doc))
+
+    def rows(self, switch, port):
+        return [c for c in self.conns if c.switch["label"] == switch and c.port == port]
+
+    def test_console_and_router_join_their_passive_entities(self):
+        cl5 = _by(self.entities, CL5)
+        self.assertEqual(cl5.sources, ["unifi", "mdns", "yamaha"], "the SCP device id is the console's MAC")
+        self.assertEqual((cl5.model, cl5.kind, cl5.status, cl5.match["device"]), ("CL5", "console", "possible", "foh-cl5"))
+        hub = _by(self.entities, VIDEOHUB_MAC)
+        self.assertEqual(sorted(hub.sources), ["snmp", "videohub"], "MAC learned on the broadcast switch + the router's unique id")
+        self.assertEqual((hub.name, hub.kind, hub.status, hub.match["device"]), ("Broadcast Router", "video_router", "match", "bc-router"))
+        core = _by(self.entities, "00:60:74:12:34:56")
+        self.assertIn("qsys", core.sources)
+        self.assertEqual((core.model, core.kind), ("Core 110f", "processor"))
+        bc = _by(self.entities, BC_SWITCH)
+        self.assertEqual((bc.serial, bc.model, sorted(bc.sources)), ("FOC2130X1AB", "WS-C2960X-24PS-L", ["lldp", "snmp"]))
+        dm7 = _by(self.entities, DM7_MAC)
+        self.assertEqual((dm7.manufacturer, dm7.status), ("YAMAHA", "new"))
+
+    def test_mirrored_switch_links_become_one_uplink(self):
+        up = self.rows("AV Core", "Port 24")
+        up = [c for c in up if c.flag == "uplink"]
+        self.assertEqual(len(up), 1)
+        c = up[0]
+        self.assertEqual((c.peer["label"], c.peer["port"], c.confidence, c.level), ("sw-stage", "gi26", 0.95, "high"))
+        for m in ("unifi_lldp", "snmp_lldp", "mac_table", "mirrored"):
+            self.assertIn(m, c.methods)
+        self.assertEqual([c for c in self.rows("sw-stage", "Port 26") if c.flag == "uplink"], [], "the reverse row is folded into the first")
+        bc = [c for c in self.rows("bc-switch.campus.local", "Port 24") if c.flag == "uplink"]
+        self.assertEqual(len(bc), 1)
+        self.assertEqual((bc[0].peer["label"], bc[0].peer["port"], bc[0].confidence), ("sw-stage", "gi25", 0.95))
+        self.assertEqual(sorted(m for m in bc[0].methods if m != "mirrored"), ["mac_table", "snmp_lldp"], "SNMP-only link, seen from both switches")
+        self.assertEqual(bc[0].cable["to"]["device"], "sw-stage")
+        self.assertIn("Discovered from both ends", bc[0].cable["note"])
+        self.assertEqual(self.rows("sw-stage", "Port 25"), [])
+
+    def test_snmp_mac_table_edges(self):
+        hub = self.rows("bc-switch.campus.local", "Port 5")
+        self.assertEqual(len(hub), 1)
+        self.assertEqual((hub[0].peer["label"], hub[0].methods, hub[0].confidence, hub[0].flag), ("Broadcast Router", ["mac_table"], 0.6, ""))
+        self.assertEqual(hub[0].cable["to"]["device"], "bc-router", "matched document device")
+        etc = self.rows("sw-stage", "Port 3")
+        self.assertEqual((etc[0].peer["mac"], etc[0].vlan), (ETC_GATEWAY_MAC, 40))
+        self.assertEqual(etc[0].cable["from"], {"device": "sw-stage", "port": self.topo.doc_port_for([d for d in self.doc["devices"] if d["id"] == "sw-stage"][0], index=3)})
+        via = [c for c in self.rows("sw-stage", "Port 26") + self.rows("bc-switch.campus.local", "Port 24") if c.flag == "via"]
+        self.assertTrue(via and all(c.cable is None and c.confidence < 0.6 for c in via), "MACs behind an uplink never become cables")
+
+    def test_networks_from_switch_vlan_names(self):
+        nets = {n["vlan"]: n for n in self.topo.build_networks(self.results, self.entities, self.doc)}
+        self.assertIn("snmp", nets[40]["sources"])
+        self.assertEqual(nets[40]["status"], "match")
+
+    def test_mirrored_merge_unit(self):
+        Nb = requires("discovery.probes:Neighbour")
+        Obs = requires("discovery.probes:Observation")
+        PR = requires("discovery.probes:ProbeResult")
+        a, b = "aa:00:00:00:00:01", "aa:00:00:00:00:02"
+        res = PR(probe="snmp", observations=[Obs(source="snmp", mac=a, name="A", kind_hint="switch", ports=[{"idx": 1, "name": "gi1"}]),
+                                             Obs(source="snmp", mac=b, name="B", kind_hint="switch", ports=[{"idx": 7, "name": "gi7"}])],
+                 neighbours=[Nb(source="snmp", method="snmp_lldp", local_mac=a, local_name="A", local_port="gi1", remote_mac=b, remote_name="B", remote_port="gi7", remote_capabilities=["bridge"]),
+                             Nb(source="snmp", method="snmp_lldp", local_mac=b, local_name="B", local_port="gi7", remote_mac=a, remote_name="A", remote_port="gi1", remote_capabilities=["bridge"])])
+        ents = self.corr.correlate([res], {})
+        conns = self.topo.build_connections(ents, [res], {}, {})
+        self.assertEqual(len(conns), 1)
+        c = conns[0]
+        self.assertEqual((c.switch["label"], c.port, c.peer["label"], c.peer["port"], c.flag, c.confidence), ("A", "Port 1", "B", "gi7", "uplink", 0.95))
+        self.assertEqual(c.methods, ["snmp_lldp", "mirrored"])
+        # inconsistent peer ports are not folded
+        res.neighbours[1].remote_port = "gi2"
+        ents = self.corr.correlate([res], {})
+        self.assertEqual(len(self.topo.build_connections(ents, [res], {}, {})), 2)
+
+
+class ActiveSettings(unittest.TestCase):
+    """Active probes default to off; list / select fields validate; env fallbacks apply (FR-DISC-07/10)."""
+
+    def setUp(self):
+        self.s = requires("discovery.settings")
+
+    def test_defaults_are_off(self):
+        d = self.s.defaults()
+        for pid in ACTIVE_PROBES:
+            self.assertFalse(d["probes"][pid]["enabled"], pid)
+            self.assertEqual(d["probes"][pid]["hosts"], "", pid)
+        for pid in PASSIVE_PROBES:
+            self.assertTrue(d["probes"][pid]["enabled"], pid)
+        self.assertEqual((d["probes"]["snmp"]["version"], d["probes"]["snmp"]["auth_protocol"], d["probes"]["snmp"]["priv_protocol"]), ("v2c", "sha1", "none"))
+        self.assertNotIn("community", d["probes"]["snmp"])
+
+    def test_list_and_select_fields(self):
+        with temp_data_dir() as data:
+            pdir = install_campus(data, "campus")
+            value = self.s.apply_update({}, pdir, {"probes": {"snmp": {"enabled": True, "hosts": ["10.99.0.3", " 10.99.0.4:1161 ", "10.99.0.3"], "version": "v3", "username": "ro",
+                                                                        "auth_key": "auth-secret-1", "priv_protocol": "aes", "priv_key": "priv-secret-2"}}})
+            self.assertEqual(value["probes"]["snmp"]["hosts"], "10.99.0.3,10.99.0.4:1161")
+            self.assertEqual(value["probes"]["snmp"]["version"], "v3")
+            self.assertNotIn("auth-secret-1", json.dumps(value))
+            self.assertEqual(self.s.read_secrets(pdir)["snmp"], {"auth_key": "auth-secret-1", "priv_key": "priv-secret-2"})
+            value = self.s.apply_update({}, pdir, {"probes": {"yamaha": {"hosts": "10.20.0.5\n10.20.0.6"}}})
+            self.assertEqual(value["probes"]["yamaha"]["hosts"], "10.20.0.5,10.20.0.6")
+            for body in ({"probes": {"snmp": {"version": "v1"}}}, {"probes": {"snmp": {"priv_protocol": "rot13"}}}, {"probes": {"snmp": {"version": 2}}}):
+                with self.assertRaises(ValueError, msg=body):
+                    self.s.apply_update({}, pdir, body)
+            doc = {"settings": {"discovery": value}}
+            pub = self.s.public(doc, pdir)
+            self.assertTrue(pub["probes"]["snmp"]["auth_key_set"])
+            with temp_env(FATHOM_SNMP_HOSTS="10.1.1.1 10.1.1.2", FATHOM_SNMP_COMMUNITY="env-community-9", FATHOM_QSYS_HOSTS="10.1.1.3"):
+                eff = self.s.effective({}, pdir)
+                self.assertEqual((eff["probes"]["snmp"]["hosts"], eff["probes"]["snmp"]["community"], eff["probes"]["qsys"]["hosts"]), ("10.1.1.1 10.1.1.2", "env-community-9", "10.1.1.3"))
+                self.assertFalse(eff["probes"]["snmp"]["enabled"], "an environment host list never turns an active probe on by itself")
+                self.assertEqual(self.s.redact("community env-community-9 rejected", pdir), "community " + self.s.REDACTED + " rejected")
+
+
+class ActiveRunApi(unittest.TestCase):
+    """Runs with active sources: opt-in, targets recorded, mode flagged, SNMP-derived connections in the findings."""
+
+    def setUp(self):
+        requires("discovery")
+        self.app = get_app()
+        self.api = DiscoveryApi()
+        self.api.app = self.app
+
+    def test_opt_in_run_with_targets(self):
+        with temp_data_dir(**FAST) as data:
+            install_campus(data, "campus")
+            base = "/api/v2/projects/campus"
+            run = self.api.run_and_wait(base, {"window": 10})
+            self.assertEqual((run["probes"], run["mode"], run.get("targets")), (PASSIVE_PROBES, "passive", {}), "nothing active unless enabled")
+            st, _, b = self.api.req("POST", base + "/discovery/runs", {"window": 10, "probes": ["snmp"]})
+            self.assertEqual(st, 400, "an active probe that is not enabled cannot be requested in")
+            st, _, b = self.api.req("PUT", base + "/discovery/settings", {"probes": {"snmp": {"enabled": True, "hosts": [], "community": "public-ro"}}})
+            self.assertEqual(st, 200, b)
+            st, _, b = self.api.req("POST", base + "/discovery/runs", {"window": 10, "probes": ["snmp"]})
+            self.assertEqual(st, 400, b)
+            self.assertIn("at least one host", jbody(b)["error"])
+            st, _, b = self.api.req("PUT", base + "/discovery/settings", {"probes": ACTIVE_SETTINGS})
+            self.assertEqual(st, 200, b)
+            s = jbody(b)["settings"]["probes"]
+            self.assertEqual((s["snmp"]["hosts"], s["snmp"]["community_set"], s["videohub"]["hosts"]), (",".join(SNMP_HOSTS), True, "10.30.0.90"))
+            self.assertNotIn("public-ro", b.decode())
+            st, _, b = self.api.req("GET", base + "/discovery/runs")
+            cards = {c["id"]: c for c in jbody(b)["sources"]}
+            self.assertTrue(cards["snmp"]["settings"]["enabled"] and cards["snmp"]["mode"] == "active" and cards["snmp"]["maturity"] == "tested")
+            self.assertTrue(cards["videohub"]["maturity"] == "mature" and cards["videohub"]["sends"])
+            run = self.api.run_and_wait(base, {"window": 10})
+            self.assertEqual(run["status"], "done", run)
+            self.assertEqual(run["probes"], PASSIVE_PROBES + ACTIVE_PROBES)
+            self.assertEqual(run["mode"], "active")
+            self.assertEqual(run["targets"], {"snmp": SNMP_HOSTS, "yamaha": ["10.20.0.5", "10.20.0.80"], "videohub": ["10.30.0.90"], "qsys": ["10.30.0.10"]})
+            log = "\n".join(x["msg"] for x in run["log"])
+            self.assertIn("read-only queries go to the listed hosts only", log)
+            self.assertIn("nothing is written to any device", log)
+            self.assertNotIn("public-ro", log)
+            self.assertEqual({k: v for k, v in run["summaries"].items() if k in ACTIVE_PROBES and v["status"] != "ok"}, {}, run["summaries"])
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + run["id"] + "/findings")
+            self.assertEqual(st, 200)
+            f = jbody(b)
+            self.assertEqual(f["counts"]["probes"], {p: "ok" for p in PASSIVE_PROBES + ACTIVE_PROBES})
+            methods = {m for c in f["connections"] for m in c["methods"]}
+            self.assertTrue({"snmp_lldp", "mirrored", "mac_table"} <= methods, methods)
+            mirrored = [c for c in f["connections"] if "mirrored" in c["methods"]]
+            self.assertEqual(sorted((c["switch"]["label"], c["port"], c["peer"]["label"], c["peer"]["port"]) for c in mirrored),
+                             [("AV Core", "Port 24", "sw-stage", "gi26"), ("bc-switch.campus.local", "Port 24", "sw-stage", "gi25")])
+            hub = [e for e in f["entities"] if VIDEOHUB_MAC in e["macs"]][0]
+            self.assertEqual((hub["status"], hub["device_id"], sorted(hub["sources"])), ("match", "bc-router", ["snmp", "videohub"]))
+            rows = [r for r in f["rows"] if r["to_device"] == "Broadcast Router"]
+            self.assertEqual(rows[0]["from_device"], "bc-switch.campus.local")
+            self.assertIn(rows[0]["from_port"], ("Port 5", "Gi1/0/5"))
+            st, _, b = self.api.req("GET", base + "/discovery/runs")
+            self.assertEqual(jbody(b)["runs"][0]["mode"], "active")
+            # a request narrowed to one active probe keeps its targets only
+            run = self.api.run_and_wait(base, {"window": 10, "probes": ["videohub", "arp"]})
+            self.assertEqual((run["probes"], run["mode"], run["targets"]), (["arp", "videohub"], "active", {"videohub": ["10.30.0.90"]}))
+
+    def test_test_endpoint_for_active_probes(self):
+        with temp_data_dir(**FAST) as data:
+            install_campus(data, "campus")
+            base = "/api/v2/projects/campus"
+            for pid in ACTIVE_PROBES:
+                st, _, b = self.api.req("POST", base + "/discovery/test", {"probe": pid})
+                self.assertEqual(st, 200, b)
+                self.assertTrue(jbody(b)["result"]["ok"] and jbody(b)["result"]["fixture"], pid)
+        with temp_data_dir() as data:  # no fixtures: a probe without hosts refuses before any socket is opened
+            install_campus(data, "campus")
+            base = "/api/v2/projects/campus"
+            with _SocketGuard() as g:
+                for pid in ("yamaha", "videohub", "qsys"):
+                    st, _, b = self.api.req("POST", base + "/discovery/test", {"probe": pid})
+                    self.assertEqual(st, 200, b)
+                    self.assertFalse(jbody(b)["result"]["ok"])
+                    self.assertIn("host", jbody(b)["result"]["message"])
+                st, _, b = self.api.req("POST", base + "/discovery/test", {"probe": "snmp", "settings": {"hosts": "10.99.0.3", "community": ""}})
+                self.assertEqual(st, 200, b)
+                res = jbody(b)["result"]
+                self.assertFalse(res["ok"])
+                self.assertTrue("community" in res["message"] or "puresnmp" in res["message"], res)
+            self.assertEqual((g.connects, g.sendto, g.sends), ([], [], []))
+
+
+class ActiveGuard(unittest.TestCase):
+    """Active probes open connections to the configured hosts and nowhere else; with no hosts, nothing happens (FR-DISC-10)."""
+
+    def setUp(self):
+        self.probes = requires("discovery.probes")
+        self.by_id = {m.INFO.id: m for m in self.probes.all_probes()}
+        self.consoles = requires("discovery.probes.consoles")
+
+    def test_consoles_connect_only_to_listed_hosts(self):
+        for pid, port in (("yamaha", 49280), ("videohub", 9990), ("qsys", 1710)):
+            probe = self.by_id[pid]
+            with temp_env(FATHOM_DISCOVERY_FIXTURES=None), _SocketGuard() as g:
+                raw = probe.collect({"hosts": "192.0.2.10, 192.0.2.11:2222", "username": "u", "password": "p"})
+                res = probe.test({"hosts": ["192.0.2.12"]})
+            self.assertEqual(sorted(a for a in g.connects if isinstance(a, tuple)), [("192.0.2.10", port), ("192.0.2.11", 2222), ("192.0.2.12", port)], pid)
+            self.assertEqual((g.sendto, g.sends, g.lookups), ([], [], []), pid)
+            self.assertEqual([e["status"] for e in raw["hosts"].values()], ["error", "error"])
+            self.assertTrue(all("cannot connect" in e["error"] for e in raw["hosts"].values()), raw)
+            self.assertFalse(res["ok"])
+            with temp_env(FATHOM_DISCOVERY_FIXTURES=None), _SocketGuard() as g:
+                with self.assertRaises(self.consoles.ConsoleError):
+                    probe.collect({})
+                res = probe.test({"hosts": ""})
+            self.assertEqual((g.connects, g.sendto, g.sends), ([], [], []), "%s: no hosts, no traffic" % pid)
+            self.assertFalse(res["ok"])
+
+    def test_console_connection_is_rate_limited_and_bounded(self):
+        c = self.consoles
+        self.assertGreaterEqual(c.PAUSE, 0.02)
+        self.assertLessEqual(c.READ_TIMEOUT, 10)
+        self.assertLessEqual(c.HOST_BUDGET, 60)
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        port = srv.getsockname()[1]
+        got = []
+
+        def serve():
+            conn, _ = srv.accept()
+            conn.settimeout(3)
+            try:
+                got.append(conn.recv(4096))
+                conn.sendall(b"NOTIFY something\nOK devinfo productname \"CL5\"\n")
+                got.append(conn.recv(4096))
+                conn.sendall(b"ERROR devinfo UnknownAddress\n")
+                time.sleep(0.5)  # the probe must give up on its own
+            except OSError:
+                pass
+            finally:
+                conn.close()
+
+        t = threading.Thread(target=serve, daemon=True)
+        t.start()
+        try:
+            conn = c._Conn("127.0.0.1", port, budget=5.0)
+            try:
+                y = self.by_id["yamaha"]
+                ok, reply = y._cmd(conn, "devinfo productname")
+                self.assertEqual((ok, reply), (True, 'OK devinfo productname "CL5"'), "notifications are skipped")
+                ok, reply = y._cmd(conn, "devinfo deviceid")
+                self.assertFalse(ok)
+                self.assertEqual(conn.read_until(b"\n", timeout=0.3), None, "a silent peer times out instead of blocking")
+            finally:
+                conn.close()
+        finally:
+            srv.close()
+            t.join(timeout=5)
+        self.assertEqual(got, [b"devinfo productname\n", b"devinfo deviceid\n"], "exactly the commands asked, nothing else")
+
+    def test_snmp_only_queries_listed_switches(self):
+        snmp = self.by_id["snmp"]
+        ok, _ = snmp.available()
+        if not ok:
+            self.skipTest("puresnmp not installed (fathom[discovery] extra)")
+        with temp_env(FATHOM_DISCOVERY_FIXTURES=None), _SocketGuard() as g:
+            raw = snmp.collect({"hosts": ["192.0.2.20", "192.0.2.21:1161"], "community": "public"})
+            res = snmp.test({"hosts": "192.0.2.22", "version": "v3", "username": "ro", "auth_key": "k"})
+        self.assertEqual(sorted(a for a in g.connects if isinstance(a, tuple)), [("192.0.2.20", 161), ("192.0.2.21", 1161), ("192.0.2.22", 161)])
+        self.assertEqual((g.sendto, g.sends, g.lookups), ([], [], []))
+        self.assertEqual([e["status"] for e in raw["hosts"].values()], ["error", "error"])
+        self.assertFalse(res["ok"])
+        with temp_env(FATHOM_DISCOVERY_FIXTURES=None), _SocketGuard() as g:
+            with self.assertRaises(snmp.SnmpError):
+                snmp.collect({"community": "public"})
+            raw = snmp.collect({"hosts": "192.0.2.20"})  # no community: refused before any packet
+            self.assertIn("community", raw["hosts"]["192.0.2.20"]["error"])
+            raw = snmp.collect({"hosts": "192.0.2.20", "version": "v3"})  # no user
+            self.assertIn("user", raw["hosts"]["192.0.2.20"]["error"])
+            self.assertFalse(snmp.test({})["ok"])
+            self.assertIn("community", snmp.test({"hosts": "192.0.2.20"})["message"])
+        self.assertEqual((g.connects, g.sendto, g.sends), ([], [], []))
+
+    def test_snmp_pacer_counts_and_pauses(self):
+        snmp = self.by_id["snmp"]
+        import asyncio
+
+        sent = []
+
+        async def fake_send(endpoint, packet, timeout=1, loop=None, retries=1):
+            sent.append((endpoint, timeout, retries))
+            return b""
+
+        pacer = snmp._Pacer(None, pause=0.01)
+        with mock.patch("puresnmp.transport.send_udp", fake_send):
+            async def go():
+                t0 = time.time()
+                for _ in range(3):
+                    await pacer("ep", b"x", timeout=99, retries=50)
+                return time.time() - t0
+
+            took = asyncio.run(go())
+        self.assertEqual(pacer.requests, 3)
+        self.assertGreaterEqual(took, 0.02, "a pause between consecutive requests")
+        self.assertEqual(sent[0][1:], (99, 50), "timeout / retries passed through as given by the client")
+        self.assertEqual(snmp.BULK, 10)
+        self.assertLessEqual(snmp.TIMEOUT, 10)
+        self.assertLessEqual(snmp.RETRIES, 3)
+
+
 # --------------------------------------------------------------------------- doctor
 
 
@@ -1114,6 +1588,374 @@ class ImporterRegistration(unittest.TestCase):
             self.assertTrue(all(d.get("source") == "discovery" for d in ov["devices"]))
             self.assertTrue(all(r.get("kind") == "network" for r in ov["routes"]))
             self.assertIn("rio-sl", ov["interfaces"])
+
+
+# ================================================================== phase 3: run-to-run diff, report section, DDM
+
+
+def _ent(eid, **kw):
+    e = {"id": eid, "macs": [], "ips": [], "hostname": "", "name": "", "dante_name": "", "serial": "", "vlan": None, "kind": "", "sources": ["unifi"], "status": "new",
+         "confidence": 0.8, "level": "high", "uplinks": [], "label": kw.get("name") or kw.get("hostname") or eid}
+    e.update(kw)
+    return e
+
+
+def _conn(cid, sw_ent, sw_mac, port, peer_ent, peer_mac, flag="", status="new", conf=0.85, methods=("mac_table",)):
+    return {"id": cid, "switch": {"entity": sw_ent, "device": "", "label": sw_ent, "mac": sw_mac}, "port": port, "peer": {"entity": peer_ent, "device": "", "label": peer_ent, "mac": peer_mac, "port": ""},
+            "methods": list(methods), "confidence": conf, "level": "high", "flag": flag, "status": status, "medium": "network", "vlan": None}
+
+
+def _findings(entities, connections):
+    return {"entities": entities, "connections": connections}
+
+
+class RunDiff(unittest.TestCase):
+    """compute_diff on synthetic findings: pairing, moved, changed, new / lost links, ignored rows left out (FR-DISC-11)."""
+
+    def setUp(self):
+        import importlib
+
+        self.d = importlib.import_module("fathom.discovery.diff")
+
+    def test_pairing_by_mac_serial_name_then_ip(self):
+        prev = [_ent("p1", macs=["aa:00:00:00:00:01"]), _ent("p2", serial="SER-0002"), _ent("p3", dante_name="RIO-SL"), _ent("p4", ips=["10.0.0.4"]), _ent("p5", ips=["10.0.0.5"], macs=["aa:00:00:00:00:05"])]
+        cur = [_ent("c1", macs=["bb:00:00:00:00:09", "aa:00:00:00:00:01"]), _ent("c2", serial="ser-0002"), _ent("c3", dante_name="rio-sl.local"), _ent("c4", ips=["10.0.0.4"]),
+               _ent("c5", ips=["10.0.0.5"]), _ent("c6", hostname="pc")]
+        pairs = self.d.pair_entities(cur, prev)
+        self.assertEqual(pairs, {"c1": "p1", "c2": "p2", "c3": "p3", "c4": "p4"}, "IP alone never pairs a MAC-less host with one that had a MAC; generic names never pair")
+
+    def test_two_previous_hosts_folded_into_one_box_are_not_missing(self):
+        prev = [_ent("p-pri", macs=["00:1d:c1:10:20:21"], ips=["10.20.0.21"]), _ent("p-sec", macs=["00:1d:c1:10:21:21"], ips=["10.21.0.21"]), _ent("sw", macs=["aa:aa:aa:aa:aa:aa"])]
+        cur = [_ent("c-rio", macs=["00:1d:c1:10:21:21", "00:1d:c1:10:20:21"], ips=["10.21.0.21", "10.20.0.21"], dante_name="RIO-SL"), _ent("sw2", macs=["aa:aa:aa:aa:aa:aa"])]
+        pairs = self.d.pair_entities(cur, prev)
+        self.assertEqual(pairs, {"c-rio": "p-sec", "sw2": "sw"})
+        self.assertEqual(self.d.absorbed_entities(cur, prev, pairs), {"p-pri": "c-rio"})
+        links_prev = [_conn("l1", "sw", "aa:aa:aa:aa:aa:aa", "Port 1", "p-pri", "00:1d:c1:10:20:21"), _conn("l2", "sw", "aa:aa:aa:aa:aa:aa", "Port 2", "p-sec", "00:1d:c1:10:21:21")]
+        links_cur = [_conn("l1x", "sw2", "aa:aa:aa:aa:aa:aa", "Port 1", "c-rio", "00:1d:c1:10:20:21"), _conn("l2x", "sw2", "aa:aa:aa:aa:aa:aa", "Port 2", "c-rio", "00:1d:c1:10:21:21")]
+        out = self.d.compute_diff(_findings(cur, links_cur), _findings(prev, links_prev))
+        self.assertEqual(out["counts"]["changes"], 0, out)
+        # the other way round: one previous box now seen as two hosts
+        out = self.d.compute_diff(_findings(prev, links_prev), _findings(cur, links_cur))
+        self.assertEqual((out["counts"]["new_devices"], out["counts"]["missing_devices"], out["counts"]["changed"], out["counts"]["new_links"], out["counts"]["lost_links"]), (0, 0, 0, 0, 0), out)
+
+    def test_new_missing_moved_changed_and_links(self):
+        sw1, sw2 = "aa:bb:cc:00:00:01", "aa:bb:cc:00:00:02"
+        prev = _findings(
+            [_ent("sw1", macs=[sw1], hostname="core", kind="switch"), _ent("sw2", macs=[sw2], hostname="edge", kind="switch"),
+             _ent("a", macs=["00:00:00:00:00:0a"], ips=["10.0.0.10"], hostname="rio-a", vlan=20), _ent("b", macs=["00:00:00:00:00:0b"], ips=["10.0.0.11"], hostname="rio-b"),
+             _ent("gone", macs=["00:00:00:00:00:0c"], hostname="old-dsp"), _ent("ign", macs=["00:00:00:00:00:0d"], status="ignored")],
+            [_conn("l1", "sw1", sw1, "Port 1", "a", "00:00:00:00:00:0a"), _conn("l2", "sw1", sw1, "Port 2", "b", "00:00:00:00:00:0b"),
+             _conn("l3", "sw1", sw1, "Port 3", "gone", "00:00:00:00:00:0c"), _conn("v1", "sw2", sw2, "Port 9", "a", "00:00:00:00:00:0a", flag="via")])
+        cur = _findings(
+            [_ent("sw1x", macs=[sw1], hostname="core.campus.local", kind="switch"), _ent("sw2x", macs=[sw2], hostname="edge", kind="switch"),
+             _ent("ax", macs=["00:00:00:00:00:0a"], ips=["10.0.0.10"], hostname="rio-a", vlan=30), _ent("bx", macs=["00:00:00:00:00:0b"], ips=["10.0.0.99"], hostname="rio-b"),
+             _ent("new", macs=["00:00:00:00:00:0e"], hostname="new-amp"), _ent("ign2", macs=["00:00:00:00:00:0d"], status="ignored")],
+            [_conn("l1x", "sw2x", sw2, "Gi1/0/5", "ax", "00:00:00:00:00:0a"), _conn("l2x", "sw1x", sw1, "Port 2", "bx", "00:00:00:00:00:0b"),
+             _conn("l4", "sw1x", sw1, "Port 4", "new", "00:00:00:00:00:0e"), _conn("ig", "sw1x", sw1, "Port 7", "bx", "00:00:00:00:00:0b", status="ignored")])
+        out = self.d.compute_diff(cur, prev, "run-b", "run-a")
+        c = out["counts"]
+        self.assertEqual((out["run"], out["against"]), ("run-b", "run-a"))
+        self.assertEqual([e["label"] for e in out["new_devices"]], ["new-amp"])
+        self.assertEqual([e["label"] for e in out["missing_devices"]], ["old-dsp"])
+        self.assertEqual([(m["label"], m["from"]["switch"], m["from"]["port"], m["to"]["switch"], m["to"]["port"]) for m in out["moved"]], [("rio-a", "sw1", "Port 1", "sw2x", "Port 5")])
+        changes = sorted((x["label"], x["field"], x["before"], x["after"]) for x in out["changed"])
+        self.assertEqual(changes, [("rio-a", "vlan", 20, 30), ("rio-b", "ips", ["10.0.0.11"], ["10.0.0.99"])], "a longer FQDN of the same host is not a hostname change")
+        self.assertEqual([(l["switch"], l["port"], l["peer"]) for l in out["new_links"]], [("sw1x", "Port 4", "new"), ("sw2x", "Gi1/0/5", "ax")])
+        self.assertEqual([(l["switch"], l["port"], l["peer"]) for l in out["lost_links"]], [("sw1", "Port 1", "a"), ("sw1", "Port 3", "gone")])
+        self.assertEqual((c["new_devices"], c["missing_devices"], c["moved"], c["changed"], c["new_links"], c["lost_links"]), (1, 1, 1, 2, 2, 2))
+        self.assertEqual((c["entities"], c["previous_entities"], c["paired"], c["unchanged"], c["changes"]), (5, 5, 4, 2, 9), "ignored rows are not counted; via rows are not links")
+        self.assertEqual(c["links"], 3)
+        self.assertEqual(c["previous_links"], 3)
+
+    def test_controller_and_switch_views_of_the_same_port_are_not_a_move(self):
+        core, edge = "aa:bb:cc:00:00:01", "aa:bb:cc:00:00:02"
+        prev = _findings([_ent("core", macs=[core]), _ent("edge", macs=[edge]), _ent("rx", macs=["00:00:00:00:00:aa"], uplinks=[{"mac": "00:00:00:00:00:aa", "switch_mac": core, "port": "Port 24", "source": "unifi"}])], [])
+        cur = _findings([_ent("core2", macs=[core]), _ent("edge2", macs=[edge]), _ent("rx2", macs=["00:00:00:00:00:aa"], uplinks=[{"mac": "00:00:00:00:00:aa", "switch_mac": core, "port": "Port 24", "source": "unifi"}])],
+                        [_conn("c", "edge2", edge, "Port 1", "rx2", "00:00:00:00:00:aa", methods=("snmp_lldp",))])
+        out = self.d.compute_diff(cur, prev)
+        self.assertEqual(out["moved"], [], "the SNMP view (edge port 1) refines the controller view (behind core port 24); nothing moved")
+        self.assertEqual(out["counts"]["new_links"], 1)
+        prev2 = _findings(prev["entities"], [_conn("c0", "core", core, "Port 24", "rx", "00:00:00:00:00:aa")])
+        cur2 = _findings([_ent("core2", macs=[core]), _ent("edge2", macs=[edge]), _ent("rx2", macs=["00:00:00:00:00:aa"])], [_conn("c", "edge2", edge, "Port 1", "rx2", "00:00:00:00:00:aa")])
+        out2 = self.d.compute_diff(cur2, prev2)
+        self.assertEqual([(m["from"]["port"], m["to"]["port"]) for m in out2["moved"]], [("Port 24", "Port 1")], "two direct links on different switches is a move")
+
+    def test_empty_diff_and_fixture_runs(self):
+        disc = requires("discovery")
+        e = self.d.empty_diff("run-x")
+        self.assertEqual((e["against"], e["counts"]["changes"], e["counts"]["entities"]), (None, 0, 0))
+        doc = json.loads((FIXTURES.parent.parent / "fathom" / "samples" / "campus-demo" / "project.json").read_text(encoding="utf-8"))
+        passive = disc.compute_findings("run-a", _results(), doc)
+        everything = disc.compute_findings("run-b", _results(PASSIVE_PROBES + ACTIVE_PROBES), doc)
+        out = self.d.compute_diff(everything, passive, "run-b", "run-a")
+        c = out["counts"]
+        self.assertEqual((c["missing_devices"], c["moved"], c["changed"], c["lost_links"]), (0, 0, 0, 0), "adding sources to the same network changes nothing that exists")
+        self.assertEqual(c["new_devices"], 5, [e["label"] for e in out["new_devices"]])
+        self.assertIn("Broadcast Router", [e["label"] for e in out["new_devices"]])
+        self.assertEqual(c["new_links"], 8)
+        self.assertEqual(c["paired"], 18)
+        same = self.d.compute_diff(everything, everything)
+        self.assertEqual(same["counts"]["changes"], 0)
+        self.assertEqual(self.d.empty_diff("run-b", everything)["counts"]["entities"], c["entities"])
+
+
+class RunDiffApi(unittest.TestCase):
+    """Two ad hoc runs → diff persisted with the second, served by GET …/diff, prior run selectable (FR-DISC-11)."""
+
+    def setUp(self):
+        requires("discovery")
+        self.app = get_app()
+        self.api = DiscoveryApi()
+        self.api.app = self.app
+
+    def test_diff_persisted_and_served(self):
+        with temp_data_dir(**FAST) as data:
+            install_campus(data, "campus")
+            base = "/api/v2/projects/campus"
+            r1 = self.api.run_and_wait(base, {"window": 10, "probes": ["unifi", "arp"]})
+            self.assertEqual(r1["status"], "done", r1)
+            self.assertEqual(r1["diff"]["against"], None, "the first run has nothing to compare with")
+            rdir = data / "projects" / "campus" / "exports" / "discovery"
+            self.assertTrue((rdir / r1["id"] / "diff.json").is_file())
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r1["id"] + "/diff")
+            self.assertEqual(st, 200, b)
+            d = jbody(b)
+            self.assertEqual((d["run"], d["against"], d["candidates"], d["diff"]["counts"]["changes"], d["persisted"]), (r1["id"], None, [], 0, True))
+
+            time.sleep(1.1)  # run ids carry a second resolution; "previous" is by id order
+            r2 = self.api.run_and_wait(base, {"window": 10})
+            self.assertEqual(r2["status"], "done", r2)
+            self.assertEqual(r2["diff"]["against"], r1["id"])
+            c2 = r2["diff"]["counts"]
+            self.assertGreater(c2["new_devices"], 0, "mDNS and LLDP add hosts the controller and ARP did not see")
+            self.assertEqual(c2["missing_devices"], 0)
+            self.assertTrue(any("compared with " + r1["id"] in x["msg"] for x in r2["log"]), r2["log"])
+            stored = json.loads((rdir / r2["id"] / "diff.json").read_text(encoding="utf-8"))
+            self.assertEqual((stored["run"], stored["against"], stored["counts"]), (r2["id"], r1["id"], c2))
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r2["id"] + "/diff")
+            self.assertEqual(st, 200, b)
+            d = jbody(b)
+            self.assertEqual((d["against"], [c["id"] for c in d["candidates"]], d["persisted"]), (r1["id"], [r1["id"]], True))
+            self.assertEqual(d["diff"]["counts"]["new_devices"], c2["new_devices"])
+            for e in d["diff"]["new_devices"]:
+                for k in ("id", "label", "kind", "macs", "ips", "sources", "confidence", "level", "status", "location"):
+                    self.assertIn(k, e)
+            for l in d["diff"]["new_links"]:
+                for k in ("switch", "port", "peer", "methods", "confidence", "level", "flag"):
+                    self.assertIn(k, l)
+            st, _, b = self.api.req("GET", base + "/discovery/runs")
+            briefs = {r["id"]: r for r in jbody(b)["runs"]}
+            self.assertEqual(briefs[r2["id"]]["diff"]["against"], r1["id"], "the runs list carries the stored diff counts")
+
+            # pick the other direction explicitly: run 1 against run 2
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r1["id"] + "/diff?against=" + r2["id"])
+            self.assertEqual(st, 200, b)
+            d = jbody(b)
+            self.assertEqual((d["against"], d["persisted"]), (r2["id"], False))
+            self.assertEqual(d["diff"]["counts"]["missing_devices"], c2["new_devices"])
+            self.assertEqual(d["diff"]["counts"]["new_devices"], 0)
+            # errors
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r2["id"] + "/diff?against=" + r2["id"])
+            self.assertEqual(st, 400, b)
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r2["id"] + "/diff?against=run-20000101-000000-dead")
+            self.assertEqual(st, 400, b)
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r2["id"] + "/diff?against=nonsense")
+            self.assertEqual(st, 400, b)
+            st, _, b = self.api.req("GET", base + "/discovery/runs/run-20000101-000000-dead/diff")
+            self.assertEqual(st, 404, b)
+
+            # a device promoted in between does not become a "change": both sides are correlated against the live document
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r2["id"] + "/findings")
+            f = jbody(b)
+            new_ids = [e["id"] for e in f["entities"] if e["status"] == "new" and e.get("proposed")][:3]
+            st, _, b = self.api.req("POST", base + "/discovery/runs/" + r2["id"] + "/findings/promote", {"entities": new_ids})
+            self.assertEqual(st, 200, b)
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + r2["id"] + "/diff")
+            self.assertEqual(jbody(b)["diff"]["counts"]["new_devices"], c2["new_devices"])
+
+
+class DiscoveredConnectionsReport(unittest.TestCase):
+    """The build's "Discovered connections" section: latest completed run plus promoted discovered cables; off with discovery=false."""
+
+    def setUp(self):
+        requires("discovery")
+        self.app = get_app()
+        self.api = DiscoveryApi()
+        self.api.app = self.app
+
+    _last_build = 0.0
+
+    def _build(self, data, body):
+        wait = self._last_build + 1.05 - time.time()  # build folders are stamped per second; a second build in the same second would reuse the folder
+        if wait > 0:
+            time.sleep(wait)
+        self._last_build = time.time()
+        st, _, b = self.api.req("POST", "/api/v2/projects/campus/builds", body)
+        self.assertEqual(st, 201, b[:400])
+        j = jbody(b)
+        return data / "builds" / "campus" / j["build"], j["files"]
+
+    def test_report_section_csv_and_toggle(self):
+        with temp_data_dir(**FAST) as data:
+            install_campus(data, "campus")
+            base = "/api/v2/projects/campus"
+            bdir, files = self._build(data, {})
+            self.assertNotIn("discovered-connections.csv", files, "no run yet: no section, no csv")
+            self.assertNotIn("Discovered connections", (bdir / "report.html").read_text(encoding="utf-8"))
+            self.assertIn("discovered connections: no completed discovery run yet", (bdir / "build-notes.txt").read_text(encoding="utf-8"))
+
+            run = self.api.run_and_wait(base, {"window": 10})
+            self.assertEqual(run["status"], "done", run)
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + run["id"] + "/findings")
+            f = jbody(b)
+            new_ids = [e["id"] for e in f["entities"] if e["status"] == "new" and e.get("proposed")]
+            st, _, b = self.api.req("POST", base + "/discovery/runs/" + run["id"] + "/findings/promote", {"entities": new_ids})
+            self.assertEqual(st, 200, b)
+            st, _, b = self.api.req("GET", base + "/discovery/runs/" + run["id"] + "/findings")
+            f = jbody(b)
+            prop = [c for c in f["connections"] if c.get("cable") and c["status"] == "new" and c["flag"] == ""]
+            self.assertTrue(prop)
+            st, _, b = self.api.req("POST", base + "/discovery/runs/" + run["id"] + "/findings/promote", {"connections": [prop[0]["id"]]})
+            self.assertEqual(st, 200, b)
+            st, _, b = self.api.req("GET", base)
+            j = jbody(b)
+            doc = j.get("doc") or j
+            cab = [c for c in doc["cables"] if c.get("source") == "discovery"]
+            self.assertEqual(len(cab), 1, "a promoted cable is marked as discovered")
+            self.assertEqual((cab[0]["discovery"]["run"], cab[0]["discovery"]["methods"], cab[0]["status"]), (run["id"], prop[0]["methods"], "planned"))
+
+            bdir, files = self._build(data, {})
+            self.assertIn("discovered-connections.csv", files)
+            html = (bdir / "report.html").read_text(encoding="utf-8")
+            self.assertIn("<h2>Discovered connections</h2>", html)
+            self.assertIn("From discovery run <code>%s</code>" % run["id"], html)
+            self.assertLess(html.index("<h2>Cable schedule</h2>"), html.index("<h2>Discovered connections</h2>"), "right after the cable schedule")
+            csv_text = (bdir / "discovered-connections.csv").read_text(encoding="utf-8")
+            head = csv_text.splitlines()[0]
+            for col in ("Tag", "From room", "From device", "From port", "To room", "To device", "To port", "Medium", "Type", "Signal", "Status", "Confidence", "Sources", "Run", "Note", "Id"):
+                self.assertIn(col, head)
+            lines = csv_text.splitlines()[1:]
+            self.assertGreaterEqual(len(lines), 5)
+            self.assertTrue(any(",planned," in l and "mac_table" in l for l in lines), "the promoted cable row carries its status and sources")
+            self.assertTrue(any(",proposed," in l for l in lines), "unpromoted links are listed as proposed")
+            self.assertIn("high (", csv_text)
+            self.assertEqual(sum(1 for l in lines if l.endswith(cab[0]["id"])), 1)
+            self.assertEqual(sum(1 for l in lines if ("," + prop[0]["id"]) in l), 0, "the promoted link is not listed twice")
+
+            # the toggle
+            bdir, files = self._build(data, {"discovery": False})
+            self.assertNotIn("discovered-connections.csv", files)
+            self.assertNotIn("Discovered connections", (bdir / "report.html").read_text(encoding="utf-8"))
+            st, _, b = self.api.req("POST", base + "/builds", {"discovery": "yes"})
+            self.assertEqual(st, 400, b)
+            # room scoping: a build of one room without discovered links has no section
+            rooms = [r["id"] for r in doc["rooms"]]
+            per_room = {}
+            for rid in rooms:
+                bdir, files = self._build(data, {"rooms": [rid]})
+                per_room[rid] = "discovered-connections.csv" in files
+            self.assertTrue(any(per_room.values()) and not all(per_room.values()), per_room)
+
+    def test_report_module_directly(self):
+        rep = requires("discovery.report")
+        self.assertEqual(rep.confidence_text(0.914, "high"), "high (91%)")
+        self.assertEqual(rep.confidence_text(None, ""), "")
+        doc = {"rooms": [{"id": "main", "name": "Main"}], "devices": [{"id": "sw", "name": "SW", "room": "main", "ports": [{"id": "p1", "label": "Port 1"}]}, {"id": "rx", "name": "RX", "room": "main", "ports": [{"id": "net", "label": "Net"}]}],
+               "cables": [{"id": "c-1", "from": {"device": "sw", "port": "p1"}, "to": {"device": "rx", "port": "net"}, "medium": "network", "status": "planned", "source": "discovery",
+                           "discovery": {"run": "run-20260101-000000-0000", "confidence": 0.9, "level": "high", "methods": ["lldp"]}},
+                          {"id": "c-2", "from": {"device": "sw", "port": "p1"}, "to": {"device": "rx", "port": "net"}, "medium": "network", "status": "planned"}]}
+        out = rep.discovered_connections(doc, None)
+        self.assertEqual(out["totals"]["rows"], 1)
+        row = out["rows"][0]
+        self.assertEqual((row["from_device"], row["from_port"], row["to_device"], row["status"], row["confidence"], row["sources"], row["run"]), ("SW", "Port 1", "RX", "planned", "high (90%)", "lldp", "run-20260101-000000-0000"))
+        self.assertEqual(rep.discovered_connections(doc, None, rooms=["other"])["rows"], [])
+        self.assertIn("promoted cables only", rep.section_intro(out))
+
+
+class DdmProbe(unittest.TestCase):
+    """Dante Domain Manager GraphQL probe: fixture parse, correlation, opt-in run, and the guard (only the DDM URL is contacted)."""
+
+    def setUp(self):
+        self.probes = requires("discovery.probes")
+        self.ddm = requires("discovery.probes.ddm")
+
+    def test_fixture_parse(self):
+        r = self.ddm.parse(json.loads((DISC_FIXTURES / "ddm.json").read_text(encoding="utf-8")))
+        self.assertEqual(r.status, "ok")
+        self.assertEqual(r.stats, {"devices": 5, "subscriptions": 11, "domains": 2})
+        by = {o.dante_name: o for o in r.observations}
+        self.assertEqual(sorted(by), ["DCP-LOBBY", "FOH-CL5", "RIO-SL", "RIO-SR", "ULXD4Q-STAGE"])
+        rio = by["RIO-SL"]
+        self.assertEqual((rio.mac, rio.extra_macs, rio.ip, rio.manufacturer, rio.model, rio.firmware, rio.kind_hint), (RIO_SL, [RIO_SL_SEC], "10.20.0.21", "Yamaha", "Rio3224-D2", "4.2.6", "dante"))
+        self.assertEqual(rio.evidence["domain"], "Campus Main")
+        self.assertEqual(rio.evidence["subscriptions"], [{"rx": "01", "tx_device": "FOH-CL5", "tx_channel": "Mix1", "status": "DYNAMIC"}, {"rx": "02", "tx_device": "FOH-CL5", "tx_channel": "Mix2", "status": "DYNAMIC"}])
+        self.assertEqual(len(by["FOH-CL5"].evidence["subscriptions"]), 6, "an unsubscribed rx channel is not a subscription")
+        self.assertEqual(by["ULXD4Q-STAGE"].evidence["enrolment"], "UNENROLLED")
+        self.assertTrue(any("preset-XML import" in n for n in r.notes), r.notes)
+        self.assertEqual(self.ddm.parse("nope").status, "error")
+        self.assertEqual(self.ddm.parse({"data": {"domains": []}}).observations, [])
+        partial = self.ddm.parse({"data": {"devices": [{"name": "X", "interfaces": [{"macAddress": "00:11:22:33:44:55"}]}]}, "errors": ["rxChannels: forbidden"]})
+        self.assertEqual((partial.status, partial.observations[0].mac, partial.observations[0].dante_name), ("ok", "00:11:22:33:44:55", "X"))
+        self.assertTrue(any("partial" in n for n in partial.notes))
+
+    def test_query_is_read_only(self):
+        q = self.ddm.QUERY
+        self.assertTrue(q.startswith("query "))
+        self.assertNotIn("mutation", q.lower())
+        for field in ("domains", "devices", "interfaces", "rxChannels", "subscribedDevice", "txChannels"):
+            self.assertIn(field, q)
+
+    def test_correlates_with_the_other_sources(self):
+        disc = requires("discovery")
+        doc = json.loads((FIXTURES.parent.parent / "fathom" / "samples" / "campus-demo" / "project.json").read_text(encoding="utf-8"))
+        f = disc.compute_findings("run-x", _results(PASSIVE_PROBES + ["ddm"]), doc)
+        by_label = {e["label"]: e for e in f["entities"]}
+        self.assertEqual(sorted(by_label["RIO-SL"]["sources"]), ["ddm", "mdns", "unifi"])
+        self.assertEqual(by_label["RIO-SL"]["status"], "match")
+        lobby = by_label["DCP-LOBBY"]
+        self.assertEqual((lobby["sources"], lobby["status"], lobby["model"]), (["ddm"], "new", "AVIO Analog Output"))
+        self.assertTrue(lobby["proposed"])
+
+    def test_opt_in_run_and_test_endpoint(self):
+        api = DiscoveryApi()
+        api.app = get_app()
+        with temp_data_dir(**FAST) as data:
+            install_campus(data, "campus")
+            base = "/api/v2/projects/campus"
+            st, _, b = api.req("POST", base + "/discovery/test", {"probe": "ddm"})
+            self.assertEqual(st, 200, b)
+            self.assertEqual(jbody(b)["result"]["ok"], True)
+            self.assertIn("11 subscriptions", jbody(b)["result"]["message"])
+            run = api.run_and_wait(base, {"window": 10})
+            self.assertNotIn("ddm", run["probes"], "off by default")
+            st, _, b = api.req("PUT", base + "/discovery/settings", {"probes": {"ddm": {"enabled": True, "url": "https://ddm.campus.local", "api_key": "k-123"}}})
+            self.assertEqual(st, 200, b)
+            s = jbody(b)["settings"]["probes"]["ddm"]
+            self.assertEqual((s["url"], s["api_key_set"]), ("https://ddm.campus.local", True))
+            self.assertNotIn("k-123", b.decode())
+            run = api.run_and_wait(base, {"window": 10, "probes": ["ddm", "mdns"]})
+            self.assertEqual((run["status"], run["probes"], run["mode"], run["targets"]), ("done", ["mdns", "ddm"], "active", {"ddm": ["https://ddm.campus.local"]}))
+            self.assertEqual(run["summaries"]["ddm"]["status"], "ok")
+            st, _, b = api.req("GET", base + "/discovery/runs/" + run["id"] + "/findings")
+            f = jbody(b)
+            self.assertIn("DCP-LOBBY", [e["label"] for e in f["entities"]])
+
+    def test_guard_only_the_ddm_url_is_contacted(self):
+        with temp_env(FATHOM_DISCOVERY_FIXTURES=None), _SocketGuard() as g:
+            with self.assertRaises(self.ddm.DdmError):
+                self.ddm.collect({})
+            with self.assertRaises(self.ddm.DdmError):
+                self.ddm.collect({"url": "https://192.0.2.50"})
+            self.assertFalse(self.ddm.test({"url": "https://192.0.2.50"})["ok"])
+        self.assertEqual((g.connects, g.sendto, g.sends), ([], [], []), "no key: nothing leaves the host")
+        with temp_env(FATHOM_DISCOVERY_FIXTURES=None), _SocketGuard() as g:
+            with self.assertRaises(self.ddm.DdmError) as cm:
+                self.ddm.collect({"url": "192.0.2.50:8443", "api_key": "k"})
+            res = self.ddm.test({"url": "https://192.0.2.51", "api_key": "k"})
+        self.assertIn("cannot reach", str(cm.exception))
+        self.assertFalse(res["ok"])
+        self.assertEqual(sorted(a for a in g.connects if isinstance(a, tuple)), [("192.0.2.50", 8443), ("192.0.2.51", 443)])
+        self.assertEqual((g.sendto, g.sends), ([], []))
 
 
 if __name__ == "__main__":
