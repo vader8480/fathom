@@ -3,9 +3,9 @@ proposals, overlay interfaces and VLAN / network findings.
 
 Connection confidence:
 
-    0.90  LLDP / CDP neighbour (switch's own LLDP table, or a frame we heard)
+    0.90  LLDP / CDP neighbour (switch's own LLDP table via UniFi or SNMP, or a frame we heard)
     0.85  controller says the client is on this port (UniFi ``sw_mac`` / ``sw_port``, or a device uplink)
-    0.95  both of the above agree
+    0.95  both of the above agree, or a switch-to-switch link is reported by both switches (``mirrored``)
     0.60  the port's MAC table holds exactly this one address
     0.30  several hosts share the port with no LLDP switch behind it → the port is flagged
           ``unmanaged`` (an unmanaged switch, hub or AP hangs off it) and no cable is proposed
@@ -33,7 +33,13 @@ from .probes import Neighbour, NetworkObs, ProbeResult
 Doc = Dict[str, Any]
 
 INFRA_HINTS = frozenset({"switch", "ap", "gateway", "bridge", "controller"})
-METHOD_WEIGHT = {"lldp": 0.90, "cdp": 0.90, "unifi_lldp": 0.90, "unifi_uplink": 0.85, "unifi_client": 0.85}
+METHOD_WEIGHT = {"lldp": 0.90, "cdp": 0.90, "unifi_lldp": 0.90, "snmp_lldp": 0.90, "unifi_uplink": 0.85, "unifi_client": 0.85}
+LLDP_FAMILY = frozenset({"lldp", "cdp", "unifi_lldp", "snmp_lldp"})
+MIRRORED = 0.95  # a switch-to-switch link reported from both ends
+
+
+def _families(methods: Iterable[str]) -> set:
+    return {"lldp" if m in LLDP_FAMILY else m for m in methods if m in METHOD_WEIGHT}
 _PORT_NUM = re.compile(r"(\d+)\s*$")
 _ROLE_FOR_INDEX = ("primary", "secondary", "control", "management", "media")
 
@@ -292,14 +298,14 @@ def build_connections(entities: List[Entity], results: Iterable[ProbeResult], do
                 if p in infra_peers:
                     flag = "uplink"
                     conf = max(METHOD_WEIGHT[m] for m in strong)
-                    if len({"lldp" if m in ("unifi_lldp", "lldp", "cdp") else m for m in strong}) >= 2:
+                    if len(_families(strong)) >= 2:
                         conf = 0.95
                 else:
                     flag = "via"
                     conf = 0.30 if not strong else max(METHOD_WEIGHT[m] for m in strong) - 0.3
             elif strong:
                 conf = max(METHOD_WEIGHT[m] for m in strong)
-                if len({"lldp" if m in ("unifi_lldp", "lldp", "cdp") else m for m in strong}) >= 2:
+                if len(_families(strong)) >= 2:
                     conf = 0.95
                 if distinct > 1:
                     conf -= 0.2
@@ -350,7 +356,59 @@ def build_connections(entities: List[Entity], results: Iterable[ProbeResult], do
             methods=[n.method], confidence=conf, level=level_for(conf), flag="host", medium="network", vlan=n.vlan, peers_on_port=1,
             evidence=[dict(n.evidence, source=n.source, method=n.method, description=n.remote_description)],
         ))
-    return out
+    return _merge_mirrored(out)
+
+
+def _merge_mirrored(conns: List[Connection]) -> List[Connection]:
+    """Fold a switch-to-switch link reported by both switches (SNMP / UniFi tables on each end) into one row.
+
+    A ↔ B is mirrored when A's row names B on port *x* and B's row names A on port *y*, and each row's
+    peer port (when known) is the other row's switch port. The surviving row keeps the earlier switch,
+    gains the other side's methods and evidence, the peer port it was missing, and confidence 0.95.
+    """
+    by_pair: Dict[Tuple[str, str], List[int]] = {}
+    for i, c in enumerate(conns):
+        a, b = c.switch.get("entity") or "", c.peer.get("entity") or ""
+        if a and b and c.flag in ("", "uplink") and a != b:
+            by_pair.setdefault((min(a, b), max(a, b)), []).append(i)
+    drop: set = set()
+    for idxs in by_pair.values():
+        if len(idxs) < 2:
+            continue
+        for i in idxs:
+            if i in drop:
+                continue
+            ci = conns[i]
+            for j in idxs:
+                if j <= i or j in drop:
+                    continue
+                cj = conns[j]
+                if ci.switch.get("entity") != cj.peer.get("entity") or cj.switch.get("entity") != ci.peer.get("entity"):
+                    continue
+                pi, pj = canonical_port(ci.peer.get("port") or ""), canonical_port(cj.peer.get("port") or "")
+                if (pi and pi != cj.port) or (pj and pj != ci.port):
+                    continue
+                for m in cj.methods:
+                    if m not in ci.methods:
+                        ci.methods.append(m)
+                if "mirrored" not in ci.methods:
+                    ci.methods.append("mirrored")
+                ci.evidence.extend(dict(e, reported_by=cj.switch.get("label")) for e in cj.evidence)
+                if not ci.peer.get("port"):
+                    ci.peer["port"] = cj.port
+                ci.confidence = max(ci.confidence, cj.confidence, MIRRORED if (_families(ci.methods) & {"lldp"}) or ci.confidence >= 0.6 else ci.confidence)
+                ci.level = level_for(ci.confidence)
+                ci.flag = "uplink"
+                ci.peers_on_port = max(ci.peers_on_port, 1)
+                if ci.cable is not None and cj.cable is not None and not ci.cable["to"].get("port") and cj.cable["from"].get("port"):
+                    ci.cable["to"]["port"] = cj.cable["from"]["port"]
+                if ci.status != "exists" and cj.status == "exists":
+                    ci.status = "exists"
+                if ci.cable is not None:
+                    ci.cable["note"] = "Discovered from both ends: %s %s ↔ %s %s (%s, %.0f%%)" % (
+                        ci.switch.get("label"), ci.port, ci.peer.get("label"), ci.peer.get("port") or "?", "/".join(m for m in ci.methods if m != "mirrored"), ci.confidence * 100)
+                drop.add(j)
+    return [c for i, c in enumerate(conns) if i not in drop]
 
 
 def _proposed_peer_port(peer: Optional[Entity], mac: str) -> str:

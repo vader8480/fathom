@@ -129,6 +129,7 @@ export function createApi(opts) {
     discoveryRun: function (name, id) { return get(proj(name) + '/discovery/runs/' + enc(id)); },
     cancelDiscovery: function (name, id) { return send('DELETE', proj(name) + '/discovery/runs/' + enc(id)); },
     discoveryFindings: function (name, id) { return get(proj(name) + '/discovery/runs/' + enc(id) + '/findings'); },
+    discoveryDiff: function (name, id, against) { return get(proj(name) + '/discovery/runs/' + enc(id) + '/diff', against ? { against: against } : undefined); },
     discoveryPromote: function (name, id, body) { return send('POST', proj(name) + '/discovery/runs/' + enc(id) + '/findings/promote', body || {}); },
     discoverySettings: function (name) { return get(proj(name) + '/discovery/settings'); },
     saveDiscoverySettings: function (name, body) { return send('PUT', proj(name) + '/discovery/settings', body || {}); },

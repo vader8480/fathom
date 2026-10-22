@@ -1,12 +1,18 @@
-"""Network discovery (Phase 1: passive, ad hoc).
+"""Network discovery (ad hoc runs: passive probes, plus opt-in read-only active ones).
 
 A *run* is started by a person from the Discovery view (or the API) and
 nothing else: there is no scheduler, no always-on listener and no periodic
 polling anywhere in this package. For the run window the enabled passive
 probes read a controller that already has the data (UniFi), listen to what
 devices already announce (mDNS / Dante, LLDP / CDP) and read the host's ARP
-table. Nothing sends a unicast packet to an AV device and nothing writes to
-any device.
+table. Nothing passive sends a unicast packet to an AV device.
+
+Active probes (Phase 2: SNMP on managed switches, Yamaha SCP, Blackmagic
+Videohub, Q-SYS QRC) are off until a person enables them per project. They
+contact only the hosts listed in their settings, one at a time, with
+documented read-only queries, a pause between requests and a timeout per
+request; a run that includes one is marked ``mode: "active"``. Nothing
+writes to any device in either mode.
 
 Runs are persisted under ``<project>/exports/discovery/<run-id>/``::
 
@@ -40,7 +46,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from .. import jobs
 from . import settings as dsettings
 from .correlate import Entity, correlate
-from .probes import ProbeResult, all_probes, probe_by_id
+from .probes import ACTIVE, ProbeResult, all_probes, host_list, probe_by_id
 from .topology import Connection, build_connections, build_networks, canonical_port, connection_rows, doc_port_for, entity_interfaces, propose_device
 
 Doc = Dict[str, Any]
@@ -54,7 +60,8 @@ IMPORT_KIND = "discovery"
 MAX_RUNS_KEPT = 20
 EXTRA_TIME = 90.0  # beyond the listen window: controller fetch, DNS, correlation
 OVERLAY_MIN_CONFIDENCE = 0.5
-MODE = "passive"
+MODE = "passive"  # what a run is unless an active probe is enabled for it
+LISTEN_PROBES = ("mdns", "lldp")  # probes that take the run window; everything else is read once
 
 
 class RunBusy(Exception):
@@ -108,12 +115,34 @@ def write_decisions(pdir: Path, data: Dict[str, Any]) -> None:
 
 def extra_installed() -> Dict[str, Any]:
     """Which optional pieces of ``fathom-audio[discovery]`` are present."""
-    from .probes import lldp, mdns
+    from .probes import lldp, mdns, snmp
 
     zc_ok, zc_ver = mdns.available()
     raw_ok, raw_msg = lldp.capability()
-    return {"zeroconf": zc_ok, "zeroconf_version": zc_ver, "net_raw": raw_ok, "net_raw_message": raw_msg,
-            "fixtures": bool(os.environ.get("FATHOM_DISCOVERY_FIXTURES")), "install_hint": "pip install 'fathom-audio[discovery]'" if not zc_ok else ""}
+    snmp_ok, snmp_ver = snmp.available()
+    return {"zeroconf": zc_ok, "zeroconf_version": zc_ver, "net_raw": raw_ok, "net_raw_message": raw_msg, "puresnmp": snmp_ok, "puresnmp_version": snmp_ver,
+            "fixtures": bool(os.environ.get("FATHOM_DISCOVERY_FIXTURES")), "install_hint": "pip install 'fathom-audio[discovery]'" if not (zc_ok and snmp_ok) else ""}
+
+
+def run_mode(wanted: Iterable[str]) -> str:
+    """``active`` when any of the probe ids is an active probe, else ``passive``."""
+    for pid in wanted:
+        m = probe_by_id(pid)
+        if m is not None and m.INFO.mode == ACTIVE:
+            return ACTIVE
+    return MODE
+
+
+def active_targets(cfg: Dict[str, Any], wanted: Iterable[str]) -> Dict[str, List[str]]:
+    """Probe id -> hosts an enabled active probe is allowed to contact (from its ``targets`` field)."""
+    out: Dict[str, List[str]] = {}
+    for pid in wanted:
+        m = probe_by_id(pid)
+        if m is None or m.INFO.mode != ACTIVE:
+            continue
+        key = m.INFO.targets
+        out[pid] = host_list((cfg.get("probes", {}).get(pid) or {}).get(key)) if key else []
+    return out
 
 
 def sources(doc: Doc, pdir: Optional[Path]) -> List[Dict[str, Any]]:
@@ -128,6 +157,8 @@ def sources(doc: Doc, pdir: Optional[Path]) -> List[Dict[str, Any]]:
             avail, why = False, "zeroconf is not installed: " + caps["install_hint"]
         if "net_raw" in m.INFO.needs and not caps["net_raw"]:
             avail, why = False, caps["net_raw_message"]
+        if "puresnmp" in m.INFO.needs and not caps["puresnmp"]:
+            avail, why = False, "puresnmp is not installed: " + (caps["install_hint"] or "pip install 'fathom-audio[discovery]'")
         if caps["fixtures"]:
             avail, why = True, "fixture replay"
         info.update({"available": avail, "unavailable_reason": why, "settings": pub["probes"].get(m.INFO.id, {})})
@@ -216,7 +247,7 @@ def list_runs(pdir: Path, limit: int = MAX_RUNS_KEPT) -> List[Dict[str, Any]]:
 
 
 def _brief(data: Dict[str, Any]) -> Dict[str, Any]:
-    return {k: data.get(k) for k in ("id", "status", "active", "started", "finished", "elapsed", "window", "probes", "by", "counts", "error", "progress", "stage")}
+    return {k: data.get(k) for k in ("id", "status", "active", "started", "finished", "elapsed", "window", "probes", "by", "counts", "error", "progress", "stage", "mode", "diff")}
 
 
 def get_run(pdir: Path, run_id: str) -> Dict[str, Any]:
@@ -244,6 +275,12 @@ def start_run(pdir: Path, doc: Doc, by: str = "", window: Optional[int] = None, 
         wanted = [p for p in wanted if p in probes]
     if not wanted:
         raise ValueError("no probes enabled")
+    targets = active_targets(cfg, wanted)
+    for pid, hosts in targets.items():
+        if not hosts:  # an active probe with nothing to contact is left out rather than failing the run
+            wanted.remove(pid)
+    if not wanted:
+        raise ValueError("no probes enabled (active sources need at least one host)")
     root = runs_root(pdir)
     root.mkdir(parents=True, exist_ok=True)
     busy = active_run_id(pdir)
@@ -261,7 +298,7 @@ def start_run(pdir: Path, doc: Doc, by: str = "", window: Optional[int] = None, 
     run.data = {
         "id": rid, "kind": IMPORT_KIND, "project": pdir.name, "status": "queued", "active": True, "window": win, "probes": wanted, "by": by,
         "created": time.time(), "started": None, "finished": None, "progress": 0.0, "stage": "queued", "log": [], "error": "",
-        "summaries": {}, "counts": {}, "room": cfg.get("room") or "", "mode": MODE,
+        "summaries": {}, "counts": {}, "room": cfg.get("room") or "", "mode": run_mode(wanted), "targets": {k: v for k, v in targets.items() if v},
     }
     run.save()
     _prune_runs(pdir)
@@ -311,7 +348,12 @@ def _execute(job: jobs.Job, run: _Run, cfg: Dict[str, Any], window: int, wanted:
     pdir = run.pdir
     raw_dir = run.dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
-    job.log(f"discovery run {run.id}: {', '.join(wanted)}; listen window {window} s; passive only — nothing is sent to AV devices")
+    targets = run.data.get("targets") or {}
+    if targets:
+        detail = "; ".join(f"{pid} → {', '.join(hosts)}" for pid, hosts in targets.items())
+        job.log(f"discovery run {run.id}: {', '.join(wanted)}; listen window {window} s; active read-only queries go to the listed hosts only ({detail}); nothing is written to any device")
+    else:
+        job.log(f"discovery run {run.id}: {', '.join(wanted)}; listen window {window} s; passive only — nothing is sent to AV devices")
     job.set_progress(0.02, "starting probes")
     results: Dict[str, Dict[str, Any]] = {}
     errors: Dict[str, str] = {}
@@ -326,7 +368,7 @@ def _execute(job: jobs.Job, run: _Run, cfg: Dict[str, Any], window: int, wanted:
         psettings = dict(cfg["probes"].get(pid) or {})
         try:
             job.log(f"{pid}: collecting")
-            if pid in ("mdns", "lldp"):
+            if pid in LISTEN_PROBES:
                 raw = mod.collect(psettings, job, window=float(window))
             else:
                 raw = mod.collect(psettings, job)
@@ -366,6 +408,17 @@ def _execute(job: jobs.Job, run: _Run, cfg: Dict[str, Any], window: int, wanted:
     run.data["summaries"] = {r.probe: r.summary() for r in probe_results}
     run.data["errors"] = errors
     run.data["counts"] = findings["counts"]
+    if not job.cancelled:
+        try:
+            run.data["diff"] = _persist_diff(pdir, run, doc, findings)
+        except Exception as exc:  # a diff that cannot be computed never fails the run
+            job.log(f"could not diff against the previous run: {type(exc).__name__}: {exc}", "warn")
+        else:
+            d = run.data["diff"]
+            if d.get("against"):
+                c = d["counts"]
+                job.log(f"compared with {d['against']}: {c['new_devices']} new, {c['missing_devices']} missing, {c['moved']} moved, {c['changed']} changed, "
+                        f"{c['new_links']} new links, {c['lost_links']} lost links")
     for r in probe_results:
         for n in r.notes:
             job.log(n, "info")
@@ -578,6 +631,65 @@ def latest_run_id(pdir: Path) -> str:
     return str(runs[0]["id"]) if runs else ""
 
 
+def completed_runs(pdir: Path, exclude: str = "") -> List[Dict[str, Any]]:
+    """Briefs of the runs that finished normally (newest first), optionally without ``exclude``."""
+    return [r for r in list_runs(pdir) if r.get("status") == "done" and r.get("id") != exclude]
+
+
+def latest_completed_run_id(pdir: Path) -> str:
+    runs = completed_runs(pdir)
+    return str(runs[0]["id"]) if runs else ""
+
+
+def previous_completed_run_id(pdir: Path, run_id: str) -> str:
+    """The completed run just before ``run_id`` (by id, which sorts by start time), or ``""``."""
+    for r in completed_runs(pdir, exclude=run_id):
+        if str(r.get("id")) < run_id:
+            return str(r["id"])
+    return ""
+
+
+# ------------------------------------------------------------------ run-to-run diff
+
+
+def _persist_diff(pdir: Path, run: _Run, doc: Doc, cur: Dict[str, Any]) -> Dict[str, Any]:
+    """Diff the finished run against the previous completed one and store it as ``diff.json``; returns the brief."""
+    from .diff import compute_diff, empty_diff
+
+    prev_id = previous_completed_run_id(pdir, run.id)
+    if prev_id:
+        d = compute_diff(cur, findings(pdir, doc, prev_id), run.id, prev_id)
+    else:
+        d = empty_diff(run.id, cur)
+    _write_json(run.dir / "diff.json", d)
+    return {"against": d["against"], "counts": d["counts"]}
+
+
+def run_diff(pdir: Path, doc: Doc, run_id: str, against: str = "") -> Dict[str, Any]:
+    """What changed between ``against`` (default: the previous completed run) and ``run_id``.
+
+    Recomputed against the live document so the two sides are comparable; the diff persisted when the
+    run finished is served as-is only when it was made against the same run and nothing else is asked.
+    """
+    from .diff import compute_diff, empty_diff
+
+    rd = run_dir(pdir, run_id)
+    if not (rd / "run.json").is_file():
+        raise RunNotFound(run_id)
+    candidates = completed_runs(pdir, exclude=run_id)
+    if against:
+        if against == run_id or not any(str(r.get("id")) == against for r in candidates):
+            raise ValueError(f"{against} is not another completed run of this project")
+        prev_id = against
+    else:
+        prev_id = previous_completed_run_id(pdir, run_id)
+    stored = _read_json(rd / "diff.json", None)
+    persisted = isinstance(stored, dict) and stored.get("against") == (prev_id or None)
+    cur = findings(pdir, doc, run_id)
+    d = compute_diff(cur, findings(pdir, doc, prev_id), run_id, prev_id) if prev_id else empty_diff(run_id, cur)
+    return {"run": run_id, "against": prev_id or None, "candidates": candidates, "diff": d, "persisted": bool(persisted)}
+
+
 # ------------------------------------------------------------------ promote
 
 
@@ -694,6 +806,8 @@ def promote_ops(pdir: Path, doc: Doc, run_id: str, body: Dict[str, Any]) -> Tupl
         cable["id"] = "c-%04d" % n
         cable_ids.add(cable["id"])
         cable["status"] = "planned"
+        cable["source"] = IMPORT_KIND  # the report's "Discovered connections" section picks these up
+        cable["discovery"] = {"run": run_id, "confidence": c.get("confidence"), "level": c.get("level") or "", "methods": list(c.get("methods") or [])}
         ops.append({"op": "put", "coll": "cables", "id": cable["id"], "value": cable})
         summary["cables"] += 1
 
@@ -814,12 +928,13 @@ def register() -> None:
 
     plugins.register_importer(plugins.Importer(
         kind=IMPORT_KIND, label="Network discovery run", detect=_detect, parse=_parse, contribute=_contribute, mode="discovery", accepts=(), folder=True,
-        help="Passive network discovery (UniFi controller, mDNS / Dante, LLDP / CDP, ARP). Runs are started from the Discovery view; the latest completed run feeds the overlay.",
+        help="Network discovery (UniFi controller, mDNS / Dante, LLDP / CDP, ARP; opt-in read-only SNMP, Yamaha SCP, Videohub, Q-SYS and Dante Domain Manager queries). "
+             "Runs are started from the Discovery view; the latest completed run feeds the overlay.",
     ))
 
 
 __all__ = [
-    "IMPORT_KIND", "MODE", "RunBusy", "RunNotFound", "RunSnapshot", "active_run_id", "cancel_run", "compute_findings", "extra_installed", "findings",
-    "get_run", "latest_run_id", "list_runs", "parse_results", "promote_ops", "read_decisions", "register", "run_dir", "runs_root", "sources", "start_run",
-    "write_decisions",
+    "IMPORT_KIND", "LISTEN_PROBES", "MODE", "RunBusy", "RunNotFound", "RunSnapshot", "active_run_id", "active_targets", "cancel_run", "completed_runs", "compute_findings",
+    "extra_installed", "findings", "get_run", "latest_completed_run_id", "latest_run_id", "list_runs", "previous_completed_run_id", "run_diff", "parse_results", "promote_ops", "read_decisions", "register", "run_dir", "run_mode",
+    "runs_root", "sources", "start_run", "write_decisions",
 ]

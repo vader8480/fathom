@@ -1,0 +1,223 @@
+{
+ "fetched": "2026-10-21T14:05:00Z",
+ "hosts": {
+  "10.30.0.10": {
+   "host": "10.30.0.10",
+   "port": 1710,
+   "status": "ok",
+   "error": "",
+   "elapsed": 0.9,
+   "status_get": {
+    "Platform": "Core 110f",
+    "State": "Active",
+    "DesignName": "Campus Main 2026",
+    "DesignCode": "qALFilm6IcAz",
+    "IsRedundant": false,
+    "IsEmulator": false,
+    "Status": {
+     "Code": 0,
+     "String": "OK"
+    }
+   },
+   "components": [
+    {
+     "Name": "Dante_RX_1",
+     "Type": "dante_rx",
+     "Properties": [
+      {
+       "Name": "channel_count",
+       "Value": "16",
+       "PrettyName": "Channel Count"
+      }
+     ]
+    },
+    {
+     "Name": "Dante_TX_1",
+     "Type": "dante_tx",
+     "Properties": [
+      {
+       "Name": "channel_count",
+       "Value": "16",
+       "PrettyName": "Channel Count"
+      }
+     ]
+    },
+    {
+     "Name": "Main_Mixer",
+     "Type": "mixer",
+     "Properties": [
+      {
+       "Name": "n_inputs",
+       "Value": "16"
+      },
+      {
+       "Name": "n_outputs",
+       "Value": "8"
+      }
+     ]
+    },
+    {
+     "Name": "Lobby_Zone",
+     "Type": "gain",
+     "Properties": []
+    },
+    {
+     "Name": "Chapel_Zone",
+     "Type": "gain",
+     "Properties": []
+    },
+    {
+     "Name": "Paging_Router",
+     "Type": "router_with_output",
+     "Properties": []
+    },
+    {
+     "Name": "Stream_Delay",
+     "Type": "delay",
+     "Properties": []
+    },
+    {
+     "Name": "Core_Status",
+     "Type": "device_monitor",
+     "Properties": []
+    },
+    {
+     "Name": "UCI_Lobby",
+     "Type": "uci_viewer",
+     "Properties": []
+    },
+    {
+     "Name": "Amp_Lobby_1",
+     "Type": "amplifier_output_section",
+     "Properties": []
+    },
+    {
+     "Name": "Amp_Lobby_2",
+     "Type": "amplifier_output_section",
+     "Properties": []
+    },
+    {
+     "Name": "ATEM_Control",
+     "Type": "scriptable_controls",
+     "Properties": []
+    }
+   ],
+   "messages": [
+    {
+     "jsonrpc": "2.0",
+     "method": "EngineStatus",
+     "params": {
+      "State": "Active",
+      "DesignName": "Campus Main 2026",
+      "DesignCode": "qALFilm6IcAz",
+      "IsRedundant": false,
+      "IsEmulator": false
+     }
+    },
+    {
+     "jsonrpc": "2.0",
+     "id": 1,
+     "result": {
+      "Platform": "Core 110f",
+      "State": "Active",
+      "DesignName": "Campus Main 2026",
+      "DesignCode": "qALFilm6IcAz",
+      "IsRedundant": false,
+      "IsEmulator": false,
+      "Status": {
+       "Code": 0,
+       "String": "OK"
+      }
+     }
+    },
+    {
+     "jsonrpc": "2.0",
+     "id": 2,
+     "result": [
+      {
+       "Name": "Dante_RX_1",
+       "Type": "dante_rx",
+       "Properties": [
+        {
+         "Name": "channel_count",
+         "Value": "16",
+         "PrettyName": "Channel Count"
+        }
+       ]
+      },
+      {
+       "Name": "Dante_TX_1",
+       "Type": "dante_tx",
+       "Properties": [
+        {
+         "Name": "channel_count",
+         "Value": "16",
+         "PrettyName": "Channel Count"
+        }
+       ]
+      },
+      {
+       "Name": "Main_Mixer",
+       "Type": "mixer",
+       "Properties": [
+        {
+         "Name": "n_inputs",
+         "Value": "16"
+        },
+        {
+         "Name": "n_outputs",
+         "Value": "8"
+        }
+       ]
+      },
+      {
+       "Name": "Lobby_Zone",
+       "Type": "gain",
+       "Properties": []
+      },
+      {
+       "Name": "Chapel_Zone",
+       "Type": "gain",
+       "Properties": []
+      },
+      {
+       "Name": "Paging_Router",
+       "Type": "router_with_output",
+       "Properties": []
+      },
+      {
+       "Name": "Stream_Delay",
+       "Type": "delay",
+       "Properties": []
+      },
+      {
+       "Name": "Core_Status",
+       "Type": "device_monitor",
+       "Properties": []
+      },
+      {
+       "Name": "UCI_Lobby",
+       "Type": "uci_viewer",
+       "Properties": []
+      },
+      {
+       "Name": "Amp_Lobby_1",
+       "Type": "amplifier_output_section",
+       "Properties": []
+      },
+      {
+       "Name": "Amp_Lobby_2",
+       "Type": "amplifier_output_section",
+       "Properties": []
+      },
+      {
+       "Name": "ATEM_Control",
+       "Type": "scriptable_controls",
+       "Properties": []
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

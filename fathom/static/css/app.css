@@ -379,9 +379,14 @@ a.btn.small{padding:2px 9px;font-size:12px;min-height:26px}
 .disc-maturity-tested{color:var(--text)}
 .disc-maturity-mature{color:var(--ok)}
 .disc-maturity-experimental{color:var(--warn);border-style:dashed}
-.disc-sends{font-size:11.5px;margin-bottom:6px}
+.disc-sends{font-size:11.5px;margin-bottom:6px;overflow-wrap:anywhere}
+.disc-sends-active{border-left:3px solid rgba(255,149,72,.6);padding-left:8px}
+.disc-card-active{border-color:rgba(255,149,72,.35)}
+.disc-optin{color:var(--muted);border-style:dashed}
 .disc-fields .field{grid-template-columns:96px minmax(0,1fr);margin:4px 0}
 .disc-fields .field.check{grid-template-columns:96px auto}
+.disc-fields .field textarea{font-family:var(--mono);font-size:12px;resize:vertical;min-height:40px}
+.disc-fields .field select{max-width:160px}
 .disc-help{grid-column:2;font-size:11px;line-height:1.35}
 .disc-clear{grid-column:2}
 .disc-test-out{margin-top:6px;font-size:12px;min-height:0}
@@ -430,6 +435,11 @@ a.btn.small{padding:2px 9px;font-size:12px;min-height:26px}
 .disc-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .disc-conn{min-width:960px}
 .badge-discovered{display:inline-block;padding:0 6px;border-radius:4px;font-size:10px;border:1px dashed var(--ok);color:var(--ok);margin-left:6px;vertical-align:middle}
+.disc-diff .chip.warn{color:var(--warn);border-color:rgba(255,149,72,.5)}
+.disc-against{gap:8px;font-size:12px;color:var(--muted)}
+.disc-against select{max-width:min(420px,70vw)}
+.disc-diff-h{margin:14px 0 2px;font-size:13px;display:flex;align-items:center;gap:6px}
+.disc-diff-hint{font-size:12px;margin-bottom:6px}
 @media (max-width:699px){
   .disc-table thead{display:none}
   .disc-table tr{display:block;padding:8px 6px;border-bottom:1px solid var(--border)}

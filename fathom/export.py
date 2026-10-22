@@ -202,8 +202,11 @@ def _scope(doc: Doc, rooms: Optional[List[str]]) -> Doc:
 
 
 def write_build(project: Project, project_dir: Path, run_dir: Path, pdf: bool = False, png: bool = False, *, doc: Optional[Doc] = None,
-                state: str = "all", rooms: Optional[List[str]] = None, base_url: str = "") -> Dict[str, str]:
-    """Render into ``run_dir`` and zip it. Returns the artifact strings (plus ``files``)."""
+                state: str = "all", rooms: Optional[List[str]] = None, base_url: str = "", discovery: bool = True) -> Dict[str, str]:
+    """Render into ``run_dir`` and zip it. Returns the artifact strings (plus ``files``).
+
+    ``discovery=False`` leaves the "Discovered connections" section (and its CSV) out of the report.
+    """
     run_dir.mkdir(parents=True, exist_ok=True)
     notes: List[str] = []
     room_ids = [r.get("id") for r in (doc or {}).get("rooms") or [] if isinstance(r, dict)]
@@ -227,7 +230,7 @@ def write_build(project: Project, project_dir: Path, run_dir: Path, pdf: bool = 
     if doc is not None:
         _write(run_dir / "project.json", json.dumps(_normalized(doc), indent=2, ensure_ascii=False) + "\n")
         try:
-            notes.extend(_write_package(doc, project_dir, run_dir, state=state, rooms=sel, droom=droom, base_url=base_url))
+            notes.extend(_write_package(doc, project_dir, run_dir, state=state, rooms=sel, droom=droom, base_url=base_url, discovery=discovery))
         except Exception as exc:  # the v0.2 part of the build must survive
             notes.append(f"build package incomplete: {type(exc).__name__}: {exc}")
     else:
@@ -265,7 +268,7 @@ def _nav(doc: Doc, sel: List[str], current: str, prefix: str) -> Dict[str, Any]:
     }
 
 
-def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, rooms: List[str], droom: str, base_url: str) -> List[str]:
+def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, rooms: List[str], droom: str, base_url: str, discovery: bool = True) -> List[str]:
     from . import bom as bom_mod
     from . import cables as cab_mod
     from . import network as net_mod
@@ -362,6 +365,18 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
     cs = cab_mod.cable_schedule(sdoc, state=state)
     _write(run_dir / "cable-schedule.csv", cab_mod.to_csv(cs))
     sections["Cable schedule"] = _html_table(cs)
+    if discovery:
+        try:
+            from .discovery import report as disc_report
+
+            all_rooms = set(rooms) == {r.get("id") for r in doc.get("rooms") or []}
+            ds = disc_report.discovered_connections(doc, project_dir, state=state, rooms=None if all_rooms else rooms)
+            notes.extend(ds.get("notes") or [])
+            if ds["rows"]:
+                _write(run_dir / "discovered-connections.csv", cab_mod.to_csv(ds))
+                sections["Discovered connections"] = disc_report.section_intro(ds) + _html_table(ds)
+        except Exception as exc:
+            notes.append(f"discovered connections: {type(exc).__name__}: {exc}; section skipped")
     _write(run_dir / "cable-labels.html", cab_mod.label_sheet_html(fdoc, qr=False, base_url=base))
     ips = net_mod.ip_schedule(fdoc, overlay)
     _write(run_dir / "ip-schedule.csv", cab_mod.to_csv(ips))
@@ -555,7 +570,7 @@ def _try_load_doc(target: str) -> Optional[Doc]:
 
 
 def build_doc(name_or_dir: str, *, state: str = "all", rooms: Optional[List[str]] = None, pdf: bool = False, png: bool = False,
-              base_url: str = "", run_dir: Optional[Path] = None) -> Path:
+              base_url: str = "", run_dir: Optional[Path] = None, discovery: bool = True) -> Path:
     """Build a project's full package from its v2 doc. Returns the run folder."""
     from .merge import default_room
     from .project import resolve_project
@@ -567,7 +582,7 @@ def build_doc(name_or_dir: str, *, state: str = "all", rooms: Optional[List[str]
     slug_ = make_slug((doc.get("meta") or {}).get("slug") or project_dir.name)
     run_dir = run_dir or new_build_dir(project_dir.name, slug_)
     project = _flow(doc, default_room(doc), state)
-    write_build(project, project_dir, run_dir, pdf=pdf, png=png, doc=doc, state=state, rooms=rooms, base_url=public_base(doc, base_url))
+    write_build(project, project_dir, run_dir, pdf=pdf, png=png, doc=doc, state=state, rooms=rooms, base_url=public_base(doc, base_url), discovery=discovery)
     return run_dir
 
 

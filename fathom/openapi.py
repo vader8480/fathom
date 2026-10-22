@@ -129,7 +129,8 @@ def _components() -> Dict[str, Any]:
         "Reconvert": {"type": "object", "properties": {"page": {"type": "integer"}, "hidden_layers": {"type": "array", "items": {"type": "string"}}}},
         "BuildOptions": {"type": "object", "properties": {"pdf": {"type": "boolean"}, "png": {"type": "boolean"},
                                                           "state": {"type": "string", "enum": ["all", "planned", "as_built", "everything"]},
-                                                          "rooms": {"type": ["array", "null"], "items": {"type": "string"}}}},
+                                                          "rooms": {"type": ["array", "null"], "items": {"type": "string"}},
+                                                          "discovery": {"type": "boolean", "default": True, "description": "Include the Discovered connections report section (latest completed discovery run and promoted discovered cables)"}}},
         "Question": {"type": "object", "required": ["question"], "properties": {"question": {"type": "string"}, "room": {"type": "string"},
                                                                               "use_llm": {"type": "boolean"}, "history": {"type": "array"}}},
         "BackupCreate": {"type": "object", "properties": {"include_builds": {"type": "boolean"}, "label": {"type": "string"}}},
@@ -153,7 +154,7 @@ def _components() -> Dict[str, Any]:
         "PageMove": {"type": "object", "properties": {"parent": {"type": ["string", "null"]}, "before": {"type": ["string", "null"]}, "order": {"type": "integer"}}},
         "DiscoveryRun": {"type": "object", "properties": {
             "window": {"type": "integer", "minimum": 10, "maximum": 300, "description": "listen window in seconds (default from settings, 60)"},
-            "probes": {"type": "array", "items": {"type": "string", "enum": ["unifi", "mdns", "lldp", "arp"]}, "description": "subset of the enabled probes"}}},
+            "probes": {"type": "array", "items": {"type": "string", "enum": ["unifi", "mdns", "lldp", "arp", "snmp", "yamaha", "videohub", "qsys", "ddm"]}, "description": "subset of the enabled probes"}}},
         "DiscoveryPromote": {"type": "object", "properties": {
             "entities": {"type": "array", "items": {"type": "string"}, "description": "entity ids to create as new devices"},
             "merge": {"type": "object", "additionalProperties": {"type": "string"}, "description": "entity id -> existing device id"},
@@ -166,8 +167,9 @@ def _components() -> Dict[str, Any]:
         "DiscoverySettings": {"type": "object", "properties": {
             "window": {"type": "integer"}, "room": {"type": "string"},
             "probes": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": True,
-                                                                  "description": "per-probe fields; secrets: string sets, empty string clears, null keeps"}}}},
-        "DiscoveryTest": {"type": "object", "required": ["probe"], "properties": {"probe": {"type": "string", "enum": ["unifi", "mdns", "lldp", "arp"]}, "settings": obj}},
+                                                                  "description": "per-probe fields (enabled, text / check / select values; list fields such as hosts as a string or array); "
+                                                                                 "secrets: string sets, empty string clears, null keeps"}}}},
+        "DiscoveryTest": {"type": "object", "required": ["probe"], "properties": {"probe": {"type": "string", "enum": ["unifi", "mdns", "lldp", "arp", "snmp", "yamaha", "videohub", "qsys", "ddm"]}, "settings": obj}},
     }
     return schemas
 

@@ -1603,6 +1603,30 @@ function safeNext(n) {
   return n;
 }
 
+// The login page bounces to `next` when the API already reports a session. If the app page then sends us
+// straight back (its request did not carry a usable cookie: another Path scope, a stale duplicate, a second
+// server on this host), that would loop forever with no chance to type. Count bounces in sessionStorage and
+// stop after a few within a short window so the form stays usable; a fresh sign-in replaces the cookie.
+const BOUNCE_KEY = 'fathom:login-bounces';
+const BOUNCE_WINDOW_MS = 20000;
+const BOUNCE_LIMIT = 2;
+
+function recentBounces() {
+  try {
+    const rec = JSON.parse(sessionStorage.getItem(BOUNCE_KEY) || 'null');
+    if (rec && typeof rec.t === 'number' && Date.now() - rec.t < BOUNCE_WINDOW_MS) return rec.n || 0;
+  } catch (e) { /* storage unavailable: never block the redirect */ }
+  return 0;
+}
+
+function noteBounce(n) {
+  try { sessionStorage.setItem(BOUNCE_KEY, JSON.stringify({ t: Date.now(), n: n })); } catch (e) { /* ignore */ }
+}
+
+function clearBounces() {
+  try { sessionStorage.removeItem(BOUNCE_KEY); } catch (e) { /* ignore */ }
+}
+
 export function bootLogin() {
   installErrorCapture();
   const api = createApi({ base: appRoot() });
@@ -1610,7 +1634,13 @@ export function bootLogin() {
   const err = $('login-error');
   const next = safeNext(new URLSearchParams(location.search).get('next'));
   api.session().then(function (s) {
-    if (s.auth_enabled && s.authenticated) { location.replace(next); return; }
+    if (s.auth_enabled && s.authenticated) {
+      const n = recentBounces();
+      if (n < BOUNCE_LIMIT) { noteBounce(n + 1); location.replace(next); return; }
+      clearBounces();
+      err.textContent = 'You seem to be signed in, but the app keeps sending you back here. Sign in again to refresh your session.';
+      return;
+    }
     if (!s.auth_enabled) {
       err.textContent = '';
       form.insertBefore(h('p', { id: 'login-off', style: { color: 'var(--ok)' } }, ['Sign-in is not required on this server. ', h('a', { href: next }, 'Open Fathom')]), form.querySelector('label'));
@@ -1622,6 +1652,7 @@ export function bootLogin() {
     const btn = $('login-submit');
     btn.disabled = true;
     api.login($('login-user').value.trim(), $('login-pass').value).then(function () {
+      clearBounces();
       location.replace(next);
     }, function (ex) {
       btn.disabled = false;
