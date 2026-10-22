@@ -1019,7 +1019,8 @@ Revision rules:
   "dmx":        {"fx-12": {"universe": 1, "address": 101, "footprint": 16, "channel": "12", "source": "eos"}},
   "patch_rows": [],
   "appendix":   {"dante": [], "console": []},
-  "notes":      ["dante: added card for unplaced device 'AM2-7'"]
+  "notes":      ["dante: added card for unplaced device 'AM2-7'"],
+  "suggestions": {"dante-am2-7": [{"template": "focusrite-rednet-am2", "manufacturer": "Focusrite", "model": "RedNet AM2", "name": "RedNet AM2", "kind": "iem", "source": "builtin", "score": 1.0, "level": "high", "evidence": "model \"RedNet AM2\" = RedNet AM2 · manufacturer Focusrite", "kind_matches": true}]}
 }
 ```
 
@@ -1027,6 +1028,7 @@ Revision rules:
 - New importers contribute directly (`Importer.contribute`, §7.4.2).
 - Routes always reference canonical device ids (never extra-card ids).
 - Cache key: `(project, revision, imports_hash)` where `imports_hash` = sha1 of `(path, size, mtime_ns)` for every import file.
+- `suggestions` (`library.suggest.suggest_for_device`): ranked library models for every overlay device without a `template`, scored from the `manufacturer` / `model` strings the source reported (Dante preset `manufacturer_name` / `model_name`, Device Info, CSV columns) and the device's name / subtitle; `level` is `high` ≥ 0.85, `medium` ≥ 0.60, else `low`. Variants (`Rio1608-D` vs `Rio1608-D2`) never score as exact. Discovery findings carry the same list per entity as `model_suggestions`; one-shot previews return it as `suggestions` keyed by device id.
 
 #### 4.11.1 Merging duplicate devices (`dedupe.py`)
 
@@ -1125,6 +1127,7 @@ Username regex `^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$`. Session cookie payload `{"u
 | GET | `/api/v2/schema.json` | public | `schema.JSON_SCHEMA` |
 | GET | `/api/v2/library?q=&discipline=&kind=&project=` | viewer | `{"templates": [{"id", "manufacturer", "model", "name", "kind", "discipline", "ru", "ports_summary": "32× Analog In · 16× Analog Out …", "source": "builtin\|extension\|custom\|project"}]}` (project-local included when `project` given) |
 | GET | `/api/v2/library/<id>?project=` | viewer | full template; 404 |
+| GET | `/api/v2/library/suggest?manufacturer=&model=&text=&kind=&project=&limit=` | viewer | `{"query": {…}, "suggestions": [{"template", "manufacturer", "model", "name", "kind", "source", "score", "level": "high\|medium\|low", "evidence", "kind_matches"}]}` ranked library models for identity strings (§4.11 `suggestions`); presets are never suggested; `limit` ≤ 20 |
 | POST | `/api/v2/library` | editor | body = template → 201 (written to `<data>/library/<id>.json`); 422 problems; 409 when id is built-in and `?override=1` absent |
 | DELETE | `/api/v2/library/<id>` | editor | custom only → 204; built-in → 409 |
 | GET | `/api/v2/presets` | viewer | `{"groups": ["Power", "Network & IT", "Audio", "Video", "Lighting"], "presets": [{"id", "label", "group", "kind", "description", "aliases", "ru", "ports": [port groups], "dante"?, "dmx_footprint"?, "width"?, "routing"?, "tags"}]}` (FR-LIB-06; the same presets are served by the library routes with `source: "preset"`) |
@@ -1180,7 +1183,7 @@ Markers, calibration, names, order and `hidden_layers` change through `/changes`
 | DELETE | `/api/v2/projects/<n>/discovery/runs/<rid>` | editor | — | `{"run": {…}}` (cancel requested; partial results are kept) |
 | GET | `/api/v2/projects/<n>/discovery/runs/<rid>/findings` | viewer | — | `{"run", "entities": [{"id", "status", "label", "confidence", "level", "reasons", "sources", "macs", "ips", "match?", "proposed?", "interfaces", "connections"}], "connections": [{"id", "switch", "port", "peer", "methods", "confidence", "level", "flag", "cable?", "status"}], "rows": [cable-schedule columns], "networks": [...], "counts", "notes"}` |
 | GET | `/api/v2/projects/<n>/discovery/runs/<rid>/diff` | viewer | `?against=<rid>` (optional; default: the previous completed run) | `{"run", "against": rid\|null, "candidates": [run brief…], "persisted": bool, "diff": {"run", "against", "computed", "new_devices": [entity summary…], "missing_devices", "moved": [{"label", "from": {switch, port…}, "to"}], "changed": [{"label", "field", "before", "after"}], "new_links": [{"switch", "port", "peer", "peer_port", "methods", "confidence", "level", "flag"}], "lost_links", "counts": {"new_devices", "missing_devices", "moved", "changed", "new_links", "lost_links", "unchanged", "paired", "entities", "previous_entities", "links", "previous_links", "changes"}}}`; 400 `against` not another completed run; 404 |
-| POST | `/api/v2/projects/<n>/discovery/runs/<rid>/findings/promote` | editor | `{"entities": [id], "merge": {entity: device}, "connections": [id], "networks": [id], "ignore": {"entities", "connections", "networks"}, "unignore": {…}, "room?"}` | `{"ops": n, "summary": {"devices", "merged", "cables", "networks", "ignored"}, "revision"}`; 400 unknown id / unpromotable |
+| POST | `/api/v2/projects/<n>/discovery/runs/<rid>/findings/promote` | editor | `{"entities": [id], "merge": {entity: device}, "templates?": {entity: template_id}, "connections": [id], "networks": [id], "ignore": {"entities", "connections", "networks"}, "unignore": {…}, "room?"}` (`templates` applies a library model to a new device the way Add gear does, or to a merge target that has no `template` yet) | `{"ops": n, "summary": {"devices", "merged", "cables", "networks", "ignored"}, "revision"}`; 400 unknown id / unpromotable |
 | GET | `/api/v2/projects/<n>/discovery/settings` | viewer | — | `{"settings": {"window", "probes": {id: {"enabled", fields…, "<secret>_set", "<secret>_from_env", "<secret>_env"}}}, "sources", "limits": {"min_window", "max_window"}}` (no secret values) |
 | PUT | `/api/v2/projects/<n>/discovery/settings` | editor | same shape; secret `null` keeps, `""` clears | `{"settings", "revision"}` |
 | POST | `/api/v2/projects/<n>/discovery/test` | editor | `{"probe", "settings?"}` | `{"probe", "result": {"ok": bool, "message", …}}` (message redacted); 400 unknown probe |
