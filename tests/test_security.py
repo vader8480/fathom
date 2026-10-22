@@ -67,6 +67,11 @@ SPEC_ROLES = {
     ("GET", "/api/v2/projects/{}/cables/tag-preview"): "editor", ("GET", "/api/v2/projects/{}/racks/{}.svg"): "viewer",
     ("GET", "/api/v2/projects/{}/qr/{}.svg"): "viewer", ("GET", "/api/v2/projects/{}/trace"): "viewer",
     ("GET", "/api/v2/projects/{}/search"): "viewer", ("POST", "/api/v2/projects/{}/assistant"): "viewer",
+    ("GET", "/api/v2/projects/{}/pages"): "viewer", ("POST", "/api/v2/projects/{}/pages/preview"): "editor",
+    ("GET", "/api/v2/projects/{}/pages/{}"): "viewer", ("PUT", "/api/v2/projects/{}/pages/{}"): "editor",
+    ("DELETE", "/api/v2/projects/{}/pages/{}"): "editor", ("POST", "/api/v2/projects/{}/pages/{}/move"): "editor",
+    ("GET", "/api/v2/projects/{}/pages/{}/versions"): "viewer", ("GET", "/api/v2/projects/{}/pages/{}/versions/{}"): "viewer",
+    ("POST", "/api/v2/projects/{}/pages/{}/restore/{}"): "editor",
     ("POST", "/api/v2/projects/{}/builds"): "editor", ("GET", "/api/v2/projects/{}/builds"): "viewer",
     ("DELETE", "/api/v2/projects/{}/builds/{}"): "editor", ("GET", "/builds/{}/{}/{}"): "viewer",
     ("GET", "/api/meta"): "viewer", ("GET", "/api/projects"): "viewer", ("POST", "/api/projects"): "editor",
@@ -85,7 +90,7 @@ SAMPLES = ["proj", "main", "atem-mini", "rk-foh", "cables", "1", "nobody", "imp-
            "run1", "index.html", "diagram.svg", "x.png", "app.html", "nope"]
 PARAM_HINTS = {"name": "proj", "room": "main", "device": "atem-mini", "rack": "rk-foh", "kind": "cables", "rev": "1", "username": "nobody",
                "iid": "imp-0001", "att": "att-000000000000", "token": "sh-abc123", "fp": "fp-none", "run": "run1", "file": "index.html",
-               "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip", "table": "devices",
+               "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip", "table": "devices", "slug": "power-up",
                "rid": "run-20260101-000000-0000"}
 DISCOVERY_FIXTURES = str(Path(__file__).parent / "fixtures" / "discovery")
 
@@ -571,6 +576,37 @@ class Passwords(unittest.TestCase):
             users.set_disabled("vic", True)
             st, _, _ = call(app, "GET", "/api/v2/projects", headers={"Cookie": cookies["viewer"]})
             self.assertEqual(st, 401, "5.3 disabled user's session invalid")
+
+    def test_login_flow_and_stale_duplicate_cookies(self):
+        """Login over plain http and a stale duplicate fathom_session cookie must not cause a /login <-> / loop."""
+        with users_env() as (app, data, cookies, pw):
+            html = {"Accept": "text/html,application/xhtml+xml,*/*;q=0.8"}
+            st, h, _ = call(app, "GET", "/", headers=html)
+            self.assertEqual(st, 302)
+            self.assertEqual(h.get("location"), "/login?next=%2F")
+            st, h, b = call(app, "GET", "/login?next=%2F", headers=html)
+            self.assertEqual(st, 200, "login page is public")
+            self.assertIn(b'id="login-form"', b)
+            self.assertIn(b"static/js/app.js", b)
+            st, h, b = call(app, "POST", "/api/v2/session", {"username": "eve", "password": pw["eve"]}, {"Content-Type": "application/json"})
+            self.assertEqual(st, 200)
+            sc = [c for c in h.all("set-cookie") if c.startswith("fathom_session=")][0]
+            value = sc.split(";")[0].split("=", 1)[1]
+            self.assertNotIn("secure", [a.strip().lower() for a in sc.split(";")], "cookie usable over http://")
+            # browsers send every cookie of that name, most specific Path first; a stale one must not win
+            for header in ("fathom_session=stale.sig; fathom_session=" + value,
+                           "fathom_session=" + value + "; fathom_session=stale.sig",
+                           "fathom_session=; other=1; fathom_session=" + value):
+                st, h, _ = call(app, "GET", "/", headers=dict(html, Cookie=header))
+                self.assertEqual(st, 200, "app page with cookies %r" % header)
+                st, _, b = call(app, "GET", "/api/v2/session", headers={"Cookie": header})
+                self.assertTrue(jbody(b)["authenticated"], "session with cookies %r" % header)
+            st, h, _ = call(app, "GET", "/login", headers=dict(html, Cookie="fathom_session=" + value))
+            self.assertEqual(st, 200, "login page never redirects server-side (the client decides)")
+            st, _, b = call(app, "GET", "/api/v2/session", headers={"Cookie": "fathom_session=stale.sig; fathom_session=also.bad"})
+            self.assertFalse(jbody(b)["authenticated"])
+            st, _, _ = call(app, "GET", "/", headers=dict(html, Cookie="fathom_session=stale.sig"))
+            self.assertEqual(st, 302)
 
     def test_basic_auth_users_and_env(self):
         app = get_app()

@@ -372,7 +372,7 @@ Format: `ID · Priority · Requirement — **AC:** acceptance criterion · Owner
 
 | ID | Pri | Requirement | Acceptance criterion | Owner |
 | --- | --- | --- | --- | --- |
-| FR-MOB-01 | P0 | Breakpoints: ≥ 1100 px = views + docked inspector; 700–1099 px (iPad portrait) = inspector as slide-over sheet; < 700 px = bottom tab bar (Map, Patch, Table, Plan, More), assistant full screen. | QA at 390×844, 820×1180, 1440×900. | W5 |
+| FR-MOB-01 | P0 | Breakpoints: ≥ 1100 px = views + docked inspector; 700–1099 px (iPad portrait) = inspector as slide-over sheet; < 700 px = bottom tab bar (Map, Patch, Table, Plan, SOPs, More), assistant full screen. | QA at 390×844, 820×1180, 1440×900. | W5 |
 | FR-MOB-02 | P0 | Editing works on iPad by touch in patch view, plans, racks, inspector; inputs ≥ 16 px font; hit targets ≥ 44 px under `(pointer: coarse)`. | QA on iPad Safari or Chrome touch emulation. | W3, W4, W5 |
 | FR-MOB-03 | P0 | Viewer pages work on phones (map pinch-zoom, tap tips, stacked patch table, device pages). | QA. | W5 |
 | FR-MOB-04 | P0 | `/manifest.webmanifest` (name "Fathom", short_name "Fathom", id "/", start_url "./", scope "./", display "standalone", theme_color `#0b1020`, background_color `#0b1020`, icons 192/512 PNG any + 512 maskable) and `apple-touch-icon` 180 PNG. | Chrome DevTools manifest pane shows no errors. | W1 |
@@ -486,7 +486,7 @@ Format: `ID · Priority · Requirement — **AC:** acceptance criterion · Owner
 
 - A project is one folder; its model is one JSON file `project.json` holding a **doc**: a JSON object with root objects (`meta`, `settings`, `media`) and **collections** (arrays of entities with unique `id`).
 - Python passes docs as plain `dict` (no dataclasses for v2). JS passes plain objects. The v1 dataclasses (`fathom.model.Project` etc.) remain and are produced from a doc by the **flow adapter** `schema.flow_project(doc, room_id)` for the signal-flow map.
-- Collections (exact names, in this order when serialized): `venues, rooms, systems, locations, racks, networks, devices, cables, bundles, floorplans, attachments, templates, imports`.
+- Collections (exact names, in this order when serialized): `venues, rooms, systems, locations, racks, networks, devices, cables, bundles, floorplans, attachments, templates, imports, pages`. `pages` (§4.3.15) is optional on disk; `normalize` adds it.
 - Optional fields are **omitted** when empty/default (like v1 `to_dict`), except where a table says "always written". Readers MUST tolerate missing optional fields and unknown extra fields (unknown fields are preserved on round-trip).
 - Units: lengths in meters (`length_m`), distances on plans in meters internally; `settings.units` only affects display.
 - Computed data (imports overlay, validation problems, search index, trace graphs) is **never persisted** in `project.json`. Entities marked `"auto": true` are overlay-only and MUST be stripped by `schema.normalize` before saving.
@@ -669,6 +669,25 @@ Types: `str`, `int`, `num` (float), `bool`, `obj`, `[T]` array of T. "Req" = req
 #### 4.3.14 `templates[]`
 
 Project-local templates in the format of §4.5 plus `"source": "project"`.
+
+#### 4.3.15 `pages[]` — SOP wiki
+
+Standard operating procedures, troubleshooting guides, checklists and reference pages written in Markdown and linked to the equipment they apply to. A doc with pages is v2-only (`is_v1_expressible` → false).
+
+| Field | Type | Req | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | str | yes | — | Generated `pg-` + 8 hex. |
+| `slug` | str | yes | — | `^[a-z0-9][a-z0-9-]{0,79}$`, unique in the project (error `duplicate_slug`); used in URLs and `[[page:<slug>]]` links. |
+| `title` | str | yes | — | |
+| `kind` | str | no | `sop` | `sop`, `troubleshooting`, `checklist`, `reference` (error `bad_enum`). |
+| `status` | str | no | `published` | `draft` (hidden from viewers), `published`, `archived`. |
+| `parent` | str | no | — | Parent page id; must exist (`dangling_ref`), no loops (`page_cycle`). |
+| `order` | int | no | — | Position among siblings (renumbered 1..n by `/move`). |
+| `summary` | str | no | — | One line for lists; falls back to the first 160 characters of the body. |
+| `body` | str | no | `""` | Markdown (§5.15). |
+| `tags`, `rooms`, `devices`, `attachments` | `[str]` | no | `[]` | Explicit "applies to" links (unknown ids are warnings `dangling_link`). Body refs count too (§5.15 backlinks). |
+| `review_due` | str | no | — | ISO date (warning `bad_date`). |
+| `owner`, `created`, `updated`, `updated_by` | str | no | — | Set by the server/editor. |
 
 ### 4.4 Semantics
 
@@ -1045,8 +1064,8 @@ Effective role = per-project override (P1: `users.json` user `projects: {"<proje
 
 | Capability | viewer | editor | admin |
 | --- | --- | --- | --- |
-| Read projects, docs, overlay, history, schedules, search, trace, assistant (without applying), viewer pages, builds | ✓ | ✓ | ✓ |
-| Write docs (`PUT`, `/changes`), imports, files, floor plans, restore, builds (create/delete), project-local templates, assistant suggestions | | ✓ | ✓ |
+| Read projects, docs, overlay, history, schedules, search, trace, assistant (without applying), viewer pages, builds, SOP pages and their versions | ✓ | ✓ | ✓ |
+| Write docs (`PUT`, `/changes`), imports, files, floor plans, restore, builds (create/delete), project-local templates, assistant suggestions, SOP pages (put/delete/move/restore/preview) | | ✓ | ✓ |
 | Create projects; write global custom templates; create/revoke share links | | ✓ | ✓ |
 | Delete projects; manage users; see `/api/v2/users` | | | ✓ |
 
@@ -1268,13 +1287,13 @@ Rules (normative where tested): `summary` uses `**bold**` only (UI escapes HTML 
 ### 5.11 Search hit shape
 
 ```json
-{"kind": "device|port|cable|interface|room|rack|floorplan|attachment",
+{"kind": "device|port|cable|interface|room|rack|floorplan|attachment|page",
  "id": "atem-mini", "device": "atem-mini", "port": null,
  "title": "ATEM Mini", "subtitle": "Blackmagic Design ATEM Mini Pro · Main Auditorium",
  "room": "main", "score": 100, "match": "name"}
 ```
 
-For ports `id` = `<device>:<port>`; cables `id` = cable id; interfaces `id` = `<device>/<interface>`.
+For ports `id` = `<device>:<port>`; cables `id` = cable id; interfaces `id` = `<device>/<interface>`; pages `id` = slug (matches title, slug, summary, tags, headings and body text).
 
 ### 5.12 v1 endpoints (kept)
 
@@ -1315,7 +1334,25 @@ For ports `id` = `<device>:<port>`; cables `id` = cable id; interfaces `id` = `<
 
 ### 5.14 OpenAPI
 
-`openapi.build_spec(routes, version) -> dict`: `openapi: "3.1.0"`, `info {title: "Fathom API", version}`, `servers: [{"url": "./"}]`, `components.securitySchemes {basic: http basic, session: apiKey cookie fathom_session}`, `components.schemas` (`Doc` → `$ref` to `/api/v2/schema.json`, `Op`, `Problem`, `Hit`, `Answer`, `Error`, `Floorplan`, `Attachment`, `Import`, `User`), and one `paths` entry per registered route (path params converted from regex groups to `{name}`), each with `summary`, `tags`, `x-fathom-role`, `requestBody` (when declared) and `responses` including the error codes of §5.1. `/api/docs` renders a table of method/path/role/summary grouped by tag.
+`openapi.build_spec(routes, version) -> dict`: `openapi: "3.1.0"`, `info {title: "Fathom API", version}`, `servers: [{"url": "./"}]`, `components.securitySchemes {basic: http basic, session: apiKey cookie fathom_session}`, `components.schemas` (`Doc` → `$ref` to `/api/v2/schema.json`, `Op`, `Problem`, `Hit`, `Answer`, `Error`, `Floorplan`, `Attachment`, `Import`, `User`, `Page`, `PagePreview`, `PageMove`), and one `paths` entry per registered route (path params converted from regex groups to `{name}`), each with `summary`, `tags`, `x-fathom-role`, `requestBody` (when declared) and `responses` including the error codes of §5.1. `/api/docs` renders a table of method/path/role/summary grouped by tag.
+
+### 5.15 SOP pages (`fathom/markdown.py`, server section "SOP pages")
+
+Pages are stored in `pages[]` (§4.3.15) and edited like any collection (`/changes` ops; the app commits `put` ops so undo, offline queueing and history work unchanged). The API adds page-shaped reads and conveniences. Rendering happens **only on the server**: `markdown.render(text, resolver) -> {html, toc, refs, missing, tasks}` implements a stdlib Markdown subset — ATX headings (ids `h-<slug>`), paragraphs, hard breaks, `**bold**`/`*em*`/`~~del~~`/`` `code` ``, fenced code, nested ordered/unordered lists, task lists (`- [ ]` → `<li class="md-task"><label><input type="checkbox" data-task="n">…`), GFM tables (wrapped in `<div class="md-table">`), blockquotes, callouts `> [!NOTE|TIP|IMPORTANT|WARNING|CAUTION] title`, rules, links, bare/angle autolinks, images, and Fathom refs `[[device:<id>|label]]`, `[[room:<id>]]`, `[[page:<slug>]]` plus `![alt](att:<attachment id>)` images. Raw HTML is always escaped; the output passes through an allow-list sanitizer (`markdown.sanitize`) that drops scripts, event handlers, `style`, non-checkbox inputs and any `href`/`src` whose scheme is not http(s)/mailto/tel/relative (`markdown.safe_url`). Unresolved refs render as `<span class="md-missing" data-ref="kind:id">` and are listed in `missing`.
+
+| Method | Path | Role | Notes |
+| --- | --- | --- | --- |
+| GET | `/api/v2/projects/{name}/pages` | viewer | `{pages: [summary…], revision}` sorted by parent then `order`. Filters `?device=`, `?room=` (backlinks: explicit lists ∪ body refs), `?status=`, `?kind=`. Summary = page fields without `body` plus `summary`, `children` (count). |
+| POST | `/api/v2/projects/{name}/pages/preview` | editor | `{body}` → `render()` result (1 MB cap → 413). |
+| GET | `/api/v2/projects/{name}/pages/{slug}` | viewer | `{page, html, toc, tasks, missing, links: {devices: [{id,name,room,kind}], rooms, pages}, backlinks: [{slug,title}], breadcrumbs, children, prev, next, revision}`. `prev`/`next` are siblings in `order`. |
+| PUT | `/api/v2/projects/{name}/pages/{slug}` | editor | Upsert: body carries page fields (not `id`). Creates (201) with `pg-` id, `created`, `owner`, `status: draft`, `kind: sop`, `order` = last sibling + 1; else 200. Optional `base_revision` → conflict semantics of `/changes`; otherwise a server op. Errors: 400 `bad_slug`/`missing_field`/`bad_enum`/`bad_type`/`dangling_ref`/`page_cycle`, 409 `duplicate_slug`. Returns the GET payload + `problems`; `ETag`. |
+| DELETE | `/api/v2/projects/{name}/pages/{slug}` | editor | A page with children is archived (`status: archived`), a leaf is removed. `{archived, revision}`. |
+| POST | `/api/v2/projects/{name}/pages/{slug}/move` | editor | `{parent, before, order}`; cycle check; siblings renumbered 1..n. |
+| GET | `/api/v2/projects/{name}/pages/{slug}/versions` | viewer | `{versions: [{revision, time, author, summary, source}]}` — the history entries whose touched refs include `pages/<id>`, newest first. |
+| GET | `/api/v2/projects/{name}/pages/{slug}/versions/{rev}` | viewer | The page as it was at `rev`, rendered (GET shape + `current_revision`). |
+| POST | `/api/v2/projects/{name}/pages/{slug}/restore/{rev}` | editor | Puts the page content of `rev` back as a new revision, keeping today's `id`, `slug`, `parent`, `order`, `created`. |
+
+Ref hrefs produced by the server are fallbacks for chrome-less pages (`p/<project>/d/<device>`, `p/<project>/r/<room>`, `#/<project>/*/sop?page=<slug>`, `api/v2/projects/<project>/files/<att>/<name>`); the app intercepts clicks on `a[data-ref]` and opens the inspector / navigates instead.
 
 ---
 
@@ -1457,6 +1494,7 @@ Exports for harnesses/tests: `export function boot(root, {api, location})` (call
 | `history` | History | `./views-admin.js` | `mountHistory` |
 | `builds` | Builds | `./views-admin.js` | `mountBuilds` |
 | `settings` | Settings | `./views-admin.js` | `mountSettings` |
+| `sop` | SOPs | `./views-sop.js` (+ `sop.css`) | `mount` — phone-first SOP wiki (§5.15): drill-down page tree with sticky search, rendered page (sticky "Applies to" chips, collapsible TOC, tappable task lists kept in `sessionStorage`, tap-to-zoom images, prev/next), split Markdown editor with live server preview, versions drawer. Hash params `?page=<slug>`, `&edit=1`, `?new=1[&parent=<slug>&device=<id>&from=<slug>]`. Also a bottom tab on phones. |
 | `json` | JSON | `./app.js` (internal) | — |
 
 **View contract** (every `mount*` export):

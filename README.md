@@ -1,5 +1,7 @@
 # Fathom
 
+[![CI](https://github.com/vader8480/fathom/actions/workflows/ci.yml/badge.svg)](https://github.com/vader8480/fathom/actions/workflows/ci.yml)
+
 **Know your AV system.** Fathom documents audio, video and lighting
 systems room by room: every device with its real ports, every cable
 port-to-port with its tag, the network, DMX patch, racks, floor plans and
@@ -356,6 +358,7 @@ suggestions and merge plans), `library/` (templates),
 runner), `discovery/` (network discovery: probes, correlation, topology,
 settings), `floorplan.py` (DXF / Draw.io / PDF / SVG), `cables.py`, `network.py`,
 `bom.py`, `qr.py`, `racks.py`, `dmx.py`, `patch.py`, `trace.py`, `search.py`,
+`markdown.py` (SOP wiki renderer + sanitizer),
 `assistant.py` / `llm.py`, `layout.py` / `render_html.py` / `render_svg.py`
 (maps and viewer pages), `export.py` (builds), `server.py` (WSGI app),
 `static/` (app). Samples: `samples/rrc-littleton` (0.2 project),

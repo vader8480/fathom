@@ -11889,5 +11889,152 @@
       "device": "switcher",
       "label": "ATEM settings"
     }
+  ],
+  "pages": [
+    {
+      "id": "pg-main-ops",
+      "slug": "main-auditorium",
+      "title": "Main Auditorium procedures",
+      "kind": "reference",
+      "status": "published",
+      "parent": null,
+      "order": 1,
+      "summary": "Start here: power, shut-down and troubleshooting for the Main Auditorium AVL system.",
+      "tags": [
+        "main"
+      ],
+      "rooms": [
+        "main"
+      ],
+      "devices": [],
+      "body": "Procedures for the [[room:main]] system. Each page below is written for a volunteer operator and can be followed on a phone.\n\n> [!TIP] Before you start\n> Check the week's run sheet. If the room has been used for a rental, assume the console file has changed.\n\n## Pages\n\n- [[page:power-up]] — bring the room up for a service or rehearsal\n- [[page:shut-down]] — full shut-down at the end of the day\n- [[page:no-audio]] — nothing coming out of the PA\n\n## Key equipment\n\n| Device | Where | Role |\n|---|---|---|\n| [[device:foh-cl5]] | FOH | Mixing console |\n| [[device:rio-sl]] / [[device:rio-sr]] | Stage left / right | Stage I/O |\n| [[device:amp-main]] | Amp rack | Main PA amplifier |\n| [[device:switcher]] | FOH | Video switcher |\n| [[device:lx-console]] | FOH | Lighting console |\n",
+      "created": "2026-09-02T14:00:00Z",
+      "updated": "2026-09-02T14:00:00Z",
+      "updated_by": "sample",
+      "owner": "sample"
+    },
+    {
+      "id": "pg-power-up",
+      "slug": "power-up",
+      "title": "Power-up: Main Auditorium",
+      "kind": "sop",
+      "status": "published",
+      "parent": "pg-main-ops",
+      "order": 1,
+      "summary": "Switch the Main Auditorium AVL system on in the correct order (about 10 minutes).",
+      "tags": [
+        "power",
+        "sunday",
+        "rehearsal"
+      ],
+      "rooms": [
+        "main"
+      ],
+      "devices": [
+        "pdu-foh",
+        "pdu-catwalk",
+        "foh-cl5",
+        "rio-sl",
+        "rio-sr",
+        "amp-main",
+        "amp-fill",
+        "switcher",
+        "projector",
+        "lx-console"
+      ],
+      "review_due": "2027-03-01",
+      "body": "Follow the steps in order. Amplifiers always come on **last** and go off **first**.\n\n> [!WARNING]\n> Never power the amps while the console is still booting. A thump through the PA can damage the main hang.\n\n## 1. Network and power\n\n- [ ] Unlock the FOH rack and switch on [[device:pdu-foh]] (master switch on the rear).\n- [ ] Switch on [[device:pdu-catwalk]] from the panel at the top of the catwalk stairs.\n- [ ] Wait until the link lights on [[device:sw-stage]] are green (about 60 s).\n\n## 2. Audio\n\n- [ ] Power on [[device:rio-sl]] and [[device:rio-sr]] — the Dante sync LED should go solid green.\n- [ ] Power on [[device:foh-cl5]] and wait for the home screen.\n- [ ] Load the scene `SUNDAY AM` (Scene → Recall).\n- [ ] Check the master fader is at **-inf** before continuing.\n- [ ] Power on [[device:amp-main]] and then [[device:amp-fill]]. Watch for the *Ready* LED.\n\n## 3. Video\n\n- [ ] Power on [[device:switcher]]; select input **1 (ProPresenter)**.\n- [ ] Power on [[device:projector]] with the remote (hold *Power* for 2 s) and wait for the lamp warm-up.\n- [ ] Confirm the lyrics computer appears on [[device:main-l]] side screen.\n\n## 4. Lighting\n\n- [ ] Power on [[device:lx-console]] and load the show `Sunday 2026`.\n- [ ] Run cue **1 – House full**.\n\n## Done\n\nPlay a track from the lyrics computer at a low level and walk the room. If you hear nothing, go to [[page:no-audio]].\n",
+      "created": "2026-09-02T14:05:00Z",
+      "updated": "2026-10-10T09:30:00Z",
+      "updated_by": "sample",
+      "owner": "sample"
+    },
+    {
+      "id": "pg-shut-down",
+      "slug": "shut-down",
+      "title": "Shut-down: Main Auditorium",
+      "kind": "sop",
+      "status": "published",
+      "parent": "pg-main-ops",
+      "order": 2,
+      "summary": "End-of-day shut-down. Amps first, then console, then video, then power.",
+      "tags": [
+        "power",
+        "sunday"
+      ],
+      "rooms": [
+        "main"
+      ],
+      "devices": [
+        "pdu-foh",
+        "pdu-catwalk",
+        "foh-cl5",
+        "amp-main",
+        "amp-fill",
+        "switcher",
+        "projector",
+        "lx-console"
+      ],
+      "review_due": "2027-03-01",
+      "body": "The reverse of [[page:power-up]]. Allow 5 minutes.\n\n> [!IMPORTANT]\n> Do **not** switch off the [[device:pdu-foh]] master until the projector fan has stopped. Cutting power mid-cool-down shortens lamp life.\n\n## 1. Audio\n\n- [ ] Pull the master fader on [[device:foh-cl5]] to **-inf**.\n- [ ] Power off [[device:amp-fill]], then [[device:amp-main]].\n- [ ] Save the scene if you changed anything (Scene → Store → overwrite `SUNDAY AM`).\n- [ ] Power off the console (hold *Power* until the screen goes dark).\n\n## 2. Video and lighting\n\n- [ ] Power off [[device:projector]] with the remote and wait for the fan to stop (about 90 s).\n- [ ] Power off [[device:switcher]].\n- [ ] Set [[device:lx-console]] to cue **0 – Work lights**, then power it off.\n\n## 3. Power\n\n- [ ] Switch off [[device:pdu-catwalk]].\n- [ ] Switch off [[device:pdu-foh]] and lock the FOH rack.\n- [ ] Return the radio-mic keys to the hook in the sound booth.\n",
+      "created": "2026-09-02T14:10:00Z",
+      "updated": "2026-09-02T14:10:00Z",
+      "updated_by": "sample",
+      "owner": "sample"
+    },
+    {
+      "id": "pg-no-audio",
+      "slug": "no-audio",
+      "title": "Troubleshooting: no audio from the PA",
+      "kind": "troubleshooting",
+      "status": "published",
+      "parent": "pg-main-ops",
+      "order": 3,
+      "summary": "Work from the stage to the speakers to find where the signal stops.",
+      "tags": [
+        "audio",
+        "troubleshooting"
+      ],
+      "rooms": [
+        "main"
+      ],
+      "devices": [
+        "foh-cl5",
+        "rio-sl",
+        "rio-sr",
+        "amp-main",
+        "amp-fill",
+        "main-l",
+        "sw-stage",
+        "sw-foh"
+      ],
+      "body": "Start at the top and stop when sound returns. Most Sunday problems are solved by step 1 or 2.\n\n## 1. Is the console seeing the input?\n\n- [ ] On [[device:foh-cl5]], select the channel and check the input meter is moving.\n- [ ] No meter: check the mic is switched on and the cable is seated at the stage box.\n- [ ] Still nothing: check the Dante sync LED on [[device:rio-sl]] / [[device:rio-sr]].\n\n> [!NOTE]\n> A flashing sync LED means the stage rack has lost the network. Check the link lights on [[device:sw-stage]] and reseat the fibre to [[device:sw-foh]].\n\n## 2. Is the console sending to the PA?\n\n- [ ] Channel fader up and **not muted**?\n- [ ] Channel assigned to the **ST** bus (the ST button is lit)?\n- [ ] Master fader up and the **L/R meters** moving?\n- [ ] DCA 1 *Band* and DCA 2 *Vocals* not pulled down.\n\n## 3. Are the amps on?\n\n| Symptom | Check |\n|---|---|\n| No LEDs | [[device:pdu-foh]] master off, or breaker tripped |\n| *Protect* LED | Power-cycle [[device:amp-main]]; if it returns, leave it off and tell the AV lead |\n| *Ready* but no sound | Confirm the Dante output on the amp shows a subscription |\n\n- [ ] [[device:amp-main]] shows *Ready*.\n- [ ] [[device:amp-fill]] shows *Ready*.\n\n## 4. Still nothing\n\n> [!CAUTION]\n> Do not open the amp rack or change Dante routing during a service.\n\nSwitch the lyrics computer to the **aux input** on the stage rack so the service can continue, then log the fault on the device page for [[device:main-l]].\n",
+      "created": "2026-09-02T14:20:00Z",
+      "updated": "2026-10-12T18:00:00Z",
+      "updated_by": "sample",
+      "owner": "sample"
+    },
+    {
+      "id": "pg-chapel-check",
+      "slug": "chapel-pre-service",
+      "title": "Chapel pre-service checklist",
+      "kind": "checklist",
+      "status": "draft",
+      "parent": null,
+      "order": 2,
+      "summary": "Five-minute walk-through before a chapel service.",
+      "tags": [
+        "chapel"
+      ],
+      "rooms": [
+        "chapel"
+      ],
+      "devices": [],
+      "body": "![Chapel layout](att:att-b249b8bb7f21)\n\n- [ ] Lectern mic on and tested\n- [ ] Hearing loop indicator lit\n- [ ] Lyrics display showing the first song\n- [ ] House lights at preset *Service*\n",
+      "created": "2026-10-15T08:00:00Z",
+      "updated": "2026-10-15T08:00:00Z",
+      "updated_by": "sample",
+      "owner": "sample"
+    }
   ]
 }

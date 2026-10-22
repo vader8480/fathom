@@ -2,7 +2,7 @@
 // (§4.4.3), editing helpers, local search, viewport math and the shared store.
 // Pure module: no window / document / fetch / timers. Imports in Node >= 18.
 
-export const COLLECTIONS = ['venues', 'rooms', 'systems', 'locations', 'racks', 'networks', 'devices', 'cables', 'bundles', 'floorplans', 'attachments', 'templates', 'imports'];
+export const COLLECTIONS = ['venues', 'rooms', 'systems', 'locations', 'racks', 'networks', 'devices', 'cables', 'bundles', 'floorplans', 'attachments', 'templates', 'imports', 'pages'];
 export const ROOTS = ['meta', 'settings', 'media'];
 export const NETWORK_MEDIA = ['dante', 'avb', 'aes67', 'aes50', 'madi', 'snake', 'network', 'qlan'];
 export const STATUSES = ['installed', 'planned', 'spare', 'retired'];
