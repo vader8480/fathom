@@ -55,6 +55,7 @@
 .sop-badge-draft{background:rgba(251,191,36,.18);color:#fbbf24}
 .sop-badge-archived{background:rgba(154,163,181,.18);color:var(--muted)}
 .sop-badge-due{background:rgba(248,113,113,.18);color:#f87171}
+.sop-badge-soon{background:rgba(251,191,36,.18);color:#fbbf24}
 
 /* ---- page viewer */
 .sop-topbar{position:sticky;top:0;z-index:4;display:flex;align-items:center;gap:6px;min-height:48px;margin:0 calc(-16px - var(--sar)) 0 calc(-16px - var(--sal));padding:0 calc(8px + var(--sar)) 0 calc(4px + var(--sal));background:var(--bg);border-bottom:1px solid var(--border)}
@@ -206,11 +207,43 @@
 .sop-editor-actions button{min-height:44px;padding:0 16px;font-size:15px}
 @media (min-width:700px){.sop-editor-actions{margin:0 -32px calc(-40px - var(--sab));padding-left:32px;padding-right:32px}}
 
+.sop-templates{display:flex;flex-direction:column;gap:6px;padding:10px 12px;margin-top:10px;border:1px dashed var(--border-2,var(--border));border-radius:10px;background:rgba(255,255,255,.02)}
+.sop-templates .sop-chips{flex-wrap:wrap;overflow:visible}
+.sop-templates .chip{min-height:40px;font-size:14px;gap:6px}
+
+/* ---- QR label dialog */
+.sop-qr{display:flex;flex-direction:column;gap:12px}
+.sop-qr-code{display:flex;justify-content:center}
+.sop-qr-img{width:min(260px,70vw);height:auto;background:#fff;border-radius:12px;padding:10px;display:block}
+.sop-qr-url{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+.sop-qr .chip{min-height:40px;padding:4px 12px;font-size:14px;text-decoration:none;color:var(--text)}
+.sop-qr .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.sop-qr .small{font-size:12px}
+
 @media (pointer:coarse){.sop button,.sop a.sop-item-main,.sop select{min-height:44px}}
 
 @media print{
-  .sop-topbar,.sop-toc summary,.sop-prevnext,.sop-progress-reset,.sop-side,.sop-back{display:none!important}
-  .sop,.sop-main{overflow:visible!important;height:auto!important;display:block!important}
-  .sop-applies{position:static}
-  .sop-body.md{font-size:12pt;color:#000}
+  @page{margin:14mm}
+  .sop-topbar,.sop-toc,.sop-prevnext,.sop-progress,.sop-side,.sop-back,.sop-crumbs,.sop-warn,.sop-related{display:none!important}
+  .sop,.sop-main{overflow:visible!important;height:auto!important;display:block!important;padding:0!important}
+  .sop-page>*{max-width:none}
+  .sop-applies{position:static;border:0;margin:0 0 8px;padding:0}
+  .sop-applies-chips{flex-wrap:wrap;overflow:visible}
+  .sop-applies .chip{border-color:#999;color:#000}
+  .sop-head h1{font-size:20pt;color:#000}
+  .sop-summary,.sop-meta{color:#333}
+  .sop-body.md{font-size:12pt;color:#000;line-height:1.45}
+  .md h2{break-after:avoid;page-break-after:avoid;border-color:#999}
+  .md li.md-task{border-color:#ddd;break-inside:avoid;page-break-inside:avoid}
+  .md .md-task-label{min-height:0;padding:4px 0}
+  .md .md-task-label input[type=checkbox]{border-color:#000;background:#fff;width:18px;height:18px;border-radius:4px}
+  .md .md-task-label input[type=checkbox]:checked{background:#fff}
+  .md .md-task-label input[type=checkbox]:checked::after{border-color:#000}
+  .md li.md-task.done .md-task-text{color:#000;text-decoration:none}
+  .md a.md-ref{border-color:#999;background:#fff;color:#000}
+  .md .md-callout{background:#fff;border-color:#999;break-inside:avoid;page-break-inside:avoid}
+  .md .md-table{border-color:#999;overflow:visible}
+  .md th,.md td{border-color:#ccc;white-space:normal;color:#000}
+  .md code,.md pre{background:#f3f5f9;color:#000;border-color:#ccc}
+  .md img{max-width:60%;cursor:default}
 }

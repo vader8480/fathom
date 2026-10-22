@@ -429,18 +429,94 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
     if plan_parts:
         sections["Floor plans"] = "".join(plan_parts)
 
+    # ---- standard operating procedures (published pages, tree order, one per printed page)
+    report_css = ""
+    try:
+        sop_html, sop_css_text = _sop_section(doc, project_dir, run_dir, rooms=rooms, all_rooms=set(rooms) == {r.get("id") for r in doc.get("rooms") or []})
+    except Exception as exc:
+        notes.append(f"procedures section: {type(exc).__name__}: {exc}")
+        sop_html, sop_css_text = "", ""
+    if sop_html:
+        sections["Standard operating procedures"] = sop_html
+        report_css = sop_css_text
+
     # ---- report
     maps = "".join(f'<figure class="map"><img src="rooms/{html.escape(r)}/diagram.svg" alt="{html.escape(room_map.get(r, {}).get("name", r))} signal flow"><figcaption>{html.escape(room_map.get(r, {}).get("name", r))}</figcaption></figure>' for r in rooms)
     sections = dict([("Signal flow", maps)] + list(sections.items()))
     render_report = _optional("render_html", "render_report")
     try:
-        report = _call(render_report, sdoc, project=name, sections=sections) if render_report is not None else _fallback_report(sdoc, sections)
+        report = _call(render_report, sdoc, project=name, sections=sections, extra_css=report_css) if render_report is not None else _fallback_report(sdoc, sections)
     except Exception as exc:
         notes.append(f"report.html: {type(exc).__name__}: {exc}; fallback used")
         report = _fallback_report(sdoc, sections)
     _write(run_dir / "report.html", report)
     notes.extend(overlay.get("notes") or [])
     return notes
+
+
+def _sop_section(doc: Doc, project_dir: Path, run_dir: Path, *, rooms: List[str], all_rooms: bool) -> Tuple[str, str]:
+    """HTML for the "Standard operating procedures" report section plus the CSS it needs ("" when there are no pages).
+
+    Published pages in tree order; when the build is scoped to some rooms only pages that apply to those rooms
+    (or to no room at all) are included. Links point at the build's device/room pages and other included pages;
+    images referenced as ``att:`` are copied to ``files/<att>/<name>`` so the package stays self-contained."""
+    from .markdown import render
+    from .render_html import SOP_REPORT_CSS, attachment_filename, sop_css, sop_link_resolver, sop_tree
+
+    from . import markdown as md_mod
+
+    rows = sop_tree(doc)
+    if not all_rooms:
+        keep = set(rooms)
+
+        def applies(p: Dict[str, Any]) -> bool:
+            refs = set(p.get("rooms") or []) | set(md_mod.find_refs(str(p.get("body") or "")).get("rooms") or [])
+            return not refs or bool(refs & keep)
+
+        rows = [(p, d) for p, d in rows if applies(p)]
+    if not rows:
+        return "", ""
+    included = {p["slug"] for p, _ in rows}
+    devices = {d.get("id"): d for d in doc.get("devices") or [] if isinstance(d, dict) and not d.get("auto")}
+    room_set = set(rooms)
+    files_root = project_dir / "files"
+    copied: Dict[str, str] = {}
+
+    def attachment(att_id: str, att: Dict[str, Any]) -> Optional[str]:
+        if att_id in copied:
+            return copied[att_id]
+        src = project_dir / str(att.get("file") or "")
+        try:
+            inside = src.resolve().is_relative_to(files_root.resolve())
+        except OSError:
+            inside = False
+        if not str(att.get("file") or "").startswith("files/") or not inside or not src.is_file():
+            return None
+        rel = f"files/{att_id}/{attachment_filename(att)}"
+        dest = run_dir / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dest)
+        copied[att_id] = rel
+        return rel
+
+    resolver = sop_link_resolver(
+        doc,
+        device=lambda i, d: f"devices/{quote(i, safe='')}.html" if (i in devices and (all_rooms or d.get("room") in room_set)) else "",
+        room=lambda i, _r: f"rooms/{quote(i, safe='')}/index.html" if i in room_set else "",
+        page=lambda s, _p: f"#sop-{quote(s, safe='')}" if s in included else None,
+        attachment=attachment,
+    )
+    rmap = {r.get("id"): str(r.get("name") or r.get("id")) for r in doc.get("rooms") or [] if isinstance(r, dict)}
+    entries = []
+    for p, depth in rows:
+        rendered = render(str(p.get("body") or ""), resolver)
+        found = md_mod.find_refs(str(p.get("body") or ""))
+        applies_to = [rmap[r] for r in list(p.get("rooms") or []) + found["rooms"] if r in rmap]
+        applies_to += [str(devices[d].get("name") or d) for d in list(p.get("devices") or []) + found["devices"] if d in devices]
+        entries.append({"page": p, "html": rendered["html"], "depth": depth, "applies": list(dict.fromkeys(applies_to))})
+    from .render_html import render_sop_report_section
+
+    return render_sop_report_section(doc, entries), sop_css() + SOP_REPORT_CSS
 
 
 def build(target: str, slug: str = "", run_dir: Optional[Path] = None, pdf: bool = False, png: bool = False, open_after: bool = False, quiet: bool = False) -> Path:
