@@ -496,6 +496,7 @@ export function mountSettings(el, ctx) {
       rootField('settings', 'cable_tag_pattern', 'Cable tag pattern', { placeholder: '{D}-{n:03}' }),
       rootField('settings', 'currency', 'Currency', { placeholder: 'USD' }),
       rootField('settings', 'public_url', 'Public URL', { placeholder: 'https://av.example.org (used in QR codes)' }),
+      rootField('settings', 'problem_email', 'Problem reports email', { placeholder: 'av-team@example.org (email fallback for "Report a problem")' }),
       rootField('settings', 'autosave', 'Autosave', { check: true }),
       h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Tag pattern tokens: {D} discipline letter, {M} medium, {room}, {from}, {to}, {n:03}. ' + (m.slug ? 'Project slug: ' + m.slug : '') + (s.revision ? '' : '')),
       ctx.role === 'admin' && ctx.api ? h('div', null, [h('h3', null, 'Danger zone'), h('button', { type: 'button', class: 'danger', onclick: function () {

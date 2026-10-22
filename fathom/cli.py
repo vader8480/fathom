@@ -809,6 +809,22 @@ def cmd_ask(a: argparse.Namespace) -> None:
     print(f"  confidence: {res.get('confidence', '')}")
 
 
+def cmd_sop_bundle(a: argparse.Namespace) -> None:
+    """Offline HTML bundle of the published procedures (a folder, or a zip when --out ends in .zip)."""
+    from .export import sop_bundle_zip, write_sop_bundle
+
+    doc, pdir, _v = _load_doc(a.project)
+    pages = [p for p in doc.get("pages") or [] if isinstance(p, dict) and (p.get("status") or "published") == "published"]
+    out = Path(a.out or f"{pdir.name}-procedures.zip").expanduser()
+    if out.suffix.lower() == ".zip":
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(sop_bundle_zip(pdir, doc))
+        print(f"ok: wrote {out} ({len(pages)} published page{'s' if len(pages) != 1 else ''}; unzip and open index.html)")
+    else:
+        files = write_sop_bundle(pdir, doc, out)
+        print(f"ok: wrote {len(files)} files to {out} ({len(pages)} published page{'s' if len(pages) != 1 else ''}; open index.html)")
+
+
 def cmd_history(a: argparse.Namespace) -> None:
     from .history import list_revisions
     from .project import resolve_project
@@ -1030,6 +1046,11 @@ def main(argv=None) -> None:
     s.add_argument("--json", action="store_true")
     s.add_argument("--no-llm", action="store_true")
     s.set_defaults(func=cmd_ask)
+
+    s = sub.add_parser("sop-bundle", help="offline HTML bundle of the published procedures (zip or folder)")
+    s.add_argument("project")
+    s.add_argument("-o", "--out", help="<name>-procedures.zip by default; a path without .zip writes a folder")
+    s.set_defaults(func=cmd_sop_bundle)
 
     s = sub.add_parser("history", help="revisions of a project")
     s.add_argument("project")

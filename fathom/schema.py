@@ -32,7 +32,7 @@ Problem = Dict[str, Any]
 SCHEMA_VERSION: int = 2
 COLLECTIONS: Tuple[str, ...] = (
     "venues", "rooms", "systems", "locations", "racks", "networks", "devices",
-    "cables", "bundles", "floorplans", "attachments", "templates", "imports", "pages",
+    "cables", "bundles", "floorplans", "attachments", "templates", "imports", "pages", "problems",
 )
 ROOTS: Tuple[str, ...] = ("meta", "settings", "media")
 
@@ -41,6 +41,7 @@ TEMPLATE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,79}$")
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,79}$")
 PAGE_KINDS: Tuple[str, ...] = ("sop", "troubleshooting", "checklist", "reference")
 PAGE_STATUSES: Tuple[str, ...] = ("draft", "published", "archived")
+PROBLEM_STATUSES: Tuple[str, ...] = ("open", "resolved")
 STATUSES: Tuple[str, ...] = ("installed", "planned", "spare", "retired")
 PORT_DIRS: Tuple[str, ...] = ("in", "out", "io")
 NETWORK_MEDIA = frozenset({"dante", "avb", "aes67", "aes50", "madi", "snake", "network", "qlan"})
@@ -1061,7 +1062,7 @@ def is_v1_expressible(doc: Doc) -> bool:
     """True when the doc can round-trip through the v1 format (§4.6.7)."""
     if len(doc.get("venues") or []) > 1 or len(doc.get("rooms") or []) > 1:
         return False
-    for c in ("racks", "networks", "floorplans", "attachments", "templates", "locations", "pages"):
+    for c in ("racks", "networks", "floorplans", "attachments", "templates", "locations", "pages", "problems"):
         if doc.get(c):
             return False
     if len(doc.get("systems") or []) > 1:
@@ -1344,7 +1345,7 @@ _REQUIRED: Dict[str, Tuple[str, ...]] = {
     "locations": ("name",), "racks": ("name", "units"), "networks": ("name",),
     "devices": ("name", "kind"), "cables": ("from", "to", "medium"), "bundles": (),
     "floorplans": ("name", "room", "source", "image"), "attachments": ("name", "file", "mime"),
-    "templates": (), "imports": ("kind", "path"), "pages": ("slug", "title"),
+    "templates": (), "imports": ("kind", "path"), "pages": ("slug", "title"), "problems": ("text",),
 }
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -1567,6 +1568,7 @@ def validate_doc(doc: Doc) -> List[Problem]:
 
     # ---- SOP pages (§4.3.15)
     P.extend(_page_problems(colls, ids))
+    P.extend(_problem_report_problems(colls, ids))
 
     # ---- helpers owned by other units (skipped when not importable)
     P.extend(_helper_problems(doc, colls))
@@ -1625,6 +1627,25 @@ def _page_problems(colls: Dict[str, List[Dict[str, Any]]], ids: Dict[str, Set[st
                     P.append(_prob("warning", "dangling_link", ref, f"{ref}/{field}/{j}", f"{ref}: {coll[:-1]} '{v}' does not exist"))
         if p.get("review_due") and not _valid_date(p.get("review_due")):
             P.append(_prob("warning", "bad_date", ref, ref + "/review_due", "review_due must be YYYY-MM-DD"))
+    return P
+
+
+def _problem_report_problems(colls: Dict[str, List[Dict[str, Any]]], ids: Dict[str, Set[str]]) -> List[Problem]:
+    """Problem reports (§4.3.16): text required, status enum; links to missing devices/pages are warnings."""
+    P: List[Problem] = []
+    slugs = {p.get("slug") for p in colls.get("pages") or []}
+    for r in colls.get("problems") or []:
+        ref = f"problems/{r['id']}"
+        if not isinstance(r.get("text"), str) or not r.get("text", "").strip():
+            P.append(_prob("error", "missing_field", ref, ref + "/text", "a problem report needs a text"))
+        if r.get("status") not in (None, *PROBLEM_STATUSES):
+            P.append(_prob("error", "bad_enum", ref, ref + "/status", f"status must be one of {', '.join(PROBLEM_STATUSES)}"))
+        if r.get("device") and r["device"] not in ids["devices"]:
+            P.append(_prob("warning", "dangling_link", ref, ref + "/device", f"{ref}: device '{r['device']}' does not exist"))
+        if r.get("page") and r["page"] not in slugs:
+            P.append(_prob("warning", "dangling_link", ref, ref + "/page", f"{ref}: page '{r['page']}' does not exist"))
+        if r.get("attachment") and r["attachment"] not in ids["attachments"]:
+            P.append(_prob("warning", "dangling_link", ref, ref + "/attachment", f"{ref}: attachment '{r['attachment']}' does not exist"))
     return P
 
 
@@ -1781,14 +1802,14 @@ JSON_SCHEMA: Dict[str, Any] = {
     "title": "Fathom project doc (schema 2)",
     "type": "object",
     "additionalProperties": True,
-    "required": ["fathom", "revision", "meta", "settings", *[c for c in COLLECTIONS if c != "pages"]],  # pages: added in 0.4, optional on disk
+    "required": ["fathom", "revision", "meta", "settings", *[c for c in COLLECTIONS if c not in ("pages", "problems")]],  # pages/problems: added in 0.4, optional on disk
     "properties": {
         "fathom": {"type": "integer", "const": 2},
         "revision": {"type": "integer", "minimum": 0},
         "meta": _obj({k: _STR for k in ("org", "system", "title", "intro", "footnote", "slug", "version", "author", "description")}),
         "settings": _obj({
             "default_room": _STR, "units": {"type": "string", "enum": ["metric", "imperial"]}, "cable_tag_pattern": _STR,
-            "currency": _STR, "public_url": _STR, "autosave": _BOOL,
+            "currency": _STR, "public_url": _STR, "autosave": _BOOL, "problem_email": _STR,
             "labels": _obj({"cols": _INT, "rows": _INT, "width_in": _NUM, "height_in": _NUM, "page": {"type": "string", "enum": ["letter", "a4"]}}),
             "assistant": _obj({"llm": _BOOL}),
         }),
@@ -1867,6 +1888,12 @@ JSON_SCHEMA: Dict[str, Any] = {
             "order": _INT, "kind": {"type": "string", "enum": list(PAGE_KINDS)}, "body": _STR, "summary": _STR, "tags": _STRS,
             "rooms": _STRS, "devices": _STRS, "attachments": _STRS, "status": {"type": "string", "enum": list(PAGE_STATUSES)},
             "owner": _STR, "created": _STR, "updated": _STR, "updated_by": _STR, "review_due": _STR,
+            "completions": _arr(_obj({"at": _STR, "by": _STR}, ("at",))),
         }, ("id", "slug", "title"))),
+        "problems": _arr(_obj({
+            "id": _ID, "text": _STR, "device": _STR, "room": _STR, "page": _STR, "status": {"type": "string", "enum": list(PROBLEM_STATUSES)},
+            "created": _STR, "by": _STR, "via": {"type": "string", "enum": ["app", "public", "share"]}, "attachment": _STR,
+            "resolved": _STR, "resolved_by": _STR, "note": _STR,
+        }, ("id", "text"))),
     },
 }

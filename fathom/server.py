@@ -1632,6 +1632,189 @@ def r_page_restore(req: Request) -> Response:
     return Response.json({"page": old, "revision": res["revision"], "problems": res.get("problems") or []})
 
 
+_COMPLETIONS_KEEP = 20
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/pages/" + _SLUG + "/complete", role="editor", summary="Record that this checklist was completed (who / when)", tags=["pages"])
+def r_page_complete(req: Request) -> Response:
+    from .history import utc_now
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    page = _page_by_slug(doc, req.params["slug"])
+    entry = {"at": utc_now(), "by": req.username or "local"}
+    done = [c for c in page.get("completions") or [] if isinstance(c, dict)] + [entry]
+    ops = [{"op": "merge", "coll": "pages", "id": page["id"], "value": {"completions": done[-_COMPLETIONS_KEEP:]}}]
+    res = _server_ops(req, pdir, ops, f"Completed SOP {page.get('title') or page['slug']}", "pages")
+    return Response.json({"completion": entry, "completions": done[-_COMPLETIONS_KEEP:], "revision": res["revision"]})
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/sop/bundle\.zip", role="editor", summary="Offline HTML bundle of the published procedures (zip)", tags=["pages"], page="file")
+def r_sop_bundle(req: Request) -> Response:
+    from .export import sop_bundle_zip
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    data = sop_bundle_zip(pdir, doc)
+    r = Response(data, 200, "application/zip", {"Content-Disposition": f'attachment; filename="{pdir.name}-procedures.zip"', "Cache-Control": "no-cache"})
+    r.csp = FILE_CSP
+    return r
+
+
+# ---- problem reports (§4.3.16, §5.16): "Report a problem" from any SOP page
+
+_PROBLEM_TEXT_MAX = 2000
+
+
+def _multipart_form(req: Request) -> Tuple[Dict[str, str], List[Tuple[str, bytes, str]]]:
+    """Text fields and files of a multipart/form-data body."""
+    msg = message_from_bytes(f"Content-Type: {req.header('content-type')}\r\nMIME-Version: 1.0\r\n\r\n".encode() + req.body(), policy=email_default_policy)
+    fields: Dict[str, str] = {}
+    files: List[Tuple[str, bytes, str]] = []
+    if not msg.is_multipart():
+        return fields, files
+    for part in msg.iter_parts():
+        fname = part.get_filename()
+        if fname:
+            files.append((fname, part.get_payload(decode=True) or b"", part.get_content_type() or ""))
+            continue
+        name = part.get_param("name", header="content-disposition")
+        if name:
+            fields[str(name)] = (part.get_payload(decode=True) or b"").decode("utf-8", "replace")
+    return fields, files
+
+
+def _problem_view(doc: Dict[str, Any], r: Dict[str, Any], project: str) -> Dict[str, Any]:
+    devs = {d.get("id"): d for d in doc.get("devices") or [] if isinstance(d, dict)}
+    pages = {p.get("slug"): p for p in _pages(doc)}
+    atts = {a.get("id"): a for a in doc.get("attachments") or [] if isinstance(a, dict)}
+    out = dict(r)
+    if r.get("device") in devs:
+        out["device_name"] = str(devs[r["device"]].get("name") or r["device"])
+    if r.get("page") in pages:
+        out["page_title"] = str(pages[r["page"]].get("title") or r["page"])
+    a = atts.get(r.get("attachment") or "")
+    if a is not None:
+        out["photo"] = f"api/v2/projects/{quote(project)}/files/{quote(a['id'])}/{quote(Path(str(a.get('file') or a.get('name') or 'file')).name)}"
+    return out
+
+
+def _create_problem(req: Request, pdir: Path, via: str) -> Dict[str, Any]:
+    from .history import utc_now
+    from .project import add_attachment
+    from .schema import STATUSES
+    from .users import role_at_least
+
+    doc, _ = _load(pdir)
+    photo: Optional[Tuple[str, bytes, str]] = None
+    if req.is_multipart():
+        fields, files = _multipart_form(req)
+        body: Dict[str, Any] = dict(fields)
+        photo = next((f for f in files if f[1]), None)
+    else:
+        body = req.json()
+    text = str(body.get("text") or "").strip()
+    if not text:
+        raise ApiError(400, "describe the problem", "missing_field")
+    text = text[:_PROBLEM_TEXT_MAX]
+    devs = {d.get("id"): d for d in doc.get("devices") or [] if isinstance(d, dict)}
+    device = str(body.get("device") or "").strip()
+    if device and device not in devs:
+        raise ApiError(400, f"unknown device '{device}'", "dangling_ref")
+    page = str(body.get("page") or "").strip()
+    if page and not any(p.get("slug") == page for p in _pages(doc)):
+        raise ApiError(400, f"unknown page '{page}'", "dangling_ref")
+    name = re.sub(r"\s+", " ", str(body.get("name") or "")).strip()[:80]
+    now = utc_now()
+    # Public / share reporters are identified by the name they typed; app users by their login.
+    by = (name if via != "app" else "") or req.username or name or "anonymous"
+    ent: Dict[str, Any] = {"id": "pr-" + secrets.token_hex(4), "text": text, "status": "open", "created": now, "by": by, "via": via}
+    if device:
+        ent["device"] = device
+        if devs[device].get("room"):
+            ent["room"] = str(devs[device]["room"])
+    if page:
+        ent["page"] = page
+    ops: List[Dict[str, Any]] = []
+    if photo is not None:
+        fname, data, ctype = photo
+        mime = mimetypes.guess_type(fname)[0] or (ctype if ctype and ctype != "application/octet-stream" else "") or ""
+        if not mime.startswith("image/"):
+            raise ApiError(400, "the photo must be an image", "bad_type")
+        att = add_attachment(pdir, fname, data, mime=mime, device=device, kind="photo", author=by)
+        att["note"] = f"Problem report {ent['id']}"
+        ops.append({"op": "put", "coll": "attachments", "id": att["id"], "value": att})
+        ent["attachment"] = att["id"]
+    ops.append({"op": "put", "coll": "problems", "id": ent["id"], "value": ent})
+    noted = False
+    # Editors reporting from the app: the device carries the note straight away (and optionally a new status).
+    # Reports through public pages / share links only create the problem entry, whoever is logged in.
+    if device and via == "app" and req.user is not None and role_at_least(req.role_for(pdir.name), "editor"):
+        stamp = now[:16].replace("T", " ")
+        line = f"[{stamp} {by}] Problem: {text}"
+        note = str(devs[device].get("note") or "").rstrip()
+        merge: Dict[str, Any] = {"note": (note + "\n" if note else "") + line}
+        status = str(body.get("device_status") or "").strip()
+        if status:
+            if status not in STATUSES:
+                raise ApiError(400, f"device_status must be one of {', '.join(STATUSES)}", "bad_enum")
+            merge["status"] = status
+        ops.append({"op": "merge", "coll": "devices", "id": device, "value": merge})
+        noted = True
+    res = _server_ops(req, pdir, ops, f"Problem reported: {text[:60]}", "problems")
+    return {"problem": ent, "noted": noted, "revision": res["revision"]}
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/problems", role="viewer", summary="Report a problem (JSON or multipart with a photo)", tags=["problems"], body="ProblemReport")
+def r_problems_create(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    return Response.json(_create_problem(req, pdir, "app"), 201)
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/problems", role="viewer", summary="Problem reports (?status=, ?device=, ?page=)", tags=["problems"])
+def r_problems(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    status = req.query.get("status") or ""
+    device = req.query.get("device") or ""
+    page = req.query.get("page") or ""
+    items = [r for r in doc.get("problems") or [] if isinstance(r, dict) and r.get("id")
+             and (not status or (r.get("status") or "open") == status)
+             and (not device or r.get("device") == device) and (not page or r.get("page") == page)]
+    items.sort(key=lambda r: str(r.get("created") or ""), reverse=True)
+    return Response.json({"problems": [_problem_view(doc, r, pdir.name) for r in items],
+                          "open": sum(1 for r in doc.get("problems") or [] if isinstance(r, dict) and (r.get("status") or "open") == "open"),
+                          "revision": _rev(doc)})
+
+
+@route("PATCH", r"/api/v2/projects/" + _NAME + r"/problems/(?P<pid>pr-[0-9a-f]{8})", role="editor", summary="Resolve / reopen a problem report", tags=["problems"], body="ProblemPatch")
+def r_problem_patch(req: Request) -> Response:
+    from .history import utc_now
+    from .schema import PROBLEM_STATUSES
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    cur = next((r for r in doc.get("problems") or [] if isinstance(r, dict) and r.get("id") == req.params["pid"]), None)
+    if cur is None:
+        raise ApiError(404, "problem report not found")
+    body = req.json()
+    status = str(body.get("status") or cur.get("status") or "open")
+    if status not in PROBLEM_STATUSES:
+        raise ApiError(400, f"status must be one of {', '.join(PROBLEM_STATUSES)}", "bad_enum")
+    value: Dict[str, Any] = {"status": status}
+    if "note" in body:
+        value["note"] = str(body.get("note") or "")[:_PROBLEM_TEXT_MAX] or None
+    if status == "resolved":
+        value["resolved"] = utc_now()
+        value["resolved_by"] = req.username or "local"
+    else:
+        value["resolved"] = None
+        value["resolved_by"] = None
+    res = _server_ops(req, pdir, [{"op": "merge", "coll": "problems", "id": cur["id"], "value": value}],
+                      f"Problem {status}: {str(cur.get('text') or '')[:50]}", "problems")
+    return Response.json({"problem": dict(cur, **{k: v for k, v in value.items() if v is not None}), "revision": res["revision"]})
+
+
 # ---- imports
 
 
@@ -2745,14 +2928,29 @@ def r_view_sop_page(req: Request) -> Response:
     from .render_html import render_sop_page
 
     pdir = _project_dir(req.params["name"])
-    doc, revision = _load(pdir)
+    doc, _ = _load(pdir)
     pub = _published_doc(doc)
     page = next((p for p in pub["pages"] if p["slug"] == req.params["slug"]), None)
     if page is None:
         raise ApiError(404, f"page '{req.params['slug']}' not found", "page_missing")
     sop_only = _share_scope(req) == "sop"
-    data = _page_payload(pdir.name, pub, page, revision, resolver=_public_page_resolver(pub, "../", sop_only))
-    return _viewer_html(render_sop_page(pub, data, project=pdir.name, base_url=_rel_base(req), sw=True, rel="../", sop_only=sop_only))
+    data = _page_payload(pdir.name, pub, page, _rev(doc), resolver=_public_page_resolver(pub, "../", sop_only))
+    report = {"action": "../problems", "email": str((doc.get("settings") or {}).get("problem_email") or "")}
+    return _viewer_html(render_sop_page(pub, data, project=pdir.name, base_url=_rel_base(req), sw=True, rel="../", sop_only=sop_only, report=report))
+
+
+@route("POST", r"/p/" + _NAME + "/problems", role="viewer", summary="Viewer: report a problem from a public SOP page", tags=["problems"], body="ProblemReport")
+def r_view_problem(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    return Response.json(_create_problem(req, pdir, "public"), 201)
+
+
+@route("POST", r"/s/(?P<token>sh-[A-Za-z0-9_-]{1,64})/problems", role="public", summary="Share link: report a problem", tags=["problems"], body="ProblemReport")
+def r_share_problem(req: Request) -> Response:
+    name, share = _share_lookup(req.params["token"])
+    if not name:
+        raise ApiError(404, "share link not found")
+    return Response.json(_create_problem(req, _project_dir(name), "share"), 201)
 
 
 @route("GET", r"/p/" + _NAME + r"/files/(?P<att>att-[0-9a-f]{12})/(?P<filename>[^/]+)", role="viewer", summary="Viewer: attachment (images embedded in SOP pages; mirrored by share links)", tags=["pages"], page="viewer")

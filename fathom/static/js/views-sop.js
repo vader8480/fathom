@@ -103,6 +103,15 @@ function readTasks(project, slug) {
 function writeTasks(project, slug, list) {
   try { if (list.length) sessionStorage.setItem(taskKey(project, slug), JSON.stringify(list)); else sessionStorage.removeItem(taskKey(project, slug)); } catch (e) { /* private mode */ }
 }
+// "Mark complete" for this session (ISO time or ''); the same key the public page uses.
+function doneKey(project, slug) { return 'fathom.sop.done.' + project + '.' + slug; }
+function readDone(project, slug) { try { return sessionStorage.getItem(doneKey(project, slug)) || ''; } catch (e) { return ''; } }
+function writeDone(project, slug, v) { try { if (v) sessionStorage.setItem(doneKey(project, slug), v); else sessionStorage.removeItem(doneKey(project, slug)); } catch (e) { /* private mode */ } }
+export function lastCompletion(p) {
+  const done = ((p && p.completions) || []).filter(function (c) { return c && c.at; });
+  if (!done.length) return null;
+  return done.slice().sort(function (a, b) { return String(a.at) < String(b.at) ? 1 : -1; })[0];
+}
 
 // Make the rendered checklist interactive; state lives in sessionStorage so a
 // reload during a procedure keeps the operator's place. Reusable by the public page.
@@ -174,8 +183,9 @@ export function mount(el, ctx) {
   el.appendChild(root);
   let token = 0;
   let destroyed = false;
-  const state = { parent: null, query: '', kind: '', slug: '', mode: 'tree' };
+  const state = { parent: null, query: '', kind: '', slug: '', mode: 'tree', archived: false };
   let editor = null;
+  const vocab = ctx.vocab || {};
 
   function narrow() { return window.innerWidth < 700; }
   function params() { return parseHash(location.hash).params; }
@@ -187,6 +197,17 @@ export function mount(el, ctx) {
   function openNew(extra) { go(Object.assign({ new: 1 }, extra || {})); }
   function err(e) { ctx.toast((e && e.message) || String(e), 'err'); }
   function user() { return (ctx.session && ctx.session.user && ctx.session.user.username) || ''; }
+  function isArchived(p) { return (p.status || 'published') === 'archived'; }
+  // Volunteers and viewers never see archived pages; editors find them under the "Archived" filter (or by searching).
+  function visible(p, q) {
+    const st = p.status || 'published';
+    if (st === 'draft') return canEdit;
+    if (st === 'archived') return canEdit && (state.archived || !!q);
+    return !state.archived;
+  }
+  function problemsOf(doc) { return (doc && doc.problems) || []; }
+  function openProblems(doc) { return problemsOf(doc).filter(function (r) { return (r.status || 'open') === 'open'; }).length; }
+  function openProblemsView() { go({ problems: 1 }); }
 
   // ---------------------------------------------------------- page tree
 
@@ -223,13 +244,26 @@ export function mount(el, ctx) {
     const search = h('input', { type: 'search', class: 'sop-search', placeholder: 'Search procedures', 'aria-label': 'Search procedures', value: state.query, autocomplete: 'off' });
     search.addEventListener('input', function () { state.query = search.value; renderList(); });
     const chips = h('div', { class: 'sop-chips', role: 'group', 'aria-label': 'Filter by kind' }, [['', 'All']].concat(KINDS).map(function (k) {
-      return h('button', { type: 'button', class: 'chip' + (state.kind === k[0] ? ' on' : ''), 'aria-pressed': state.kind === k[0] ? 'true' : 'false', onclick: function () { state.kind = k[0]; renderTree(); } }, k[1]);
+      return h('button', { type: 'button', class: 'chip' + (state.kind === k[0] && !state.archived ? ' on' : ''), 'aria-pressed': state.kind === k[0] && !state.archived ? 'true' : 'false', onclick: function () { state.kind = k[0]; state.archived = false; renderTree(); } }, k[1]);
     }));
+    const nArchived = pagesOf(doc).filter(isArchived).length;
+    if (canEdit && (nArchived || state.archived)) {
+      chips.appendChild(h('button', { type: 'button', class: 'chip sop-chip-archived' + (state.archived ? ' on' : ''), 'data-filter': 'archived', 'aria-pressed': state.archived ? 'true' : 'false', onclick: function () { state.archived = !state.archived; state.kind = ''; renderTree(); } }, 'Archived' + (nArchived ? ' (' + nArchived + ')' : '')));
+    }
+    const nOpen = openProblems(doc);
+    const headMenu = [];
+    headMenu.push({ label: 'Problems' + (nOpen ? ' (' + nOpen + ' open)' : ''), action: openProblemsView });
+    if (canEdit) {
+      headMenu.push({ sep: true });
+      headMenu.push({ label: 'Download offline bundle', action: function () { window.open(api.sopBundleUrl(project), '_blank', 'noopener'); } });
+    }
     const head = h('div', { class: 'sop-tree-head' }, [
       h('div', { class: 'sop-tree-title' }, [
         h('h2', null, 'Procedures'),
+        nOpen ? h('button', { type: 'button', class: 'sop-badge sop-badge-open sop-problems-badge', 'data-action': 'problems', title: nOpen + ' open problem report' + (nOpen > 1 ? 's' : ''), onclick: openProblemsView }, nOpen + ' open') : null,
         h('span', { class: 'grow' }),
         canEdit ? h('button', { type: 'button', class: 'primary', 'data-action': 'new', onclick: function () { openNew(state.parent ? { parent: (byId(doc, state.parent) || {}).slug } : {}); } }, 'New page') : null,
+        h('button', { type: 'button', class: 'sop-more', 'aria-label': 'More actions', 'aria-haspopup': 'menu', onclick: function (e) { simpleMenu(e.currentTarget, headMenu); } }, '\u22EF'),
       ]),
       search,
       chips,
@@ -241,19 +275,18 @@ export function mount(el, ctx) {
     function renderList() {
       listHost.innerHTML = '';
       const all = pagesOf(doc).filter(function (p) { return !state.kind || (p.kind || 'sop') === state.kind; })
-        .filter(function (p) { return canEdit || (p.status || 'published') !== 'draft'; })
-        .filter(function (p) { return (p.status || 'published') !== 'archived' || q; });
+        .filter(function (p) { return visible(p, q); });
       if (!all.length) {
         listHost.appendChild(h('div', { class: 'sop-empty' }, [
-          h('p', null, pagesOf(doc).length ? 'No pages match.' : 'No procedures yet.'),
+          h('p', null, state.archived ? 'No archived pages.' : (pagesOf(doc).length ? 'No pages match.' : 'No procedures yet.')),
           canEdit && !pagesOf(doc).length ? h('p', { class: 'muted' }, 'Write the first SOP for this system: power-up, shut-down, or a troubleshooting guide.') : null,
         ]));
         return;
       }
       const ul = h('ul', { class: 'sop-list', role: 'list' });
       const qq = state.query.trim().toLowerCase();
-      if (qq) {
-        const hits = all.filter(function (p) { return matches(p, qq); }).sort(orderKey);
+      if (qq || state.archived) {
+        const hits = all.filter(function (p) { return matches(p, qq) && (!state.archived || isArchived(p)); }).sort(orderKey);
         if (!hits.length) ul.appendChild(h('li', { class: 'sop-empty' }, 'No pages match "' + state.query.trim() + '"'));
         hits.forEach(function (p) { ul.appendChild(listItem(p, { flat: true })); });
         listHost.appendChild(ul);
@@ -321,16 +354,26 @@ export function mount(el, ctx) {
     const main = h('article', { class: 'sop-main sop-page', 'data-page': p.slug, 'aria-labelledby': 'sop-title' });
 
     const menuItems = [];
+    menuItems.push({ label: 'Report a problem', action: function () { reportSheet(p, data); } });
     menuItems.push({ label: 'Print', action: function () { window.print(); } });
     menuItems.push({ label: 'QR label', action: function () { qrDialog(p); } });
     menuItems.push({ label: 'Versions', action: function () { versionsDialog(p); } });
+    if (data.tasks) {
+      menuItems.push({ sep: true });
+      menuItems.push({ label: 'Mark complete', action: function () { markComplete(); } });
+      menuItems.push({ label: 'Reset checklist', action: function () { resetChecklist(); } });
+    }
     if (canEdit) {
       menuItems.push({ sep: true });
       menuItems.push({ label: 'New child page', action: function () { openNew({ parent: p.slug }); } });
       menuItems.push({ label: 'Duplicate', action: function () { openNew({ from: p.slug }); } });
+      menuItems.push({ label: 'Download offline bundle', action: function () { window.open(api.sopBundleUrl(project), '_blank', 'noopener'); } });
       menuItems.push({ sep: true });
-      menuItems.push({ label: (p.status || 'published') === 'archived' ? 'Delete page' : 'Archive / delete page', danger: true, action: function () { deletePage(p); } });
+      if (isArchived(p)) menuItems.push({ label: 'Restore page', action: function () { restorePage(p); } });
+      menuItems.push({ label: isArchived(p) ? 'Delete page' : 'Archive / delete page', danger: true, action: function () { deletePage(p); } });
     }
+    let resetChecklist = function () {};
+    let markComplete = function () {};
     const topbar = h('div', { class: 'sop-topbar' }, [
       h('button', { type: 'button', class: 'sop-back', 'aria-label': 'Back to procedures', onclick: function () {
         if (p.parent && narrow()) { state.parent = p.parent; }
@@ -353,6 +396,10 @@ export function mount(el, ctx) {
       p.summary ? h('p', { class: 'sop-summary' }, p.summary) : null,
     ]);
     main.appendChild(headEl);
+    if (isArchived(p)) {
+      main.appendChild(h('div', { class: 'sop-warn', role: 'status' }, ['This page is archived and hidden from volunteers and public links.',
+        canEdit ? h('button', { type: 'button', 'data-action': 'restore', onclick: function () { restorePage(p); } }, 'Restore') : null]));
+    }
     if (data.missing && data.missing.length && canEdit) {
       main.appendChild(h('div', { class: 'sop-warn', role: 'status' }, 'Broken links: ' + data.missing.join(', ')));
     }
@@ -386,19 +433,50 @@ export function mount(el, ctx) {
     const body = renderPageBody(data.html, { ref: refHandler, anchor: scrollToHeading, image: lightbox });
     main.appendChild(body);
     if (data.tasks) {
+      // Progress ("3 of 8 done"), "Reset checklist" and "Mark complete". Editors' completions are recorded on the
+      // page (who / when, last 20); for viewers the mark lives in sessionStorage like the tick state.
+      const note = h('p', { class: 'sop-complete-note', role: 'status' });
+      let doneAt = readDone(project, p.slug);
+      let completions = (p.completions || []).slice();
       const update = function (done, total) {
         progress.innerHTML = '';
         progress.appendChild(h('span', { class: 'sop-progress-text' }, done + ' of ' + total + ' done'));
         progress.appendChild(h('span', { class: 'sop-progress-bar', 'aria-hidden': 'true' }, h('i', { style: { width: Math.round(100 * done / Math.max(1, total)) + '%' } })));
-        progress.appendChild(h('button', { type: 'button', class: 'sop-progress-reset', hidden: !done, onclick: function () {
-          writeTasks(project, p.slug, []);
-          Array.prototype.forEach.call(body.querySelectorAll('input[data-task]'), function (b) { b.checked = false; const li = b.closest('li'); if (li) li.classList.remove('done'); });
-          update(0, total);
-        } }, 'Reset'));
+        progress.appendChild(h('button', { type: 'button', class: 'sop-progress-reset', hidden: !done && !doneAt, onclick: resetChecklist }, 'Reset checklist'));
+        progress.appendChild(h('button', { type: 'button', class: 'sop-progress-complete', 'data-action': 'complete', hidden: !!doneAt, onclick: markComplete }, 'Mark complete'));
+        note.hidden = !doneAt;
+        note.textContent = doneAt ? 'Marked complete at ' + new Date(doneAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + (canEdit ? ' by ' + (user() || 'you') + ' (recorded on the page).' : ' on this device.') : '';
       };
+      resetChecklist = function () {
+        writeTasks(project, p.slug, []);
+        writeDone(project, p.slug, '');
+        doneAt = '';
+        Array.prototype.forEach.call(body.querySelectorAll('input[data-task]'), function (b) { b.checked = false; const li = b.closest('li'); if (li) li.classList.remove('done'); });
+        update(0, data.tasks);
+      };
+      markComplete = function () {
+        const all = [];
+        Array.prototype.forEach.call(body.querySelectorAll('input[data-task]'), function (b) { b.checked = true; const li = b.closest('li'); if (li) li.classList.add('done'); all.push(Number(b.getAttribute('data-task'))); });
+        writeTasks(project, p.slug, all);
+        doneAt = new Date().toISOString();
+        writeDone(project, p.slug, doneAt);
+        update(all.length, data.tasks);
+        if (!canEdit) return;
+        api.completePage(project, p.slug).then(function (r) {
+          completions = r.completions || completions;
+          p.completions = completions;
+          paintMeta();
+          ctx.toast('Marked complete', 'ok');
+          return ctx.reload();
+        }, err);
+      };
+      progress.after(note);
       const st = applyTaskState(body, project, p.slug, update);
       update(st.done, st.total);
     }
+
+    // "Report a problem" is a first-class action on every procedure, not buried in a menu.
+    main.appendChild(h('div', { class: 'sop-report' }, h('button', { type: 'button', id: 'sop-report', class: 'sop-report-btn', 'data-action': 'report', onclick: function () { reportSheet(p, data); } }, '\u26A0 Report a problem')));
 
     if (data.children.length) {
       main.appendChild(h('section', { class: 'sop-related' }, [
@@ -420,12 +498,19 @@ export function mount(el, ctx) {
       data.next ? h('a', { class: 'sop-next', href: hashFor({ page: data.next.slug }) }, [h('small', null, 'Next \u203a'), h('span', null, data.next.title)]) : h('span'),
     ]);
     main.appendChild(nav);
-    const meta = [];
-    if (p.updated) meta.push('Updated ' + fmtDate(p.updated) + (p.updated_by ? ' by ' + p.updated_by : ''));
-    if (p.review_due) meta.push('Review due ' + fmtDate(p.review_due));
-    if (p.owner && p.owner !== p.updated_by) meta.push('Owner ' + p.owner);
-    meta.push('r' + data.revision);
-    main.appendChild(h('footer', { class: 'sop-meta' }, meta.join(' \u00b7 ')));
+    const metaEl = h('footer', { class: 'sop-meta' });
+    const paintMeta = function () {
+      const meta = [];
+      if (p.updated) meta.push('Updated ' + fmtDate(p.updated) + (p.updated_by ? ' by ' + p.updated_by : ''));
+      if (p.review_due) meta.push('Review due ' + fmtDate(p.review_due));
+      if (p.owner && p.owner !== p.updated_by) meta.push('Owner ' + p.owner);
+      const last = lastCompletion(p);
+      if (last) meta.push('Last completed ' + fmtDate(last.at) + (last.by ? ' by ' + last.by : ''));
+      meta.push('r' + data.revision);
+      metaEl.textContent = meta.join(' \u00b7 ');
+    };
+    paintMeta();
+    main.appendChild(metaEl);
 
     root.innerHTML = '';
     root.className = 'sop sop-view';
@@ -487,6 +572,131 @@ export function mount(el, ctx) {
       state.parent = p.parent || null;
       openTree();
     });
+  }
+
+  // Archived → published again (the editor can switch it to draft afterwards).
+  function restorePage(p) {
+    ctx.commit([{ op: 'merge', coll: 'pages', id: p.id, value: { status: 'published', updated: new Date().toISOString(), updated_by: user() } }], 'Restore SOP ' + p.title);
+    ctx.toast('Restored "' + p.title + '"', 'ok');
+    loadPage(p.slug);
+  }
+
+  // ---------------------------------------------------------- report a problem
+
+  // Phone-first bottom sheet. Editors' reports also land as a timestamped note on the device (and can set its
+  // status); everyone's reports show up as a badge in the inspector and in the Problems list.
+  function reportSheet(p, data) {
+    const devices = (data && data.links && data.links.devices) || [];
+    const sel = h('select', { name: 'device', 'aria-label': 'Device' }, [h('option', { value: '' }, devices.length ? 'Not a specific device' : 'No device picked')].concat(devices.map(function (d) {
+      return h('option', { value: d.id, selected: devices.length === 1 ? true : null }, d.name);
+    })));
+    const text = h('textarea', { name: 'text', rows: 3, required: true, maxlength: 2000, placeholder: 'e.g. No sound from the lectern mic; red light on channel 3', 'aria-label': 'What is wrong?' });
+    const photo = h('input', { type: 'file', name: 'photo', accept: 'image/*', capture: 'environment', 'aria-label': 'Photo' });
+    const preview = h('img', { class: 'sop-photo-preview', alt: '', hidden: true });
+    photo.addEventListener('change', function () {
+      const f = photo.files && photo.files[0];
+      if (!f || typeof URL === 'undefined' || !URL.createObjectURL) { preview.hidden = true; return; }
+      preview.src = URL.createObjectURL(f); preview.hidden = false;
+    });
+    const statuses = (vocab.statuses || ['installed', 'planned', 'spare', 'retired']);
+    const statusSel = canEdit ? h('select', { name: 'device_status', 'aria-label': 'Set device status' }, [h('option', { value: '' }, 'Leave the device status as it is')].concat(statuses.map(function (s) { return h('option', { value: s }, 'Set device status: ' + s); }))) : null;
+    const status = h('p', { class: 'sop-sheet-status', role: 'status', 'aria-live': 'polite' });
+    const email = (store.doc.settings && store.doc.settings.problem_email) || '';
+    const submit = h('button', { type: 'submit', class: 'primary' }, 'Send report');
+    const form = h('form', { class: 'sop-sheet-panel', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'sop-sheet-title', novalidate: true }, [
+      h('div', { class: 'sop-sheet-grip', 'aria-hidden': 'true' }),
+      h('h2', { id: 'sop-sheet-title' }, 'Report a problem'),
+      h('div', { class: 'sop-field' }, [h('span', null, 'Device'), sel]),
+      h('div', { class: 'sop-field' }, [h('span', null, 'What is wrong?'), text]),
+      statusSel ? h('div', { class: 'sop-field' }, [h('span', null, 'Device status'), statusSel]) : null,
+      h('div', { class: 'sop-field sop-photo' }, [h('span', null, ['Photo ', h('small', null, '(optional)')]), photo, preview]),
+      status,
+      h('div', { class: 'sop-sheet-actions' }, [h('button', { type: 'button', class: 'sop-sheet-cancel', onclick: function () { close(); } }, 'Cancel'), submit]),
+      email ? h('div', { class: 'sop-sheet-foot' }, h('a', { class: 'sop-sheet-mail', href: 'mailto:' + email, onclick: function (e) {
+        const dev = sel.selectedIndex > 0 ? sel.options[sel.selectedIndex].text : '';
+        e.currentTarget.href = 'mailto:' + encodeURIComponent(email) + '?subject=' + encodeURIComponent('Problem: ' + p.title) + '&body=' + encodeURIComponent('Procedure: ' + p.title + '\nLink: ' + location.href + (dev ? '\nDevice: ' + dev : '') + '\n\n' + text.value.trim());
+      } }, 'Email the AV team instead')) : null,
+    ]);
+    const sheet = h('div', { class: 'sop-sheet', id: 'sop-sheet' }, [h('div', { class: 'sop-sheet-backdrop', onclick: function () { close(); } }), form]);
+    const onKey = function (e) { if (e.key === 'Escape') close(); };
+    function close() { sheet.remove(); document.body.classList.remove('sop-sheet-open'); document.removeEventListener('keydown', onKey); }
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!text.value.trim()) { status.textContent = 'Describe the problem first.'; text.focus(); return; }
+      const fd = new FormData();
+      fd.append('text', text.value.trim());
+      fd.append('page', p.slug);
+      if (sel.value) fd.append('device', sel.value);
+      if (statusSel && statusSel.value) fd.append('device_status', statusSel.value);
+      if (photo.files && photo.files[0]) fd.append('photo', photo.files[0], photo.files[0].name || 'photo.jpg');
+      submit.disabled = true; status.textContent = 'Sending\u2026';
+      api.reportProblem(project, fd).then(function (r) {
+        close();
+        ctx.toast(r.noted ? 'Problem reported and noted on the device' : 'Problem reported', 'ok');
+        return ctx.reload();
+      }, function (er) {
+        submit.disabled = false;
+        status.textContent = 'Could not send (' + ((er && er.message) || er) + ').' + (email ? ' Use the email link instead.' : '');
+      });
+    });
+    document.addEventListener('keydown', onKey);
+    document.body.classList.add('sop-sheet-open');
+    document.body.appendChild(sheet);
+    setTimeout(function () { text.focus(); }, 60);
+  }
+
+  // ---------------------------------------------------------- problems list
+
+  function renderProblems() {
+    state.mode = 'problems';
+    editor = null;
+    const doc = store.doc;
+    const items = problemsOf(doc).slice().sort(function (a, b) {
+      const oa = (a.status || 'open') === 'open' ? 0 : 1, ob = (b.status || 'open') === 'open' ? 0 : 1;
+      if (oa !== ob) return oa - ob;
+      return String(b.created || '') < String(a.created || '') ? -1 : 1;
+    });
+    const devName = function (id) { const d = (doc.devices || []).filter(function (x) { return x.id === id; })[0]; return d ? deviceTitle(d) : id; };
+    const main = h('div', { class: 'sop-main sop-problems-view' }, [
+      h('div', { class: 'sop-topbar' }, [h('button', { type: 'button', class: 'sop-back', onclick: openTree }, '\u2039 Procedures')]),
+      h('header', { class: 'sop-head' }, [h('h1', null, 'Problems'), h('p', { class: 'sop-summary' }, openProblems(doc) + ' open \u00b7 ' + items.length + ' total. Reports from procedure pages, QR labels and share links.')]),
+    ]);
+    if (!items.length) main.appendChild(h('div', { class: 'sop-empty' }, 'No problems reported. Every procedure page has a "Report a problem" button.'));
+    const ul = h('ul', { class: 'sop-problems', role: 'list' });
+    items.forEach(function (r) {
+      const open = (r.status || 'open') === 'open';
+      const att = r.attachment ? (doc.attachments || []).filter(function (a) { return a.id === r.attachment; })[0] : null;
+      const page = r.page ? bySlug(doc, r.page) : null;
+      const meta = [
+        h('span', { class: 'sop-badge ' + (open ? 'sop-badge-open' : 'sop-badge-resolved') }, open ? 'Open' : 'Resolved'),
+        h('span', null, fmtDate(r.created) + (r.by ? ' \u00b7 ' + r.by : '') + (r.via && r.via !== 'app' ? ' \u00b7 via ' + (r.via === 'share' ? 'share link' : 'public page') : '')),
+        r.device ? h('button', { type: 'button', class: 'chip sop-chip-device', onclick: function () { refHandler('device', r.device); } }, devName(r.device)) : null,
+        page ? h('a', { class: 'chip', href: hashFor({ page: page.slug }) }, page.title || page.slug) : null,
+      ];
+      const li = h('li', { class: 'sop-problem' + (open ? '' : ' resolved'), 'data-problem': r.id }, [
+        h('div', { class: 'sop-problem-text' }, r.text),
+        h('div', { class: 'sop-problem-meta' }, meta),
+        att ? h('img', { class: 'sop-problem-photo', src: api.fileUrl(project, att), alt: 'Photo', onclick: function (e) { lightbox(e.currentTarget); } }) : null,
+        !open && r.resolved ? h('div', { class: 'muted small' }, 'Resolved ' + fmtDate(r.resolved) + (r.resolved_by ? ' by ' + r.resolved_by : '') + (r.note ? ' \u2014 ' + r.note : '')) : null,
+        canEdit ? h('div', { class: 'sop-problem-actions' }, [
+          h('button', { type: 'button', 'data-action': open ? 'resolve' : 'reopen', onclick: function () {
+            api.patchProblem(project, r.id, { status: open ? 'resolved' : 'open' }).then(function () { return ctx.reload(); }).then(function () { renderProblems(); }, err);
+          } }, open ? 'Resolve' : 'Reopen'),
+        ]) : null,
+      ]);
+      ul.appendChild(li);
+    });
+    main.appendChild(ul);
+    root.innerHTML = '';
+    root.className = 'sop sop-view';
+    if (!narrow()) {
+      renderTree();
+      const side = root.querySelector('.sop-side');
+      root.innerHTML = '';
+      root.appendChild(side);
+      state.mode = 'problems';
+    }
+    root.appendChild(main);
   }
 
   function versionsDialog(p) {
@@ -943,6 +1153,7 @@ export function mount(el, ctx) {
       return;
     }
     if (slug) { loadPage(slug); return; }
+    if (q.get('problems')) { renderProblems(); return; }
     renderTree();
   }
 
@@ -958,8 +1169,10 @@ export function mount(el, ctx) {
   }
   function onDoc(e) {
     const d = e.detail || {};
+    const touched = function (prefix) { return (d.touched || []).some(function (t) { return t.indexOf(prefix) === 0; }); };
+    if (state.mode === 'problems') { if (touched('problems/') || d.source === 'load') renderProblems(); return; }
     if (state.mode !== 'tree') return;
-    if ((d.touched || []).some(function (t) { return t.indexOf('pages/') === 0; }) || d.source === 'load') renderTree();
+    if (touched('pages/') || touched('problems/') || d.source === 'load') renderTree();
   }
   let resizeTimer = null;
   let wasNarrow = narrow();

@@ -217,6 +217,17 @@ a{color:var(--accent)}
 .ins-procs a:hover .ins-proc-title{text-decoration:underline}
 .ins-proc-title{font-weight:600;font-size:14px}
 .ins-proc-sub{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge-problem{display:inline-flex;align-items:center;padding:0 8px;min-height:22px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid rgba(248,113,113,.6);background:rgba(248,113,113,.16);color:#f87171;cursor:pointer;font-family:inherit}
+.ins-problems{list-style:none;margin:0;padding:0}
+.ins-problems li{display:flex;flex-direction:column;gap:4px;padding:8px 0}
+.ins-problems li+li{border-top:1px solid var(--border)}
+.ins-problems li.resolved .ins-problem-text{color:var(--muted)}
+.ins-problem-text{font-size:14px;line-height:1.4;overflow-wrap:anywhere}
+.ins-problem-sub{font-size:12px;color:var(--muted)}
+.ins-problem-state{font-weight:600;color:#f87171}
+.ins-problems li.resolved .ins-problem-state{color:#6fe2b4}
+.ins-problem-photo{max-width:140px;max-height:100px;border-radius:6px;display:block}
+.ins-problems button{align-self:flex-start}
 .field{display:grid;grid-template-columns:112px minmax(0,1fr);gap:6px 10px;align-items:center;margin:5px 0}
 .field>label{color:var(--muted);font-size:12px}
 .field input,.field select,.field textarea{width:100%;min-width:0}

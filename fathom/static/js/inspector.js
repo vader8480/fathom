@@ -191,9 +191,16 @@ export function mountInspector(el, ctx) {
     const kinds = vocab.kinds || {};
     const proj = encodeURIComponent(ctx.project || '');
     const devUrl = (ctx.appRoot || '') + 'p/' + proj + '/d/' + encodeURIComponent(d.id);
+    const problems = problemsFor(d);
+    const nOpen = problems.filter(function (r) { return (r.status || 'open') === 'open'; }).length;
     root.appendChild(head(((vocab.disciplines && vocab.disciplines[disc] && vocab.disciplines[disc].label) || disc) + ' \u00b7 ' + ((kinds[d.kind] && kinds[d.kind].label) || d.kind || 'device'), dcol, deviceTitle(d),
       [((d.manufacturer || '') + ' ' + (d.model || '')).trim() || d.sub || '', d.status && d.status !== 'installed' ? ' \u00b7 ' + d.status : ''].join(''),
-      d.status === 'planned' ? h('span', { class: 'badge-planned' }, 'planned') : null));
+      h('span', { class: 'row' }, [
+        nOpen ? h('button', { type: 'button', class: 'badge-problem', 'data-badge': 'problems', title: nOpen + ' open problem report' + (nOpen > 1 ? 's' : ''), onclick: function () {
+          const sec = root.querySelector('[data-section="problems"]'); if (sec) { sec.open = true; sec.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+        } }, '\u26A0 ' + nOpen + ' open') : null,
+        d.status === 'planned' ? h('span', { class: 'badge-planned' }, 'planned') : null,
+      ])));
     const actions = h('div', { class: 'ins-actions' }, [
       h('button', { type: 'button', class: 'small', onclick: function () { ctx.navigate('patch', { sel: 'device:' + d.id }); } }, 'Show in patch view'),
       h('a', { class: 'chip', href: devUrl, target: '_blank', rel: 'noopener' }, 'Device page'),
@@ -270,15 +277,54 @@ export function mountInspector(el, ctx) {
     root.appendChild(section('files', 'Photos & documents', attachmentsBlock(d)));
     const procs = proceduresFor(d);
     root.appendChild(section('procedures', 'Procedures' + (procs.length ? ' (' + procs.length + ')' : ''), proceduresBlock(d, procs), procs.length > 0));
+    root.appendChild(section('problems', 'Problems' + (nOpen ? ' (' + nOpen + ' open)' : problems.length ? ' (' + problems.length + ')' : ''), problemsBlock(d, problems), nOpen > 0));
     root.appendChild(section('qr', 'QR label', qrBlock(d, devUrl)));
     root.appendChild(section('notes', 'Notes', [bound('devices', id, ['note'], { multiline: true, label: 'Edit note' })], !!d.note));
   }
 
+  // Problem reports filed against this device (from SOP pages, QR labels and share links), open first.
+  function problemsFor(d) {
+    return (store.doc.problems || []).filter(function (r) { return r.device === d.id; }).sort(function (a, b) {
+      const oa = (a.status || 'open') === 'open' ? 0 : 1, ob = (b.status || 'open') === 'open' ? 0 : 1;
+      if (oa !== ob) return oa - ob;
+      return String(b.created || '').localeCompare(String(a.created || ''));
+    });
+  }
+
+  function problemsBlock(d, problems) {
+    const who = (ctx.session && ctx.session.user && ctx.session.user.username) || 'local';
+    const out = [];
+    if (!problems.length) out.push(h('div', { class: 'muted', style: { fontSize: '12px' } }, 'No problems reported for this device.'));
+    else {
+      out.push(h('ul', { class: 'ins-problems' }, problems.map(function (r) {
+        const open = (r.status || 'open') === 'open';
+        const att = r.attachment ? (store.doc.attachments || []).filter(function (a) { return a.id === r.attachment; })[0] : null;
+        const when = r.created ? new Date(r.created).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
+        return h('li', { class: open ? 'open' : 'resolved', 'data-problem': r.id }, [
+          h('div', { class: 'ins-problem-text' }, r.text),
+          h('div', { class: 'ins-problem-sub' }, [
+            h('span', { class: 'ins-problem-state' }, open ? 'Open' : 'Resolved'),
+            ' \u00b7 ' + when + (r.by ? ' \u00b7 ' + r.by : '') + (r.via && r.via !== 'app' ? ' \u00b7 via ' + (r.via === 'share' ? 'share link' : 'public page') : ''),
+          ]),
+          att ? h('a', { href: ctx.api.fileUrl(ctx.project, att), target: '_blank', rel: 'noopener' }, h('img', { class: 'ins-problem-photo', src: ctx.api.fileUrl(ctx.project, att), alt: 'Photo' })) : null,
+          ro() ? null : h('button', { type: 'button', class: 'small', 'data-action': open ? 'resolve' : 'reopen', onclick: function () {
+            const now = new Date().toISOString();
+            commit([{ op: 'merge', coll: 'problems', id: r.id, value: open ? { status: 'resolved', resolved: now, resolved_by: who } : { status: 'open', resolved: null, resolved_by: null } }], (open ? 'Resolve' : 'Reopen') + ' problem');
+          } }, open ? 'Resolve' : 'Reopen'),
+        ]);
+      })));
+    }
+    const sopHash = '#/' + encodeURIComponent(ctx.project) + '/' + encodeURIComponent(store.room || '*').replace(/%2A/g, '*') + '/sop?problems=1';
+    out.push(h('div', { class: 'row', style: { marginTop: '6px' } }, h('a', { class: 'chip', href: sopHash }, 'All problems')));
+    return out;
+  }
+
   // SOP pages that apply to this device: listed in page.devices or linked as [[device:id]] in the body.
+  // Archived pages are hidden from viewers; drafts too.
   function proceduresFor(d) {
     const re = /\[\[device:([^\]|]+)(?:\|[^\]]*)?\]\]/g;
     return (store.doc.pages || []).filter(function (p) {
-      if (ro() && (p.status || 'published') === 'draft') return false;
+      if (ro() && (p.status || 'published') !== 'published') return false;
       if ((p.devices || []).indexOf(d.id) >= 0) return true;
       let m;
       re.lastIndex = 0;
@@ -299,7 +345,7 @@ export function mountInspector(el, ctx) {
       out.push(h('ul', { class: 'ins-procs' }, procs.map(function (p) {
         return h('li', null, h('a', { href: sopHash({ page: p.slug }), 'data-page': p.slug }, [
           h('span', { class: 'ins-proc-title' }, p.title || p.slug),
-          h('span', { class: 'ins-proc-sub' }, (KIND[p.kind || 'sop'] || p.kind) + ((p.status || 'published') === 'draft' ? ' \u00b7 draft' : '') + (p.summary ? ' \u00b7 ' + p.summary : '')),
+          h('span', { class: 'ins-proc-sub' }, (KIND[p.kind || 'sop'] || p.kind) + ((p.status || 'published') !== 'published' ? ' \u00b7 ' + p.status : '') + (p.summary ? ' \u00b7 ' + p.summary : '')),
         ]));
       })));
     }
