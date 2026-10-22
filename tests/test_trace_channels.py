@@ -285,6 +285,26 @@ class TraceApi(unittest.TestCase):
         st, _, b = call(self.app, "GET", "/api/v2/projects/campus/trace?from=foh-cl5:CH%20999")
         self.assertEqual(st, 400)
 
+    def test_node_refs_round_trip_and_device_names(self):
+        """The API accepts the node refs it returns (``dev:@ch``, ``dev:@rack.A``, ``dev:~text``) and names every hop's device (§5.8)."""
+        st, _, b = call(self.app, "GET", "/api/v2/projects/campus/trace?from=foh-cl5:%40in-17&direction=up")
+        self.assertEqual(st, 200, b[:300])
+        j = jbody(b)
+        self.assertEqual(j["from"], "foh-cl5:@in-17")
+        for p in j["paths"]:
+            for h in p["hops"]:
+                self.assertTrue(h.get("device_name"), h)
+        hop = next(h for p in j["paths"] for h in p["hops"] if h["device"] == "foh-cl5")
+        self.assertEqual(hop["device_name"], "FOH CL5")
+        st, _, b = call(self.app, "GET", "/api/v2/projects/campus/trace?from=foh-cl5:%40prfx-6.A")
+        self.assertEqual(st, 200, b[:300])
+        self.assertEqual(jbody(b)["from"], "foh-cl5:@prfx-6.A")
+        st, _, b = call(self.app, "GET", "/api/v2/projects/campus/trace?from=foh-cl5:%40nope-1")
+        self.assertEqual(st, 400, "unknown channel ids are rejected")
+        st, _, b = call(self.app, "GET", "/api/v2/projects/campus/trace?from=foh-cl5:~REC%201&direction=up")
+        self.assertEqual(st, 200, b[:300])
+        self.assertEqual(jbody(b)["from"], "foh-cl5:~REC 1")
+
 
 if __name__ == "__main__":
     unittest.main()

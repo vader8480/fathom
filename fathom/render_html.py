@@ -627,6 +627,15 @@ table.t td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.05);vertica
 .pt-t td.pn{width:70px;color:var(--muted)}
 .pt-t .none{color:#4a5368}
 .pt-t .ovl{font-style:italic;color:var(--muted)}
+table.t .none{color:#4a5368}
+.console-group{border:1px solid var(--border);border-radius:10px;margin:0 0 10px;padding:0 12px}
+.console-group>summary{cursor:pointer;padding:10px 0;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;font-weight:600;list-style:none}
+.console-group>summary::-webkit-details-marker{display:none}
+.console-group>summary::before{content:"\\25B8";margin-right:6px;font-size:10px}
+.console-group[open]>summary::before{content:"\\25BE"}
+.console-group .sub{letter-spacing:0;text-transform:none;font-weight:400}
+.trace-link{border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--accent);font:inherit;font-size:12px;padding:2px 9px;min-height:28px;cursor:pointer;white-space:nowrap}
+.trace-link:hover{border-color:var(--accent)}
 .live{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:999px;padding:2px 10px;font-size:11.5px}
 .live .dot{color:var(--ok)}
 @media (hover:none),(pointer:coarse){.nav a,.nav button,.nav select{min-height:44px;min-width:44px}.pt-t td{padding:10px 8px}summary{min-height:44px;display:flex;align-items:center}button,select,a.btn{min-height:44px;min-width:44px}}
@@ -844,7 +853,91 @@ def render_room_index(doc: Dict[str, Any], *, project: str, base_url: str = "", 
     return _page(f"Rooms · {meta.get('org') or project}", "".join(out), base_url=base_url, sw=sw)
 
 
-def _port_rows_for_device(doc: Dict[str, Any], dev: Dict[str, Any], L: _Links, overlay: Optional[Dict[str, Any]]) -> str:
+def _trace_btn(ref: str, title: str, sub: str = "", direction: str = "down", text: str = "Trace") -> str:
+    return (f'<button type="button" class="trace-link no-print" data-trace="{esc(ref)}" data-trace-title="{esc(title)}" data-trace-sub="{esc(sub)}" '
+            f'data-trace-dir="{esc(direction)}" aria-label="Trace signal path of {esc(title)}">{esc(text)}</button>')
+
+
+def _trace_bootstrap(base_url: str, project: str) -> str:
+    """Trace drawer (static/js/trace-ui.js) for viewer pages served by the app; builds have no API and get no buttons."""
+    return (f'<link rel="stylesheet" href="{esc(base_url)}static/css/trace.css">'
+            f'<script type="module">import {{ bindTraceButtons }} from "{esc(base_url)}static/js/trace-ui.js";'
+            f'bindTraceButtons(document, {{ base: {json.dumps(base_url)}, project: {json.dumps(project)} }});</script>')
+
+
+def _console_section_for_device(doc: Dict[str, Any], dev: Dict[str, Any], overlay: Optional[Dict[str, Any]], *, traceable: bool) -> str:
+    """Console channels, buses, DCAs and racks of a mixer (§4.3.17) as per-group tables; empty string for other devices."""
+    try:
+        from . import console as C
+    except Exception:  # pragma: no cover
+        return ""
+    eff = C.effective_channels(doc, overlay, dev["id"])
+    if not eff["channels"]:
+        return ""
+    chans = C.channel_map(eff["channels"])
+    ports = {str(p.get("id")): p for p in dev.get("ports") or [] if isinstance(p, dict) and p.get("id")}
+    labels = ((overlay or {}).get("channel_labels") or {}).get(dev["id"]) or {}
+
+    def ep_text(ep: Dict[str, Any], direction: str) -> str:
+        base = C.endpoint_text(ep, chans, ports)
+        if isinstance(ep, dict) and ep.get("port") and ep.get("ch"):
+            nm = ((labels.get(str(ep["port"])) or {}).get(direction) or {}).get(str(ep["ch"]))
+            if nm:
+                base += f" “{nm}”"
+        return base
+
+    feeds: Dict[str, List[str]] = {}
+    dests: Dict[str, List[str]] = {}
+    groups: Dict[str, List[str]] = {}
+    members: Dict[str, List[str]] = {}
+    for ln in eff["links"]:
+        f, t, kind = ln.get("from") or {}, ln.get("to") or {}, str(ln.get("kind") or "")
+        if kind in ("input_patch", "insert_return", "send", "output_patch", "direct_out", "insert_send"):
+            if t.get("channel"):
+                feeds.setdefault(str(t["channel"]), []).append(ep_text(f, "in") if not f.get("channel") else C.endpoint_text(f, chans, ports))
+            if f.get("channel"):
+                dests.setdefault(str(f["channel"]), []).append(ep_text(t, "out") if not t.get("channel") else C.endpoint_text(t, chans, ports))
+        elif kind in ("dca", "mute") and f.get("channel") and t.get("channel"):
+            groups.setdefault(str(f["channel"]), []).append(C.channel_title(chans.get(str(t["channel"])) or {"id": t["channel"], "kind": kind}))
+            members.setdefault(str(t["channel"]), []).append(C.channel_label(chans.get(str(f["channel"])) or {"id": f["channel"], "kind": "input"}))
+
+    GROUPS = (("Inputs", ("input", "stereo_input")), ("Buses", ("mix", "aux", "group", "matrix", "stereo", "mono", "monitor", "cue", "talkback", "oscillator")),
+              ("DCAs & mute groups", ("dca", "mute_group")), ("Racks", ("rack",)))
+    out: List[str] = []
+    src = "imported, not applied yet" if eff["source"] == "overlay" else ("device · newer import pending" if eff.get("pending") else "device")
+    s = C.summary(eff["channels"], eff["links"])
+    out.append(f'<h2>Console channels</h2><div class="sub">{s["channels"]} channels · {s["links"]} patches · {s["sends"]} sends · {s["dca_members"]} DCA members · source: {esc(src)}</div>')
+    if not s["sends"]:
+        out.append('<p class="sub">No sends are recorded (a console export carries no send levels), so traces stop at the input channel until sends are entered.</p>')
+    for title, kinds in GROUPS:
+        rows = [c for c in eff["channels"] if c.get("kind") in kinds]
+        if not rows:
+            continue
+        is_group = kinds[0] == "dca"
+        trs = []
+        for c in rows:
+            cid = str(c["id"])
+            left = ", ".join(feeds.get(cid) or []) if not is_group else ", ".join(members.get(cid) or [])
+            right = ", ".join(dests.get(cid) or []) if not is_group else ""
+            grp = ", ".join(groups.get(cid) or [])
+            tr = (f'<tr><td><b>{esc(C.channel_label(c))}</b></td><td>{esc(c.get("name") or "")}</td>'
+                  f'<td>{esc(left) or "<span class=none>—</span>"}</td>')
+            if not is_group:
+                tr += f'<td>{esc(right) or "<span class=none>—</span>"}</td><td class="sub">{esc(grp)}</td>'
+            if traceable:
+                ref = f"{dev['id']}:@{cid}"
+                tr += '<td class="no-print">' + _trace_btn(ref, C.channel_title(c), str(dev.get("name") or dev["id"]), "up" if kinds[0] in ("input", "stereo_input") else "down") + "</td>"
+            trs.append(tr + "</tr>")
+        head = '<th scope="col">Channel</th><th scope="col">Name</th>'
+        head += '<th scope="col">Members</th>' if is_group else '<th scope="col">Fed by</th><th scope="col">Goes to</th><th scope="col">DCA / mute</th>'
+        if traceable:
+            head += '<th scope="col" class="no-print"></th>'
+        out.append(f'<details class="console-group" open><summary>{esc(title)} <span class="sub">· {len(rows)}</span></summary>'
+                   f'<div class="scroll"><table class="t"><thead><tr>{head}</tr></thead><tbody>{"".join(trs)}</tbody></table></div></details>')
+    return "".join(out)
+
+
+def _port_rows_for_device(doc: Dict[str, Any], dev: Dict[str, Any], L: _Links, overlay: Optional[Dict[str, Any]], *, traceable: bool = False) -> str:
     devs = {d["id"]: d for d in _devices(doc)}
     cables = [c for c in doc.get("cables") or [] if isinstance(c, dict) and not c.get("auto")]
     labels = ((overlay or {}).get("port_labels") or {}).get(dev["id"]) or {}
@@ -876,27 +969,33 @@ def _port_rows_for_device(doc: Dict[str, Any], dev: Dict[str, Any], L: _Links, o
         label = p.get("label") or ""
         lab_html = esc(label) if label else (f'<span class="ovl" title="from import">{esc(labels[p["id"]])}</span>' if p.get("id") in labels else '<span class="none">—</span>')
         arrow = {"in": "←", "out": "→"}.get(str(p.get("dir")), "↔")
+        tcell = ""
+        if traceable:
+            ptitle = f"{dev.get('name') or dev['id']} · {p.get('label') or p.get('name') or p['id']}"
+            psub = f"{p.get('channels')} channels" if p.get("channels") else ""
+            tcell = '<td class="no-print">' + _trace_btn(f"{dev['id']}:{p['id']}", ptitle, psub, "up" if p.get("dir") == "in" else "down") + "</td>"
         if not mine_cables:
-            rows.append(f'<tr><td>{_medium_dot(p.get("medium"))}{esc(p.get("name") or p.get("id"))}</td><td>{lab_html}</td><td class="sub">{arrow}</td><td class="none">not patched</td><td></td><td></td></tr>')
+            rows.append(f'<tr><td>{_medium_dot(p.get("medium"))}{esc(p.get("name") or p.get("id"))}</td><td>{lab_html}</td><td class="sub">{arrow}</td><td class="none">not patched</td><td></td><td></td>{tcell}</tr>')
         for c, mine in mine_cables:
             link, pname = peer_html(c, mine)
             rows.append(
                 f'<tr><td>{_medium_dot(p.get("medium"))}{esc(p.get("name") or p.get("id"))}</td><td>{lab_html}</td><td class="sub">{"→" if mine == "from" else "←"}</td>'
-                f'<td>{link}</td><td>{pname}</td><td class="mono">{esc(c.get("tag") or "")}</td></tr>'
+                f'<td>{link}</td><td>{pname}</td><td class="mono">{esc(c.get("tag") or "")}</td>{tcell}</tr>'
             )
         if p.get("note"):
-            rows.append(f'<tr><td></td><td colspan="5" class="sub">{esc(p["note"])}</td></tr>')
+            rows.append(f'<tr><td></td><td colspan="{6 if traceable else 5}" class="sub">{esc(p["note"])}</td></tr>')
     for c in cables:
         f, t = c.get("from") or {}, c.get("to") or {}
         for end, other_end in (("from", "to"), ("to", "from")):
             e = c.get(end) or {}
             if e.get("device") == dev["id"] and not e.get("port"):
                 link, pname = peer_html(c, end)
-                rows.append(f'<tr><td>{_medium_dot(c.get("medium"))}<span class="sub">device</span></td><td></td><td class="sub">{"→" if end == "from" else "←"}</td><td>{link}</td><td>{pname}</td><td class="mono">{esc(c.get("tag") or "")}</td></tr>')
+                rows.append(f'<tr><td>{_medium_dot(c.get("medium"))}<span class="sub">device</span></td><td></td><td class="sub">{"→" if end == "from" else "←"}</td><td>{link}</td><td>{pname}</td><td class="mono">{esc(c.get("tag") or "")}</td>{"<td></td>" if traceable else ""}</tr>')
     if not rows:
         return '<p class="sub">No ports.</p>'
     return ('<div class="scroll"><table class="t"><thead><tr><th scope="col">Port</th><th scope="col">Label</th><th scope="col"></th>'
-            '<th scope="col">Connected to</th><th scope="col">Peer port</th><th scope="col">Cable</th></tr></thead><tbody>' + "".join(rows) + "</tbody></table></div>")
+            '<th scope="col">Connected to</th><th scope="col">Peer port</th><th scope="col">Cable</th>' + ('<th scope="col" class="no-print"></th>' if traceable else "")
+            + '</tr></thead><tbody>' + "".join(rows) + "</tbody></table></div>")
 
 
 def render_device_page(doc: Dict[str, Any], device_id: str, *, project: str, overlay: Optional[Dict[str, Any]] = None, base_url: str = "", qr_svg: str = "", sw: bool = False, link_style: str = "viewer") -> str:
@@ -918,6 +1017,7 @@ def render_device_page(doc: Dict[str, Any], device_id: str, *, project: str, ove
     out.append(f'<a href="{esc(L.rooms())}">All rooms</a>')
     if link_style != "build":
         out.append(f'<a href="{esc(_editor_link(base_url, project, str((room or {}).get("id") or ""), "patch", "device:" + str(dev["id"])))}">Open in editor</a>')
+        out.append(f'<button type="button" data-trace="{esc(dev["id"])}" data-trace-title="{esc(_title(dev))}" data-trace-sub="all ports">Trace path</button>')
     out.append("</nav>")
     # identity
     kv: List[Tuple[str, str]] = [("Kind", esc((kinds.get(str(dev.get("kind") or "")) or {}).get("label") or dev.get("kind") or ""))]
@@ -965,7 +1065,11 @@ def render_device_page(doc: Dict[str, Any], device_id: str, *, project: str, ove
         )
         out.append('<h2>Network</h2><div class="scroll"><table class="t"><thead><tr><th scope="col">Interface</th><th scope="col">Role</th><th scope="col">IP</th><th scope="col">VLAN</th>'
                    f'<th scope="col">Network</th><th scope="col">MAC</th><th scope="col">Hostname</th><th scope="col">Source</th></tr></thead><tbody>{rows}</tbody></table></div>')
-    out.append("<h2>Ports & patching</h2>" + _port_rows_for_device(doc, dev, L, overlay))
+    traceable = link_style != "build"
+    out.append("<h2>Ports & patching</h2>" + _port_rows_for_device(doc, dev, L, overlay, traceable=traceable))
+    out.append(_console_section_for_device(doc, dev, overlay, traceable=traceable))
+    if traceable:
+        out.append(_trace_bootstrap(base_url, project))
     atts = [a for a in doc.get("attachments") or [] if isinstance(a, dict) and a.get("device") == dev["id"]]
     if atts and link_style != "build":
         items = []

@@ -228,6 +228,32 @@ a{color:var(--accent)}
 .ins-problems li.resolved .ins-problem-state{color:#6fe2b4}
 .ins-problem-photo{max-width:140px;max-height:100px;border-radius:6px;display:block}
 .ins-problems button{align-self:flex-start}
+/* console channels (§6.8.6) */
+.ins-console-note{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted);padding:6px 0 8px}
+.ins-console-note.pending{color:var(--warn)}
+.ins-seg{display:flex;border:1px solid var(--border);border-radius:9px;overflow:hidden;margin:2px 0 8px}
+.ins-seg-btn{flex:1;border:0;border-radius:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;padding:0 6px;min-height:32px;cursor:pointer;white-space:nowrap}
+.ins-seg-btn+.ins-seg-btn{border-left:1px solid var(--border)}
+.ins-seg-btn.on{color:var(--text);background:rgba(142,162,255,.16)}
+.ins-seg-btn:disabled{opacity:.4;cursor:default}
+.ins-console-search{width:100%;margin-bottom:6px}
+.ins-chans{list-style:none;margin:0;padding:0;max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:8px}
+.ins-chans li+li{border-top:1px solid rgba(255,255,255,.05)}
+.ins-chan{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;border:0;border-radius:0;padding:6px 8px;min-height:40px;color:var(--text);font:inherit;cursor:pointer}
+.ins-chan:hover,.ins-chan:focus-visible{background:rgba(142,162,255,.12);outline:none}
+.ins-chan-dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+.ins-chan-text{display:flex;flex-direction:column;min-width:0;flex:1}
+.ins-chan-title{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ins-chan-sub{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ins-chipgrid{display:flex;flex-wrap:wrap;gap:5px}
+.ins-chipgrid .chip{cursor:pointer;font:inherit;font-size:12px}
+.ins-chipgrid .chip:disabled{cursor:default;opacity:.7}
+.ins-chipgrid .chip.on{color:var(--text);border-color:#6fe2b4;background:rgba(111,226,180,.16)}
+.ins-link{margin:4px 0;font-size:12.5px}
+.ins-chan-link{background:transparent;border:0;color:var(--text);font:inherit;text-align:left;padding:4px 0;cursor:pointer;min-height:28px}
+.ins-chan-link:hover{text-decoration:underline}
+.ins-ep select,.ins-ep input{min-width:0}
+@media (pointer:coarse){.ins-chan{min-height:48px}.ins-seg-btn{min-height:40px}.ins-chipgrid .chip{min-height:36px;padding:4px 12px}}
 .field{display:grid;grid-template-columns:112px minmax(0,1fr);gap:6px 10px;align-items:center;margin:5px 0}
 .field>label{color:var(--muted);font-size:12px}
 .field input,.field select,.field textarea{width:100%;min-width:0}

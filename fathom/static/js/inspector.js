@@ -8,8 +8,14 @@ import {
   normalizeMac,
 } from './model-core.js';
 import { duplicateHints, openMergeDialog } from './merge-ui.js';
+import {
+  GROUPS, BUS_KINDS, effectiveChannels, groupChannels, channelMap, channelIndex, channelLabel, channelTitle, channelSummary, filterChannels,
+  endpointText as linkEndpointText, routePeer, channelRef, setInputPatch, toggleSend, toggleMembership, addOutput, removeLink, updateChannel, nextChannel,
+} from './console-core.js';
+import { openTraceDrawer } from './trace-ui.js';
 
 const DEBOUNCE = 400;
+const CHANNEL_COLORS = ['Off', 'Blue', 'Orange', 'Yellow', 'Purple', 'Cyan', 'Magenta', 'Red', 'Green', 'Pink', 'White'];
 let uid = 0;
 
 function h(tag, attrs, children) {
@@ -62,7 +68,10 @@ export function mountInspector(el, ctx) {
   const pendingTimers = {};
   const root = h('div', { class: 'ins' });
   el.appendChild(root);
-  let openSections = { identity: true, ports: true, endpoints: true, fields: true };
+  let openSections = { identity: true, ports: true, endpoints: true, fields: true, console: true };
+  let consoleTab = 'inputs';
+  let consoleQuery = '';
+  let traceDrawer = null;
 
   function ro() { return store.readOnly; }
   function commit(ops, label) {
@@ -204,6 +213,7 @@ export function mountInspector(el, ctx) {
       ])));
     const actions = h('div', { class: 'ins-actions' }, [
       h('button', { type: 'button', class: 'small', onclick: function () { ctx.navigate('patch', { sel: 'device:' + d.id }); } }, 'Show in patch view'),
+      ctx.api ? h('button', { type: 'button', class: 'small', 'data-action': 'trace', onclick: function () { openTrace(d.id, deviceTitle(d), 'all ports', d); } }, 'Trace path') : null,
       h('a', { class: 'chip', href: devUrl, target: '_blank', rel: 'noopener' }, 'Device page'),
       ro() ? null : h('button', { type: 'button', class: 'small', onclick: function () {
         const r = duplicateDeviceOps(store.doc, d.id);
@@ -259,6 +269,10 @@ export function mountInspector(el, ctx) {
     ]));
 
     root.appendChild(section('ports', 'Ports (' + devicePorts(d).length + ')', portsEditor(d), true));
+    const eff = effectiveChannels(d, store.overlay);
+    if (eff.source !== 'none') {
+      root.appendChild(section('console', 'Console channels (' + eff.channels.length + ')' + (eff.source === 'overlay' ? ' \u00b7 imported' : ''), consoleSection(d, eff), true));
+    }
     root.appendChild(section('rack', 'Rack', rackFields(d)));
     root.appendChild(section('inventory', 'Inventory', [
       fieldRow('Serial', bound('devices', id, ['inventory', 'serial'])),
@@ -680,6 +694,328 @@ export function mountInspector(el, ctx) {
     return [img, hint, h('div', { class: 'row', style: { marginTop: '6px' } }, [h('a', { class: 'chip', href: ctx.api.qrUrl(ctx.project, d.id), download: d.id + '-qr.svg' }, 'Download SVG'), h('a', { class: 'chip', href: devUrl, target: '_blank', rel: 'noopener' }, 'Open device page')])];
   }
 
+  // -------------------------------------------------- console channels (§6.8.6)
+
+  function portMap(d) {
+    const m = {};
+    devicePorts(d).forEach(function (p) { m[p.id] = p; });
+    return m;
+  }
+  function channelCtx(d, eff) {
+    const ov = store.overlay || {};
+    return {
+      channels: channelMap(eff.channels), ports: portMap(d),
+      labels: (ov.channel_labels && ov.channel_labels[d.id]) || {}, routes: ov.routes || [],
+    };
+  }
+  function groupColor(ch) {
+    const k = ch.kind;
+    if (k === 'input' || k === 'stereo_input') return '#6fe2b4';
+    if (k === 'dca' || k === 'mute_group') return 'var(--warn)';
+    if (k === 'rack') return 'var(--muted)';
+    return '#8ea2ff';
+  }
+  // Where the signal on a port sub-channel comes from / goes to over the network (overlay routes)
+  function peerText(cctx, d, ep, dir) {
+    if (!ep || !ep.port || !ep.ch) return '';
+    const peer = routePeer(cctx.routes, d.id, ep.port, ep.ch, dir);
+    if (!peer) return '';
+    const pd = find(store.doc.devices, peer.device);
+    return (pd ? pd.name : peer.device) + (peer.channel ? ' \u00b7 ' + peer.channel : '');
+  }
+  function selectChannel(d, ch) { store.select({ type: 'channel', id: d.id, device: d.id, channel: typeof ch === 'string' ? ch : ch.id }); }
+
+  function applyButton(d, eff) {
+    if (!ctx.api || ro() || !eff.pending) return null;
+    return h('button', { type: 'button', class: 'small primary', 'data-action': 'apply-channels', onclick: function () {
+      const go = ctx.flush ? ctx.flush() : Promise.resolve();
+      go.then(function () { return ctx.api.applyChannels(ctx.project, d.id); }).then(function (res) {
+        const s = (res && res.summary) || {};
+        ctx.toast(res && res.changed ? 'Applied ' + (s.channels || 0) + ' channels and ' + (s.links || 0) + ' links to ' + d.name : 'Already up to date', 'ok');
+        return ctx.reload().then(function () { return ctx.api.overlay(ctx.project).then(function (o) { store.setOverlay(o); }, function () { /* optional */ }); });
+      }).then(render, function (e) { ctx.toast(e.message || String(e), 'err'); });
+    } }, eff.source === 'overlay' ? 'Apply to device' : 'Re-apply import');
+  }
+
+  function consoleSection(d, eff) {
+    const out = [];
+    const cctx = channelCtx(d, eff);
+    const idx = channelIndex(eff.links);
+    const groups = groupChannels(eff.channels);
+    const srcNote = eff.source === 'overlay'
+      ? 'Imported from the console export and not applied yet \u2014 read-only until applied to the device.'
+      : (eff.pending ? 'A newer import differs from what is on the device.' : '');
+    const apply = applyButton(d, eff);
+    if (srcNote || apply) {
+      out.push(h('div', { class: 'ins-console-note' + (eff.source === 'overlay' ? ' pending' : '') }, [h('span', { class: 'grow' }, srcNote), apply]));
+    }
+    if (!groups[consoleTab].length) consoleTab = GROUPS.map(function (g) { return g.id; }).filter(function (gid) { return groups[gid].length; })[0] || 'inputs';
+    const seg = h('div', { class: 'ins-seg', role: 'tablist', 'aria-label': 'Channel groups' }, GROUPS.map(function (g) {
+      const n = groups[g.id].length;
+      return h('button', { type: 'button', role: 'tab', class: 'ins-seg-btn' + (consoleTab === g.id ? ' on' : ''), 'aria-selected': consoleTab === g.id ? 'true' : 'false', disabled: n ? null : true, 'data-tab': g.id, onclick: function () {
+        consoleTab = g.id; render();
+      } }, g.label + (n ? ' ' + n : ''));
+    }));
+    const search = h('input', { type: 'search', class: 'ins-console-search', placeholder: 'Filter channels, names, patches', 'aria-label': 'Filter channels', value: consoleQuery, autocomplete: 'off' });
+    search.addEventListener('input', function () { consoleQuery = search.value; debounced('console-q/' + d.id, function () { fillList(); }); });
+    out.push(seg, search);
+    const list = h('ul', { class: 'ins-chans', 'data-group': consoleTab });
+    function fillList() {
+      list.innerHTML = '';
+      list.setAttribute('data-group', consoleTab);
+      const rows = filterChannels(groups[consoleTab], consoleQuery, idx, cctx);
+      rows.slice(0, 400).forEach(function (ch) {
+        const s = channelSummary(ch, idx, cctx);
+        const bits = [];
+        const me = idx[ch.id] || {};
+        if (s.source) {
+          const first = (me.inputs || []).concat(me.feeds || [])[0];
+          const peer = first && first.kind === 'input_patch' ? peerText(cctx, d, first.from, 'in') : '';
+          bits.push('\u2190 ' + s.source + (peer ? ' (' + peer + ')' : ''));
+        }
+        if (s.dests.length) bits.push((ch.kind === 'dca' || ch.kind === 'mute_group' ? '' : '\u2192 ') + s.dests.slice(0, 4).join(', ') + (s.dests.length > 4 ? ' +' + (s.dests.length - 4) : ''));
+        if (s.groups.length) bits.push(s.groups.join(', '));
+        const btn = h('button', { type: 'button', class: 'ins-chan', 'data-channel': ch.id, onclick: function () { selectChannel(d, ch); } }, [
+          h('span', { class: 'ins-chan-dot', style: { color: groupColor(ch) } }),
+          h('span', { class: 'ins-chan-text' }, [
+            h('span', { class: 'ins-chan-title' }, channelTitle(ch)),
+            h('span', { class: 'ins-chan-sub' }, bits.length ? bits.join(' \u00b7 ') : (ch.kind === 'input' || ch.kind === 'stereo_input' ? 'no input patch' : 'nothing patched')),
+          ]),
+        ]);
+        list.appendChild(h('li', null, btn));
+      });
+      if (!rows.length) list.appendChild(h('li', { class: 'muted', style: { padding: '8px 0' } }, consoleQuery ? 'No channel matches \u201c' + consoleQuery + '\u201d.' : 'None.'));
+    }
+    fillList();
+    out.push(list);
+    if (!ro() && eff.source === 'device') {
+      const kindSel = h('select', { 'aria-label': 'Channel kind' }, [['input', 'Input channel'], ['stereo_input', 'Stereo input'], ['mix', 'Mix bus'], ['matrix', 'Matrix'], ['group', 'Group'], ['aux', 'Aux'], ['dca', 'DCA'], ['mute_group', 'Mute group']].map(function (k) { return h('option', { value: k[0] }, k[1]); }));
+      kindSel.value = consoleTab === 'buses' ? 'mix' : consoleTab === 'dcas' ? 'dca' : 'input';
+      out.push(h('div', { class: 'row', style: { marginTop: '8px' } }, [h('button', { type: 'button', class: 'small', onclick: function () {
+        const dd = find(store.doc.devices, d.id);
+        const ch = nextChannel((dd && dd.channels) || [], kindSel.value);
+        commit([{ op: 'merge', coll: 'devices', id: d.id, value: { channels: ((dd && dd.channels) || []).concat([ch]) } }], 'Add ' + channelLabel(ch) + ' \u00b7 ' + d.name);
+        selectChannel(d, ch);
+      } }, 'Add'), kindSel]));
+    }
+    return out;
+  }
+
+  function renderChannel(d, ch, eff) {
+    const cctx = channelCtx(d, eff);
+    const idx = channelIndex(eff.links);
+    const me = idx[ch.id] || { inputs: [], sends: [], feeds: [], outputs: [], direct: [], insertSend: [], insertReturn: [], dca: [], mute: [], members: [] };
+    const editable = !ro() && eff.source === 'device';
+    const kindLabel = { input: 'Input channel', stereo_input: 'Stereo input', mix: 'Mix bus', aux: 'Aux bus', group: 'Group bus', matrix: 'Matrix', stereo: 'Stereo bus', mono: 'Mono bus', dca: 'DCA', mute_group: 'Mute group', rack: 'Rack' }[ch.kind] || ch.kind;
+    const back = h('button', { type: 'button', class: 'small ghost', 'aria-label': 'Back to ' + d.name, onclick: function () { store.select({ type: 'device', id: d.id, device: d.id }); } }, '\u2190 ' + (d.name || d.id));
+    root.appendChild(head(kindLabel, groupColor(ch), channelTitle(ch), [d.name || d.id, ch.source && ch.source !== 'user' ? ' \u00b7 from ' + ch.source + ' import' : ''].join(''), back));
+    root.appendChild(h('div', { class: 'ins-actions' }, [
+      ctx.api ? h('button', { type: 'button', class: 'small primary', 'data-action': 'trace', onclick: function () { openTrace(channelRef(d.id, ch), channelTitle(ch), d.name || d.id, d); } }, 'Trace path') : null,
+      h('button', { type: 'button', class: 'small', onclick: function () { ctx.navigate('patch', { sel: 'device:' + d.id }); } }, 'Show console in patch view'),
+    ]));
+    if (eff.source === 'overlay') {
+      root.appendChild(h('div', { class: 'ins-console-note pending', style: { margin: '0 12px 8px' } }, [
+        h('span', { class: 'grow' }, 'Imported, not applied yet. Apply the import to the device to edit channels and patches.'), applyButton(d, eff),
+      ]));
+    }
+
+    function links() { const dd = find(store.doc.devices, d.id); return ((dd && dd.channel_links) || []).slice(); }
+    function commitLinks(next, label) { commit([{ op: 'merge', coll: 'devices', id: d.id, value: { channel_links: next } }], label + ' \u00b7 ' + channelTitle(ch)); render(); }
+    function chanField(label, key, opts) {
+      opts = opts || {};
+      const input = opts.select || h('input', { value: ch[key] === undefined || ch[key] === null ? '' : String(ch[key]), placeholder: opts.placeholder, list: opts.list });
+      const k = 'chan/' + d.id + '/' + ch.id + '/' + key;
+      function send() {
+        const dd = find(store.doc.devices, d.id);
+        if (!dd) return;
+        const patch = {};
+        patch[key] = input.value.trim() === '' ? null : input.value.trim();
+        commit([{ op: 'merge', coll: 'devices', id: d.id, value: { channels: updateChannel(dd.channels || [], ch.id, patch) } }], 'Edit ' + key + ' \u00b7 ' + channelLabel(ch) + ' \u00b7 ' + d.name);
+      }
+      if (input.tagName === 'SELECT') input.addEventListener('change', send);
+      else { input.addEventListener('input', function () { debounced(k, send); }); input.addEventListener('change', function () { if (pendingTimers[k]) { clearTimeout(pendingTimers[k].id); delete pendingTimers[k]; send(); } }); }
+      const row = fieldRow(label, input);
+      if (!editable) input.disabled = true;
+      return row;
+    }
+    const colorSel = h('select', null, CHANNEL_COLORS.map(function (c) { return h('option', { value: c === 'Off' ? '' : c, selected: (ch.color || '') === (c === 'Off' ? '' : c) ? true : null }, c); }));
+    if (ch.color && CHANNEL_COLORS.indexOf(ch.color) < 0) colorSel.appendChild(h('option', { value: ch.color, selected: true }, ch.color));
+    root.appendChild(section('fields', 'Channel', [
+      chanField('Name', 'name', { placeholder: 'e.g. Bass' }),
+      chanField('Label', 'label', { placeholder: channelLabel(Object.assign({}, ch, { label: null })) }),
+      chanField('Colour', 'color', { select: colorSel }),
+      chanField('Icon', 'icon', { placeholder: 'console icon' }),
+      chanField('Note', 'note', { select: (function () { const t = h('textarea', { rows: 2 }); t.value = ch.note || ''; return t; })() }),
+    ], true));
+
+    function linkRow(ln, text, sub, removable) {
+      return h('div', { class: 'ins-link row', 'data-link-kind': ln.kind }, [
+        h('span', { class: 'grow' }, [h('span', null, text), sub ? h('span', { class: 'muted' }, ' ' + sub) : null]),
+        ln.source && ln.source !== 'user' ? h('span', { class: 'chip', title: 'From the ' + ln.source + ' import' }, ln.source) : null,
+        editable && removable !== false ? h('button', { type: 'button', class: 'small ghost danger', 'aria-label': 'Remove', onclick: function () { commitLinks(removeLink(links(), ln), 'Remove ' + ln.kind.replace(/_/g, ' ')); } }, '\u00d7') : null,
+      ]);
+    }
+    // endpoint editor: a port of this device (+ channel number) or a rack return
+    function endpointPicker(dir, onPick, okLabel) {
+      const ports = devicePorts(d).filter(function (p) { return (p.dir || 'io') === 'io' || p.dir === dir; });
+      const racks = eff.channels.filter(function (c) { return c.kind === 'rack'; });
+      const kindSel = h('select', { 'aria-label': 'Source kind' }, [h('option', { value: 'port' }, 'Port'), racks.length ? h('option', { value: 'rack' }, 'Rack') : null, h('option', { value: 'text' }, 'Text')]);
+      const portSel = h('select', { 'aria-label': 'Port' }, ports.map(function (p) { return h('option', { value: p.id }, portLabel(p) + (p.channels > 1 ? ' (' + p.channels + ' ch)' : '')); }));
+      const chI = h('input', { type: 'number', inputmode: 'numeric', min: '1', placeholder: 'ch', 'aria-label': 'Channel number', style: { width: '64px' } });
+      const rackSel = h('select', { 'aria-label': 'Rack', class: 'hidden' }, racks.map(function (c) { return h('option', { value: c.id }, channelTitle(c)); }));
+      const tagSel = h('select', { 'aria-label': 'Rack side', class: 'hidden' }, [['', '\u2014'], ['A', 'A'], ['B', 'B']].map(function (t) { return h('option', { value: t[0] }, t[1]); }));
+      const textI = h('input', { placeholder: 'e.g. REC 1', 'aria-label': 'Text', class: 'hidden' });
+      function sync() {
+        const k = kindSel.value;
+        portSel.classList.toggle('hidden', k !== 'port');
+        const p = ports.filter(function (x) { return x.id === portSel.value; })[0];
+        chI.classList.toggle('hidden', k !== 'port' || !(p && p.channels > 1));
+        if (p && p.channels > 1) chI.max = String(p.channels);
+        rackSel.classList.toggle('hidden', k !== 'rack');
+        tagSel.classList.toggle('hidden', k !== 'rack');
+        textI.classList.toggle('hidden', k !== 'text');
+      }
+      kindSel.addEventListener('change', sync);
+      portSel.addEventListener('change', sync);
+      sync();
+      const ok = h('button', { type: 'button', class: 'small', onclick: function () {
+        const k = kindSel.value;
+        let ep = null;
+        if (k === 'port' && portSel.value) {
+          ep = { port: portSel.value };
+          const p = ports.filter(function (x) { return x.id === portSel.value; })[0];
+          if (p && p.channels > 1) { const n = parseInt(chI.value, 10); if (!(n >= 1)) { ctx.toast('Enter the channel number on ' + portLabel(p), 'warn'); return; } ep.ch = n; }
+        } else if (k === 'rack' && rackSel.value) {
+          ep = { channel: rackSel.value };
+          if (tagSel.value) ep.tag = tagSel.value;
+        } else if (k === 'text' && textI.value.trim()) ep = { text: textI.value.trim() };
+        if (ep) onPick(ep);
+      } }, okLabel || 'Set');
+      return h('div', { class: 'row ins-ep', style: { flexWrap: 'wrap', marginTop: '6px' } }, [kindSel, portSel, chI, rackSel, tagSel, textI, ok]);
+    }
+    const isInput = ch.kind === 'input' || ch.kind === 'stereo_input';
+    const isBus = BUS_KINDS.indexOf(ch.kind) >= 0;
+    const isGroup = ch.kind === 'dca' || ch.kind === 'mute_group';
+
+    // --- input patch / fed by
+    if (isInput || ch.kind === 'rack') {
+      const rows = [];
+      me.inputs.forEach(function (ln) {
+        const peer = peerText(cctx, d, ln.from, 'in');
+        rows.push(linkRow(ln, '\u2190 ' + linkEndpointText(ln.from, Object.assign({}, cctx, { dir: 'in' })), peer ? '(' + peer + ')' : ''));
+      });
+      me.insertReturn.forEach(function (ln) { rows.push(linkRow(ln, '\u21A9 insert ' + (ln.insert || '') + ' return from ' + linkEndpointText(ln.from, Object.assign({}, cctx, { dir: 'in' })))); });
+      if (!rows.length) rows.push(h('div', { class: 'muted' }, 'No input patch.'));
+      if (editable) rows.push(endpointPicker('in', function (ep) { commitLinks(isInput ? setInputPatch(links(), ch.id, ep) : links().concat([{ from: ep, to: { channel: ch.id }, kind: 'input_patch', source: 'user' }]), 'Patch input'); }, 'Patch input'));
+      root.appendChild(section('input', 'Input patch', rows, true));
+    }
+    if (isBus || ch.kind === 'rack') {
+      const rows = me.feeds.map(function (ln) {
+        const src = cctx.channels[ln.from.channel];
+        return h('div', { class: 'ins-link row' }, [
+          h('button', { type: 'button', class: 'ins-chan-link grow', onclick: function () { if (src) selectChannel(d, src); } }, (src ? channelTitle(src) : String(ln.from.channel)) + (ln.level !== undefined && ln.level !== null ? ' \u00b7 ' + ln.level : '')),
+          editable ? h('button', { type: 'button', class: 'small ghost danger', 'aria-label': 'Remove send', onclick: function () { commitLinks(removeLink(links(), ln), 'Remove send'); } }, '\u00d7') : null,
+        ]);
+      });
+      me.inputs.forEach(function (ln) { rows.push(linkRow(ln, '\u2190 ' + linkEndpointText(ln.from, Object.assign({}, cctx, { dir: 'in' })) + (ln.insert ? ' (insert ' + ln.insert + ' send)' : ''))); });
+      if (!rows.length) rows.push(h('div', { class: 'muted' }, isBus ? 'Nothing is sent to this bus yet \u2014 a console export has no send levels; tick sends on the channels or import a CSV.' : 'Nothing patched in.'));
+      root.appendChild(section('fedby', (isBus ? 'Fed by' : 'Inputs') + ' (' + rows.length + ')', rows, true));
+    }
+    // --- sends (inputs → buses, buses → matrix / stereo)
+    if (isInput || (isBus && ch.kind !== 'matrix' && ch.kind !== 'stereo' && ch.kind !== 'mono')) {
+      const targets = eff.channels.filter(function (c) {
+        if (c.id === ch.id || BUS_KINDS.indexOf(c.kind) < 0) return false;
+        if (isInput) return true;
+        return c.kind === 'matrix' || c.kind === 'stereo' || c.kind === 'mono';
+      });
+      const on = {};
+      me.sends.forEach(function (ln) { on[ln.to.channel] = ln; });
+      const grid = h('div', { class: 'ins-chipgrid', role: 'group', 'aria-label': 'Sends' }, targets.map(function (c) {
+        const active = !!on[c.id];
+        return h('button', { type: 'button', class: 'chip' + (active ? ' on' : ''), 'aria-pressed': active ? 'true' : 'false', 'data-send': c.id, title: channelTitle(c), disabled: editable ? null : true, onclick: function () {
+          commitLinks(toggleSend(links(), ch.id, c.id, !active), (active ? 'Remove send to ' : 'Send to ') + channelLabel(c));
+        } }, channelLabel(c));
+      }));
+      const n = me.sends.length;
+      root.appendChild(section('sends', 'Sends (' + n + ')', [
+        targets.length ? grid : h('div', { class: 'muted' }, 'No buses on this console yet.'),
+        !n ? h('div', { class: 'muted', style: { marginTop: '6px', fontSize: '12px' } }, 'No sends recorded \u2014 nothing is assumed, not even Stereo L/R. The trace stops here until a send is ticked.') : null,
+      ], true));
+    }
+    // --- DCA / mute membership
+    if (isInput || isBus) {
+      const groupsList = eff.channels.filter(function (c) { return c.kind === 'dca' || c.kind === 'mute_group'; });
+      if (groupsList.length || me.dca.length || me.mute.length) {
+        const mine = {};
+        me.dca.concat(me.mute).forEach(function (ln) { mine[ln.to.channel] = ln; });
+        const grid = h('div', { class: 'ins-chipgrid', role: 'group', 'aria-label': 'DCA and mute groups' }, groupsList.map(function (c) {
+          const active = !!mine[c.id];
+          return h('button', { type: 'button', class: 'chip' + (active ? ' on' : ''), 'aria-pressed': active ? 'true' : 'false', 'data-group': c.id, title: channelTitle(c), disabled: editable ? null : true, onclick: function () {
+            commitLinks(toggleMembership(links(), c.kind === 'dca' ? 'dca' : 'mute', ch.id, c.id, !active), (active ? 'Remove from ' : 'Add to ') + channelTitle(c));
+          } }, channelTitle(c));
+        }));
+        root.appendChild(section('groups', 'DCA / mute groups (' + (me.dca.length + me.mute.length) + ')', [grid], true));
+      }
+    }
+    if (isGroup) {
+      const candidates = eff.channels.filter(function (c) { return c.kind === 'input' || c.kind === 'stereo_input' || BUS_KINDS.indexOf(c.kind) >= 0; });
+      const mem = {};
+      me.members.forEach(function (ln) { mem[ln.from.channel] = ln; });
+      const grid = h('div', { class: 'ins-chipgrid', role: 'group', 'aria-label': 'Members' }, candidates.map(function (c) {
+        const active = !!mem[c.id];
+        return h('button', { type: 'button', class: 'chip' + (active ? ' on' : ''), 'aria-pressed': active ? 'true' : 'false', 'data-member': c.id, title: channelTitle(c), disabled: editable ? null : true, onclick: function () {
+          commitLinks(toggleMembership(links(), ch.kind === 'dca' ? 'dca' : 'mute', c.id, ch.id, !active), (active ? 'Remove ' : 'Add ') + channelLabel(c) + (active ? ' from ' : ' to ') + channelLabel(ch));
+        } }, channelLabel(c));
+      }));
+      root.appendChild(section('members', 'Members (' + me.members.length + ')', [grid, !me.members.length ? h('div', { class: 'muted', style: { marginTop: '6px', fontSize: '12px' } }, 'No members recorded yet. Tap channels to add them.') : null], true));
+    }
+    // --- outputs / direct out / insert sends
+    if (isInput || isBus || ch.kind === 'rack') {
+      const rows = [];
+      me.outputs.forEach(function (ln) { const peer = peerText(cctx, d, ln.to, 'out'); rows.push(linkRow(ln, '\u2192 ' + linkEndpointText(ln.to, Object.assign({}, cctx, { dir: 'out' })), peer ? '(' + peer + ')' : '')); });
+      me.direct.forEach(function (ln) { const peer = peerText(cctx, d, ln.to, 'out'); rows.push(linkRow(ln, '\u2192 direct out \u2192 ' + linkEndpointText(ln.to, Object.assign({}, cctx, { dir: 'out' })), peer ? '(' + peer + ')' : '')); });
+      me.insertSend.forEach(function (ln) { rows.push(linkRow(ln, '\u21AA insert ' + (ln.insert || '') + ' send to ' + linkEndpointText(ln.to, Object.assign({}, cctx, { dir: 'out' })))); });
+      if (!rows.length) rows.push(h('div', { class: 'muted' }, isBus ? 'No output patch.' : 'No direct out or inserts.'));
+      if (editable) {
+        const kind = isBus || ch.kind === 'rack' ? 'output_patch' : 'direct_out';
+        rows.push(endpointPicker('out', function (ep) { commitLinks(addOutput(links(), ch.id, ep, kind), kind === 'direct_out' ? 'Add direct out' : 'Add output patch'); }, kind === 'direct_out' ? 'Add direct out' : 'Add output'));
+      }
+      root.appendChild(section('outputs', (isBus || ch.kind === 'rack' ? 'Output patch' : 'Direct out & inserts') + ' (' + (me.outputs.length + me.direct.length + me.insertSend.length) + ')', rows, true));
+    }
+    if (editable) {
+      root.appendChild(h('div', { class: 'ins-actions' }, [h('button', { type: 'button', class: 'small danger', onclick: function () {
+        ctx.confirm('Delete ' + channelTitle(ch) + ' and its patches?', { danger: true }).then(function (y) {
+          if (!y) return;
+          const dd = find(store.doc.devices, d.id);
+          if (!dd) return;
+          const chans = (dd.channels || []).filter(function (c) { return c && c.id !== ch.id; });
+          const lns = (dd.channel_links || []).filter(function (l) { return !(l && ((l.from && l.from.channel === ch.id) || (l.to && l.to.channel === ch.id))); });
+          commit([{ op: 'merge', coll: 'devices', id: d.id, value: { channels: chans, channel_links: lns } }], 'Delete ' + channelTitle(ch) + ' \u00b7 ' + d.name);
+          store.select({ type: 'device', id: d.id, device: d.id });
+        });
+      } }, 'Delete channel')]));
+    }
+  }
+
+  // Trace drawer (§6.8.7) over GET …/trace; tapping a hop selects it in the inspector.
+  function openTrace(ref, title, sub, d) {
+    if (!ctx.api) return;
+    if (traceDrawer) traceDrawer.close();
+    traceDrawer = openTraceDrawer({
+      from: ref, title: title, sub: sub, direction: 'down', dca: true,
+      fetchPaths: function (params) { return ctx.api.trace(ctx.project, params); },
+      actions: [{ label: 'Open in patch view', onclick: function (st) { st.close(); ctx.navigate('patch', { sel: 'device:' + (d ? d.id : ref.split(':')[0]) }); } }],
+      onHop: function (hop) {
+        if (!hop || !hop.device) return;
+        if (hop.kind === 'channel' || hop.kind === 'dca') store.select({ type: 'channel', id: hop.device, device: hop.device, channel: hop.channel });
+        else if (hop.port) store.select({ type: 'port', id: hop.device, device: hop.device, port: hop.port });
+        else store.select({ type: 'device', id: hop.device, device: hop.device });
+        if (traceDrawer) traceDrawer.close();
+      },
+      onClose: function () { traceDrawer = null; },
+    });
+  }
+
   // -------------------------------------------------- port
 
   function renderPort(d, p) {
@@ -746,7 +1082,10 @@ export function mountInspector(el, ctx) {
       });
     } }, 'Patch\u2026'));
     root.appendChild(section('cables', 'Connections (' + cables.length + ')', [list], true));
-    root.appendChild(h('div', { class: 'ins-actions' }, [h('button', { type: 'button', class: 'small', onclick: function () { store.select({ type: 'device', id: d.id, device: d.id }); } }, 'Device details')]));
+    root.appendChild(h('div', { class: 'ins-actions' }, [
+      h('button', { type: 'button', class: 'small', onclick: function () { store.select({ type: 'device', id: d.id, device: d.id }); } }, 'Device details'),
+      ctx.api ? h('button', { type: 'button', class: 'small', 'data-action': 'trace', onclick: function () { openTrace(d.id + ':' + p.id, (d.name || d.id) + ' \u00b7 ' + portLabel(p), p.channels > 1 ? p.channels + ' channels' : (m.label || p.medium || ''), d); } }, 'Trace path') : null,
+    ]));
   }
 
   // -------------------------------------------------- cable
@@ -919,6 +1258,11 @@ export function mountInspector(el, ctx) {
       const d = find(doc.devices, sel.device || sel.id);
       const p = d ? devicePorts(d).filter(function (x) { return x.id === sel.port; })[0] : null;
       if (d && p) renderPort(d, p); else if (d) renderDevice(d); else renderEmpty();
+    } else if (sel.type === 'channel') {
+      const d = find(doc.devices, sel.device || sel.id);
+      const eff = d ? effectiveChannels(d, store.overlay) : null;
+      const ch = eff ? eff.channels.filter(function (x) { return x.id === sel.channel; })[0] : null;
+      if (d && ch) renderChannel(d, ch, eff); else if (d) renderDevice(d); else renderEmpty();
     } else if (sel.type === 'cable') {
       const c = find(doc.cables, sel.id);
       if (c) renderCable(c); else renderEmpty();
@@ -945,10 +1289,10 @@ export function mountInspector(el, ctx) {
   function selRefs() {
     const sel = store.selection;
     if (!sel) return [];
-    const map = { device: 'devices', port: 'devices', cable: 'cables', rack: 'racks', floorplan: 'floorplans', marker: 'floorplans', bundle: 'bundles', room: 'rooms' };
+    const map = { device: 'devices', port: 'devices', channel: 'devices', cable: 'cables', rack: 'racks', floorplan: 'floorplans', marker: 'floorplans', bundle: 'bundles', room: 'rooms' };
     const coll = map[sel.type];
     if (!coll) return [];
-    const id = sel.type === 'marker' ? sel.floorplan : (sel.type === 'port' ? (sel.device || sel.id) : sel.id);
+    const id = sel.type === 'marker' ? sel.floorplan : (sel.type === 'port' || sel.type === 'channel' ? (sel.device || sel.id) : sel.id);
     const refs = [coll + '/' + id];
     if (sel.type === 'port' || sel.type === 'device') refs.push('cables/');
     return refs;
@@ -976,9 +1320,14 @@ export function mountInspector(el, ctx) {
     render();
   }
   function onMode() { render(); }
+  function onOverlay() {
+    const sel = store.selection;
+    if (sel && (sel.type === 'device' || sel.type === 'channel') && !(el.contains(document.activeElement) && document.activeElement.tagName === 'INPUT')) render();
+  }
   store.addEventListener('selection', onSelection);
   store.addEventListener('doc', onDoc);
   store.addEventListener('mode', onMode);
+  store.addEventListener('overlay', onOverlay);
   lastSelKey = store.selection ? JSON.stringify(store.selection) : '';
   render();
   return {
@@ -987,6 +1336,8 @@ export function mountInspector(el, ctx) {
       store.removeEventListener('selection', onSelection);
       store.removeEventListener('doc', onDoc);
       store.removeEventListener('mode', onMode);
+      store.removeEventListener('overlay', onOverlay);
+      if (traceDrawer) traceDrawer.close();
       el.innerHTML = '';
     },
     focus: function (sel) { if (sel) store.select(sel); },

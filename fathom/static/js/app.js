@@ -663,6 +663,7 @@ export function selToString(sel) {
   if (!sel) return '';
   if (sel.type === 'port') return 'port:' + (sel.device || sel.id) + ':' + sel.port;
   if (sel.type === 'marker') return 'marker:' + (sel.floorplan || '') + ':' + (sel.device || sel.id);
+  if (sel.type === 'channel') return 'channel:' + (sel.device || sel.id) + ':' + sel.channel;
   return sel.type + ':' + sel.id;
 }
 
@@ -671,6 +672,7 @@ export function selFromString(s) {
   const parts = String(s).split(':');
   const type = parts[0];
   if (type === 'port') return { type: 'port', id: parts[1], device: parts[1], port: parts[2] || null };
+  if (type === 'channel') return parts[2] ? { type: 'channel', id: parts[1], device: parts[1], channel: parts[2] } : { type: 'device', id: parts[1], device: parts[1] };
   if (type === 'marker') return { type: 'marker', id: parts[2], floorplan: parts[1], device: parts[2] };
   if (!parts[1]) return null;
   const sel = { type: type, id: parts[1] };
