@@ -258,12 +258,17 @@ class Request:
         return str(self.environ.get("REMOTE_ADDR") or "")
 
     def cookie(self, name: str) -> str:
-        raw = self.header("cookie")
-        for part in raw.split(";"):
+        values = self.cookies(name)
+        return values[0] if values else ""
+
+    def cookies(self, name: str) -> List[str]:
+        """Every value sent under ``name`` (browsers send one per Path/Domain scope, most specific first)."""
+        out: List[str] = []
+        for part in self.header("cookie").split(";"):
             k, _, v = part.strip().partition("=")
-            if k == name:
-                return v
-        return ""
+            if k == name and v:
+                out.append(v)
+        return out
 
     def wants_html(self) -> bool:
         return "text/html" in self.header("accept")
@@ -2481,11 +2486,13 @@ def _authenticate(req: Request) -> None:
             raise ApiError(401, "wrong username or password", "auth_required", headers={"WWW-Authenticate": 'Basic realm="Fathom"'})
         req.user, req.auth_via = u, "basic"
         return
-    cookie = req.cookie("fathom_session")
-    if cookie:
+    # A stale duplicate (another Path/Domain scope, an older secret, a second Fathom on the same host) must
+    # not shadow the live session, or /api/v2/session and the app pages disagree and the client loops.
+    for cookie in req.cookies("fathom_session"):
         u = read_session(cookie)
         if u is not None:
             req.user, req.auth_via = u, "cookie"
+            break
 
 
 def _csrf_ok(req: Request) -> bool:
