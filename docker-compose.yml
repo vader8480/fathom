@@ -10,6 +10,10 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+    # Optional. The reference deployment is a plain Ubuntu VM with deploy/fathom.service
+    # (see README › Running on Ubuntu); in a container the passive discovery probes only
+    # see the container's own network unless it shares the host's (network_mode: host,
+    # plus cap_add: [NET_RAW] for the LLDP listener).
     volumes:
       - fathom-data:/data
     environment:
@@ -38,6 +42,9 @@ services:
       # FATHOM_PDF_RASTERIZER: "pdftoppm -f {page} -l {page} -r {dpi} -png -singlefile {in} {out}"
       # FATHOM_ODA: "/opt/oda/ODAFileConverter"
       # FATHOM_ODA_XVFB: "1"
+      # Network discovery: server-wide UniFi defaults (per-project settings in Discovery › Sources win).
+      # FATHOM_UNIFI_URL: "https://10.0.0.1"
+      # FATHOM_UNIFI_API_KEY: "..."
 
 volumes:
   fathom-data:

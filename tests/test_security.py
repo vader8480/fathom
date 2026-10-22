@@ -55,6 +55,11 @@ SPEC_ROLES = {
     ("POST", "/api/v2/projects/{}/imports"): "editor", ("DELETE", "/api/v2/projects/{}/imports/{}"): "editor",
     ("GET", "/api/v2/projects/{}/imports/{}/inspect"): "viewer", ("POST", "/api/v2/projects/{}/imports/preview"): "editor",
     ("GET", "/api/v2/projects/{}/imports/templates/{}/{}.csv"): "viewer",
+    ("GET", "/api/v2/projects/{}/discovery/runs"): "viewer", ("POST", "/api/v2/projects/{}/discovery/runs"): "editor",
+    ("GET", "/api/v2/projects/{}/discovery/runs/{}"): "viewer", ("DELETE", "/api/v2/projects/{}/discovery/runs/{}"): "editor",
+    ("GET", "/api/v2/projects/{}/discovery/runs/{}/findings"): "viewer", ("POST", "/api/v2/projects/{}/discovery/runs/{}/findings/promote"): "editor",
+    ("GET", "/api/v2/projects/{}/discovery/settings"): "viewer", ("PUT", "/api/v2/projects/{}/discovery/settings"): "editor",
+    ("POST", "/api/v2/projects/{}/discovery/test"): "editor",
     ("POST", "/api/v2/projects/{}/files"): "editor", ("GET", "/api/v2/projects/{}/files/{}/{}"): "viewer",
     ("DELETE", "/api/v2/projects/{}/files/{}"): "editor", ("POST", "/api/v2/projects/{}/floorplans"): "editor",
     ("POST", "/api/v2/projects/{}/floorplans/{}/reconvert"): "editor", ("GET", "/api/v2/projects/{}/floorplans/{}/image"): "viewer",
@@ -80,7 +85,9 @@ SAMPLES = ["proj", "main", "atem-mini", "rk-foh", "cables", "1", "nobody", "imp-
            "run1", "index.html", "diagram.svg", "x.png", "app.html", "nope"]
 PARAM_HINTS = {"name": "proj", "room": "main", "device": "atem-mini", "rack": "rk-foh", "kind": "cables", "rev": "1", "username": "nobody",
                "iid": "imp-0001", "att": "att-000000000000", "token": "sh-abc123", "fp": "fp-none", "run": "run1", "file": "index.html",
-               "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip", "table": "devices"}
+               "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip", "table": "devices",
+               "rid": "run-20260101-000000-0000"}
+DISCOVERY_FIXTURES = str(Path(__file__).parent / "fixtures" / "discovery")
 
 
 def _groups(pattern):
@@ -141,6 +148,7 @@ def users_env(**env):
     """Data dir with auth on via users.json (admin ada, editor eve, viewer vic) + logged-in cookies."""
     users = requires("users")
     app = get_app()
+    env.setdefault("FATHOM_DISCOVERY_FIXTURES", DISCOVERY_FIXTURES)  # the role matrix starts a discovery run: replay fixtures, never touch the network
     with temp_data_dir(**env) as data:
         install_sunday(data, "proj")
         pw = {"ada": "ada-password-1", "eve": "eve-password-1", "vic": "vic-password-1"}

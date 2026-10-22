@@ -1,0 +1,738 @@
+{
+ "api": "unifi-os",
+ "site": "default",
+ "url": "https://10.99.0.1",
+ "fetched": "2026-10-20T14:05:00Z",
+ "devices": [
+  {
+   "type": "usw",
+   "mac": "78:45:58:aa:00:01",
+   "ip": "10.99.0.2",
+   "name": "AV Core",
+   "hostname": "USW-Pro-24-PoE",
+   "model": "USW-Pro-24-PoE",
+   "serial": "7845580A0001",
+   "version": "7.1.26",
+   "adopted": true,
+   "state": 1,
+   "uptime": 864000,
+   "port_table": [
+    {
+     "port_idx": 1,
+     "name": "Port 1",
+     "up": true,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false,
+     "mac_table": [
+      {
+       "mac": "00:1d:c1:10:20:21",
+       "ip": "10.20.0.21",
+       "vlan": 20,
+       "age": 3,
+       "uptime": 86000
+      }
+     ]
+    },
+    {
+     "port_idx": 2,
+     "name": "Port 2",
+     "up": true,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false,
+     "mac_table": [
+      {
+       "mac": "00:1d:c1:10:20:22",
+       "ip": "10.20.0.22",
+       "vlan": 20,
+       "age": 1,
+       "uptime": 86000
+      }
+     ]
+    },
+    {
+     "port_idx": 3,
+     "name": "Port 3",
+     "up": true,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false,
+     "mac_table": [
+      {
+       "mac": "00:a0:de:50:00:05",
+       "ip": "10.20.0.5",
+       "vlan": 20,
+       "age": 2,
+       "uptime": 85000
+      }
+     ]
+    },
+    {
+     "port_idx": 4,
+     "name": "Port 4",
+     "up": true,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false,
+     "mac_table": [
+      {
+       "mac": "00:60:74:12:34:56",
+       "ip": "10.30.0.10",
+       "vlan": 30,
+       "age": 4,
+       "uptime": 85000
+      }
+     ]
+    },
+    {
+     "port_idx": 5,
+     "name": "Port 5",
+     "up": true,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false,
+     "mac_table": [
+      {
+       "mac": "7c:2e:0d:aa:bb:01",
+       "ip": "10.30.0.40",
+       "vlan": 30,
+       "age": 4,
+       "uptime": 80000
+      }
+     ]
+    },
+    {
+     "port_idx": 6,
+     "name": "Port 6",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 7,
+     "name": "Port 7",
+     "up": true,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false,
+     "mac_table": [
+      {
+       "mac": "3c:22:fb:01:02:03",
+       "ip": "10.30.0.120",
+       "vlan": 30,
+       "age": 1,
+       "uptime": 3000
+      },
+      {
+       "mac": "00:17:c8:0a:0b:0c",
+       "ip": "10.30.0.121",
+       "vlan": 30,
+       "age": 20,
+       "uptime": 90000
+      },
+      {
+       "mac": "b8:27:eb:11:22:33",
+       "ip": "10.30.0.122",
+       "vlan": 30,
+       "age": 2,
+       "uptime": 90000
+      }
+     ]
+    },
+    {
+     "port_idx": 8,
+     "name": "Port 8",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 9,
+     "name": "Port 9",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 10,
+     "name": "Port 10",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 11,
+     "name": "Port 11",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 12,
+     "name": "Port 12",
+     "up": true,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false,
+     "mac_table": [
+      {
+       "mac": "78:45:58:aa:00:02",
+       "ip": "10.99.0.5",
+       "vlan": 99,
+       "age": 1,
+       "uptime": 86000
+      }
+     ]
+    },
+    {
+     "port_idx": 13,
+     "name": "Port 13",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 14,
+     "name": "Port 14",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 15,
+     "name": "Port 15",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 16,
+     "name": "Port 16",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 17,
+     "name": "Port 17",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": false,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 18,
+     "name": "Port 18",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": false,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 19,
+     "name": "Port 19",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": false,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 20,
+     "name": "Port 20",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": false,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 21,
+     "name": "Port 21",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": false,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 22,
+     "name": "Port 22",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": false,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 23,
+     "name": "Port 23",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": false,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 24,
+     "name": "Port 24",
+     "up": true,
+     "speed": 1000,
+     "poe_enable": false,
+     "media": "GE",
+     "is_uplink": false,
+     "mac_table": [
+      {
+       "mac": "28:c6:8e:11:22:33",
+       "ip": "10.99.0.3",
+       "vlan": 99,
+       "age": 1,
+       "uptime": 86000
+      },
+      {
+       "mac": "00:0e:dd:44:55:66",
+       "ip": "10.30.0.60",
+       "vlan": 30,
+       "age": 5,
+       "uptime": 86000
+      },
+      {
+       "mac": "00:1d:c1:10:21:21",
+       "ip": "10.21.0.21",
+       "vlan": 21,
+       "age": 5,
+       "uptime": 86000
+      }
+     ]
+    },
+    {
+     "port_idx": 25,
+     "name": "Port 25",
+     "up": false,
+     "speed": 10000,
+     "poe_enable": false,
+     "media": "SFP+",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 26,
+     "name": "Port 26",
+     "up": false,
+     "speed": 10000,
+     "poe_enable": false,
+     "media": "SFP+",
+     "is_uplink": true
+    }
+   ],
+   "lldp_table": [
+    {
+     "chassis_id": "28:c6:8e:11:22:33",
+     "chassis_name": "sw-stage",
+     "local_port_idx": 24,
+     "local_port_name": "Port 24",
+     "port_id": "gi26",
+     "is_wired": true
+    },
+    {
+     "chassis_id": "78:45:58:aa:00:02",
+     "chassis_name": "Lobby AP",
+     "local_port_idx": 12,
+     "local_port_name": "Port 12",
+     "port_id": "eth0",
+     "is_wired": true
+    },
+    {
+     "chassis_id": "00:a0:de:50:00:05",
+     "chassis_name": "FOH-CL5",
+     "local_port_idx": 3,
+     "local_port_name": "Port 3",
+     "port_id": "Dante Primary",
+     "is_wired": true
+    }
+   ],
+   "uplink": {
+    "uplink_mac": "78:45:58:aa:00:00",
+    "uplink_remote_port": 9,
+    "port_idx": 26,
+    "type": "wire",
+    "speed": 10000
+   }
+  },
+  {
+   "type": "uap",
+   "mac": "78:45:58:aa:00:02",
+   "ip": "10.99.0.5",
+   "name": "Lobby AP",
+   "hostname": "U6-Pro",
+   "model": "U6-Pro",
+   "serial": "7845580A0002",
+   "version": "6.5.28",
+   "adopted": true,
+   "state": 1,
+   "uptime": 860000,
+   "uplink": {
+    "uplink_mac": "78:45:58:aa:00:01",
+    "uplink_remote_port": 12,
+    "port_idx": 1,
+    "type": "wire",
+    "speed": 1000
+   }
+  },
+  {
+   "type": "udm",
+   "mac": "78:45:58:aa:00:00",
+   "ip": "10.99.0.1",
+   "name": "Gateway",
+   "hostname": "UDM-Pro",
+   "model": "UDMPRO",
+   "serial": "7845580A0000",
+   "version": "3.2.12",
+   "adopted": true,
+   "state": 1,
+   "uptime": 2000000,
+   "port_table": [
+    {
+     "port_idx": 1,
+     "name": "Port 1",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 2,
+     "name": "Port 2",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 3,
+     "name": "Port 3",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 4,
+     "name": "Port 4",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 5,
+     "name": "Port 5",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 6,
+     "name": "Port 6",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 7,
+     "name": "Port 7",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 8,
+     "name": "Port 8",
+     "up": false,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false
+    },
+    {
+     "port_idx": 9,
+     "name": "Port 9",
+     "up": true,
+     "speed": 1000,
+     "poe_enable": true,
+     "media": "GE",
+     "is_uplink": false,
+     "mac_table": [
+      {
+       "mac": "78:45:58:aa:00:01",
+       "ip": "10.99.0.2",
+       "vlan": 99
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "clients": [
+  {
+   "mac": "00:1d:c1:10:20:21",
+   "ip": "10.20.0.21",
+   "hostname": "Rio3224-D-102021",
+   "name": "",
+   "is_wired": true,
+   "sw_mac": "78:45:58:aa:00:01",
+   "sw_port": 1,
+   "sw_depth": 1,
+   "vlan": 20,
+   "network": "Dante primary",
+   "oui": "Audinate",
+   "last_seen": 1760969100,
+   "uptime": 86000
+  },
+  {
+   "mac": "00:1d:c1:10:20:22",
+   "ip": "10.20.0.22",
+   "hostname": "Rio3224-D-102022",
+   "name": "",
+   "is_wired": true,
+   "sw_mac": "78:45:58:aa:00:01",
+   "sw_port": 2,
+   "sw_depth": 1,
+   "vlan": 20,
+   "network": "Dante primary",
+   "oui": "Audinate",
+   "last_seen": 1760969100,
+   "uptime": 86000
+  },
+  {
+   "mac": "00:a0:de:50:00:05",
+   "ip": "10.20.0.5",
+   "hostname": "CL5-FOH",
+   "name": "FOH console",
+   "is_wired": true,
+   "sw_mac": "78:45:58:aa:00:01",
+   "sw_port": 3,
+   "sw_depth": 1,
+   "vlan": 20,
+   "network": "Dante primary",
+   "oui": "Yamaha",
+   "last_seen": 1760969100,
+   "uptime": 85000
+  },
+  {
+   "mac": "00:60:74:12:34:56",
+   "ip": "10.30.0.10",
+   "hostname": "QSYS-Core110f",
+   "name": "",
+   "is_wired": true,
+   "sw_mac": "78:45:58:aa:00:01",
+   "sw_port": 4,
+   "sw_depth": 1,
+   "vlan": 30,
+   "network": "AV control",
+   "oui": "QSC",
+   "last_seen": 1760969100,
+   "uptime": 85000
+  },
+  {
+   "mac": "7c:2e:0d:aa:bb:01",
+   "ip": "10.30.0.40",
+   "hostname": "ATEM-Mini-Pro-ISO",
+   "name": "",
+   "is_wired": true,
+   "sw_mac": "78:45:58:aa:00:01",
+   "sw_port": 5,
+   "sw_depth": 1,
+   "vlan": 30,
+   "network": "AV control",
+   "oui": "Blackmagic",
+   "last_seen": 1760969100,
+   "uptime": 80000
+  },
+  {
+   "mac": "3c:22:fb:01:02:03",
+   "ip": "10.30.0.120",
+   "hostname": "Tech-MacBook",
+   "name": "",
+   "is_wired": true,
+   "sw_mac": "78:45:58:aa:00:01",
+   "sw_port": 7,
+   "sw_depth": 2,
+   "vlan": 30,
+   "network": "AV control",
+   "oui": "Apple",
+   "last_seen": 1760969100,
+   "uptime": 3000,
+   "os_name": "macOS"
+  },
+  {
+   "mac": "00:17:c8:0a:0b:0c",
+   "ip": "10.30.0.121",
+   "hostname": "KM-Printer",
+   "name": "",
+   "is_wired": true,
+   "sw_mac": "78:45:58:aa:00:01",
+   "sw_port": 7,
+   "sw_depth": 2,
+   "vlan": 30,
+   "network": "AV control",
+   "oui": "Kyocera",
+   "last_seen": 1760969100,
+   "uptime": 90000
+  },
+  {
+   "mac": "b8:27:eb:11:22:33",
+   "ip": "10.30.0.122",
+   "hostname": "companion-pi",
+   "name": "",
+   "is_wired": true,
+   "sw_mac": "78:45:58:aa:00:01",
+   "sw_port": 7,
+   "sw_depth": 2,
+   "vlan": 30,
+   "network": "AV control",
+   "oui": "Raspberry Pi",
+   "last_seen": 1760969100,
+   "uptime": 90000
+  },
+  {
+   "mac": "00:0e:dd:44:55:66",
+   "ip": "10.30.0.60",
+   "hostname": "ULXD4Q-STAGE",
+   "name": "",
+   "is_wired": true,
+   "sw_mac": "78:45:58:aa:00:01",
+   "sw_port": 24,
+   "sw_depth": 2,
+   "vlan": 30,
+   "network": "AV control",
+   "oui": "Shure",
+   "last_seen": 1760969100,
+   "uptime": 86000
+  },
+  {
+   "mac": "f0:18:98:aa:bb:cc",
+   "ip": "10.50.0.33",
+   "hostname": "iPhone",
+   "name": "",
+   "is_wired": false,
+   "ap_mac": "78:45:58:aa:00:02",
+   "essid": "Campus Guest",
+   "vlan": 50,
+   "network": "Guest Wi-Fi",
+   "oui": "Apple",
+   "last_seen": 1760969100,
+   "uptime": 300,
+   "os_name": "iOS",
+   "dev_cat": 44
+  }
+ ],
+ "networks": [
+  {
+   "name": "Dante primary",
+   "vlan": 20,
+   "ip_subnet": "10.20.0.1/24",
+   "purpose": "corporate",
+   "enabled": true,
+   "dhcpd_enabled": false,
+   "igmp_snooping": true,
+   "networkgroup": "LAN"
+  },
+  {
+   "name": "Dante secondary",
+   "vlan": 21,
+   "ip_subnet": "10.21.0.1/24",
+   "purpose": "corporate",
+   "enabled": true,
+   "dhcpd_enabled": false,
+   "igmp_snooping": true,
+   "networkgroup": "LAN"
+  },
+  {
+   "name": "AV control",
+   "vlan": 30,
+   "ip_subnet": "10.30.0.1/24",
+   "purpose": "corporate",
+   "enabled": true,
+   "dhcpd_enabled": true,
+   "dhcpd_start": "10.30.0.100",
+   "dhcpd_stop": "10.30.0.199",
+   "networkgroup": "LAN"
+  },
+  {
+   "name": "Lighting",
+   "vlan": 40,
+   "ip_subnet": "10.40.0.1/24",
+   "purpose": "corporate",
+   "enabled": true,
+   "dhcpd_enabled": false,
+   "networkgroup": "LAN"
+  },
+  {
+   "name": "Guest Wi-Fi",
+   "vlan": 50,
+   "ip_subnet": "10.50.0.1/24",
+   "purpose": "guest",
+   "enabled": true,
+   "dhcpd_enabled": true,
+   "dhcpd_start": "10.50.0.10",
+   "dhcpd_stop": "10.50.0.250",
+   "networkgroup": "LAN"
+  },
+  {
+   "name": "Management",
+   "vlan": 99,
+   "ip_subnet": "10.99.0.1/24",
+   "purpose": "corporate",
+   "enabled": true,
+   "dhcpd_enabled": true,
+   "dhcpd_start": "10.99.0.100",
+   "dhcpd_stop": "10.99.0.120",
+   "networkgroup": "LAN"
+  },
+  {
+   "name": "Old lab",
+   "vlan": 77,
+   "ip_subnet": "10.77.0.1/24",
+   "purpose": "corporate",
+   "enabled": false
+  }
+ ]
+}

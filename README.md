@@ -30,20 +30,64 @@ under one data directory, with full revision history.
 
 ## Run it
 
-### Docker (recommended for hosting)
+### Running on Ubuntu (VM)
+
+Fathom is meant to live on a small dedicated Ubuntu server or VM (the
+reference install is an Ubuntu guest on VMware ESXi 8). A venv, a systemd
+unit and a non-root user are all it needs:
 
 ```bash
-docker compose up -d          # http://localhost:8080  · data in the fathom-data volume
+sudo apt install -y python3-venv poppler-utils         # poppler for PDF floor plans
+sudo git clone https://github.com/vader8480/fathom /opt/fathom && cd /opt/fathom
+sudo python3 -m venv --copies .venv                     # --copies: a real interpreter, so setcap can target it if you ever need to
+sudo .venv/bin/pip install -e '.[serve,discovery]'      # gunicorn + zeroconf (mDNS / Dante discovery)
+sudo deploy/install-service.sh                          # `fathom` system user, /var/lib/fathom, fathom.service on :8080
 ```
 
-Or without compose:
+`deploy/fathom.service` runs gunicorn as the unprivileged `fathom` user with
+
+```ini
+AmbientCapabilities=CAP_NET_RAW CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_BIND_SERVICE
+```
+
+so the LLDP / CDP listener can open a packet socket and the server can bind
+:80 / :443 without root, and never holds any other capability. mDNS needs
+no capability at all. If you do not use systemd, the equivalent is
+`sudo setcap cap_net_raw,cap_net_bind_service+eip /opt/fathom/.venv/bin/python3`
+(hence `--copies`; a symlinked venv would put the capability on the system
+interpreter). `fathom discovery doctor` tells you whether it worked, lists
+the interfaces with their VLANs, and listens for 35 s to confirm LLDP / CDP
+frames from *other* hosts actually reach the VM:
 
 ```bash
-docker build -t fathom .
-docker run -d --name fathom -p 8080:8080 -v fathom-data:/data fathom
+sudo systemd-run --uid=fathom --gid=fathom -p AmbientCapabilities=CAP_NET_RAW -t /opt/fathom/.venv/bin/fathom discovery doctor
 ```
 
-The image includes `poppler-utils` so PDF floor plans convert out of the box.
+**ESXi specifics** for the passive probes:
+
+- The VM's port group (standard vSwitch or distributed port group) must have
+  **Promiscuous Mode = Accept** in its security policy, otherwise the vSwitch
+  only delivers frames addressed to the VM's own MAC and the LLDP / CDP
+  listener and other hosts' multicast never arrive. *Forged Transmits* and
+  *MAC Address Changes* can stay **Reject**; Fathom never sends with another
+  MAC. (On a vDS, enabling it per port group is enough; on a standard vSwitch
+  you can override it on the port group only.)
+- If the VM sits on a **VLAN trunk**, either give the port group VLAN ID
+  **4095 (VGT)** and create 802.1Q sub-interfaces inside the guest
+  (`ens192.20`, `ens192.21`, `ens192.30` … via netplan `vlans:`), or add one
+  vNIC per audio VLAN on **per-VLAN port groups**. The doctor lists what it
+  sees.
+- **mDNS does not cross VLANs**: the VM needs an interface on every VLAN it
+  should discover (Dante primary, secondary, control …) unless the network
+  runs an mDNS reflector. The ARP probe likewise only sees the subnets the VM
+  is on; the UniFi probe sees everything the controller knows.
+- The upstream physical switch port must transmit LLDP (or CDP); most do by
+  default and announce every 30 s, which is why the doctor listens for 35 s.
+
+Docker is optional: `docker compose up -d` builds the same app on :8080
+with data in a volume (see `docker-compose.yml`); the passive probes then
+only see the container's network unless you give it the host's.
 
 ### Locally
 
@@ -60,7 +104,7 @@ Without installing: `python -m fathom serve` from this folder.
 
 | Variable | Purpose |
 | --- | --- |
-| `FATHOM_DATA` | data directory (`/data` in the image, `~/.fathom` otherwise) |
+| `FATHOM_DATA` | data directory (`/var/lib/fathom` with the systemd unit, `/data` in the image, `~/.fathom` otherwise) |
 | `FATHOM_HOST`, `FATHOM_PORT` | dev-server bind address (default `127.0.0.1:8080`) |
 | `FATHOM_AUTH` | `user:pass[,user2:pass2]` bootstrap admin logins; with neither this nor users (`fathom user add`) the app is open, as in 0.2 |
 | `FATHOM_PUBLIC_VIEW=1` | keep the viewer (`/p/*`) and build downloads public while the app needs a login |
@@ -74,6 +118,9 @@ Without installing: `python -m fathom serve` from this folder.
 | `FATHOM_LIBRARY` | extra equipment-template directories (`*.json`) |
 | `FATHOM_CHECKLISTS` | extra assistant checklist directories |
 | `FATHOM_LLM_URL`, `FATHOM_LLM_MODEL`, `FATHOM_LLM_API_KEY`, `FATHOM_LLM_TIMEOUT`, `FATHOM_LLM_MAX_CONTEXT` | optional OpenAI-compatible endpoint that rewords assistant answers (the answer itself is always computed locally) |
+| `FATHOM_UNIFI_URL`, `FATHOM_UNIFI_SITE`, `FATHOM_UNIFI_API_KEY` (or `FATHOM_UNIFI_USER` / `FATHOM_UNIFI_PASSWORD`), `FATHOM_UNIFI_VERIFY_TLS` | server-wide defaults for the UniFi discovery probe; per-project settings in Discovery › Sources take precedence |
+| `FATHOM_DISCOVERY_INTERFACE`, `FATHOM_DISCOVERY_INTERFACE_IP` | interface the LLDP listener / mDNS browser bind to (default: all) |
+| `FATHOM_DISCOVERY_FIXTURES` | directory of recorded probe payloads to replay instead of touching the network (tests, demos) |
 
 Put it behind your reverse proxy with TLS for anything beyond a trusted LAN.
 The app binds `0.0.0.0:8080` in the container; the dev server binds
@@ -130,6 +177,39 @@ Imports never overwrite what you typed: their results form an **overlay**
 (routes, labels, addresses, DMX rows, auto devices) shown in italics, which
 you can keep or promote.
 
+### Network discovery
+
+The **Discovery** view looks at the network the server is on and reports
+what it finds as findings you promote by hand. It is strictly passive and
+on demand: nothing runs unless you press *Run*, a run lasts for the window
+you set (60 s by default, 5 minutes at most), there is no scheduler, no
+background listener and nothing is ever written to a device. Sources:
+
+| Source | What it does on the wire | What it yields |
+| --- | --- | --- |
+| **UniFi controller** | read-only HTTPS calls to the controller you configure (API key or local read-only admin) | switches, APs, their port tables and LLDP neighbours, every client with MAC / IP / VLAN / switch port, the VLAN list |
+| **mDNS / Dante** | standard multicast DNS-SD queries for `_netaudio-*` (Dante), Blackmagic, Shure, HTTP/SSH services; never a unicast packet to a device | Dante device names, primary / secondary addresses, manufacturer and model, hostnames |
+| **LLDP / CDP** | listens for frames the switches announce anyway (raw socket, `CAP_NET_RAW` from the systemd unit) | which switch and port this host is plugged into, switch model, management IP, VLAN |
+| **ARP / neighbour table** | reads the host's own neighbour cache (`ip neigh`, `/proc/net/arp`, `arp -a`) | MAC ↔ IP pairs with vendor from the bundled OUI list |
+
+Findings are correlated into one entity per device (by MAC, then IP within
+the run, then Dante name / hostname / serial), matched against the devices
+you already have (*Merge into …*), and switch port tables become proposed
+connections in cable-schedule form with a confidence (LLDP + client table
+high, a single MAC on a port medium, several MACs on a port flagged as an
+uplink or an unmanaged switch). The latest run also feeds the overlay like
+any import, so discovered devices and links show up in italics until you
+promote or ignore them. The mDNS probe needs `pip install
+"fathom-audio[discovery]"` (`zeroconf`); the other three are standard
+library only. On the Ubuntu VM, *Running on Ubuntu (VM)* above covers
+the capabilities (`CAP_NET_RAW` for LLDP), the ESXi port-group settings
+(Promiscuous Mode = Accept) and one interface per audio VLAN for mDNS;
+`fathom discovery doctor` checks all three. Settings live per project (Discovery › Sources);
+secrets are kept in `projects/<name>/discovery-secrets.json`, never in the
+project file or its history. `FATHOM_UNIFI_URL` / `FATHOM_UNIFI_API_KEY` (or
+`_USER` / `_PASSWORD`), `FATHOM_UNIFI_SITE`, `FATHOM_UNIFI_VERIFY_TLS` and
+`FATHOM_DISCOVERY_INTERFACE` provide server-wide defaults.
+
 ## CLI
 
 ```text
@@ -150,6 +230,7 @@ fathom migrate <project> [--write] · fathom history <project> · fathom restore
 fathom user add <name> [--role viewer|editor|admin] [--password-stdin] | list | passwd <name> | role <name> <role> | remove <name>
 fathom backup create [--include-builds] [--label L] [--out F] | list | restore <file.zip|name> [--yes] [--no-safety]
 fathom vocab [--json] · fathom plugins · fathom validate <project> · fathom list · fathom status · fathom demo · fathom selftest
+fathom discovery doctor [--seconds 35] [--interface IF] [--json]   CAP_NET_RAW, interfaces / VLANs, foreign LLDP heard?
 ```
 
 Cable tags follow `settings.cable_tag_pattern` (default `{D}-{n:03}`:
@@ -167,6 +248,8 @@ $FATHOM_DATA/
   projects/<name>/project.json               the model (schema 2, with "revision")
   projects/<name>/project.v1.json            the original 0.2 file, kept once after migration
   projects/<name>/exports/<kind>/...         copies of imported exports
+  projects/<name>/exports/discovery/<run>/   discovery runs (raw probe payloads, findings)
+  projects/<name>/discovery-secrets.json     UniFi credentials (mode 0600; excluded from the project file)
   projects/<name>/files/<att-id>/<file>      photos, documents, floor-plan sources and renders
   projects/<name>/history/                   index.jsonl, ops/<rev>.json, snap/<rev>.json
   builds/<name>/<YYYY-MM-DD_HHMMSS>_<slug>/  build packages (below)
@@ -196,14 +279,13 @@ server, and treat it like a password file (it holds password hashes).
 saves the current state as a `…-pre-restore.zip` backup, then swaps the
 backup's data in. Builds are only replaced when the backup includes them;
 `backups/` itself is never touched. Restoring brings back the backup's user
-accounts, so you may have to sign in again. From a shell, e.g. inside the
-container:
+accounts, so you may have to sign in again. From a shell on the server
+(the same commands work with `docker exec fathom …` in a container):
 
 ```bash
-docker exec fathom fathom backup create              # prints the backup name
-docker cp fathom:/data/backups/fathom-backup-20261021-183105.zip .
-docker cp ./fathom-backup-20261021-183105.zip fathom:/tmp/
-docker exec -it fathom fathom backup restore /tmp/fathom-backup-20261021-183105.zip
+sudo -u fathom FATHOM_DATA=/var/lib/fathom /opt/fathom/.venv/bin/fathom backup create     # prints the backup name
+scp fathom@server:/var/lib/fathom/backups/fathom-backup-20261021-183105.zip .
+sudo -u fathom FATHOM_DATA=/var/lib/fathom /opt/fathom/.venv/bin/fathom backup restore fathom-backup-20261021-183105.zip
 ```
 
 ## Extending
@@ -239,8 +321,9 @@ migration, ops, validation), `project.py` / `history.py` / `users.py`
 (storage, revisions, logins), `plugins.py` + `parsers/` (importers),
 `merge.py` (0.2 merge + import overlay), `dedupe.py` (duplicate-device
 suggestions and merge plans), `library/` (templates),
-`presets.py` (generic device type presets),
-`floorplan.py` (DXF / Draw.io / PDF / SVG), `cables.py`, `network.py`,
+`presets.py` (generic device type presets), `jobs.py` (in-process job
+runner), `discovery/` (network discovery: probes, correlation, topology,
+settings), `floorplan.py` (DXF / Draw.io / PDF / SVG), `cables.py`, `network.py`,
 `bom.py`, `qr.py`, `racks.py`, `dmx.py`, `patch.py`, `trace.py`, `search.py`,
 `assistant.py` / `llm.py`, `layout.py` / `render_html.py` / `render_svg.py`
 (maps and viewer pages), `export.py` (builds), `server.py` (WSGI app),
@@ -252,12 +335,13 @@ suggestions and merge plans), `library/` (templates),
 
 - DWG is a closed format: export DXF, PDF or SVG, or configure the ODA File
   Converter. Binary DXF is not read; save ASCII DXF.
-- PDF floor plans need a rasterizer on the server (`pdftoppm` is in the
-  Docker image).
+- PDF floor plans need a rasterizer on the server (`apt install
+  poppler-utils`; the Docker image has it).
 - Waves session files (`.sprk`) are undocumented; the CSV fallback is the
   reliable path. The console CSV carries names, colours and patching, not
   gain, sends or inserts.
-- Imports read files you export; there is no live discovery (Dante mDNS,
-  Videohub TCP, sACN, SNMP).
+- Network discovery is passive and on demand (UniFi, mDNS / Dante, LLDP /
+  CDP, ARP). There is no monitoring, no scheduled scan and no active probing
+  (SNMP, Videohub TCP, sACN, Q-SYS); those are still import-from-dump paths.
 - Port counts of templates marked "not verified" come from general
   knowledge; check them against the datasheet.
