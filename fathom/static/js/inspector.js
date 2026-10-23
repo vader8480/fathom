@@ -410,7 +410,7 @@ export function mountInspector(el, ctx) {
   function portsEditor(d) {
     const out = [];
     const cablesAt = store.index.cablesByPort;
-    const tbody = h('tbody');
+    const list = h('ul', { class: 'ins-ports', 'aria-label': 'Ports' });
     const ports = devicePorts(d);
     function commitPorts(next, label) { commit(setPortsOps(store.doc, d.id, next), label + ' \u00b7 ' + d.name); }
     function current() { const dd = find(store.doc.devices, d.id); return dd ? deepClone(devicePorts(dd)) : []; }
@@ -432,15 +432,15 @@ export function mountInspector(el, ctx) {
         if (ro()) input.disabled = true;
         return input;
       }
-      const nameI = cell('name', h('input', { value: p.name || '', 'aria-label': 'Port name' }));
-      const labelI = cell('label', h('input', { value: p.label || '', placeholder: '\u2014', 'aria-label': 'Port label' }));
-      const dirS = cell('dir', h('select', { 'aria-label': 'Direction' }, ['in', 'out', 'io'].map(function (x) { return h('option', { value: x, selected: (p.dir || 'io') === x ? true : null }, x); })));
-      const medS = h('select', { 'aria-label': 'Medium' });
+      const nameI = cell('name', h('input', { value: p.name || '', placeholder: 'Name', title: 'Name', 'aria-label': 'Port name' }));
+      const labelI = cell('label', h('input', { value: p.label || '', placeholder: 'Label', title: 'Label', 'aria-label': 'Port label' }));
+      const dirS = cell('dir', h('select', { 'aria-label': 'Direction', title: 'Direction' }, ['in', 'out', 'io'].map(function (x) { return h('option', { value: x, selected: (p.dir || 'io') === x ? true : null }, x); })));
+      const medS = h('select', { 'aria-label': 'Medium', title: 'Medium' });
       if (p.medium && !(vocab.media || {})[p.medium]) medS.appendChild(h('option', { value: p.medium }, p.medium));
       mediaOptions().forEach(function (m) { medS.appendChild(h('option', { value: m[0], selected: m[0] === p.medium ? true : null }, m[1])); });
       cell('medium', medS);
-      const conI = cell('connector', h('input', { value: p.connector || '', list: connectorList(), 'aria-label': 'Connector', placeholder: '\u2014' }));
-      const chI = cell('channels', h('input', { value: p.channels || '', class: 'num', inputmode: 'numeric', 'aria-label': 'Channels', placeholder: '1' }), function (v) { const n = parseInt(v, 10); return n > 1 ? n : null; });
+      const conI = cell('connector', h('input', { value: p.connector || '', list: connectorList(), 'aria-label': 'Connector', title: 'Connector', placeholder: 'Connector' }));
+      const chI = cell('channels', h('input', { value: p.channels || '', class: 'num', inputmode: 'numeric', 'aria-label': 'Channels', title: 'Channels', placeholder: '1 ch' }), function (v) { const n = parseInt(v, 10); return n > 1 ? n : null; });
       const m = mediumInfo(p.medium, vocab);
       const up = h('button', { type: 'button', class: 'small ghost', 'aria-label': 'Move up', disabled: i === 0 || ro() ? true : null, onclick: function () { const next = current(); const t = next.splice(i, 1)[0]; next.splice(i - 1, 0, t); commitPorts(next, 'Reorder ports'); render(); } }, '\u2191');
       const del = h('button', { type: 'button', class: 'small ghost danger', 'aria-label': 'Remove port ' + portLabel(p), disabled: ro() ? true : null, onclick: function () {
@@ -454,15 +454,14 @@ export function mountInspector(el, ctx) {
         if (n) ctx.confirm(portLabel(p) + ' has ' + n + ' cable' + (n > 1 ? 's' : '') + '. Remove the port and its cables?', { danger: true, ok: 'Remove' }).then(function (y) { if (y) go(); });
         else go();
       } }, '\u00d7');
-      tbody.appendChild(h('tr', { 'data-port': p.id }, [
-        h('td', null, h('span', { class: 'dot', style: { color: m.color }, title: m.label })),
-        h('td', null, nameI), h('td', null, labelI), h('td', null, dirS), h('td', null, medS), h('td', null, conI), h('td', null, chI),
-        h('td', { style: { whiteSpace: 'nowrap' } }, [n ? h('span', { class: 'muted', title: n + ' cable(s)' }, '\u25CF') : null, up, del]),
+      list.appendChild(h('li', { class: 'ins-port', 'data-port': p.id }, [
+        h('span', { class: 'dot', style: { color: m.color }, title: m.label }),
+        nameI, labelI,
+        h('span', { class: 'ins-port-act' }, [n ? h('span', { class: 'muted', title: n + ' cable(s)' }, '\u25CF') : null, up, del]),
+        h('div', { class: 'ins-port-meta' }, [dirS, medS, conI, chI]),
       ]));
     });
-    out.push(h('div', { style: { overflowX: 'auto' } }, h('table', { class: 'ins-table' }, [
-      h('thead', null, h('tr', null, ['', 'Name', 'Label', 'Dir', 'Medium', 'Connector', 'Ch', ''].map(function (t) { return h('th', { scope: 'col' }, t); }))), tbody,
-    ])));
+    out.push(list);
     if (!ports.length) out.push(h('div', { class: 'muted' }, 'No ports yet.'));
     if (ro()) return out;
     // add one / bulk add
