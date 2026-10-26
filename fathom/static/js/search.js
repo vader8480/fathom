@@ -172,8 +172,8 @@ function create(ctx, opts) {
       });
     });
     input.setAttribute('aria-expanded', items.length ? 'true' : 'false');
-    setActive(initial, false);
     list.scrollTop = 0;
+    setActive(initial, false);
   }
 
   function idle() {
@@ -202,9 +202,21 @@ function create(ctx, opts) {
     foot.setAttribute('data-offline', local ? '1' : '0');
   }
 
+  // Groups follow CATEGORIES order, so the best-ranked hit may sit in a later
+  // group; it starts active so Enter opens it.
+  function bestIndex(hits) {
+    const at = {};
+    items.forEach(function (it, i) { at[it.hit.kind + ':' + it.hit.id] = i; });
+    for (let i = 0; i < hits.length; i++) {
+      const k = hits[i] && hits[i].kind + ':' + hits[i].id;
+      if (Object.prototype.hasOwnProperty.call(at, k)) return at[k];
+    }
+    return items.length ? 0 : -1;
+  }
+
   function show(hits, q, cat, local) {
-    const groups = groupHits(hits, cat);
-    render(groups, groups.length ? 0 : -1);
+    render(groupHits(hits, cat), -1);
+    setActive(bestIndex(hits), true);
     hint(local);
     empty.innerHTML = '';
     empty.hidden = items.length > 0;
