@@ -134,6 +134,16 @@
   pointer-events: none;
 }
 .pv-empty .fb-empty { margin: 0 auto; }
+/* import overlay freshness (fb-stale), bottom-left so it clears the badge and the hint */
+.pv-stale-host {
+  position: absolute; left: max(12px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom)); z-index: 4;
+  max-width: calc(100% - 24px); pointer-events: none;
+}
+.pv-stale-host[hidden] { display: none; }
+.pv-stale-host .fb-stale { pointer-events: auto; max-width: 100%; background-color: rgba(17, 24, 40, .92); }
+.pv-stale-host .fb-stale.fb-is-stale {
+  background-color: rgba(17, 24, 40, .92); background-image: linear-gradient(rgba(255, 149, 72, .08), rgba(255, 149, 72, .08));
+}
 .pv-empty button { pointer-events: auto; min-height: 40px; }
 .pv-box {
   position: absolute; left: 0; top: 0; border: 1px dashed var(--pv-accent); background: rgba(142, 162, 255, .08);
