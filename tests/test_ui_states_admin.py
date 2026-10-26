@@ -83,6 +83,11 @@ HOLD = """(function () {
 })();"""
 
 
+def each_size():
+    """(size, is_last) over STATE_SIZES; destructive steps (a Retry that succeeds, a confirmed delete) run once, last."""
+    return [(s, i == len(STATE_SIZES) - 1) for i, s in enumerate(STATE_SIZES)]
+
+
 class StateMixin(object):
     def view(self, pg, cls_name: str, timeout: float = 20) -> None:
         pg.wait_for("!!document.querySelector('#app-main .%s')" % cls_name, timeout)
@@ -203,37 +208,42 @@ class AdminStates(StateMixin, UiCase):
                 pg.wait_for("document.querySelector('.adm-sec-head .fb-stale').hidden", 20)
 
     def test_import_upload_failure_is_inline_and_retry_uploads(self):
-        with self.open(P + "imports", "m", intercepts=[("/api/v2/projects/campus-demo/imports?*", 500, BOOM, "POST")]) as pg:
-            self.view(pg, "adm-imports")
-            card = ".adm-card[data-importer=dante]"
-            pg.wait_for("!!document.querySelector(%s)" % q(card + " input[type=file]"))
-            pg.js("""(function () {
-              var dt = new DataTransfer();
-              dt.items.add(new File([%s], 'stage.xml', {type: 'text/xml'}));
-              document.querySelector(%s).files = dt.files;
-            })()""" % (q(DANTE_PRESET), q(card + " input[type=file]")))
-            self.assertEqual(pg.js("document.querySelector(%s).files.length" % q(card + " input[type=file]")), 1)
-            pg.click(card + " button.primary")
-            out = card + " .imp-out"
-            pg.wait_for("!!document.querySelector(%s)" % q(out + " .fb-error"), 20)
-            self.assertIn("Could not import stage.xml", self.text(pg, out))
-            self.no_hscroll(pg, "import upload error")
-            pg.shot("st-admin-imports-upload-error-m")
-            self.retry_clears(pg, out, "!!document.querySelector(%s)" % q(out + " .imp-sum"), pg.rules[0])
+        for size, last in each_size():
+            with self.subTest(size=size), self.open(P + "imports", size, intercepts=[("/api/v2/projects/campus-demo/imports?*", 500, BOOM, "POST")]) as pg:
+                self.view(pg, "adm-imports")
+                card = ".adm-card[data-importer=dante]"
+                pg.wait_for("!!document.querySelector(%s)" % q(card + " input[type=file]"))
+                pg.js("""(function () {
+                  var dt = new DataTransfer();
+                  dt.items.add(new File([%s], 'stage.xml', {type: 'text/xml'}));
+                  document.querySelector(%s).files = dt.files;
+                })()""" % (q(DANTE_PRESET), q(card + " input[type=file]")))
+                self.assertEqual(pg.js("document.querySelector(%s).files.length" % q(card + " input[type=file]")), 1)
+                pg.click(card + " button.primary")
+                out = card + " .imp-out"
+                pg.wait_for("!!document.querySelector(%s)" % q(out + " .fb-error"), 20)
+                self.assertIn("Could not import stage.xml", self.text(pg, out))
+                self.no_hscroll(pg, "import upload error")
+                pg.js("document.querySelector(%s).scrollIntoView({block: 'center'})" % q(out))
+                pg.shot("st-admin-imports-upload-error-%s" % size)
+                if last:
+                    self.retry_clears(pg, out, "!!document.querySelector(%s)" % q(out + " .imp-sum"), pg.rules[0])
 
     def test_remove_import_confirms_scope(self):
         imp = api(self.base, "GET", "/api/v2/projects/campus-demo")
         imp = (imp.get("doc", imp).get("imports") or [])[0]
-        with self.open(P + "imports", "d") as pg:
-            self.view(pg, "adm-imports")
-            sel = "[data-table=\"imports.registered\"] tr.dt-row[data-id=%s] .adm-acts button.danger" % q(imp["id"])
-            pg.wait_for("!!document.querySelector(%s)" % q(sel))
-            pg.click(sel)
-            text = self.dialog_text(pg)
-            self.assertIn("Remove import " + imp["path"] + "?", text)
-            self.assertIn("Remove + delete files", text)
-            self.dismiss(pg)
-            self.assertTrue(pg.js("!!document.querySelector(%s)" % q(sel)), "cancel removes nothing")
+        sel = "[data-table=\"imports.registered\"] tr.dt-row[data-id=%s] .adm-acts button.danger" % q(imp["id"])
+        for size, _ in each_size():
+            with self.subTest(size=size), self.open(P + "imports", size) as pg:
+                self.view(pg, "adm-imports")
+                pg.wait_for("!!document.querySelector(%s)" % q(sel))
+                pg.click(sel)
+                text = self.dialog_text(pg)
+                self.assertIn("Remove import " + imp["path"] + "?", text)
+                self.assertIn("Remove + delete files", text)
+                pg.shot("st-admin-imports-remove-confirm-%s" % size)
+                self.dismiss(pg)
+                self.assertTrue(pg.js("!!document.querySelector(%s)" % q(sel)), "cancel removes nothing")
 
     # ------------------------------------------------------------------ history
 
@@ -251,23 +261,27 @@ class AdminStates(StateMixin, UiCase):
     def test_history_restore_confirms_with_numbers_and_failure_retries(self):
         revs = self.revisions()
         latest = max(revs)
-        with self.open(P + "history", "d", intercepts=[("/api/v2/projects/campus-demo/history/1/restore", 500, BOOM, "POST")]) as pg:
-            self.view(pg, "adm-history")
-            pg.wait_for("document.querySelectorAll('.adm-history tr.dt-row').length === %d" % len(revs), 20)
-            restore = "(function () { return Array.prototype.filter.call(document.querySelectorAll('.adm-history tr.dt-row[data-id=\"1\"] .adm-acts button'), function (b) { return b.textContent === 'Restore'; })[0]; })()"
-            pg.js(restore + ".click()")
-            text = self.dialog_text(pg)
-            self.assertIn("Restore revision 1?", text)
-            self.assertIn("This creates revision %d." % (latest + 1), text)
-            pg.shot("st-admin-history-restore-confirm-d")
-            self.dismiss(pg)
-            pg.js(restore + ".click()")
-            self.dialog_text(pg)
-            self.confirm(pg)
-            err = ".adm-history .adm-state"
-            pg.wait_for("!!document.querySelector(%s)" % q(err + " .fb-error"), 20)
-            self.assertIn("Could not restore revision 1", self.text(pg, err))
-            self.retry_clears(pg, err, "document.querySelectorAll('.adm-history tr.dt-row').length === %d" % (len(revs) + 1), pg.rules[0])
+        restore = "(function () { return Array.prototype.filter.call(document.querySelectorAll('.adm-history tr.dt-row[data-id=\"1\"] .adm-acts button'), function (b) { return b.textContent === 'Restore'; })[0]; })()"
+        for size, last in each_size():
+            with self.subTest(size=size), self.open(P + "history", size, intercepts=[("/api/v2/projects/campus-demo/history/1/restore", 500, BOOM, "POST")]) as pg:
+                self.view(pg, "adm-history")
+                pg.wait_for("document.querySelectorAll('.adm-history tr.dt-row').length === %d" % len(revs), 20)
+                pg.js(restore + ".click()")
+                text = self.dialog_text(pg)
+                self.assertIn("Restore revision 1?", text)
+                self.assertIn("This creates revision %d." % (latest + 1), text)
+                pg.shot("st-admin-history-restore-confirm-%s" % size)
+                self.dismiss(pg)
+                if not last:
+                    continue
+                pg.js(restore + ".click()")
+                self.dialog_text(pg)
+                self.confirm(pg)
+                err = ".adm-history .adm-state"
+                pg.wait_for("!!document.querySelector(%s)" % q(err + " .fb-error"), 20)
+                self.assertIn("Could not restore revision 1", self.text(pg, err))
+                self.no_hscroll(pg, "history restore error")
+                self.retry_clears(pg, err, "document.querySelectorAll('.adm-history tr.dt-row').length === %d" % (len(revs) + 1), pg.rules[0])
         self.assertEqual(max(self.revisions()), latest + 1)
 
     # ------------------------------------------------------------------ builds
@@ -286,70 +300,81 @@ class AdminStates(StateMixin, UiCase):
                 pg.shot("st-admin-builds-empty-%s" % size)
 
     def test_build_and_delete_failures_are_inline(self):
-        with self.open(P + "builds", "m", intercepts=[("/api/v2/projects/campus-demo/builds", 500, BOOM, "POST")]) as pg:
-            self.view(pg, "adm-builds")
-            pg.wait_for("document.querySelectorAll('.adm-builds tr.dt-row').length > 0", 20)
-            n = self.rows(pg, ".adm-builds")
-            pg.click("#bld-go")
-            pg.wait_for("!!document.querySelector('.adm-build-err .fb-error')", 30)
-            self.assertIn("Build failed", self.text(pg, ".adm-build-err"))
-            self.assertTrue(pg.js("!!document.querySelector('.adm-build-err .fb-retry')"))
-            self.no_hscroll(pg, "build error")
-            pg.shot("st-admin-builds-build-error-m")
-            pg.clear_intercepts()
-            pg.intercept("/api/v2/projects/campus-demo/builds/*", 500, BOOM, "DELETE")
-            pg.click("tr.dt-row[data-id=%s] .adm-acts button.danger" % q(self.build))
-            self.assertIn("Delete build " + self.build + "?", self.dialog_text(pg))
-            self.confirm(pg)
-            self.retry_clears(pg, ".adm-builds .adm-state", "document.querySelectorAll('.adm-builds tr.dt-row').length === %d" % (n - 1), pg.rules[0])
+        for size, last in each_size():
+            with self.subTest(size=size), self.open(P + "builds", size, intercepts=[("/api/v2/projects/campus-demo/builds", 500, BOOM, "POST")]) as pg:
+                self.view(pg, "adm-builds")
+                pg.wait_for("document.querySelectorAll('.adm-builds tr.dt-row').length > 0", 20)
+                n = self.rows(pg, ".adm-builds")
+                pg.click("#bld-go")
+                pg.wait_for("!!document.querySelector('.adm-build-err .fb-error')", 30)
+                self.assertIn("Build failed", self.text(pg, ".adm-build-err"))
+                self.assertTrue(pg.js("!!document.querySelector('.adm-build-err .fb-retry')"))
+                self.no_hscroll(pg, "build error")
+                pg.shot("st-admin-builds-build-error-%s" % size)
+                if not last:
+                    continue
+                pg.clear_intercepts()
+                pg.intercept("/api/v2/projects/campus-demo/builds/*", 500, BOOM, "DELETE")
+                pg.click("tr.dt-row[data-id=%s] .adm-acts button.danger" % q(self.build))
+                self.assertIn("Delete build " + self.build + "?", self.dialog_text(pg))
+                self.confirm(pg)
+                self.retry_clears(pg, ".adm-builds .adm-state", "document.querySelectorAll('.adm-builds tr.dt-row').length === %d" % (n - 1), pg.rules[0])
 
     # ------------------------------------------------------------------ settings
 
     def test_share_revoke_confirms_and_failure_retries(self):
         tok = self.share["token"]
-        with self.open(P + "settings/sharing", "m", intercepts=[("/api/v2/projects/campus-demo/shares/*", 500, BOOM, "DELETE")]) as pg:
-            self.view(pg, "adm-settings")
-            row = ".adm-panel tr.dt-row[data-id=%s]" % q(tok)
-            pg.wait_for("!!document.querySelector(%s)" % q(row), 20)
-            pg.click(row + " .adm-acts button.danger")
-            text = self.dialog_text(pg)
-            self.assertIn("Revoke share link \u201cUshers\u201d?", text)
-            self.assertIn("loses access", text)
-            pg.shot("st-admin-share-revoke-confirm-m")
-            self.confirm(pg)
-            self.retry_clears(pg, ".adm-panel .adm-state", "!document.querySelector(%s)" % q(row), pg.rules[0])
+        for size, last in each_size():
+            with self.subTest(size=size), self.open(P + "settings/sharing", size, intercepts=[("/api/v2/projects/campus-demo/shares/*", 500, BOOM, "DELETE")]) as pg:
+                self.view(pg, "adm-settings")
+                row = ".adm-panel tr.dt-row[data-id=%s]" % q(tok)
+                pg.wait_for("!!document.querySelector(%s)" % q(row), 20)
+                pg.click(row + " .adm-acts button.danger")
+                text = self.dialog_text(pg)
+                self.assertIn("Revoke share link \u201cUshers\u201d?", text)
+                self.assertIn("loses access", text)
+                pg.shot("st-admin-share-revoke-confirm-%s" % size)
+                if not last:
+                    self.dismiss(pg)
+                    continue
+                self.confirm(pg)
+                self.retry_clears(pg, ".adm-panel .adm-state", "!document.querySelector(%s)" % q(row), pg.rules[0])
 
     def test_backup_delete_and_restore_confirm_scope(self):
         name = self.backup["name"]
         listed = [b for b in api(self.base, "GET", "/api/v2/backups")["backups"] if b["name"] == name][0]
         n = len(listed.get("projects") or [])
-        with self.open(P + "settings/backups", "m") as pg:
-            self.view(pg, "adm-settings")
-            row = ".adm-panel tr.dt-row[data-id=%s]" % q(name)
-            pg.wait_for("!!document.querySelector(%s)" % q(row), 20)
-            pg.click(row + " button[aria-label^=Delete]")
-            self.assertIn("Delete backup " + name + "?", self.dialog_text(pg))
-            self.dismiss(pg)
-            pg.js("Array.prototype.filter.call(document.querySelectorAll(%s), function (b) { return b.textContent === 'Restore'; })[0].click()" % q(row + " .adm-acts button"))
-            text = self.dialog_text(pg)
-            self.assertIn("Restore backup " + name + "?", text)
-            self.assertIn("%d project%s" % (n, "" if n == 1 else "s"), text)
-            self.assertIn("pre-restore", text)
-            self.assertIn("Replace everything", text)
-            pg.shot("st-admin-backup-restore-confirm-m")
-            self.dismiss(pg)
-            self.assertTrue(pg.js("!!document.querySelector(%s)" % q(row)))
+        for size, _ in each_size():
+            with self.subTest(size=size), self.open(P + "settings/backups", size) as pg:
+                self.view(pg, "adm-settings")
+                row = ".adm-panel tr.dt-row[data-id=%s]" % q(name)
+                pg.wait_for("!!document.querySelector(%s)" % q(row), 20)
+                pg.click(row + " button[aria-label^=Delete]")
+                self.assertIn("Delete backup " + name + "?", self.dialog_text(pg))
+                pg.shot("st-admin-backup-delete-confirm-%s" % size)
+                self.dismiss(pg)
+                pg.js("Array.prototype.filter.call(document.querySelectorAll(%s), function (b) { return b.textContent === 'Restore'; })[0].click()" % q(row + " .adm-acts button"))
+                text = self.dialog_text(pg)
+                self.assertIn("Restore backup " + name + "?", text)
+                self.assertIn("%d project%s" % (n, "" if n == 1 else "s"), text)
+                self.assertIn("pre-restore", text)
+                self.assertIn("Replace everything", text)
+                pg.shot("st-admin-backup-restore-confirm-%s" % size)
+                self.dismiss(pg)
+                self.assertTrue(pg.js("!!document.querySelector(%s)" % q(row)))
 
     def test_settings_row_deletes_confirm_scope(self):
-        with self.open(P + "settings/networks", "d") as pg:
-            self.view(pg, "adm-settings")
-            pg.wait_for("!!document.querySelector('.adm-panel tr.dt-row[data-id=mgmt]')", 20)
-            n = self.rows(pg, ".adm-panel")
-            pg.click(".adm-panel tr.dt-row[data-id=mgmt] .adm-acts button.danger")
-            text = self.dialog_text(pg)
-            self.assertRegex(text, r"Delete network .+\?")
-            self.dismiss(pg)
-            self.assertEqual(self.rows(pg, ".adm-panel"), n)
+        for size, _ in each_size():
+            with self.subTest(size=size), self.open(P + "settings/networks", size) as pg:
+                self.view(pg, "adm-settings")
+                pg.wait_for("!!document.querySelector('.adm-panel tr.dt-row[data-id=mgmt]')", 20)
+                n = self.rows(pg, ".adm-panel")
+                pg.click(".adm-panel tr.dt-row[data-id=mgmt] .adm-acts button.danger")
+                text = self.dialog_text(pg)
+                self.assertRegex(text, r"Delete network .+\?")
+                pg.shot("st-admin-settings-row-delete-confirm-%s" % size)
+                self.dismiss(pg)
+                self.assertEqual(self.rows(pg, ".adm-panel"), n)
 
 
 class DiscoveryStates(StateMixin, UiCase):
@@ -436,58 +461,66 @@ class DiscoveryStates(StateMixin, UiCase):
 
     def test_run_start_failure_is_inline_and_retry_starts_it(self):
         before = len(api(self.base, "GET", "/api/v2/projects/st-norun/discovery/runs")["runs"])
-        with self.open("#/st-norun//discovery", "m", intercepts=[("/api/v2/projects/st-norun/discovery/runs", 500, BOOM, "POST")]) as pg:
-            pg.wait_for("!!document.querySelector('.disc-run-btn') && !document.querySelector('.disc-run-btn').disabled", 20)
-            pg.click(".disc-run-btn")
-            err = ".disc-run-err"
-            pg.wait_for("!!document.querySelector(%s)" % q(err + " .fb-error"), 20)
-            self.assertIn("Could not start the run", self.text(pg, err))
-            self.no_hscroll(pg, "run start error")
-            pg.shot("st-admin-discovery-start-error-m")
-            self.retry_clears(pg, err, "!!document.querySelector('.disc-run .disc-run-id')", pg.rules[0])
+        for size, last in each_size():
+            with self.subTest(size=size), self.open("#/st-norun//discovery", size, intercepts=[("/api/v2/projects/st-norun/discovery/runs", 500, BOOM, "POST")]) as pg:
+                pg.wait_for("!!document.querySelector('.disc-run-btn') && !document.querySelector('.disc-run-btn').disabled", 20)
+                pg.click(".disc-run-btn")
+                err = ".disc-run-err"
+                pg.wait_for("!!document.querySelector(%s)" % q(err + " .fb-error"), 20)
+                self.assertIn("Could not start the run", self.text(pg, err))
+                self.no_hscroll(pg, "run start error")
+                pg.shot("st-admin-discovery-start-error-%s" % size)
+                if last:
+                    self.retry_clears(pg, err, "!!document.querySelector('.disc-run .disc-run-id')", pg.rules[0])
         t0 = time.time()
         while time.time() - t0 < 30 and len(api(self.base, "GET", "/api/v2/projects/st-norun/discovery/runs")["runs"]) == before:
             time.sleep(0.2)
         self.assertEqual(len(api(self.base, "GET", "/api/v2/projects/st-norun/discovery/runs")["runs"]), before + 1)
 
     def test_source_save_and_test_failures_sit_beside_the_form(self):
-        with self.open("#/campus-demo/main/discovery/new?run=" + self.rid, "m") as pg:
-            pg.wait_for("!!document.querySelector('.disc-card .disc-card-acts')", 20)
-            pg.js("document.querySelector('details.disc-sources').open = true")
-            card = ".disc-card[data-probe]:not(.disc-install)"
-            pid = pg.js("document.querySelector(%s).getAttribute('data-probe')" % q(card))
-            card = ".disc-card[data-probe=%s]" % q(pid)
-            rule = pg.intercept("/api/v2/projects/campus-demo/discovery/settings", 500, BOOM, "PUT")
-            pg.click(card + " .disc-card-acts button.primary")
-            out = card + " .disc-test-out"
-            pg.wait_for("!!document.querySelector(%s)" % q(out + " .fb-error"), 20)
-            self.assertIn("Could not save", self.text(pg, out))
-            self.no_hscroll(pg, "source save error")
-            pg.js("document.querySelector(%s).scrollIntoView({block: 'center'})" % q(out))
-            pg.shot("st-admin-discovery-source-save-error-m")
-            pg.js("document.querySelector(%s).__stale = 1" % q(card))
-            # A save that goes through re-renders the source cards.
-            self.retry_clears(pg, out, "!!document.querySelector(%s) && !document.querySelector(%s).__stale" % (q(card), q(card)), rule)
-            pg.js("document.querySelector('details.disc-sources').open = true")
-            rule = pg.intercept("/api/v2/projects/campus-demo/discovery/test", 500, BOOM, "POST")
-            pg.click(card + " .disc-card-acts button:not(.primary)")
-            pg.wait_for("!!document.querySelector(%s)" % q(out + " .fb-error .fb-retry"), 20)
-            self.assertIn("Could not test", self.text(pg, out))
-            self.assertEqual(rule["hits"], 1)
+        for size, last in each_size():
+            with self.subTest(size=size), self.open("#/campus-demo/main/discovery/new?run=" + self.rid, size) as pg:
+                pg.wait_for("!!document.querySelector('.disc-card .disc-card-acts')", 20)
+                pg.js("document.querySelector('details.disc-sources').open = true")
+                card = ".disc-card[data-probe]:not(.disc-install)"
+                pid = pg.js("document.querySelector(%s).getAttribute('data-probe')" % q(card))
+                card = ".disc-card[data-probe=%s]" % q(pid)
+                out = card + " .disc-test-out"
+                rule = pg.intercept("/api/v2/projects/campus-demo/discovery/settings", 500, BOOM, "PUT")
+                pg.click(card + " .disc-card-acts button.primary")
+                pg.wait_for("!!document.querySelector(%s)" % q(out + " .fb-error"), 20)
+                self.assertIn("Could not save", self.text(pg, out))
+                self.no_hscroll(pg, "source save error")
+                pg.js("document.querySelector(%s).scrollIntoView({block: 'center'})" % q(out))
+                pg.shot("st-admin-discovery-source-save-error-%s" % size)
+                if last:
+                    pg.js("document.querySelector(%s).__stale = 1" % q(card))
+                    # A save that goes through re-renders the source cards.
+                    self.retry_clears(pg, out, "!!document.querySelector(%s) && !document.querySelector(%s).__stale" % (q(card), q(card)), rule)
+                    pg.js("document.querySelector('details.disc-sources').open = true")
+                pg.clear_intercepts()
+                rule = pg.intercept("/api/v2/projects/campus-demo/discovery/test", 500, BOOM, "POST")
+                pg.click(card + " .disc-card-acts button:not(.primary)")
+                pg.wait_for("!!document.querySelector(%s)" % q(out + " .fb-error .fb-retry"), 20)
+                self.assertIn("Could not test", self.text(pg, out))
+                self.assertEqual(rule["hits"], 1)
+                pg.shot("st-admin-discovery-source-test-error-%s" % size)
 
     def test_promote_failure_is_inline_and_retry_promotes(self):
-        with self.open("#/campus-demo/main/discovery/new?run=" + self.rid, "m",
-                       intercepts=[("/api/v2/projects/campus-demo/discovery/runs/*/findings/promote", 500, BOOM, "POST")]) as pg:
-            pg.wait_for("!!document.querySelector('.disc-tab-body tr.dt-row .disc-actions button.primary')", 20)
-            n = self.rows(pg, ".disc-tab-body")
-            pg.click(".disc-tab-body tr.dt-row .disc-actions button.primary")
-            err = ".disc-act-err"
-            pg.wait_for("!!document.querySelector(%s)" % q(err + " .fb-error"), 20)
-            self.assertIn("Could not apply the change", self.text(pg, err))
-            self.no_hscroll(pg, "promote error")
-            pg.js("document.querySelector('.disc-act-err').scrollIntoView({block: 'center'})")
-            pg.shot("st-admin-discovery-promote-error-m")
-            self.retry_clears(pg, err, "document.querySelectorAll('.disc-tab-body tr.dt-row').length === %d" % (n - 1), pg.rules[0])
+        for size, last in each_size():
+            with self.subTest(size=size), self.open("#/campus-demo/main/discovery/new?run=" + self.rid, size,
+                                                    intercepts=[("/api/v2/projects/campus-demo/discovery/runs/*/findings/promote", 500, BOOM, "POST")]) as pg:
+                pg.wait_for("!!document.querySelector('.disc-tab-body tr.dt-row .disc-actions button.primary')", 20)
+                n = self.rows(pg, ".disc-tab-body")
+                pg.click(".disc-tab-body tr.dt-row .disc-actions button.primary")
+                err = ".disc-act-err"
+                pg.wait_for("!!document.querySelector(%s)" % q(err + " .fb-error"), 20)
+                self.assertIn("Could not apply the change", self.text(pg, err))
+                self.no_hscroll(pg, "promote error")
+                pg.js("document.querySelector('.disc-act-err').scrollIntoView({block: 'center'})")
+                pg.shot("st-admin-discovery-promote-error-%s" % size)
+                if last:
+                    self.retry_clears(pg, err, "document.querySelectorAll('.disc-tab-body tr.dt-row').length === %d" % (n - 1), pg.rules[0])
 
 
 class RoleStates(StateMixin, UiCase):
@@ -516,35 +549,45 @@ class RoleStates(StateMixin, UiCase):
         return pg
 
     def test_admin_user_remove_confirms_scope(self):
-        pg = self.signed_in("admin1", "/" + P + "settings/users", "m")
-        row = ".adm-panel tr.dt-row[data-id=temp1]"
-        pg.wait_for("!!document.querySelector(%s)" % q(row), 20)
-        pg.js("Array.prototype.filter.call(document.querySelectorAll(%s), function (b) { return b.textContent === 'Remove'; })[0].click()" % q(row + " .adm-acts button"))
-        text = self.dialog_text(pg)
-        self.assertIn("Remove user temp1?", text)
-        self.assertIn("Remove user", pg.js("document.querySelector('.app-dialog footer button:last-child').textContent"))
-        pg.shot("st-admin-user-remove-confirm-m")
-        self.confirm(pg)
-        pg.wait_for("!document.querySelector(%s)" % q(row), 20)
-        self.assertLessEqual(pg.page_hscroll(), 0)
+        for size, last in each_size():
+            with self.subTest(size=size):
+                pg = self.signed_in("admin1", "/" + P + "settings/users", size)
+                row = ".adm-panel tr.dt-row[data-id=temp1]"
+                pg.wait_for("!!document.querySelector(%s)" % q(row), 20)
+                pg.js("Array.prototype.filter.call(document.querySelectorAll(%s), function (b) { return b.textContent === 'Remove'; })[0].click()" % q(row + " .adm-acts button"))
+                text = self.dialog_text(pg)
+                self.assertIn("Remove user temp1?", text)
+                self.assertIn("Remove user", pg.js("document.querySelector('.app-dialog footer button:last-child').textContent"))
+                pg.shot("st-admin-user-remove-confirm-%s" % size)
+                if not last:
+                    self.dismiss(pg)
+                    continue
+                self.confirm(pg)
+                pg.wait_for("!document.querySelector(%s)" % q(row), 20)
+                self.no_hscroll(pg, "user removed")
 
     def test_viewer_gets_states_without_write_actions(self):
-        pg = self.signed_in("viewer1", "/#/st-empty//builds", "m")
-        pg.wait_for("!!document.querySelector('.adm-builds .fb-empty')", 20)
-        self.assertIn("No builds yet", self.text(pg, ".adm-builds .fb-empty"))
-        self.assertFalse(pg.js("!!document.querySelector('.adm-builds .fb-empty-action, #bld-go')"), "viewer: no Build action")
-        self.assertLessEqual(pg.page_hscroll(), 0)
-        pg.shot("st-admin-viewer-builds-empty-m")
-        pg.goto("#/st-empty//discovery")
-        pg.wait_for("!!document.querySelector('.disc-findings .fb-empty')", 20)
-        self.assertIn("has not been run", self.text(pg, ".disc-findings .fb-empty"))
-        self.assertFalse(pg.js("!!document.querySelector('.disc-findings .fb-empty-action, .disc-run-btn')"), "viewer: no Run action")
-        pg.goto("#/campus-demo/main/history")
-        pg.wait_for("document.querySelectorAll('.adm-history tr.dt-row').length > 0", 20)
-        self.assertEqual(pg.js("Array.prototype.filter.call(document.querySelectorAll('.adm-history .adm-acts button'), function (b) { return b.textContent === 'Restore'; }).length"), 0)
-        pg.goto("#/campus-demo/main/imports")
-        pg.wait_for("!!document.querySelector('#app-main .adm-imports')", 20)
-        self.assertEqual(pg.js("document.querySelectorAll('.adm-imports .adm-acts button.danger, .adm-imports .adm-card input[type=file], .adm-ovl .disc-actions button').length"), 0)
+        for size, last in each_size():
+            with self.subTest(size=size):
+                pg = self.signed_in("viewer1", "/#/st-empty//builds", size)
+                pg.wait_for("!!document.querySelector('.adm-builds .fb-empty')", 20)
+                self.assertIn("No builds yet", self.text(pg, ".adm-builds .fb-empty"))
+                self.assertFalse(pg.js("!!document.querySelector('.adm-builds .fb-empty-action, #bld-go')"), "viewer: no Build action")
+                self.no_hscroll(pg, "viewer builds empty")
+                pg.shot("st-admin-viewer-builds-empty-%s" % size)
+                pg.goto("#/st-empty//discovery")
+                pg.wait_for("!!document.querySelector('.disc-findings .fb-empty')", 20)
+                self.assertIn("has not been run", self.text(pg, ".disc-findings .fb-empty"))
+                self.assertFalse(pg.js("!!document.querySelector('.disc-findings .fb-empty-action, .disc-run-btn')"), "viewer: no Run action")
+                pg.shot("st-admin-viewer-discovery-no-runs-%s" % size)
+                if not last:
+                    continue
+                pg.goto("#/campus-demo/main/history")
+                pg.wait_for("document.querySelectorAll('.adm-history tr.dt-row').length > 0", 20)
+                self.assertEqual(pg.js("Array.prototype.filter.call(document.querySelectorAll('.adm-history .adm-acts button'), function (b) { return b.textContent === 'Restore'; }).length"), 0)
+                pg.goto("#/campus-demo/main/imports")
+                pg.wait_for("!!document.querySelector('#app-main .adm-imports')", 20)
+                self.assertEqual(pg.js("document.querySelectorAll('.adm-imports .adm-acts button.danger, .adm-imports .adm-card input[type=file], .adm-ovl .disc-actions button').length"), 0)
 
 
 if __name__ == "__main__":  # pragma: no cover
