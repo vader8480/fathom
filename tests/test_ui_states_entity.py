@@ -141,7 +141,7 @@ class EntityStatesUi(UiCase):
             "procedures": ("No procedures mention Bare Box yet.", ["New procedure"]),
             "files": ("No photos or documents for Bare Box.", ["Upload files"]),
         }
-        for size in ("d", "m"):
+        for size in ("d", "t", "m"):
             with self.subTest(size=size), self.open(E + "store/devices/bare-box/ports", size) as pg:
                 for tab, (title, actions) in want.items():
                     pg.goto(E + "store/devices/bare-box/" + tab)
@@ -169,20 +169,21 @@ class EntityStatesUi(UiCase):
                 pg.click(".pd-body .fb-empty-action")
                 pg.wait_for("location.hash.indexOf('/patch?') > 0")
                 self.assertIn("sel=device:bare-box", pg.hash)
-                self.assertEqual("drawer=0" in pg.hash, size == "m", "the canvas stays clear below lg")
+                self.assertEqual("drawer=0" in pg.hash, size != "d", "the canvas stays clear below lg")
                 self.no_errors(pg)
 
     def test_device_landing_empty(self):
-        with self.open(E + "main/devices", "m") as pg:
-            st = self.empty(pg, ".pd-landing")
-            self.assertEqual(st["title"], "No devices in Main room yet.")
-            self.assertEqual(st["actions"], ["Add device", "Bulk add"])
-            self.assertLessEqual(pg.page_hscroll(), 0)
-            pg.shot("st-device-landing-m")
-            self.no_errors(pg)
+        for size in ("d", "t", "m"):
+            with self.subTest(size=size), self.open(E + "main/devices", size) as pg:
+                st = self.empty(pg, ".pd-landing")
+                self.assertEqual(st["title"], "No devices in Main room yet.")
+                self.assertEqual(st["actions"], ["Add device", "Bulk add"])
+                self.assertLessEqual(pg.page_hscroll(), 0)
+                pg.shot("st-device-landing-" + size)
+                self.no_errors(pg)
 
     def test_unknown_device_inline_error_and_back_link(self):
-        for size in ("d", "m"):
+        for size in ("d", "t", "m"):
             with self.subTest(size=size), self.open(C + "devices/no-such-box/ports", size) as pg:
                 pg.wait_for("!!document.querySelector('.pd-notfound.fb-error[role=alert]')")
                 self.assertIn("Device \u201cno-such-box\u201d not found", pg.js("document.querySelector('.pd-notfound').textContent"))
@@ -204,7 +205,7 @@ class EntityStatesUi(UiCase):
             "plans": ("No floor plan for Main room.", ["Upload a plan"]),
             "procedures": ("No procedures apply to Main room yet.", ["New procedure"]),
         }
-        for size in ("d", "m"):
+        for size in ("d", "t", "m"):
             with self.subTest(size=size), self.open(E + "main/rooms/main/overview", size) as pg:
                 for tab, (title, actions) in want.items():
                     pg.goto(E + "main/rooms/main/" + tab)
@@ -229,16 +230,17 @@ class EntityStatesUi(UiCase):
             self.no_errors(pg)
 
     def test_rooms_landing_empty(self):
-        with self.open("#/roomless-demo/*/rooms", "m") as pg:
-            st = self.empty(pg, ".pr-landing")
-            self.assertEqual(st["title"], "No rooms yet.")
-            self.assertEqual(st["actions"], ["Add a room", "Import a spreadsheet"])
-            self.assertLessEqual(pg.page_hscroll(), 0)
-            pg.shot("st-rooms-landing-m")
-            self.no_errors(pg)
+        for size in ("d", "t", "m"):
+            with self.subTest(size=size), self.open("#/roomless-demo/*/rooms", size) as pg:
+                st = self.empty(pg, ".pr-landing")
+                self.assertEqual(st["title"], "No rooms yet.")
+                self.assertEqual(st["actions"], ["Add a room", "Import a spreadsheet"])
+                self.assertLessEqual(pg.page_hscroll(), 0)
+                pg.shot("st-rooms-landing-" + size)
+                self.no_errors(pg)
 
     def test_unknown_room_inline_error_and_back_link(self):
-        for size in ("d", "m"):
+        for size in ("d", "t", "m"):
             with self.subTest(size=size), self.open(C + "rooms/nowhere/cables", size) as pg:
                 pg.wait_for("!!document.querySelector('.pr-notfound .fb-error[role=alert]')")
                 self.assertIn("Room \u201cnowhere\u201d not found", pg.js("document.querySelector('.pr-notfound').textContent"))
@@ -284,7 +286,7 @@ class EntityStatesUi(UiCase):
         return [("/api/v2/projects/campus-demo", 200, body, "GET")]
 
     def test_inspector_review_badges_jump_to_their_sections(self):
-        for size in ("d", "m"):
+        for size in ("d", "t", "m"):
             rules = self.campus_with_reports() + [("/api/v2/projects/campus-demo/devices/duplicates*", 200, DUPLICATES, "GET")]
             with self.subTest(size=size), self.open(C + "patch?sel=device:foh-cl5", size, intercepts=rules) as pg:
                 pg.wait_for(DRAWER_OPEN)
@@ -315,20 +317,21 @@ class EntityStatesUi(UiCase):
 
     def test_inspector_duplicates_error_and_retry(self):
         rules = [("/api/v2/projects/campus-demo/devices/duplicates*", 500, {"error": "boom", "code": "internal"}, "GET")]
-        with self.open(C + "patch?sel=device:foh-cl5&sec=dups", "m", intercepts=rules) as pg:
-            pg.wait_for(DRAWER_OPEN)
-            pg.wait_for("!!document.querySelector('#app-inspector .ins-dups-error.fb-error[role=alert]')")
-            self.assertIn("Could not check for duplicates: boom", pg.js("document.querySelector('#app-inspector .ins-dups-error').textContent"))
-            self.assertFalse(pg.js("!!document.querySelector('#app-inspector [data-badge=dups]')"))
-            self.assertLessEqual(pg.page_hscroll(), 0)
-            pg.shot("st-ins-dups-error-m")
-            pg.rules = [r for r in pg.rules if "duplicates" not in r["glob"]]
-            pg.intercept("/api/v2/projects/campus-demo/devices/duplicates*", 200, DUPLICATES, "GET")
-            pg.click("#app-inspector .ins-dups-error .fb-retry")
-            pg.wait_for("document.querySelectorAll('#app-inspector [data-section=dups] .mg-hint').length === 3")
-            pg.wait_for("!!document.querySelector('#app-inspector [data-badge=dups]')")
-            self.assertFalse(pg.js("!!document.querySelector('#app-inspector .ins-dups-error')"))
-            self.no_errors(pg)
+        for size in ("d", "t", "m"):
+            with self.subTest(size=size), self.open(C + "patch?sel=device:foh-cl5&sec=dups", size, intercepts=rules) as pg:
+                pg.wait_for(DRAWER_OPEN)
+                pg.wait_for("!!document.querySelector('#app-inspector .ins-dups-error.fb-error[role=alert]')")
+                self.assertIn("Could not check for duplicates: boom", pg.js("document.querySelector('#app-inspector .ins-dups-error').textContent"))
+                self.assertFalse(pg.js("!!document.querySelector('#app-inspector [data-badge=dups]')"))
+                self.assertLessEqual(pg.page_hscroll(), 0)
+                pg.shot("st-ins-dups-error-" + size)
+                pg.rules = [r for r in pg.rules if "duplicates" not in r["glob"]]
+                pg.intercept("/api/v2/projects/campus-demo/devices/duplicates*", 200, DUPLICATES, "GET")
+                pg.click("#app-inspector .ins-dups-error .fb-retry")
+                pg.wait_for("document.querySelectorAll('#app-inspector [data-section=dups] .mg-hint').length === 3")
+                pg.wait_for("!!document.querySelector('#app-inspector [data-badge=dups]')")
+                self.assertFalse(pg.js("!!document.querySelector('#app-inspector .ins-dups-error')"))
+                self.no_errors(pg)
 
 
 if __name__ == "__main__":  # pragma: no cover
