@@ -199,6 +199,18 @@ class DiscoveryUi(UiCase):
             self.assertIn("0 sources configured", pg.js("document.querySelector('.disc-sources summary').textContent"))
             self.assertLessEqual(pg.page_hscroll(), 0)
 
+    def test_unresolved_review_badge_links_to_the_tab(self):
+        rid = self.runs[0]
+        path = "/api/v2/projects/campus-demo/discovery/runs/%s/findings" % rid
+        f = self._api("GET", path)
+        f["counts"]["unresolved"] = 2
+        with self._open("discovery/new?run=" + rid, "m", intercepts=[(path, 200, f, "GET")]) as pg:
+            pg.wait_for("!!document.querySelector('.disc-review .fb-review')", 20)
+            self.assertIn("2", pg.js("document.querySelector('.disc-review').textContent"))
+            pg.click(".disc-review .fb-review")
+            pg.wait_for("location.hash.indexOf('/discovery/unresolved?run=%s') > 0" % rid)
+            pg.wait_for("document.querySelector('.disc-tab-body').dataset.discTab === 'unresolved'")
+
     # --------------------------------------------------------------- actions
 
     def test_matched_row_opens_the_device_drawer(self):
