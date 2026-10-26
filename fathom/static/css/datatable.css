@@ -155,6 +155,7 @@ th[aria-sort=ascending],th[aria-sort=descending]{color:var(--text)}
 @media (pointer:coarse){
   .dt-root button,.dt-root select,.dt-root .dt-search,.dt-root .dt-pop-search,.dt-cols>summary,.dt-csv{min-height:44px}
   .dt-pager-nav button,.dt-pop-close,.dt-dialog-close{min-width:44px;min-height:44px}
+  .dt-cols>summary,.dt-csv{min-width:44px;justify-content:center}
   .dt-opt,.dt-check-hit{min-height:44px;min-width:44px}
   .dt-table td,.dt-compact .dt-table td,.dt-table thead th,.dt-sort{min-height:44px;height:44px}
   .dt-opt input,.dt-check-hit input{width:22px;height:22px}
