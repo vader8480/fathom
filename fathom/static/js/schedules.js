@@ -703,7 +703,7 @@ export function mount(el, ctx) {
       }
       const what = NOUNS[kind].many;
       const hides = STATE_HIDES[S.state];
-      if (hides) {
+      if (hides && localSchedule(doc(), kind, {room: room(), state: 'everything'}, vocab, store.overlay).rows.length) {
         return emptyState({
           title: 'No ' + what + ' match the state filter.',
           text: 'State \u201c' + hides[0] + '\u201d hides ' + hides[1] + ' items.',
