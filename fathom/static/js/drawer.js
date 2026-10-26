@@ -21,6 +21,12 @@ const FOCUSABLE = 'a[href], area[href], button:not([disabled]), input:not([disab
 
 function rendered(el) {
   if (!el || !el.getClientRects().length) return false;
+  // Chrome gives layout rects to the content of a closed <details>.
+  for (let p = el.parentElement, c = el; p; c = p, p = p.parentElement) {
+    if (p.tagName === 'DETAILS' && !p.open && !(c.tagName === 'SUMMARY' && c.parentElement === p)) return false;
+  }
+  if (typeof el.checkVisibility === 'function' &&
+    !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true, opacityProperty: true, visibilityProperty: true })) return false;
   const cs = el.ownerDocument.defaultView.getComputedStyle(el);
   return cs.visibility !== 'hidden' && cs.opacity !== '0';
 }
@@ -169,12 +175,22 @@ export function createDrawer(host, opts) {
     if (typeof o.onClose === 'function') o.onClose(reason);
   }
 
+  // Layers are read in the capture phase, before any handler closes one of
+  // them, and acted on in the bubble phase, after the content's own handlers
+  // (which may preventDefault, e.g. to cancel an inline edit).
+  let escSnap = null;
+  function onKeyCapture(e) {
+    escSnap = isOpenNow && (e.key === 'Escape' || e.key === 'Esc') ? { e: e, top: topLayer(flags()), inside: focusInside() } : null;
+  }
+
   function onKey(e) {
     if (!isOpenNow || destroyed || e.defaultPrevented) return;
     const modal = isModal(mode);
     if (e.key === 'Escape' || e.key === 'Esc') {
-      if (!modal && !focusInside()) return;
-      if (topLayer(flags()) !== 'drawer') return;
+      const snap = escSnap && escSnap.e === e ? escSnap : { top: topLayer(flags()), inside: focusInside() };
+      escSnap = null;
+      if (!modal && !snap.inside) return;
+      if (snap.top !== 'drawer') return;
       e.preventDefault();
       const ae = doc.activeElement;
       if (ae && ae !== host && host.contains(ae) && isField(ae)) {
@@ -205,6 +221,7 @@ export function createDrawer(host, opts) {
     focusHost();
   }
 
+  offs.push(on(doc, 'keydown', onKeyCapture, true));
   offs.push(on(doc, 'keydown', onKey));
   offs.push(on(doc, 'focusin', onFocusIn));
   offs.push(on(win, 'resize', function () { relayout(); }));

@@ -35,3 +35,4 @@ body .dr-docked-open{grid-template-columns:minmax(0,1fr) 360px}
 @media (prefers-reduced-motion:reduce){
   .dr-host.dr-sheet.dr-open,.dr-host.dr-full.dr-open,.dr-backdrop{animation:none}
 }
+@media print{.dr-host.dr-open,.dr-backdrop{display:none!important}}
