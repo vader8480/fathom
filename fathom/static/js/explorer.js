@@ -2,6 +2,30 @@
 // a page. Resizable 240–480px and collapsible to a 56px rail at md/lg (both
 // persisted in localStorage fathom.ui.explorer.<key>); a slide-in drawer with a
 // backdrop and focus trap at sm. The page goes into `handle.content`.
+//
+// Options beyond the B.2 block (all optional):
+//   renderItem(item, base) -> Node   content of each li.ex-item instead of the
+//                                    default link `base` (which it may decorate and
+//                                    return); null/undefined keeps `base`. The li
+//                                    (role=option, data-id, aria-selected) stays
+//                                    the explorer's. Controls inside a row that must
+//                                    not pick the item carry [data-ex-ignore]. To
+//                                    put controls beside it, return a div.ex-item-row
+//                                    holding `base` (a.ex-item-link) and the controls.
+//   itemAttrs(item) -> {}            extra li attributes (class is added; role, id,
+//                                    data-id, data-index, aria-selected are kept)
+//   headSlot: Node                   shown between the head and the list (hints,
+//                                    a legend); hidden in the collapsed rail
+//   emptyText: string | (query, total) -> string
+//                                    a string replaces "Nothing here yet" (no items);
+//                                    a function decides both empty and no-match text
+//   listId, contentLabel, storage, toolbar[{key, label, glyph, title, pressed, run}]
+// Handle extras: setRail(rail) takes [{key, label, glyph, href, active}] or groups
+// [{items: [...]}] (a separator between groups); setChips(chips) keeps the
+// pressed chips that still exist; setHeadSlot(node); update(partial) applies
+// items, selected, chips, rail, headSlot, toolbar, footer, emptyText, match,
+// renderItem, itemAttrs and mobileLabel without a remount (key, title and glyph
+// are fixed at mount).
 
 import { h, on } from './dom.js';
 import {
@@ -10,6 +34,8 @@ import {
 } from './explorer-core.js';
 
 let seq = 0;
+
+const RESERVED_ATTRS = { role: 1, id: 1, 'data-id': 1, 'data-index': 1, 'aria-selected': 1 };
 
 const FOCUSABLE = 'a[href]:not([tabindex="-1"]),button:not([disabled]):not([tabindex="-1"]),input:not([disabled]),' +
   'select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
@@ -65,8 +91,8 @@ export function mountExplorer(el, opts) {
   const uid = 'ex' + (++seq);
   const storage = Object.prototype.hasOwnProperty.call(o, 'storage') ? o.storage : defaultStorage();
   const state = loadExplorer(storage, o.key);
-  const chips = Array.isArray(o.chips) ? o.chips : [];
-  const activeChips = [];
+  let chips = Array.isArray(o.chips) ? o.chips : [];
+  let activeChips = [];
   const offs = [];
   let items = Array.isArray(o.items) ? o.items.slice() : [];
   let selected = o.selected === undefined || o.selected === null ? null : String(o.selected);
@@ -84,14 +110,25 @@ export function mountExplorer(el, opts) {
     class: 'ex-search', type: 'search', placeholder: 'Filter ' + title.toLowerCase() + '\u2026',
     'aria-label': 'Filter ' + title, autocomplete: 'off', spellcheck: 'false', 'aria-controls': uid + '-list',
   });
-  const chipBox = h('div', { class: 'ex-chips', role: 'group', 'aria-label': title + ' filters', hidden: !chips.length });
-  chips.forEach(function (c) {
-    chipBox.appendChild(h('button', {
-      type: 'button', class: 'ex-chip', 'data-chip': c.key, 'aria-pressed': 'false',
-    }, [h('span', { class: 'ex-chip-pill' }, [h('span', { class: 'ex-chip-label', text: str(c.label) }), h('span', { class: 'ex-chip-n' })])]));
-  });
-  const tools = (Array.isArray(o.toolbar) ? o.toolbar : []).map(toolbarButton);
-  const toolbar = h('div', { class: 'ex-toolbar', hidden: !tools.length }, tools);
+  const chipBox = h('div', { class: 'ex-chips', role: 'group', 'aria-label': title + ' filters' });
+  function buildChips() {
+    chipBox.textContent = '';
+    chipBox.hidden = !chips.length;
+    chips.forEach(function (c) {
+      chipBox.appendChild(h('button', {
+        type: 'button', class: 'ex-chip', 'data-chip': c.key, 'aria-pressed': 'false',
+      }, [h('span', { class: 'ex-chip-pill' }, [h('span', { class: 'ex-chip-label', text: str(c.label) }), h('span', { class: 'ex-chip-n' })])]));
+    });
+  }
+  buildChips();
+  const toolbar = h('div', { class: 'ex-toolbar' });
+  function buildToolbar() {
+    toolbar.textContent = '';
+    const tools = (Array.isArray(o.toolbar) ? o.toolbar : []).map(toolbarButton);
+    tools.forEach(function (t) { toolbar.appendChild(t); });
+    toolbar.hidden = !tools.length;
+  }
+  buildToolbar();
   const closeBtn = h('button', { type: 'button', class: 'ex-close', 'aria-label': 'Close ' + title, title: 'Close' }, '\u00D7');
   const head = h('div', { class: 'ex-head' }, [
     h('div', { class: 'ex-titlebar' }, [
@@ -101,13 +138,21 @@ export function mountExplorer(el, opts) {
     ]),
     search, chipBox, toolbar,
   ]);
+  const slot = h('div', { class: 'ex-slot' });
   const list = h('ul', { class: 'ex-list', id: o.listId || uid + '-list', role: 'listbox', 'aria-label': title, tabindex: '0' });
   const empty = h('p', { class: 'ex-empty', role: 'status', hidden: true });
   const rail = h('nav', { class: 'ex-rail', 'aria-label': title });
   const count = h('span', { class: 'ex-count', 'aria-live': 'polite' });
   const collapseBtn = h('button', { type: 'button', class: 'ex-collapse', 'aria-controls': uid + '-side' });
   const foot = h('div', { class: 'ex-foot' }, [count, collapseBtn]);
-  const side = h('aside', { class: 'ex-side', id: uid + '-side', 'aria-label': title }, [head, list, empty, rail, foot]);
+  const side = h('aside', { class: 'ex-side', id: uid + '-side', 'aria-label': title }, [head, slot, list, empty, rail, foot]);
+
+  function setSlot(node) {
+    slot.textContent = '';
+    if (node && node.nodeType) slot.appendChild(node);
+    slot.hidden = !slot.firstChild;
+  }
+  setSlot(o.headSlot);
   const resizer = h('div', {
     class: 'ex-resizer', role: 'separator', 'aria-orientation': 'vertical', 'aria-valuemin': '240',
     'aria-valuemax': '480', 'aria-valuenow': String(state.w), tabindex: '0', 'aria-label': 'Resize ' + title,
@@ -152,7 +197,15 @@ export function mountExplorer(el, opts) {
   function renderRail() {
     rail.textContent = '';
     if (o.glyph) rail.appendChild(h('span', { class: 'ex-rail-glyph', 'aria-hidden': 'true', title: title, text: o.glyph }));
+    const flat = [];
     (Array.isArray(o.rail) ? o.rail : []).forEach(function (r) {
+      if (!r) return;
+      if (!Array.isArray(r.items)) { flat.push(r); return; }
+      if (flat.length && r.items.length) flat.push(null);
+      r.items.forEach(function (x) { if (x) flat.push(x); });
+    });
+    flat.forEach(function (r) {
+      if (r === null) { rail.appendChild(h('span', { class: 'ex-rail-sep', role: 'separator' })); return; }
       rail.appendChild(h('a', {
         class: 'ex-rail-item', href: r.href || null, 'data-key': r.key || null, title: r.label || null,
         'aria-label': r.label || null, 'aria-current': r.active ? 'page' : null,
@@ -173,7 +226,7 @@ export function mountExplorer(el, opts) {
   function itemEl(item, i) {
     const id = str(item.id);
     const depth = Math.max(0, Math.min(8, Number(item.depth) || 0));
-    const a = h('a', { href: item.href || null, tabindex: '-1', draggable: 'false',
+    const a = h('a', { class: 'ex-item-link', href: item.href || null, tabindex: '-1', draggable: 'false',
       style: depth ? { paddingLeft: (12 + depth * 14) + 'px' } : null }, [
       item.glyph ? h('span', { class: 'ex-item-glyph', 'aria-hidden': 'true', text: str(item.glyph) }) : null,
       h('span', { class: 'ex-item-text' }, [
@@ -182,10 +235,37 @@ export function mountExplorer(el, opts) {
       ]),
       item.badge !== undefined && item.badge !== null && item.badge !== '' ? h('span', { class: 'ex-badge', text: str(item.badge) }) : null,
     ]);
-    return h('li', {
+    let content = a;
+    if (typeof o.renderItem === 'function') {
+      const r = o.renderItem(item, a);
+      if (r && r.nodeType) content = r;
+    }
+    const li = h('li', {
       class: 'ex-item', role: 'option', id: uid + '-o' + i, 'data-id': id, 'data-index': String(i),
       'aria-selected': String(selected !== null && id === selected),
-    }, a);
+    }, content);
+    if (typeof o.itemAttrs === 'function') applyAttrs(li, o.itemAttrs(item));
+    return li;
+  }
+
+  function applyAttrs(li, attrs) {
+    if (!attrs || typeof attrs !== 'object') return;
+    Object.keys(attrs).forEach(function (k) {
+      const v = attrs[k];
+      if (RESERVED_ATTRS[k] || v === undefined || v === null || v === false) return;
+      if (k === 'class') String(v).split(/\s+/).forEach(function (c) { if (c) li.classList.add(c); });
+      else if (k === 'style' && typeof v === 'object') Object.keys(v).forEach(function (p) { li.style.setProperty(p.indexOf('-') >= 0 ? p : p.replace(/[A-Z]/g, function (c) { return '-' + c.toLowerCase(); }), String(v[p])); });
+      else li.setAttribute(k, v === true ? '' : String(v));
+    });
+  }
+
+  function emptyMessage() {
+    if (typeof o.emptyText === 'function') {
+      const t = o.emptyText(query, items.length);
+      if (t !== undefined && t !== null) return str(t);
+    }
+    if (!items.length) return typeof o.emptyText === 'string' && o.emptyText ? o.emptyText : 'Nothing here yet';
+    return 'No matches' + (query ? ' for \u201C' + query + '\u201D' : '');
   }
 
   function renderList() {
@@ -208,7 +288,7 @@ export function mountExplorer(el, opts) {
     if (active >= shown.length) active = shown.length - 1;
     markActive(false);
     empty.hidden = shown.length > 0;
-    empty.textContent = items.length ? 'No matches' + (query ? ' for \u201C' + query + '\u201D' : '') : 'Nothing here yet';
+    empty.textContent = emptyMessage();
     count.textContent = footerText(shown.length, items.length, o.footer);
     openBtn.textContent = openLabel(o.mobileLabel || title, items.length);
     chipCounts();
@@ -373,6 +453,8 @@ export function mountExplorer(el, opts) {
     const li = e.target.closest('.ex-item');
     if (!li || !list.contains(li)) return;
     if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const skip = e.target.closest('[data-ex-ignore]');
+    if (skip && li.contains(skip)) return;
     e.preventDefault();
     focusEl(list);
     activate(Number(li.getAttribute('data-index')), e);
@@ -432,6 +514,30 @@ export function mountExplorer(el, opts) {
     setItems: function (next) {
       items = Array.isArray(next) ? next.slice() : [];
       renderList();
+    },
+    setRail: function (next) {
+      o.rail = Array.isArray(next) ? next : [];
+      renderRail();
+    },
+    setChips: function (next) {
+      chips = Array.isArray(next) ? next.filter(Boolean) : [];
+      activeChips = activeChips.filter(function (k) { return chips.some(function (c) { return c.key === k; }); });
+      buildChips();
+      active = -1;
+      renderList();
+    },
+    setHeadSlot: setSlot,
+    update: function (partial) {
+      const p = partial || {};
+      const has = function (k) { return Object.prototype.hasOwnProperty.call(p, k); };
+      ['footer', 'emptyText', 'match', 'renderItem', 'itemAttrs', 'mobileLabel'].forEach(function (k) { if (has(k)) o[k] = p[k]; });
+      if (has('toolbar')) { o.toolbar = p.toolbar; buildToolbar(); }
+      if (has('headSlot')) setSlot(p.headSlot);
+      if (has('rail')) handle.setRail(p.rail);
+      if (has('chips')) handle.setChips(p.chips);
+      if (has('items')) items = Array.isArray(p.items) ? p.items.slice() : [];
+      renderList();
+      if (has('selected')) handle.setSelected(p.selected);
     },
     setSelected: function (id) {
       const next = id === undefined || id === null ? null : String(id);

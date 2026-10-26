@@ -167,6 +167,51 @@ test('drawer.js imports in Node without touching the DOM and exports the contrac
   assert.ok(/from\s+'\.\/dom\.js'/.test(src), 'imports dom.js');
 });
 
+// Minimal DOM for domLayers: elements with a parent chain, rects and a computed style.
+function fakeDoc() {
+  const view = { getComputedStyle: (el) => ({ visibility: el.vis || 'visible', opacity: el.op || '1' }) };
+  const doc = { defaultView: view, all: [] };
+  const el = (tag, o) => {
+    const e = Object.assign({ tagName: tag, parentElement: null, ownerDocument: doc, shownRects: true, layer: false }, o);
+    e.getClientRects = () => (e.shownRects ? [{}] : []);
+    e.contains = (x) => { for (let n = x; n; n = n.parentElement) if (n === e) return true; return false; };
+    e.closest = (sel) => {
+      for (let n = e; n; n = n.parentElement) if (n.layer && sel.indexOf(n.layer) >= 0) return n;
+      return null;
+    };
+    doc.all.push(e);
+    return e;
+  };
+  doc.el = el;
+  doc.getElementById = () => null;
+  doc.querySelectorAll = (sel) => (sel === '[role="dialog"][aria-modal="true"]' ? doc.all.filter((e) => e.modal) : []);
+  return doc;
+}
+
+test('domLayers: a rendered [role=dialog][aria-modal=true] outside the host counts as a dialog', { skip }, async () => {
+  const dr = await loadModule('js/drawer.js', 'DRAWER');
+  if (dr.error) throw dr.error;
+  const domLayers = dr.mod.domLayers;
+  const doc = fakeDoc();
+  const host = doc.el('ASIDE', { modal: true });
+  const inner = doc.el('DIV', { modal: true, parentElement: host });
+  assert.equal(domLayers(doc, host).dialog, false, 'the drawer host and dialogs inside it are not a layer above it');
+  const palette = doc.el('DIV', { modal: true, layer: '#app-palette' });
+  const exSide = doc.el('DIV', { modal: true, parentElement: doc.el('DIV', { layer: '.ex-side' }) });
+  assert.equal(domLayers(doc, host).dialog, false, 'palette and explorer dialogs belong to their own layers');
+  const wiz = doc.el('DIV', { modal: true, shownRects: false });
+  assert.equal(domLayers(doc, host).dialog, false, 'an unrendered dialog does not count');
+  wiz.shownRects = true;
+  wiz.vis = 'hidden';
+  assert.equal(domLayers(doc, host).dialog, false, 'visibility: hidden does not count');
+  wiz.vis = 'visible';
+  assert.equal(domLayers(doc, host).dialog, true, 'a rendered wizard/admin dialog counts');
+  host.shownRects = false;
+  inner.shownRects = false;
+  assert.equal(domLayers(doc, wiz).dialog, false, 'the host passed in is excluded');
+  assert.ok(palette && exSide && inner);
+});
+
 test('drawer.css uses only the D3 breakpoints and dr- classes', () => {
   const css = readFileSync(path.join(JS, '..', 'css', 'drawer.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   for (const m of css.match(/\(\s*(?:max|min)-width\s*:\s*\d+px\s*\)/g) || []) {

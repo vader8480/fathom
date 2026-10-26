@@ -1,6 +1,37 @@
 // Shared DataTable (docs/ui-audit.md B.2 TABLE, D1, D3, D8, D9). Every read list
 // of records in the app renders through createTable; drill-down counts open
 // openTableDialog. State logic is in datatable-core.js; this module owns the DOM.
+//
+// Options beyond the B.2 block (all optional; the defaults keep wave-2 behaviour):
+//   noun: {one, many}        count line, CSV label and (by default) the bulk bar
+//   bulkNoun: {one, many}    bulk bar only ("3 patches selected" over a "rows" count)
+//   readOnly: bool | () => bool
+//                            no selection column, bulk bar or Space-to-select; a
+//                            function is read on every render (refresh() after a
+//                            role change). `selectable: !ro` keeps working.
+//   tableClass: 'a b'        classes added to the <table> (beside dt-table)
+//   rowAttrs: (row) => {}    attributes on each tr (data-*, aria-*); class goes
+//                            through rowClass
+//   urlFilters: 'authoritative'
+//                            with `url`, the URL alone decides the column filters on
+//                            load and in readUrl(): no f.* means no filters, so a
+//                            stale stored f.id cannot outlive its link. Default:
+//                            stored filters apply when the URL has no f.* (D8).
+//   persist, cards, search: false, csv: false, searchPlaceholder, groupOrder,
+//   pageSizes, selectable(fn) as merged in wave 1.
+// Filter buttons are shown only for visible columns (not hidden, not hideOnMobile
+// below 700px), re-checked on resize; a button whose filter is active stays.
+// Per-row controls: cell(row) may return the same Node on every call (cache it by
+// row id per data load); the table re-parents it, so its state (input value, an
+// open details) survives sort, page and search re-renders.
+//
+// Handle extras: setHighlight(id, {scroll: false}) skips the centre scroll; focus
+// on a row or a control inside it is restored to the same row/column after the
+// re-render. setCsvName(name) changes the download name. readUrl() re-reads the
+// URL binding. info() -> {total, filtered, page, pages, pageSize}.
+//
+// openTableDialog(ctx, {title, columns, rows, onRow, key, rowId, noun, empty,
+//   csvName, pageSize, storage, rowAttrs, rowClass, tableClass}).
 import { h, on } from './dom.js';
 import { layoutFor } from './router-core.js';
 import {
@@ -16,6 +47,7 @@ const POP_MAX_VALUES = 200;
 const DEBOUNCE_ROWS = 3000;
 const PERSIST_FIELDS = ['sort', 'filters', 'pageSize', 'hidden', 'density', 'extra'];
 const IGNORE_ROW_CLICK = 'input,button,a,select,textarea,label,summary,[contenteditable],[data-dt-ignore]';
+const CELL_FOCUSABLE = 'a[href],button,input,select,textarea,summary,[tabindex]:not([tabindex="-1"])';
 
 let uidSeq = 0;
 function uid(p) { uidSeq += 1; return 'dt-' + p + '-' + uidSeq; }
@@ -61,9 +93,12 @@ export function createTable(host, opts) {
   const persist = o.persist === false ? [] : (Array.isArray(o.persist) ? o.persist : PERSIST_FIELDS);
   const rowIdFn = typeof o.rowId === 'function' ? o.rowId : function (r) { return r && r.id; };
   const canSelectFn = typeof o.selectable === 'function' ? o.selectable : null;
-  const selectable = !!o.selectable;
+  const selectableOpt = !!o.selectable;
+  const readOnlyFn = typeof o.readOnly === 'function' ? o.readOnly : null;
   const bulkActions = Array.isArray(o.bulkActions) ? o.bulkActions : [];
   const noun = o.noun || (bulkActions.filter(function (b) { return b && b.noun; })[0] || {}).noun || null;
+  const bulkNoun = o.bulkNoun || noun;
+  const urlAuthoritative = o.urlFilters === 'authoritative';
   const pageSizes = Array.isArray(o.pageSizes) && o.pageSizes.length ? o.pageSizes.filter(function (n) { return PAGE_SIZES.indexOf(n) >= 0; }) : PAGE_SIZES;
   const url = o.url && typeof o.url.get === 'function' && typeof o.url.set === 'function' ? o.url : null;
   const defaults = { pageSize: o.pageSize || 50, density: o.density || 'normal' };
@@ -88,6 +123,12 @@ export function createTable(host, opts) {
   let destroyed = false;
   const selected = new Set();
   const offs = [];
+  let selectable = selectableOpt && !readOnlyNow();
+
+  function readOnlyNow() {
+    if (!readOnlyFn) return o.readOnly === true;
+    try { return !!readOnlyFn(); } catch (e) { return false; }
+  }
 
   // ---------------------------------------------------------- state
 
@@ -107,7 +148,7 @@ export function createTable(host, opts) {
     const hasF = Object.keys(query).some(function (k) { return k.indexOf('f.') === 0; });
     const partial = { q: u.q, page: u.page };
     if (own(query, 'sort')) partial.sort = u.sort;
-    if (hasF) partial.filters = u.filters;
+    if (hasF || urlAuthoritative) partial.filters = u.filters;
     state = mergeState(state, partial, columns);
   }
 
@@ -218,7 +259,7 @@ export function createTable(host, opts) {
 
   const thead = h('thead');
   const tbody = h('tbody');
-  const table = h('table', { class: 'dt-table', id: ids.table }, [caption ? h('caption', { class: 'dt-caption', text: caption }) : null, thead, tbody]);
+  const table = h('table', { class: 'dt-table' + (o.tableClass ? ' ' + String(o.tableClass).trim() : ''), id: ids.table }, [caption ? h('caption', { class: 'dt-caption', text: caption }) : null, thead, tbody]);
   const scroller = h('div', { class: 'dt-scroll' }, table);
   const emptyBox = h('div', { class: 'dt-empty', hidden: true });
   const errorBox = h('div', { class: 'dt-error', hidden: true, role: 'alert' });
@@ -240,11 +281,11 @@ export function createTable(host, opts) {
   root.appendChild(scroller);
   root.appendChild(emptyBox);
   root.appendChild(pager);
-  if (selectable) root.classList.add('dt-selectable');
+  root.classList.toggle('dt-selectable', selectable);
+  root.classList.toggle('dt-readonly', readOnlyNow());
   if (o.sticky !== false) root.classList.add('dt-sticky-head');
   if (o.cards) root.classList.add('dt-cards');
   if (typeof o.onRow === 'function') root.classList.add('dt-clickable');
-  if (!columns.some(function (c) { return c.filterable; })) filterBox.hidden = true;
   if (o.csv === false) csv.hidden = true;
   if (o.search === false) toolbar.querySelector('.dt-search-wrap').classList.add('dt-no-search');
   if (!actions.childNodes.length) actions.hidden = true;
@@ -461,21 +502,40 @@ export function createTable(host, opts) {
     count.textContent = loading ? 'Loading\u2026' : view.filtered === view.total ? total : fmt(view.filtered) + ' of ' + total;
   }
 
-  function renderToolbar() {
-    if (document.activeElement !== search && search.value !== state.q) search.value = state.q;
+  // A filter button shows for a column on screen, or while its filter is active
+  // (so it can still be read and cleared after the column was hidden).
+  function filterShown(c, n) {
+    if (n > 0) return true;
+    if (state.hidden.indexOf(c.key) >= 0) return false;
+    return !(c.hideOnMobile && layout === 'sm');
+  }
+
+  function renderFilters() {
+    let any = false;
     columns.forEach(function (c) {
       const b = filterBtns[c.key];
       if (!b) return;
       const n = (state.filters[c.key] || []).length;
+      const show = filterShown(c, n);
+      if (!show && pop && pop.col === c.key) closePop(false);
+      b.hidden = !show;
+      if (show) any = true;
       b.classList.toggle('dt-on', n > 0);
       b.querySelector('.dt-filter-n').textContent = n ? String(n) : '';
       b.setAttribute('aria-label', 'Filter ' + c.header + (n ? ' (' + n + ' selected)' : ''));
     });
+    filterBox.hidden = !any;
+  }
+
+  function renderToolbar() {
+    if (document.activeElement !== search && search.value !== state.q) search.value = state.q;
+    renderFilters();
     root.classList.toggle('dt-compact', state.density === 'compact');
     renderColsPanel();
   }
 
   function renderSelection() {
+    if (!selectable) bulk.hidden = true;
     if (!selectable || !view) return;
     const all = thead.querySelector('.dt-select-all');
     let selectableCount = 0;
@@ -489,7 +549,7 @@ export function createTable(host, opts) {
       all.title = 'Select all ' + fmt(selectableCount) + ' matching';
     }
     bulk.hidden = n === 0;
-    bulkCount.textContent = fmt(n) + ' ' + (noun ? (n === 1 ? noun.one : noun.many) + ' ' : '') + 'selected';
+    bulkCount.textContent = fmt(n) + ' ' + (bulkNoun ? (n === 1 ? bulkNoun.one : bulkNoun.many) + ' ' : '') + 'selected';
     bulkAll.hidden = n >= selectableCount;
     bulkAll.textContent = 'Select all ' + fmt(selectableCount) + ' matching';
     Array.prototype.forEach.call(tbody.querySelectorAll('tr.dt-row'), function (tr) {
@@ -504,9 +564,15 @@ export function createTable(host, opts) {
   // still loading); view.page is the clamped page on screen.
   function render() {
     if (destroyed) return;
+    const ro = readOnlyNow();
+    selectable = selectableOpt && !ro;
+    root.classList.toggle('dt-selectable', selectable);
+    root.classList.toggle('dt-readonly', ro);
+    let dropped = false;
+    if (!selectable && selected.size) { selected.clear(); dropped = true; }
     view = compute();
     locateHighlight();
-    const pruned = loading ? false : pruneSelection();
+    const pruned = (loading ? false : pruneSelection()) || dropped;
     renderHead();
     renderBody();
     renderPager();
@@ -521,6 +587,44 @@ export function createTable(host, opts) {
         if (tr && tr.scrollIntoView) tr.scrollIntoView({ block: 'center', inline: 'nearest' });
       }, 0);
     }
+  }
+
+  // Where focus sits inside tbody, as {id, col, i}: the row id, the cell column
+  // ('#' for the checkbox cell, '' for the row itself) and the index among that
+  // cell's focusable controls.
+  function focusSpot() {
+    const ae = document.activeElement;
+    if (!ae || !tbody.contains(ae)) return null;
+    const tr = ae.closest('tr.dt-row');
+    if (!tr) return null;
+    const spot = { id: tr.getAttribute('data-id'), col: '', i: -1 };
+    if (ae === tr) return spot;
+    const td = ae.closest('td');
+    if (!td || !tr.contains(td)) return spot;
+    spot.col = td.classList.contains('dt-check') ? '#' : (td.getAttribute('data-col') || '');
+    spot.i = Array.prototype.indexOf.call(td.querySelectorAll(CELL_FOCUSABLE), ae);
+    return spot;
+  }
+
+  function restoreFocus(spot) {
+    if (!spot) return;
+    const ae = document.activeElement;
+    if (ae && ae !== document.body && ae.isConnected && !tbody.contains(ae)) return;
+    let tr = null;
+    const rowsNow = tbody.querySelectorAll('tr.dt-row');
+    for (let i = 0; i < rowsNow.length; i++) if (rowsNow[i].getAttribute('data-id') === spot.id) { tr = rowsNow[i]; break; }
+    if (!tr) return;
+    let target = tr;
+    if (spot.col) {
+      let td = null;
+      for (let j = 0; j < tr.children.length; j++) {
+        const c = tr.children[j];
+        if (spot.col === '#' ? c.classList.contains('dt-check') : c.getAttribute('data-col') === spot.col) { td = c; break; }
+      }
+      const els = td ? td.querySelectorAll(CELL_FOCUSABLE) : [];
+      if (els.length) target = els[Math.max(0, Math.min(els.length - 1, spot.i))];
+    }
+    try { target.focus({ preventScroll: true }); } catch (e) { target.focus(); }
   }
 
   // ---------------------------------------------------------- selection
@@ -799,6 +903,7 @@ export function createTable(host, opts) {
     layout = l;
     root.setAttribute('data-layout', l);
     renderColsPanel();
+    renderFilters();
   }));
   root.setAttribute('data-layout', layout);
 
@@ -821,10 +926,15 @@ export function createTable(host, opts) {
       loading = false;
       render();
     },
-    setHighlight: function (id) {
+    setHighlight: function (id, hlOpts) {
       highlight = id === null || id === undefined || id === '' ? null : String(id);
-      scrollToHl = highlight !== null;
+      scrollToHl = highlight !== null && !(hlOpts && hlOpts.scroll === false);
+      const spot = focusSpot();
       render();
+      restoreFocus(spot);
+    },
+    setCsvName: function (name) {
+      csv.setAttribute('download', name ? String(name) : 'export.csv');
     },
     getState: snapshot,
     setState: function (partial) {
@@ -927,6 +1037,10 @@ export function openTableDialog(ctx, opts) {
     columns: o.columns,
     rows: o.rows,
     rowId: o.rowId,
+    noun: o.noun,
+    rowAttrs: o.rowAttrs,
+    rowClass: o.rowClass,
+    tableClass: o.tableClass,
     pageSize: o.pageSize || 25,
     sticky: true,
     persist: ['pageSize', 'hidden', 'density'],
