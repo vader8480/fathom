@@ -2,7 +2,8 @@
 
 Ranking per field: exact (100) > prefix (80) > token (60) > substring (40) >
 fuzzy, edit distance 1 on tokens of ≥ 4 chars (25). Ties: kind order
-device, port, cable, interface, room, rack, floorplan, attachment, page, then title.
+device, port, cable, interface, network, room, rack, floorplan, attachment, page, then title.
+Every hit also carries ``status``: the device or page status, ``''`` for other kinds.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 Doc = Dict[str, Any]
 
-KIND_ORDER: Tuple[str, ...] = ("device", "port", "cable", "interface", "room", "rack", "floorplan", "attachment", "page")
+KIND_ORDER: Tuple[str, ...] = ("device", "port", "cable", "interface", "network", "room", "rack", "floorplan", "attachment", "page")
 _TOKEN_RE = re.compile(r"[^a-z0-9]+")
 
 
@@ -75,10 +76,10 @@ class SearchIndex:
         self.entries: List[Dict[str, Any]] = []
 
     def add(self, kind: str, id: str, title: str, subtitle: str = "", room: str = "", device: Optional[str] = None,
-            port: Optional[str] = None, fields: Optional[List[Tuple[str, Any]]] = None) -> None:
+            port: Optional[str] = None, fields: Optional[List[Tuple[str, Any]]] = None, status: Any = "") -> None:
         fl = [(name, _norm(val)) for name, val in (fields or []) if val not in (None, "")]
         self.entries.append({"kind": kind, "id": id, "device": device, "port": port, "title": title, "subtitle": subtitle,
-                             "room": room, "fields": [(n, v) for n, v in fl if v]})
+                             "room": room, "status": str(status or ""), "fields": [(n, v) for n, v in fl if v]})
 
     def __len__(self) -> int:
         return len(self.entries)
@@ -106,7 +107,8 @@ def build_index(doc: Doc, overlay: Optional[Dict[str, Any]] = None) -> SearchInd
                    ("serial", inv.get("serial")), ("asset_tag", inv.get("asset_tag")), ("note", d.get("note"))]
         model = f"{d.get('manufacturer') or ''} {d.get('model') or ''}".strip() or d.get("sub") or ""
         rn = room_name(d.get("room") or "") if d.get("room") else "Shared inventory"
-        ix.add("device", d["id"], str(d.get("name") or d["id"]), _join(model, rn), d.get("room") or "", d["id"], None, fields)
+        ix.add("device", d["id"], str(d.get("name") or d["id"]), _join(model, rn), d.get("room") or "", d["id"], None, fields,
+               d.get("status"))
         for p in device_ports(d):
             ix.add("port", f"{d['id']}:{p['id']}", _join(d.get("name") or d["id"], port_label(p)),
                    _join(p.get("name"), p.get("dir"), medium_label(p.get("medium", ""))), d.get("room") or "", d["id"], p["id"],
@@ -137,6 +139,13 @@ def build_index(doc: Doc, overlay: Optional[Dict[str, Any]] = None) -> SearchInd
         ix.add("cable", c["id"], str(c.get("tag") or c["id"]), f"{end(fd, f)} → {end(td, t)}",
                (fd or {}).get("room") or "", f.get("device"), None,
                [("tag", c.get("tag")), ("label", c.get("label")), ("signal", c.get("signal")), ("note", c.get("note")), ("id", c["id"])])
+    for n in doc.get("networks") or []:
+        if isinstance(n, dict) and n.get("id"):
+            vlan = n.get("vlan")
+            vlan = "" if vlan is None or isinstance(vlan, bool) else str(vlan).strip()
+            ix.add("network", str(n["id"]), str(n.get("name") or n["id"]), _join(f"VLAN {vlan}" if vlan else "", n.get("subnet")), "",
+                   None, None, [("name", n.get("name")), ("id", n["id"]), ("vlan", vlan), ("subnet", n.get("subnet")),
+                                ("protocol", n.get("protocol"))])
     for r in rooms.values():
         if r.get("id"):
             ix.add("room", r["id"], str(r.get("name") or r["id"]), (venues.get(r.get("venue")) or {}).get("name") or "", r["id"], None, None,
@@ -174,7 +183,8 @@ def _add_pages(ix: SearchIndex, doc: Doc, room_name: Any) -> None:
         fields.append(("body", plain_text(body)))
         rooms = [r for r in p.get("rooms") or [] if isinstance(r, str)]
         sub = _join((p.get("kind") or "sop").replace("_", " "), room_name(rooms[0]) if rooms else "", "draft" if p.get("status") == "draft" else "")
-        ix.add("page", str(p["slug"]), str(p.get("title") or p["slug"]), sub, rooms[0] if rooms else "", None, None, fields)
+        ix.add("page", str(p["slug"]), str(p.get("title") or p["slug"]), sub, rooms[0] if rooms else "", None, None, fields,
+               p.get("status"))
 
 
 def _add_iface(ix: SearchIndex, d: Dict[str, Any], itf: Dict[str, Any]) -> None:
@@ -203,7 +213,7 @@ def search(index_or_doc: Union[SearchIndex, Doc], q: str, limit: int = 20, kinds
                 best, match = s, name
         if best:
             hits.append({"kind": e["kind"], "id": e["id"], "device": e["device"], "port": e["port"], "title": e["title"],
-                         "subtitle": e["subtitle"], "room": e["room"], "score": best, "match": match})
+                         "subtitle": e["subtitle"], "room": e["room"], "score": best, "match": match, "status": e["status"]})
     order = {k: i for i, k in enumerate(KIND_ORDER)}
     hits.sort(key=lambda h: (-h["score"], order.get(h["kind"], 99), h["title"].casefold(), h["id"]))
     return hits[:max(0, int(limit))]
