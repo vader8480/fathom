@@ -1945,3 +1945,27 @@ comparison.
 ---
 
 ## Done / Deferred
+
+Filled in by the coordinator as waves merge. Each unit's branch was merged into `cursor/ui-uplift` with a
+`--no-ff` merge commit named after the unit after the full gate passed on the merged tree.
+
+### Wave 1 (shared primitives) — merged
+
+| Unit | Merge | Contract tests | Accepted deviations from B.2 (document amended by this entry) |
+| --- | --- | --- | --- |
+| SRV | 57ba9da | 14 py | `vlan 20` does not match a network (the field holds the bare number). |
+| T-* | 9 merges | 198 js | Test-first workers own `tests/js/<name>-contract.test.mjs`. |
+| ROUTER | b28519f | 30/30 | D1 round-trip wording settled (byte-exact for `buildRoute` output, semantic for legacy hashes); `mergeRoute` replaces `query` wholesale; see D1. ROUTER also owns `tests/_ui.py` and `tests/test_ui_router.py`. |
+| DRAWER | 4a5f922 | 9/9 | sm is the existing 88dvh bottom sheet (B.2), not the D3 table's "full-height"; extra exports `isModal, drawerHistory, LAYERS, isCanvas, trapIndex, domLayers`; `createDrawer(host, {layers})`, `open({focus:false})`, `relayout(width)`; first Esc inside a field blurs it, the second closes. |
+| ENTITY | 7617524 | 16/16 | Header and sentinel are prepended to the host; page content must share the host (`position: sticky`). `resolveTab` returns `redirect: true` for a missing tab segment. Tab arrows move focus only; Enter follows. Compact mode keeps badges and tabs; actions go to ⋯ (all of them at sm). |
+| SEARCH | 04c0d45 | 15/15 | `targetFor` always fills `id/tab/sub/query`; `groupHits` sets `category` on copies; `search.js` pushes recents itself; the no-results row and `button.sr-all` sit outside the listbox; `openSearch` returns `{root, input, close}`; "Go to" opens the section root. `ctx.recent` must expose the D8 arrays as well as `push/list`. |
+| EXPLORER | 4de531a | 28/28 | `ex.content` is `div.ex-page` inside `section.ex-content`; `open()/close()` act only at sm; picking an item closes the sm drawer; resizer hit area 12 px (20 px coarse) with keyboard resizing as the accessible alternative; drawer `max-width: 24rem` = 312 px at the 13 px root font (kept). |
+| FEEDBACK | 0117bda | 23/23 | `inlineError` is the API, `errorState` a re-export alias; the `skeleton()` node is itself the `aria-busy` wrapper (replace it, never clear it); `reviewBadge` returns `null` at 0; `mountBell` appends its menu to `body` and returns `{open, close, toggle, render, isOpen, destroy, pop, menu}`; `button.fb-bell` is 40/44 px. |
+| TABLE | b16295c | 30/30 | CSV control is `a.dt-csv[role=button][download]` with a blob href (matches `#inv-csv`/`#sch-csv`); sm default is a table with a sticky first column (D3), card mode is opt-in `cards: true`; search text and page are not persisted (D8); sticky header needs `.dt-scroll` as an inner scroller (`--dt-max-h`); extra options `persist, noun, selectable(fn), search:false, csv:false, searchPlaceholder, groupOrder, pageSizes`; handle extras `setHighlight, readUrl, info`. |
+| HOME | f36788c | 17/17 | Needs only `ctx.store.doc`; reads `fathom.ui.recent.<project>` directly for timestamps; synthesises the current project card at sm when `ctx.projects` is empty; cross-room cables count in both rooms; recents section omitted when empty. |
+| WIZARD | 6fcc960 | 30/30 | Review and Result steps are appended automatically; `bulkDeviceOps/bulkCableOps` return plain op arrays; repatch deletes the displaced cables in the same commit; own per-row checkbox column (TABLE has no per-row `selectable`); backdrop also carries `.app-dialog-backdrop` so DRAWER's layer detection sees it; result link adds `hl=<first id>` and `f.id=a|b|…` for ≤ 50 rows; keydown does not bubble out of the open wizard. |
+| SHELL | 2e8c1ed | — (12 py) | Section menus are siblings of their buttons; `navigateRoute`/`routeHref` reset the query when view or id changes and no query is given; a remembered section hash has its room rewritten to the current room; new storage key `fathom.ui.seen.<project>` (problem-report high-water mark; add to D8); subnav chips are 36 px tall (44 px coarse) — D6 wins over the 40 px rule here; `#app-views` is 44 px under a coarse pointer; restored offline edits keep their toast and get no notice; below lg legacy `navigate()` writes `drawer=0` on canvas views; the `/?p=` redirect keeps other query parameters. `A.inspector.focusSection` is guarded until INS lands. |
+
+Gate at the end of wave 1 (`2e8c1ed`): 590 Python tests OK (1 skip), 557/557 Node tests, `fathom selftest` OK.
+
+Follow-ups carried into later waves: DRAWER `domLayers` should also detect a generic `[role=dialog][aria-modal=true]` outside the host (wave 3 ST-SHELL or a DRAWER fix-up); `model-core.searchLocal` does not index SOP pages offline (D14 candidate); `fathom/static/dev/index.html` should link the new harnesses and the smoke `HARNESSES` list may include them (DOCS/QA); `AGENTS.md` test counts and the dotted single-suite command (`.[discovery]` pulls `x690`, whose stray top-level `tests` package breaks `python -m unittest tests.test_x`; use `discover -s tests -p test_x.py`) (DOCS).
