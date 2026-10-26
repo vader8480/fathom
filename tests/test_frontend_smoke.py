@@ -38,11 +38,12 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-VIEWS = ["map", "patch", "table", "plan", "racks", "inventory", "schedules", "imports", "discovery", "history", "builds", "settings", "sop", "json"]
+VIEWS = ["map", "patch", "table", "plan", "racks", "inventory", "schedules", "imports", "discovery", "history", "builds", "settings", "sop", "json", "home", "devices", "rooms"]
 HARNESSES = ["patchview", "floorplan", "rack", "schedules", "patchtable"]
 VIEWER_PAGES = ["/p/sunday-demo", "/p/sunday-demo/rooms", "/p/sunday-demo/d/atem-mini", "/p/sunday-demo/r/main/patch"]
 SHELL_IDS = ["app", "app-top", "app-project", "app-room", "app-views", "app-search", "app-assistant-btn", "app-save", "app-user",
-             "app-main", "app-inspector", "app-assistant", "fathom-live", "app-toasts", "app-dialog"]
+             "app-main", "app-inspector", "app-assistant", "fathom-live", "app-toasts", "app-dialog",
+             "app-banner", "app-subnav", "app-notify", "app-tabbar", "app-selbar"]
 PERF_PATH = "/static/dev/patchview.html?devices=150&cables=600"
 PERF_BUDGET_MS = 1500
 CHROME_TIMEOUT = 120
@@ -576,7 +577,7 @@ class FrontendSmoke(unittest.TestCase):
         tabs = {n.attrs.get("data-view") for n in p.nodes if n.attrs.get("data-view")}
         for v in VIEWS:
             with self.subTest(tab=v):
-                self.assertIn(v, tabs, "§6.4: #app-views has no [data-view=%s] tab" % v)
+                self.assertIn(v, tabs, "§6.4: no [data-view=%s] control (section menu or subnav)" % v)
 
     def test_harnesses(self) -> None:
         for h in HARNESSES:

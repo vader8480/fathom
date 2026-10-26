@@ -1,65 +1,58 @@
-// Fathom app shell (§6.4): hash router, store + change queue wiring, lazy
-// views with error cards, top bar, room/project pickers, dialogs, pickers,
-// toasts, search palette, offline / conflict handling, SW registration and
-// the login page. app.html and login.html both load this module.
+// Fathom app shell (§6.4, docs/ui-audit.md B.2 SHELL): hash router on
+// router-core, store + change queue wiring, lazy views with error cards,
+// sections / sub-views / phone tab bar, the drawer, the selection bar, the
+// notification bell, room/project pickers, dialogs, pickers, toasts, offline /
+// conflict handling, SW registration and the login page. app.html and
+// login.html both load this module.
 
 import {
-  createStore, canConnect, devicePorts, portLabel, deviceTitle, disciplineOf, mediumInfo, searchLocal,
+  createStore, canConnect, devicePorts, portLabel, deviceTitle, disciplineOf, mediumInfo,
   filterDevices, parsePortRef, slug, deepClone,
 } from './model-core.js';
 import { createApi, ChangeQueue, ApiError } from './api.js';
+import { h, esc } from './dom.js';
+import {
+  layoutFor, DEFAULT_VIEW, SECTIONS, sectionOf, sectionsFor, canSee, parseRoute, buildRoute, withQuery, mergeRoute,
+  selToString, selFromString, navMemory, legacyHash,
+} from './router-core.js';
+import { createDrawer } from './drawer.js';
+import { parseDrawer, selectionOpensDrawer } from './drawer-core.js';
+import { openSearch } from './search.js';
+import { createNotices, mountBell } from './feedback.js';
 
+export { h, esc, selToString, selFromString };
+
+const PAGE_CSS = ['entity-header.css', 'datatable.css', 'explorer.css'];
+const ADMIN_CSS = ['datatable.css', 'admin.css'];
 export const VIEWS = {
+  home: { label: 'Home', module: './home.js', export: 'mount', css: ['home.css'] },
   map: { label: 'Map', module: null, internal: true },
-  patch: { label: 'Patch', module: './patchview.js', export: 'mount', css: 'patchview.css' },
-  table: { label: 'Table', module: './patchtable.js', export: 'mount' },
-  plan: { label: 'Plan', module: './floorplan.js', export: 'mount', css: 'plan.css' },
-  racks: { label: 'Racks', module: './rack.js', export: 'mount', css: 'plan.css' },
-  inventory: { label: 'Inventory', module: './inventory.js', export: 'mount', css: 'plan.css' },
-  schedules: { label: 'Schedules', module: './schedules.js', export: 'mount', css: 'plan.css' },
-  imports: { label: 'Imports', module: './views-admin.js', export: 'mountImports' },
-  discovery: { label: 'Discovery', module: './views-discovery.js', export: 'mount' },
-  history: { label: 'History', module: './views-admin.js', export: 'mountHistory' },
-  builds: { label: 'Builds', module: './views-admin.js', export: 'mountBuilds' },
-  settings: { label: 'Settings', module: './views-admin.js', export: 'mountSettings' },
-  sop: { label: 'SOPs', module: './views-sop.js', export: 'mount', css: 'sop.css' },
+  patch: { label: 'Patch', module: './patchview.js', export: 'mount', css: ['patchview.css'] },
+  table: { label: 'Table', module: './patchtable.js', export: 'mount', css: ['datatable.css', 'patchtable.css'] },
+  rooms: { label: 'Rooms', module: './page-room.js', export: 'mount', css: PAGE_CSS.concat(['page-room.css']) },
+  plan: { label: 'Plan', module: './floorplan.js', export: 'mount', css: ['plan.css', 'explorer.css'] },
+  racks: { label: 'Racks', module: './rack.js', export: 'mount', css: ['plan.css', 'explorer.css', 'entity-header.css', 'datatable.css', 'rack.css'] },
+  devices: { label: 'Devices', module: './page-device.js', export: 'mount', css: PAGE_CSS.concat(['page-device.css']) },
+  inventory: { label: 'Inventory', module: './inventory.js', export: 'mount', css: ['plan.css', 'datatable.css', 'inventory.css'] },
+  schedules: { label: 'Schedules', module: './schedules.js', export: 'mount', css: ['plan.css', 'datatable.css', 'schedules.css'] },
+  imports: { label: 'Imports', module: './views-admin.js', export: 'mountImports', css: ADMIN_CSS },
+  discovery: { label: 'Discovery', module: './views-discovery.js', export: 'mount', css: ['datatable.css', 'discovery.css'] },
+  history: { label: 'History', module: './views-admin.js', export: 'mountHistory', css: ADMIN_CSS },
+  builds: { label: 'Builds', module: './views-admin.js', export: 'mountBuilds', css: ADMIN_CSS },
+  settings: { label: 'Settings', module: './views-admin.js', export: 'mountSettings', css: ADMIN_CSS },
+  sop: { label: 'SOPs', module: './views-sop.js', export: 'mount', css: ['sop.css'] },
   json: { label: 'JSON', module: null, internal: true },
 };
-const PHONE_TABS = ['map', 'patch', 'table', 'plan', 'sop'];
-const TAB_ICONS = { map: '\u25A6', patch: '\u2B95', table: '\u2630', plan: '\u25A3', sop: '\u2611', more: '\u22EF' };
-const DEFAULT_VIEW = 'patch';
+const BOOT_CSS = ['drawer.css', 'inspector.css', 'search.css', 'feedback.css'];
+const RECENT_TYPES = ['device', 'room', 'rack', 'page'];
+const RECENT_MAX = 8;
+const EMPTY_ROUTE = { project: '', room: '', view: '', id: '', tab: '', sub: '', extra: [], query: {} };
 const FALLBACK_VOCAB = {
   kinds: {}, media: {}, brands: {}, connectors: [], statuses: ['installed', 'planned', 'spare', 'retired'],
   disciplines: { audio: { label: 'Audio', color: '#4ea8ff', letter: 'A' }, video: { label: 'Video', color: '#34d399', letter: 'V' }, lighting: { label: 'Lighting', color: '#fbbf24', letter: 'L' }, network: { label: 'Network', color: '#fb923c', letter: 'N' }, control: { label: 'Control', color: '#c084fc', letter: 'C' }, power: { label: 'Power', color: '#f87171', letter: 'P' }, other: { label: 'Other', color: '#9aa3b5', letter: 'X' } },
 };
 
-// ------------------------------------------------------------ DOM helpers
-
-export function h(tag, attrs, children) {
-  const el = document.createElement(tag);
-  if (attrs) {
-    Object.keys(attrs).forEach(function (k) {
-      const v = attrs[k];
-      if (v === undefined || v === null || v === false) return;
-      if (k === 'class') el.className = v;
-      else if (k === 'text') el.textContent = v;
-      else if (k === 'html') el.innerHTML = v;
-      else if (k.indexOf('on') === 0 && typeof v === 'function') el.addEventListener(k.slice(2), v);
-      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
-      else if (v === true) el.setAttribute(k, '');
-      else el.setAttribute(k, String(v));
-    });
-  }
-  (Array.isArray(children) ? children : (children === undefined || children === null ? [] : [children])).forEach(function (c) {
-    if (c === null || c === undefined || c === false) return;
-    el.appendChild(typeof c === 'string' || typeof c === 'number' ? document.createTextNode(String(c)) : c);
-  });
-  return el;
-}
-
-export function esc(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
-}
+// ------------------------------------------------------------ helpers
 
 function errMsg(e) {
   return (e && (e.message || String(e))) || 'Unknown error';
@@ -76,8 +69,10 @@ function appRoot() {
 }
 
 const loadedCss = {};
-// Resolves once the stylesheet has loaded (or failed), so views can measure styled layout.
+// Resolves once the stylesheet (or every stylesheet of an array) has loaded or failed,
+// so views can measure styled layout.
 export function ensureCss(file) {
+  if (Array.isArray(file)) return Promise.all(file.map(ensureCss)).then(function () {});
   if (!file) return Promise.resolve();
   if (loadedCss[file]) return loadedCss[file];
   loadedCss[file] = new Promise(function (resolve) {
@@ -632,15 +627,41 @@ export function makeCtx(store, extras) {
     closeInspector: function () {},
     reload: function () { return Promise.resolve(null); },
     timeTravel: null,
+    // B.2 SHELL item 4: every member below is optional for views; these are the harness-safe defaults.
+    navigateRoute: function () { return ''; },
+    routeHref: function () { return '#'; },
+    setParams: function () {},
+    openDrawer: function (sel) { return ctx.openInspector(typeof sel === 'string' ? selFromString(sel) : sel); },
+    closeDrawer: function () { ctx.closeInspector(); if (ctx.store) ctx.store.select(null); },
+    layout: function () { return layoutFor(typeof window !== 'undefined' ? window.innerWidth : 1280); },
+    subscribe: function () { return function () {}; },
+    recent: { push: function () {}, list: function () { return []; } },
+    notify: function (n) { if (n && n.text) ctx.toast(n.text, n.level); },
+    sections: SECTIONS,
+    projects: [],
+    setTitle: function () {},
+    problems: function () { return []; },
+    overlayInfo: function () { return { fetchedAt: null, revision: null }; },
+    refreshOverlay: function () { return Promise.resolve(); },
   });
+  Object.defineProperty(ctx, 'route', { configurable: true, enumerable: true, get: function () { return copyRoute(EMPTY_ROUTE); } });
   ctx.pickTemplate = makePickTemplate(get);
   ctx.pickPort = makePickPort(get);
   ctx.pickDevice = makePickDevice(get);
-  Object.keys(extras).forEach(function (k) { ctx[k] = extras[k]; });
+  // Descriptors, not values, so getters in extras (route, recent, projects) stay live.
+  Object.keys(extras).forEach(function (k) {
+    const d = Object.getOwnPropertyDescriptor(extras, k);
+    if (d.get || d.set) Object.defineProperty(ctx, k, { configurable: true, enumerable: true, get: d.get, set: d.set });
+    else Object.defineProperty(ctx, k, { configurable: true, enumerable: true, writable: true, value: d.value });
+  });
   return ctx;
 }
 
-// ------------------------------------------------------------ router
+function copyRoute(r) {
+  return mergeRoute(r || EMPTY_ROUTE, {});
+}
+
+// ------------------------------------------------------------ router (legacy wrappers; views-sop.js imports these)
 
 export function parseHash(hash) {
   let s = String(hash || '').replace(/^#\/?/, '');
@@ -652,33 +673,7 @@ export function parseHash(hash) {
 }
 
 export function buildHash(project, room, view, params) {
-  let s = '#/' + encodeURIComponent(project || '') + '/' + encodeURIComponent(room || '').replace(/%2A/g, '*') + '/' + (view || DEFAULT_VIEW);
-  const q = [];
-  if (params) Object.keys(params).forEach(function (k) { if (params[k] !== undefined && params[k] !== null && params[k] !== '') q.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]).replace(/%3A/g, ':')); });
-  if (q.length) s += '?' + q.join('&');
-  return s;
-}
-
-export function selToString(sel) {
-  if (!sel) return '';
-  if (sel.type === 'port') return 'port:' + (sel.device || sel.id) + ':' + sel.port;
-  if (sel.type === 'marker') return 'marker:' + (sel.floorplan || '') + ':' + (sel.device || sel.id);
-  if (sel.type === 'channel') return 'channel:' + (sel.device || sel.id) + ':' + sel.channel;
-  return sel.type + ':' + sel.id;
-}
-
-export function selFromString(s) {
-  if (!s) return null;
-  const parts = String(s).split(':');
-  const type = parts[0];
-  if (type === 'port') return { type: 'port', id: parts[1], device: parts[1], port: parts[2] || null };
-  if (type === 'channel') return parts[2] ? { type: 'channel', id: parts[1], device: parts[1], channel: parts[2] } : { type: 'device', id: parts[1], device: parts[1] };
-  if (type === 'marker') return { type: 'marker', id: parts[2], floorplan: parts[1], device: parts[2] };
-  if (!parts[1]) return null;
-  const sel = { type: type, id: parts[1] };
-  if (type === 'device') sel.device = parts[1];
-  if (parts[2]) { sel.port = parts[2]; sel.device = parts[1]; sel.type = type === 'device' ? 'port' : type; }
-  return sel;
+  return legacyHash(project, room, view, params);
 }
 
 // ------------------------------------------------------------ shell
@@ -686,8 +681,15 @@ export function selFromString(s) {
 const A = {
   api: null, session: null, meta: null, vocab: FALLBACK_VOCAB, projects: [], project: '', store: null, queue: null,
   ctx: null, role: 'admin', view: '', viewHandle: null, viewToken: 0, viewStates: {}, inspector: null, assistant: null,
-  inspectorOpen: false, sheetOpen: false, offline: false, travel: null, banner: null, unsubs: [], problems: [],
+  offline: false, travel: null, banner: null, unsubs: [], problems: [],
+  route: copyRoute(EMPTY_ROUTE), layout: 'lg', nav: null, drawer: null, drawerOpen: false, intent: null, pendingSection: '',
+  applyingRoute: false, subs: {}, recent: null, notices: null, bell: null, overlayInfo: { fetchedAt: null, revision: null },
+  saveTrack: { last: '', offlineMax: 0 }, noteSig: '',
 };
+
+function storageOf(kind) {
+  try { return window[kind]; } catch (e) { return null; }
+}
 
 function $(id) { return document.getElementById(id); }
 
@@ -715,68 +717,160 @@ function defaultRoom(doc) {
   return rooms.length ? rooms[0].id : '';
 }
 
-function currentHashParams(extra) {
-  const r = parseHash(location.hash);
-  const p = {};
-  r.params.forEach(function (v, k) { p[k] = v; });
-  return Object.assign(p, extra || {});
+// ---- sections (#app-views), sub-views (#app-subnav), phone tab bar (#app-tabbar)
+
+function navSections() {
+  return sectionsFor(A.role).map(function (s) {
+    return { key: s.key, label: s.label, glyph: s.glyph, views: s.views.filter(function (v) { return !!VIEWS[v]; }) };
+  }).filter(function (s) { return s.views.length; });
 }
 
-function replaceHash(project, room, view, params) {
-  const nh = buildHash(project, room, view, params);
-  if (location.hash !== nh) history.replaceState(null, '', location.pathname + location.search + nh);
+// Hash for a click on section `key` (D2 nav memory). A remembered hash from another room follows
+// the room picker instead, without its selection.
+function sectionHash(key) {
+  const target = A.nav ? A.nav.target(A.project, key, A.route, A.role) : '';
+  if (!target) return '';
+  const r = parseRoute(target);
+  if (r.view !== 'rooms' && A.store && r.room !== A.store.room) {
+    return buildRoute(withQuery(mergeRoute(r, { room: A.store.room }), { sel: null, sec: null, drawer: null }));
+  }
+  return target;
 }
 
-function renderTabs() {
+function goSection(key) {
+  const hash = sectionHash(key);
+  if (hash) writeHash(hash, false);
+}
+
+function renderNav() {
+  const secs = navSections();
+  const cur = sectionOf(A.view || DEFAULT_VIEW);
   const nav = $('app-views');
-  nav.innerHTML = '';
-  const strip = h('div', { class: 'app-views-strip' });
-  Object.keys(VIEWS).forEach(function (k) {
-    strip.appendChild(h('button', { type: 'button', 'data-view': k, 'aria-current': A.view === k ? 'page' : null, onclick: function () { navigate(k); } }, VIEWS[k].label));
-  });
-  const overflow = h('button', { type: 'button', class: 'app-views-more', 'aria-haspopup': 'menu', hidden: true }, ['More', h('span', { class: 'caret', 'aria-hidden': 'true' }, '\u25BE')]);
-  overflow.addEventListener('click', function () {
-    const items = Array.prototype.filter.call(strip.children, function (b) { return b.hidden; }).map(function (b) {
-      const k = b.getAttribute('data-view');
-      return { label: VIEWS[k].label, current: A.view === k, action: function () { navigate(k); } };
-    });
-    openMenu(overflow, items);
-  });
-  nav.appendChild(strip);
-  nav.appendChild(overflow);
-  fitTabs();
+  if (nav) {
+    closeSectionMenu();
+    nav.innerHTML = '';
+    secs.forEach(function (s) { nav.appendChild(sectionItem(s, cur === s.key)); });
+    fitSections();
+  }
   const bar = $('app-tabbar');
-  bar.innerHTML = '';
-  PHONE_TABS.forEach(function (k) {
-    bar.appendChild(h('button', { type: 'button', 'data-tab': k, 'aria-current': A.view === k ? 'page' : null, onclick: function () { navigate(k); } }, [h('span', { class: 'ico', 'aria-hidden': 'true' }, TAB_ICONS[k]), VIEWS[k].label]));
-  });
-  const moreOn = PHONE_TABS.indexOf(A.view) < 0;
-  const more = h('button', { type: 'button', 'data-tab': 'more', 'aria-current': moreOn ? 'page' : null, 'aria-haspopup': 'menu' }, [h('span', { class: 'ico', 'aria-hidden': 'true' }, TAB_ICONS.more), 'More']);
-  more.addEventListener('click', function () {
-    const items = Object.keys(VIEWS).filter(function (k) { return PHONE_TABS.indexOf(k) < 0; }).map(function (k) { return { label: VIEWS[k].label, action: function () { navigate(k); } }; });
-    items.push({ sep: true });
-    items.push({ label: 'Search', action: openPalette });
-    items.push({ label: 'Helper', action: function () { toggleAssistant(true); } });
-    openMenu(more, items);
-  });
-  bar.appendChild(more);
+  if (bar) {
+    bar.innerHTML = '';
+    secs.forEach(function (s) {
+      bar.appendChild(h('button', {
+        type: 'button', 'data-tab': s.key, 'aria-label': s.label, title: s.label, 'aria-current': cur === s.key ? 'page' : null,
+        onclick: function () { goSection(s.key); },
+      }, h('span', { class: 'ico', 'aria-hidden': 'true' }, s.glyph)));
+    });
+  }
+  renderSubnav(secs.filter(function (s) { return s.key === cur; })[0]);
+  const home = $('app-home');
+  if (home && A.project) home.setAttribute('href', buildRoute({ project: A.project, room: A.store ? A.store.room : '', view: 'home' }));
 }
 
-// Tabs that do not fit the top bar move, last first, into the More menu.
-function fitTabs() {
+function renderSubnav(sec) {
+  const sub = $('app-subnav');
+  if (!sub) return;
+  sub.innerHTML = '';
+  if (!sec || sec.views.length < 2) { sub.hidden = true; return; }
+  sub.hidden = false;
+  sec.views.forEach(function (v) {
+    sub.appendChild(h('a', {
+      class: 'app-subtab', 'data-view': v, href: navigateHash(v), 'aria-current': A.view === v ? 'page' : null,
+      onclick: function (e) {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
+        e.preventDefault();
+        navigate(v);
+      },
+    }, VIEWS[v].label));
+  });
+}
+
+function sectionItem(s, current) {
+  const multi = s.views.length > 1;
+  const btn = h('button', {
+    type: 'button', class: 'app-sec', 'data-section': s.key, 'data-views': s.views.join(' '), 'aria-label': s.label, title: s.label,
+    'aria-current': current ? 'page' : null, 'aria-haspopup': multi ? 'menu' : null, 'aria-expanded': multi ? 'false' : null,
+  }, [h('span', { class: 'app-sec-ico', 'aria-hidden': 'true' }, s.glyph), h('span', { class: 'app-sec-label', 'aria-hidden': 'true' }, s.label)]);
+  // The menu is a sibling of its button: a list inside a <button> is not valid HTML.
+  const menu = h('ul', { class: 'app-sec-menu', role: 'menu', 'aria-label': s.label + ' views', hidden: true }, s.views.map(function (v) {
+    return h('li', { role: 'none' }, h('button', {
+      type: 'button', role: 'menuitem', tabindex: '-1', 'data-view': v, 'aria-current': A.view === v ? 'page' : null,
+      onclick: function () { closeSectionMenu(); navigate(v); },
+    }, VIEWS[v].label));
+  }));
+  let pressTimer = null;
+  let pressed = false;
+  btn.addEventListener('click', function (e) {
+    if (pressed) { pressed = false; e.preventDefault(); return; }
+    goSection(s.key);
+  });
+  if (multi) {
+    btn.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); openSectionMenu(btn, menu); }
+    });
+    btn.addEventListener('contextmenu', function (e) { e.preventDefault(); openSectionMenu(btn, menu); });
+    btn.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'mouse') return;
+      pressed = false;
+      if (pressTimer) clearTimeout(pressTimer);
+      pressTimer = setTimeout(function () { pressTimer = null; pressed = true; openSectionMenu(btn, menu); }, 500);
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (t) {
+      btn.addEventListener(t, function () { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
+    });
+  }
+  return h('div', { class: 'app-sec-item' + (s.key === 'home' ? ' app-sec-home' : '') }, [btn, menu]);
+}
+
+let openSec = null;
+
+function closeSectionMenu(focusButton) {
+  const o = openSec;
+  if (!o) return;
+  openSec = null;
+  o.menu.hidden = true;
+  o.btn.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('pointerdown', o.outside, true);
+  document.removeEventListener('keydown', o.key, true);
+  if (focusButton) o.btn.focus();
+}
+
+function openSectionMenu(btn, menu) {
+  closeSectionMenu();
+  const r = btn.getBoundingClientRect();
+  menu.hidden = false;
+  menu.style.top = Math.round(r.bottom + 2) + 'px';
+  menu.style.left = Math.round(Math.max(8, Math.min(window.innerWidth - menu.offsetWidth - 8, r.left))) + 'px';
+  btn.setAttribute('aria-expanded', 'true');
+  const items = function () { return Array.prototype.slice.call(menu.querySelectorAll('button')); };
+  const o = {
+    btn: btn, menu: menu,
+    outside: function (e) { if (!menu.contains(e.target) && !btn.contains(e.target)) closeSectionMenu(); },
+    key: function (e) {
+      const its = items();
+      const i = its.indexOf(document.activeElement);
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSectionMenu(true); }
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const n = its[(i + (e.key === 'ArrowDown' ? 1 : its.length - 1) + its.length) % its.length];
+        if (n) n.focus();
+      } else if (e.key === 'Tab') closeSectionMenu();
+    },
+  };
+  openSec = o;
+  document.addEventListener('pointerdown', o.outside, true);
+  document.addEventListener('keydown', o.key, true);
+  const first = menu.querySelector('button[aria-current]') || menu.querySelector('button');
+  if (first) first.focus();
+}
+
+// Labels hide (icons stay) when the section row does not fit (B.2 SHELL item 1).
+function fitSections() {
   const nav = $('app-views');
-  const strip = nav && nav.querySelector('.app-views-strip');
-  const more = nav && nav.querySelector('.app-views-more');
-  if (!strip || !more) return;
-  const tabs = strip.children;
-  let i;
-  for (i = 0; i < tabs.length; i++) tabs[i].hidden = false;
-  more.hidden = true;
-  more.removeAttribute('aria-current');
-  if (!nav.offsetWidth || strip.scrollWidth <= strip.clientWidth) return;
-  more.hidden = false;
-  for (i = tabs.length - 1; i >= 0 && strip.scrollWidth > strip.clientWidth; i--) tabs[i].hidden = true;
-  if (strip.querySelector('[aria-current][hidden]')) more.setAttribute('aria-current', 'page');
+  if (!nav) return;
+  nav.classList.remove('app-views--icons');
+  if (!nav.offsetWidth) return;
+  if (nav.scrollWidth > nav.clientWidth + 1) nav.classList.add('app-views--icons');
 }
 
 function renderPickers() {
@@ -832,7 +926,11 @@ function updateSave(d) {
   const b = $('app-save');
   if (!b) return;
   if (!d) d = liveSaveState();
-  b.textContent = saveLabel(d);
+  const label = saveLabel(d);
+  const text = b.querySelector('.app-save-text');
+  if (text) text.textContent = label;
+  else b.textContent = label;
+  b.setAttribute('aria-label', label);
   b.setAttribute('data-state', (d && d.state) || 'saved');
   b.title = (d && d.error ? d.error + ' \u00b7 ' : '') + 'Save now (Cmd/Ctrl+S)';
   const u = $('app-undo');
@@ -889,39 +987,229 @@ function afterResync() {
   updateSave(null);
 }
 
-function layoutInspector() {
-  const body = $('app-body');
-  if (!body) return;
-  body.classList.toggle('has-inspector', !!A.inspectorOpen);
-  body.classList.toggle('sheet-open', !!A.sheetOpen);
-}
+// ---- drawer (#app-inspector, D4) and selection bar (#app-selbar)
 
-function openInspector(sel) {
-  if (sel) A.store.select(sel);
-  A.inspectorOpen = true;
-  A.sheetOpen = true;
-  layoutInspector();
-  ensureInspector();
-}
-
-function closeInspector() {
-  A.sheetOpen = false;
-  A.inspectorOpen = false;
-  layoutInspector();
+function ensureDrawer() {
+  if (A.drawer) return A.drawer;
+  const host = $('app-inspector');
+  if (!host) return null;
+  A.drawer = createDrawer(host, { label: 'Details', onClose: function () { closeDrawer(); } });
+  return A.drawer;
 }
 
 function ensureInspector() {
   if (A.inspector || !A.ctx) return;
   A.inspector = { destroy: function () {} };
+  const ctx = A.ctx;
   const el = $('app-inspector');
   import('./inspector.js').then(function (m) {
-    if (!A.ctx) return;
+    if (A.ctx !== ctx) return;
     el.innerHTML = '';
-    A.inspector = m.mountInspector(el, A.ctx) || { destroy: function () {} };
+    A.inspector = m.mountInspector(el, ctx) || { destroy: function () {} };
+    if (A.pendingSection) focusSection(A.pendingSection);
   }, function (e) {
     el.innerHTML = '';
     el.appendChild(errorCard('Inspector', e));
   });
+}
+
+// Focuses an inspector section (`sec`); skipped when the inspector has no focusSection yet.
+function focusSection(sec) {
+  A.pendingSection = sec || '';
+  if (!sec || !A.inspector || typeof A.inspector.focusSection !== 'function') return;
+  A.pendingSection = '';
+  const ins = A.inspector;
+  setTimeout(function () { if (A.inspector === ins) { try { ins.focusSection(sec); } catch (e) { console.warn(e); } } }, 0);
+}
+
+// UI only: the URL is written by the callers.
+function setDrawerOpen(open, focus) {
+  const d = ensureDrawer();
+  A.drawerOpen = !!open && !!(A.store && A.store.selection);
+  if (A.drawerOpen) {
+    ensureInspector();
+    if (d) d.open({ focus: !!focus });
+  } else if (d) d.close();
+  refreshSelbar();
+}
+
+function isCanvasSelection(view, route, layout) {
+  return !selectionOpensDrawer(view, route, layout, false);
+}
+
+function openDrawer(sel, opts) {
+  if (!A.store) return;
+  if (typeof sel === 'string') sel = selFromString(sel);
+  sel = sel || A.store.selection;
+  if (!sel) return;
+  A.intent = { section: (opts && opts.section) || '' };
+  try { A.store.select(sel); } finally { A.intent = null; }
+}
+
+function closeDrawer() {
+  setDrawerOpen(false);
+  if (A.store && A.store.selection) A.store.select(null);
+  else syncRoute(withQuery(A.route, { sel: null, sec: null, drawer: null }), true);
+}
+
+// Store selection → URL (sel/sec/drawer) and drawer state, unless the URL itself is being applied.
+function onSelection(sel) {
+  if (A.applyingRoute) { refreshSelbar(); return; }
+  const intent = A.intent;
+  A.intent = null;
+  const r = A.route;
+  if (!sel) {
+    setDrawerOpen(false);
+    syncRoute(withQuery(r, { sel: null, sec: null, drawer: null }), true);
+    return;
+  }
+  const s = selToString(sel);
+  const was = A.drawerOpen;
+  const open = !!intent || was || selectionOpensDrawer(A.view, r, A.layout, false);
+  const sec = intent && intent.section ? intent.section : (s === (r.query.sel || '') ? r.query.sec : '');
+  A.drawerOpen = open;
+  const push = open && !was && (!!intent || A.layout !== 'lg');
+  syncRoute(withQuery(r, { sel: s, sec: sec || null, drawer: open ? null : '0' }), !push);
+  setDrawerOpen(open, !!intent);
+  if (open && intent && intent.section) focusSection(intent.section);
+}
+
+function find(coll, id) {
+  if (!A.store || !id) return null;
+  return (A.store.doc[coll] || []).filter(function (x) { return x.id === id; })[0] || null;
+}
+
+function selTitle(sel) {
+  if (!sel) return '';
+  const dev = find('devices', sel.device || (sel.type === 'device' ? sel.id : ''));
+  const dn = dev ? deviceTitle(dev) : (sel.device || sel.id || '');
+  if (sel.type === 'device') return dn;
+  if (sel.type === 'port') {
+    const p = dev ? devicePorts(dev).filter(function (x) { return x.id === sel.port; })[0] : null;
+    return dn + ' \u00b7 ' + (p ? portLabel(p) : sel.port || '');
+  }
+  if (sel.type === 'channel') return dn + ' \u00b7 ' + (sel.channel || '');
+  if (sel.type === 'marker') return dn;
+  const coll = { cable: 'cables', rack: 'racks', floorplan: 'floorplans', room: 'rooms', bundle: 'bundles' }[sel.type];
+  const ent = coll ? find(coll, sel.id) : null;
+  return ent ? (ent.tag || ent.label || ent.name || ent.id) : selToString(sel);
+}
+
+function refreshSelbar() {
+  const bar = $('app-selbar');
+  if (!bar) return;
+  const sel = A.store ? A.store.selection : null;
+  const show = !!sel && !A.drawerOpen;
+  bar.hidden = !show;
+  if ($('app')) $('app').classList.toggle('has-selbar', show);
+  const t = bar.querySelector('.app-selbar-title');
+  if (t) t.textContent = show ? selTitle(sel) : '';
+}
+
+// ---- route writes (D1 history rules)
+
+function emit(type, detail) {
+  (A.subs[type] || []).slice().forEach(function (fn) {
+    try { fn(detail); } catch (e) { console.error(e); }
+  });
+}
+
+function subscribe(type, fn) {
+  if (!A.subs[type] || typeof fn !== 'function') return function () {};
+  A.subs[type].push(fn);
+  return function () {
+    const list = A.subs[type] || [];
+    const i = list.indexOf(fn);
+    if (i >= 0) list.splice(i, 1);
+  };
+}
+
+function resetSubs() {
+  A.subs = { route: [], layout: [], problems: [], overlay: [] };
+}
+
+function historyWrite(hash, replace) {
+  if (location.hash === hash) return false;
+  const url = location.pathname + location.search + hash;
+  if (replace) history.replaceState(history.state, '', url);
+  else history.pushState(null, '', url);
+  return true;
+}
+
+function routed(hash) {
+  if (A.nav && A.project) A.nav.remember(A.project, hash);
+  emit('route', copyRoute(A.route));
+}
+
+// Silent write: the URL follows shell state (selection, view params) without re-routing.
+function syncRoute(r, replace) {
+  const hash = buildRoute(r);
+  A.route = parseRoute(hash);
+  historyWrite(hash, replace !== false);
+  routed(hash);
+}
+
+// Routing write: push (or replace) and run the hash handlers, including views that listen to
+// hashchange themselves (views-sop.js), because pushState fires no hashchange.
+function writeHash(hash, replace) {
+  if (!historyWrite(hash, replace)) { onHash(); return hash; }
+  let ev;
+  try { ev = new HashChangeEvent('hashchange'); } catch (e) { ev = document.createEvent('Event'); ev.initEvent('hashchange', false, false); }
+  window.dispatchEvent(ev);
+  return hash;
+}
+
+function targetRoute(partial) {
+  const p = Object.assign({}, partial || {});
+  const base = A.route;
+  const changesEntity = (p.view != null && String(p.view) !== base.view) || (p.id != null && String(p.id) !== base.id);
+  if (changesEntity && p.query == null) p.query = {};
+  const r = mergeRoute(base, p);
+  if (!r.project) r.project = A.project;
+  return r;
+}
+
+function navigateRoute(partial, opts) {
+  return writeHash(buildRoute(targetRoute(partial)), !!(opts && opts.replace));
+}
+
+function routeHref(partial) {
+  return buildRoute(targetRoute(partial));
+}
+
+function setParams(patch, opts) {
+  const replace = !(opts && opts.replace === false);
+  const r = withQuery(A.route, patch);
+  const p = patch || {};
+  if (('sel' in p) || ('drawer' in p) || ('sec' in p)) {
+    A.route = r;
+    historyWrite(buildRoute(r), replace);
+    applySelection(r, false);
+    routed(buildRoute(r));
+    return;
+  }
+  syncRoute(r, replace);
+}
+
+// Legacy navigate(view, {room, sel, keepSel}): kept for existing callers.
+function navigateHash(view, params) {
+  params = params || {};
+  const v = view || A.view || DEFAULT_VIEW;
+  const room = params.room !== undefined ? params.room : (A.store ? A.store.room : '');
+  const q = {};
+  let sel = '';
+  if (params.sel) sel = params.sel;
+  else if (A.store && A.store.selection && params.keepSel !== false) sel = selToString(A.store.selection);
+  if (sel) {
+    q.sel = sel;
+    const open = selectionOpensDrawer(v, { view: v }, A.layout, false) && (!!params.sel || A.drawerOpen);
+    if (!open) q.drawer = '0';
+  }
+  return buildRoute({ project: A.project, room: room, view: v, query: q });
+}
+
+function navigate(view, params) {
+  writeHash(navigateHash(view, params), false);
 }
 
 function errorCard(name, e) {
@@ -930,18 +1218,6 @@ function errorCard(name, e) {
     h('div', null, 'This part of Fathom failed to load. The rest of the app keeps working.'),
     h('pre', null, errMsg(e)),
   ]);
-}
-
-function navigate(view, params) {
-  params = params || {};
-  const v = view || A.view || DEFAULT_VIEW;
-  const room = params.room !== undefined ? params.room : (A.store ? A.store.room : '');
-  const extra = {};
-  if (params.sel) extra.sel = params.sel;
-  else if (A.store && A.store.selection && params.keepSel !== false) extra.sel = selToString(A.store.selection);
-  const nh = buildHash(A.project, room, v, extra);
-  if (location.hash === nh) onHash();
-  else location.hash = nh;
 }
 
 function mountInternal(key, el, ctx) {
@@ -959,12 +1235,13 @@ function mountView(key) {
   }
   A.viewHandle = null;
   A.view = key;
-  renderTabs();
+  renderNav();
   const host = $('app-main');
   host.innerHTML = '';
   const el = h('div', { class: 'app-view', 'data-view': key });
   host.appendChild(el);
   const def = VIEWS[key];
+  setTitle(def.label);
   const done = function (handle) {
     if (token !== A.viewToken) { if (handle && handle.destroy) handle.destroy(); return; }
     A.viewHandle = handle || { destroy: function () {} };
@@ -1132,71 +1409,11 @@ function mountJson(el, ctx) {
   return { destroy: function () { store.removeEventListener('doc', onDoc); } };
 }
 
-// ---- palette
+// ---- search (search.js owns the palette and its routing via search-core.targetFor)
 
-function openPalette() {
-  if (!A.store) return;
-  if ($('app-palette')) { $('app-palette-input').focus(); return; }
-  const opener = document.activeElement;
-  const input = h('input', { id: 'app-palette-input', type: 'search', placeholder: 'Search devices, ports, cables, IPs, rooms\u2026', 'aria-label': 'Search', autocomplete: 'off', role: 'combobox', 'aria-controls': 'app-palette-list', 'aria-expanded': 'true' });
-  const list = h('ul', { id: 'app-palette-list', role: 'listbox' });
-  const foot = h('div', { class: 'foot' }, '\u2191\u2193 to move \u00b7 Enter to open \u00b7 Esc to close');
-  const box = h('div', { class: 'box', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Search' }, [input, list, foot]);
-  const pal = h('div', { id: 'app-palette', class: 'app-palette' }, box);
-  let hits = [];
-  let idx = 0;
-  let timer = null;
-  let seq = 0;
-  function close() { pal.remove(); document.removeEventListener('keydown', onKey, true); if (opener && opener.focus) opener.focus(); }
-  function render() {
-    list.innerHTML = '';
-    let lastKind = '';
-    hits.forEach(function (hit, i) {
-      if (hit.kind !== lastKind) { lastKind = hit.kind; list.appendChild(h('li', { class: 'kind', role: 'presentation' }, hit.kind + 's')); }
-      const li = h('li', { role: 'option', 'data-hit-kind': hit.kind, 'data-hit-id': hit.id, 'aria-selected': i === idx ? 'true' : 'false' }, [h('span', null, hit.title), h('span', { class: 'sub' }, hit.subtitle || '')]);
-      li.addEventListener('click', function () { pick(hit); });
-      li.addEventListener('pointermove', function () { if (idx !== i) { idx = i; mark(); } });
-      list.appendChild(li);
-    });
-    if (!hits.length && input.value.trim()) list.appendChild(h('li', { class: 'kind' }, 'No matches'));
-  }
-  function mark() {
-    Array.prototype.forEach.call(list.querySelectorAll('li[data-hit-id]'), function (li, i) { li.setAttribute('aria-selected', i === idx ? 'true' : 'false'); if (i === idx) li.scrollIntoView({ block: 'nearest' }); });
-  }
-  function search() {
-    const q = input.value.trim();
-    const my = ++seq;
-    if (!q) { hits = []; render(); return; }
-    const local = function () { hits = searchLocal(A.store.doc, q, 20); idx = 0; render(); foot.textContent = 'Offline search \u00b7 Enter to open'; };
-    if (!A.api || A.offline || navigator.onLine === false) { local(); return; }
-    A.api.search(A.project, q, { limit: 20 }).then(function (r) { if (my !== seq) return; hits = (r && r.hits) || []; idx = 0; render(); }, function () { if (my === seq) local(); });
-  }
-  function pick(hit) {
-    close();
-    const store = A.store;
-    if (hit.room !== null && hit.room !== undefined && hit.room !== store.room && store.room !== '*' && ['device', 'port'].indexOf(hit.kind) >= 0 && hit.room !== '') store.setRoom(hit.room);
-    if (hit.kind === 'device') navigate('patch', { sel: 'device:' + hit.device, keepSel: false });
-    else if (hit.kind === 'port') navigate('patch', { sel: 'port:' + hit.device + ':' + hit.port, keepSel: false });
-    else if (hit.kind === 'cable') navigate('schedules', { sel: 'cable:' + hit.id, keepSel: false });
-    else if (hit.kind === 'interface') openInspector({ type: 'device', id: hit.device, device: hit.device });
-    else if (hit.kind === 'room') { store.setRoom(hit.id); navigate(A.view); }
-    else if (hit.kind === 'rack') navigate('racks', { sel: 'rack:' + hit.id, keepSel: false });
-    else if (hit.kind === 'floorplan') navigate('plan', { sel: 'floorplan:' + hit.id, keepSel: false });
-    else if (hit.kind === 'attachment' && hit.device) openInspector({ type: 'device', id: hit.device, device: hit.device });
-    else if (hit.kind === 'page') location.hash = buildHash(A.project, store.room, 'sop', { page: hit.id });
-  }
-  function onKey(e) {
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
-    else if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(hits.length - 1, idx + 1); mark(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(0, idx - 1); mark(); }
-    else if (e.key === 'Enter') { if (hits[idx]) { e.preventDefault(); pick(hits[idx]); } }
-    else if (e.key === 'Tab') { e.preventDefault(); input.focus(); }
-  }
-  input.addEventListener('input', function () { if (timer) clearTimeout(timer); timer = setTimeout(search, 150); });
-  pal.addEventListener('pointerdown', function (e) { if (e.target === pal) close(); });
-  document.addEventListener('keydown', onKey, true);
-  document.body.appendChild(pal);
-  input.focus();
+function startSearch() {
+  if (!A.ctx) return;
+  openSearch(A.ctx);
 }
 
 // ---- menus
@@ -1208,7 +1425,7 @@ function openMenu(anchor, items) {
   items.forEach(function (it) {
     if (it.sep) { menu.appendChild(h('div', { class: 'sep', role: 'separator' })); return; }
     if (it.info) { menu.appendChild(h('div', { class: 'lbl' }, it.info)); return; }
-    menu.appendChild(h('button', { type: 'button', role: 'menuitem', 'aria-current': it.current ? 'page' : null, onclick: function () { close(); it.action(); } }, it.label));
+    menu.appendChild(h('button', { type: 'button', role: 'menuitem', disabled: !!it.disabled, 'aria-current': it.current ? 'page' : null, onclick: function () { close(); it.action(); } }, it.label));
   });
   document.body.appendChild(menu);
   const r = anchor.getBoundingClientRect();
@@ -1239,6 +1456,22 @@ function userMenu() {
   const s = A.session || {};
   const u = s.user;
   const items = [{ info: u ? u.username + ' \u00b7 ' + u.role : (s.auth_enabled ? 'Not signed in' : 'Local mode (no login)') }];
+  // sm: the header hides undo, redo, Helper and the project select; they live here instead.
+  if (A.layout === 'sm') {
+    const st = A.store;
+    if (st && !st.readOnly) {
+      items.push({ label: 'Undo' + (st.canUndo && st.undoLabel ? ' ' + st.undoLabel : ''), disabled: !st.canUndo, action: function () { if (st.canUndo) st.undo(); } });
+      items.push({ label: 'Redo' + (st.canRedo && st.redoLabel ? ' ' + st.redoLabel : ''), disabled: !st.canRedo, action: function () { if (st.canRedo) st.redo(); } });
+    }
+    if (A.ctx) items.push({ label: 'Helper', action: function () { toggleAssistant(true); } });
+    items.push({ sep: true });
+    items.push({ info: 'Projects' });
+    A.projects.forEach(function (p) {
+      items.push({ label: p.name, current: p.name === A.project, action: function () { if (p.name !== A.project) writeHash(buildRoute({ project: p.name, view: DEFAULT_VIEW }), false); } });
+    });
+    if (A.role !== 'viewer') items.push({ label: 'New project\u2026', action: newProjectDialog });
+    items.push({ sep: true });
+  }
   items.push({ label: 'Make available offline', action: makeOffline });
   items.push({ label: 'Keyboard shortcuts', action: shortcutsDialog });
   if (s.auth_enabled && u) {
@@ -1382,6 +1615,11 @@ function teardown() {
   A.inspector = null;
   if (A.assistant && A.assistant.destroy) { try { A.assistant.destroy(); } catch (e) { /* ignore */ } }
   A.assistant = null;
+  if (A.bell && A.bell.destroy) { try { A.bell.destroy(); } catch (e) { /* ignore */ } }
+  A.bell = null;
+  A.notices = null;
+  A.drawerOpen = false;
+  if (A.drawer) A.drawer.close();
   const ins = $('app-inspector');
   if (ins) ins.innerHTML = '';
   const ast = $('app-assistant');
@@ -1389,23 +1627,140 @@ function teardown() {
   if ($('app')) $('app').classList.remove('ast-open');
   A.viewStates = {};
   A.travel = null;
+  A.ctx = null;
+  A.store = null;
+  A.view = '';
+  A.pendingSection = '';
+  A.overlayInfo = { fetchedAt: null, revision: null };
+  A.saveTrack = { last: '', offlineMax: 0 };
+  A.noteSig = '';
+  resetSubs();
+  refreshSelbar();
+}
+
+function setTitle(text) {
+  document.title = (text ? text + ' \u00b7 ' : '') + (A.project ? A.project + ' \u00b7 ' : '') + 'Fathom';
+}
+
+// ---- recents (D8 fathom.ui.recent.<project>)
+
+function recentStore(project) {
+  const key = 'fathom.ui.recent.' + project;
+  const ls = storageOf('localStorage');
+  function read() {
+    try {
+      const o = JSON.parse((ls && ls.getItem(key)) || 'null');
+      return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+    } catch (e) { return {}; }
+  }
+  function entries(o, type) {
+    const list = Array.isArray(o[type]) ? o[type] : [];
+    return list.filter(function (e) { return e && typeof e === 'object' && typeof e.id === 'string' && e.id; })
+      .map(function (e) { return { id: e.id, t: Number(e.t) || 0 }; });
+  }
+  function push(type, id) {
+    if (RECENT_TYPES.indexOf(type) < 0 || !id) return;
+    const o = read();
+    const out = {};
+    RECENT_TYPES.forEach(function (t) { out[t] = entries(o, t); });
+    out[type] = [{ id: String(id), t: Date.now() }].concat(out[type].filter(function (e) { return e.id !== String(id); })).slice(0, RECENT_MAX);
+    try { if (ls) ls.setItem(key, JSON.stringify(out)); } catch (e) { /* full or private mode */ }
+  }
+  function list(type) { return entries(read(), type).map(function (e) { return e.id; }); }
+  // ctx.recent: the D8 object ({device: [{id, t}], …}) with non-enumerable push/list.
+  function snapshot() {
+    const o = read();
+    const out = {};
+    RECENT_TYPES.forEach(function (t) { out[t] = entries(o, t); });
+    Object.defineProperty(out, 'push', { value: push });
+    Object.defineProperty(out, 'list', { value: list });
+    return out;
+  }
+  return { push: push, list: list, snapshot: snapshot };
+}
+
+function recordRecent(r) {
+  if (!A.recent || !A.store) return;
+  if (r.view === 'devices' && r.id && find('devices', r.id)) A.recent.push('device', r.id);
+  else if (r.view === 'rooms' && r.id && find('rooms', r.id)) A.recent.push('room', r.id);
+  else if (r.view === 'racks' && r.id && find('racks', r.id)) A.recent.push('rack', r.id);
+  else if (r.view === 'sop' && r.query.page && find('pages', r.query.page)) A.recent.push('page', r.query.page);
+}
+
+// ---- notifications (B.2 SHELL item 6): each event goes to the bell only, never also to a toast
+
+function notify(n) {
+  n = n || {};
+  if (!n.text) return null;
+  const item = { level: n.level || 'info', text: String(n.text), href: n.href || null };
+  announce(item.text);
+  if (A.notices) return A.notices.add(item);
+  toast(item.text, item.level);
+  return null;
+}
+
+function trackSave(d) {
+  const t = A.saveTrack;
+  const st = d && d.state;
+  if (st === 'offline') t.offlineMax = Math.max(t.offlineMax, d.pending || 0);
+  if (st === 'saved' && t.offlineMax && !(d.pending)) {
+    const n = t.offlineMax;
+    t.offlineMax = 0;
+    notify({ level: 'ok', text: 'Saved ' + n + ' queued change' + (n === 1 ? '' : 's') });
+  }
+  if (st === 'conflict' && t.last !== 'conflict') {
+    notify({ level: 'err', text: 'Someone else changed this project. Choose Reload or Keep mine in the banner.' });
+  }
+  if (st) t.last = st;
+}
+
+function overlayNotes(o) {
+  const notes = ((o && o.notes) || []).filter(function (x) { return /failed|skipped/i.test(String(x)); });
+  const sig = notes.join('\n');
+  if (!notes.length || sig === A.noteSig) return;
+  A.noteSig = sig;
+  notify({ level: 'warn', text: 'Imports finished with ' + notes.length + ' problem' + (notes.length === 1 ? '' : 's') + ': ' + String(notes[0]).slice(0, 120), href: routeHref({ view: 'imports' }) });
+}
+
+// New open problem reports since the last visit; the high-water mark is fathom.ui.seen.<project>.
+function checkProblemReports(first) {
+  if (!A.store) return;
+  const ls = storageOf('localStorage');
+  const key = 'fathom.ui.seen.' + A.project;
+  let seen = '';
+  try { seen = (ls && ls.getItem(key)) || ''; } catch (e) { seen = ''; }
+  const reports = (A.store.doc.problems || []).filter(function (r) { return r && (r.status || 'open') === 'open' && typeof r.created === 'string'; });
+  let newest = seen;
+  reports.forEach(function (r) { if (r.created > newest) newest = r.created; });
+  if (newest === seen) return;
+  try { if (ls) ls.setItem(key, newest); } catch (e) { /* private mode */ }
+  if (!seen && first) return;
+  const fresh = reports.filter(function (r) { return r.created > seen; }).length;
+  if (fresh) notify({ level: 'warn', text: fresh + ' new problem report' + (fresh === 1 ? '' : 's'), href: routeHref({ view: 'sop', query: { problems: '1' } }) });
+}
+
+function refreshOverlay() {
+  const store = A.store;
+  if (!A.api || !store) return Promise.resolve();
+  return A.api.overlay(A.project).then(function (o) { if (A.store === store) store.setOverlay(o); return o; });
 }
 
 function loadProject(name, route) {
   teardown();
   A.project = name;
+  A.recent = recentStore(name);
   $('app-main').innerHTML = '<div class="app-loading">Loading ' + esc(name) + '\u2026</div>';
   return A.api.getProject(name).then(function (p) {
     A.offline = !!p.offline;
     A.role = p.role || 'admin';
     const doc = p.doc || {};
     let room = route.room;
+    if (route.view === 'rooms' && route.id && (doc.rooms || []).some(function (r) { return r.id === route.id; })) room = route.id;
     if (room !== '*' && !(doc.rooms || []).some(function (r) { return r.id === room; })) room = defaultRoom(doc);
     const store = createStore({ doc: doc, vocab: A.vocab, readOnly: A.role === 'viewer' || A.offline, room: room, revision: p.revision });
     A.store = store;
     A.problems = p.problems || [];
-    let storage = null;
-    try { storage = window.localStorage; } catch (e) { storage = null; }
+    const storage = storageOf('localStorage');
     const queue = new ChangeQueue({ api: A.api, project: name, store: store, storage: storage, autosave: !(doc.settings && doc.settings.autosave === false) });
     A.queue = queue;
     const restored = queue.takeRestored();
@@ -1413,11 +1768,28 @@ function loadProject(name, route) {
       try { store.applyRemote(restored, 'pending'); toast(restored.length + ' offline edits restored; sending\u2026'); } catch (e) { toast('Could not re-apply offline edits: ' + errMsg(e), 'warn'); }
       queue.flush();
     }
+    const recent = A.recent;
     const ctx = makeCtx(store, {
       api: A.api, project: name, meta: A.meta, role: A.role, session: A.session,
       navigate: navigate,
-      openInspector: openInspector,
-      closeInspector: closeInspector,
+      openInspector: openDrawer,
+      closeInspector: closeDrawer,
+      openDrawer: openDrawer,
+      closeDrawer: closeDrawer,
+      navigateRoute: navigateRoute,
+      routeHref: routeHref,
+      setParams: setParams,
+      layout: function () { return layoutFor(window.innerWidth); },
+      subscribe: subscribe,
+      notify: notify,
+      sections: sectionsFor(A.role),
+      setTitle: setTitle,
+      problems: function () { return A.problems; },
+      overlayInfo: function () { return { fetchedAt: A.overlayInfo.fetchedAt, revision: A.overlayInfo.revision }; },
+      refreshOverlay: refreshOverlay,
+      get route() { return copyRoute(A.route); },
+      get recent() { return recent.snapshot(); },
+      get projects() { return A.projects.map(function (x) { return { name: x.name, title: x.title || x.name }; }); },
       reload: function () { return queue.resync().then(function (r) { afterResync(); return r; }); },
       flush: function () { return queue.flush(); },
       timeTravel: startTimeTravel,
@@ -1428,6 +1800,10 @@ function loadProject(name, route) {
       isTimeTravel: function () { return !!A.travel; },
     });
     A.ctx = ctx;
+    try {
+      A.notices = createNotices(storageOf('sessionStorage'), name);
+      A.bell = mountBell($('app-notify'), $('app-notify-count'), A.notices, ctx);
+    } catch (e) { console.warn('notifications: ' + errMsg(e)); }
     on(store, 'doc', function (e) {
       const d = e.detail;
       if (d.source === 'local' || d.source === 'undo' || d.source === 'redo') {
@@ -1437,41 +1813,39 @@ function loadProject(name, route) {
       }
       if (d.touched && d.touched.some(function (r) { return r.indexOf('rooms/') === 0 || r.indexOf('venues/') === 0; })) renderPickers();
       if (d.source === 'load') renderPickers();
+      if (d.source !== 'local' && d.touched && d.touched.some(function (r) { return r.indexOf('problems/') === 0; })) checkProblemReports(false);
       updateSave(null);
+      refreshSelbar();
     });
-    on(store, 'selection', function (e) {
-      const sel = e.detail;
-      const r = parseHash(location.hash);
-      replaceHash(A.project, store.room, r.view || A.view, currentHashParams({ sel: sel ? selToString(sel) : '' }));
-      if (sel && window.innerWidth >= 1100) { A.inspectorOpen = true; ensureInspector(); }
-      if (!sel && window.innerWidth >= 1100) A.inspectorOpen = false;
-      layoutInspector();
-    });
+    on(store, 'selection', function (e) { onSelection(e.detail); });
     on(store, 'room', function () {
       $('app-room').value = store.room;
-      replaceHash(A.project, store.room, A.view, currentHashParams());
+      if (!A.applyingRoute && A.route.room !== store.room) syncRoute(mergeRoute(A.route, { room: store.room }), true);
+      renderNav();
+    });
+    on(store, 'overlay', function (e) {
+      const o = e.detail || store.overlay || null;
+      A.overlayInfo = { fetchedAt: Date.now(), revision: o && typeof o.revision === 'number' ? o.revision : null };
+      emit('overlay', ctx.overlayInfo());
+      overlayNotes(o);
     });
     on(store, 'error', function (e) { toast(errMsg(e.detail && e.detail.error), 'err'); });
-    on(queue, 'state', function (e) { updateSave(e.detail); refreshBanner(); });
+    on(queue, 'state', function (e) { updateSave(e.detail); refreshBanner(); trackSave(e.detail); });
     on(queue, 'dropped', function (e) { toast('Change rejected by the server: ' + errMsg(e.detail.error) + '. Reloaded the project.', 'err'); });
-    on(queue, 'problems', function (e) { A.problems = e.detail || []; });
+    on(queue, 'problems', function (e) { A.problems = e.detail || []; emit('problems', A.problems); });
     on(window, 'online', function () { refreshBanner(); queue.flush(); });
     on(window, 'offline', refreshBanner);
     on(window, 'beforeunload', function (e) { if (queue.pending && navigator.onLine !== false) { queue.flush(); e.preventDefault(); e.returnValue = ''; } });
     renderPickers();
     refreshBanner();
     updateSave(null);
-    // overlay in the background
-    A.api.overlay(name).then(function (o) { if (A.store === store) store.setOverlay(o); }, function () { /* overlay optional */ });
-    const sel = selFromString(route.params.get('sel'));
-    const view = VIEWS[route.view] ? route.view : DEFAULT_VIEW;
-    replaceHash(name, room, view, currentHashParams());
-    if (sel) {
-      store.select(sel);
-      openInspector(sel);
-    }
-    return mountView(view);
+    refreshOverlay().catch(function () { /* overlay optional */ });
+    checkProblemReports(true);
+    A.loading = '';
+    const cur = parseRoute(location.hash);
+    return applyRoute(cur.project === name ? cur : route);
   }).catch(function (e) {
+    A.loading = '';
     const main = $('app-main');
     main.innerHTML = '';
     if (e instanceof ApiError && e.status === 401) { location.href = appRoot() + 'login?next=' + encodeURIComponent(location.pathname + location.search + location.hash); return; }
@@ -1482,20 +1856,73 @@ function loadProject(name, route) {
   });
 }
 
+function startProject(name, r) {
+  A.loading = name;
+  return loadProject(name, r);
+}
+
 function onHash() {
-  const r = parseHash(location.hash);
+  const r = parseRoute(location.hash);
   if (!r.project) {
-    if (A.projects.length) { location.replace(location.pathname + location.search + buildHash(A.projects[0].name, '', DEFAULT_VIEW)); }
+    if (A.projects.length) writeHash(buildRoute({ project: A.projects[0].name, view: DEFAULT_VIEW }), true);
     return;
   }
-  if (r.project !== A.project || !A.store) { loadProject(r.project, r); return; }
+  if (A.loading === r.project) return;
+  if (r.project !== A.project || !A.store) { startProject(r.project, r); return; }
+  applyRoute(r);
+}
+
+// URL → selection and drawer (D4: `sel` without drawer=0 opens the drawer at every width).
+function applySelection(r, focusView) {
   const store = A.store;
-  if (r.room && r.room !== store.room && (r.room === '*' || (store.doc.rooms || []).some(function (x) { return x.id === r.room; }))) store.setRoom(r.room);
-  const sel = selFromString(r.params.get('sel'));
-  if (sel && selToString(sel) !== selToString(store.selection)) store.select(sel);
-  const view = VIEWS[r.view] ? r.view : DEFAULT_VIEW;
-  if (view !== A.view) mountView(view);
-  else if (sel && A.viewHandle && A.viewHandle.focus) { try { A.viewHandle.focus(sel); } catch (e) { /* ignore */ } }
+  const d = parseDrawer(r.query);
+  const sel = selFromString(d.sel);
+  const changed = selToString(sel) !== selToString(store.selection);
+  if (changed) {
+    A.applyingRoute = true;
+    try { store.select(sel); } finally { A.applyingRoute = false; }
+  }
+  setDrawerOpen(d.open && !!sel, false);
+  if (d.open && d.section) focusSection(d.section);
+  if (focusView && sel && A.viewHandle && A.viewHandle.focus) { try { A.viewHandle.focus(sel); } catch (e) { /* ignore */ } }
+}
+
+function roomExists(id) {
+  return id === '*' || (A.store.doc.rooms || []).some(function (x) { return x.id === id; });
+}
+
+// Applies a parsed route for the loaded project: room, selection, drawer, view (D1 same-view
+// rules), nav memory, recents; empty or unknown views and rooms are canonicalized (replace).
+function applyRoute(input) {
+  const store = A.store;
+  let r = copyRoute(input);
+  let canon = false;
+  if (!VIEWS[r.view] || !canSee(r.view, A.role)) { r = mergeRoute(r, { view: DEFAULT_VIEW }); canon = true; }
+  let room = r.room;
+  if (r.view === 'rooms' && r.id && roomExists(r.id)) room = r.id;
+  if (!room || !roomExists(room)) room = store.room;
+  if (room !== r.room) { r.room = room; canon = true; }
+  if (room !== store.room) {
+    A.applyingRoute = true;
+    try { store.setRoom(room); } finally { A.applyingRoute = false; }
+  }
+  const prev = A.route;
+  A.route = r;
+  if (canon) historyWrite(buildRoute(r), true);
+  let mounted = null;
+  const same = r.view === A.view && !!A.viewHandle;
+  applySelection(r, false);
+  if (!same) mounted = mountView(r.view);
+  else if (typeof A.viewHandle.route === 'function') { try { A.viewHandle.route(copyRoute(r)); } catch (e) { console.error(e); } }
+  else if (prev.id !== r.id || prev.tab !== r.tab || prev.sub !== r.sub) mounted = mountView(r.view);
+  else {
+    const sel = store.selection;
+    if (sel && A.viewHandle.focus) { try { A.viewHandle.focus(sel); } catch (e) { /* ignore */ } }
+    renderNav();
+  }
+  recordRecent(r);
+  routed(buildRoute(r));
+  return mounted || Promise.resolve();
 }
 
 function emptyState() {
@@ -1514,18 +1941,41 @@ function globalKeys(e) {
   const t = e.target;
   const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
   const k = (e.key || '').toLowerCase();
-  if (mod && k === 'k') { e.preventDefault(); openPalette(); return; }
+  if (mod && k === 'k') { e.preventDefault(); startSearch(); return; }
   if (mod && k === 'j') { e.preventDefault(); toggleAssistant(); return; }
   if (mod && k === 's') { e.preventDefault(); if (A.queue) A.queue.flush().then(function () { if (A.queue && !A.queue.pending) announce('Saved'); }); return; }
   if (e.defaultPrevented || typing || !A.store) return;
   if (mod && k === 'z' && !e.shiftKey) { e.preventDefault(); if (A.store.canUndo) A.store.undo(); return; }
   if ((mod && k === 'z' && e.shiftKey) || (e.ctrlKey && k === 'y')) { e.preventDefault(); if (A.store.canRedo) A.store.redo(); return; }
   if (e.key === 'Escape') {
+    // D4 order: palette, dialog, trace and explorer handle their own Esc; then assistant, drawer, highlight.
+    if (document.querySelector('#app-palette, .app-dialog-backdrop, .trace-backdrop, .ex-backdrop')) return;
     const ast = $('app-assistant');
-    if (ast && ast.classList.contains('open')) { toggleAssistant(false); return; }
-    if (A.sheetOpen && window.innerWidth < 1100) { closeInspector(); return; }
-    if (A.store.highlighted) A.store.highlight(null);
+    if (ast && ast.classList.contains('open')) { e.preventDefault(); toggleAssistant(false); return; }
+    if (A.drawerOpen && A.drawer) {
+      const host = $('app-inspector');
+      // drawer.js closes a modal drawer, or a docked one when focus is inside it.
+      if (A.drawer.mode() !== 'docked' || (host && host.contains(document.activeElement))) return;
+    }
+    if (A.store.highlighted) { e.preventDefault(); A.store.highlight(null); }
   }
+}
+
+function onLayout() {
+  const l = layoutFor(window.innerWidth);
+  if (A.ctx) A.ctx.env.narrow = l === 'sm';
+  if (l === A.layout) return;
+  A.layout = l;
+  if (A.drawer) A.drawer.relayout();
+  if (A.store && A.store.selection && A.drawerOpen && l !== 'lg' && isCanvasSelection(A.view, A.route, l)) {
+    setDrawerOpen(false);
+    syncRoute(withQuery(A.route, { drawer: '0' }), true);
+  } else if (A.store && A.store.selection && !A.drawerOpen && l === 'lg' && isCanvasSelection(A.view, A.route, 'md')) {
+    setDrawerOpen(true, false);
+    syncRoute(withQuery(A.route, { drawer: null }), true);
+  }
+  emit('layout', l);
+  fitSections();
 }
 
 export function boot(root, opts) {
@@ -1533,9 +1983,22 @@ export function boot(root, opts) {
   installErrorCapture();
   A.api = opts.api || createApi({ base: appRoot() });
   // legacy /?p=<project>
-  const legacy = new URLSearchParams(location.search).get('p');
-  if (legacy && !location.hash) history.replaceState(null, '', location.pathname + buildHash(legacy, '', DEFAULT_VIEW));
-  $('app-search').addEventListener('click', openPalette);
+  const search = new URLSearchParams(location.search);
+  const legacy = search.get('p');
+  if (legacy && !location.hash) {
+    search.delete('p');
+    const rest = search.toString();
+    history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + buildHash(legacy, '', DEFAULT_VIEW));
+  }
+  A.layout = layoutFor(window.innerWidth);
+  A.nav = navMemory(storageOf('sessionStorage'));
+  resetSubs();
+  ensureCss(BOOT_CSS);
+  ensureDrawer();
+  const env = detectEnv();
+  const kbd = document.querySelector('#app-search .app-search-kbd');
+  if (kbd && env.platform !== 'mac' && env.platform !== 'ios') kbd.textContent = 'Ctrl K';
+  $('app-search').addEventListener('click', startSearch);
   $('app-assistant-btn').addEventListener('click', function () { toggleAssistant(); });
   $('app-save').addEventListener('click', function () { if (A.queue) A.queue.flush(); });
   $('app-user').addEventListener('click', userMenu);
@@ -1544,24 +2007,26 @@ export function boot(root, opts) {
   $('app-project').addEventListener('change', function (e) {
     const v = e.target.value;
     if (v === '__new__') { newProjectDialog(); return; }
-    location.hash = buildHash(v, '', A.view || DEFAULT_VIEW);
+    writeHash(buildRoute({ project: v, view: A.view || DEFAULT_VIEW }), false);
   });
   $('app-room').addEventListener('change', function (e) {
     if (!A.store) return;
-    A.store.setRoom(e.target.value);
-    navigate(A.view, { room: e.target.value, keepSel: false });
+    const v = e.target.value;
+    if (A.view === 'rooms' && A.route.id && v !== '*') navigateRoute({ view: 'rooms', id: v, room: v, query: {} });
+    else navigate(A.view, { room: v, keepSel: false });
   });
+  const selbar = $('app-selbar');
+  selbar.querySelector('.app-selbar-open').addEventListener('click', function () { openDrawer(null); });
+  selbar.querySelector('.app-selbar-close').addEventListener('click', function () { closeDrawer(); });
   document.addEventListener('keydown', globalKeys);
   window.addEventListener('hashchange', onHash);
   window.addEventListener('resize', function () {
-    if (A.ctx) { A.ctx.env.narrow = window.innerWidth < 700; }
-    if (window.innerWidth >= 1100 && A.store && A.store.selection) A.inspectorOpen = true;
-    layoutInspector();
-    if (typeof ResizeObserver === 'undefined') fitTabs();
+    onLayout();
+    if (typeof ResizeObserver === 'undefined') fitSections();
   });
-  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(fitTabs).observe($('app-views'));
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTabs);
-  renderTabs();
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(function () { fitSections(); }).observe($('app-views'));
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitSections);
+  renderNav();
   registerSW();
   return A.api.session().catch(function (e) {
     return { auth_enabled: false, authenticated: true, user: null, offline: true, error: errMsg(e) };
@@ -1584,13 +2049,14 @@ export function boot(root, opts) {
     A.vocab = (A.meta && A.meta.vocab) || FALLBACK_VOCAB;
     disciplineVars(A.vocab);
     A.projects = (res[1] && res[1].projects) || [];
-    const r = parseHash(location.hash);
+    renderNav();
+    const r = parseRoute(location.hash);
     if (!r.project) {
       if (!A.projects.length) { renderPickers(); emptyState(); return null; }
-      location.replace(location.pathname + location.search + buildHash(A.projects[0].name, '', DEFAULT_VIEW));
-      return loadProject(A.projects[0].name, parseHash(location.hash));
+      historyWrite(buildRoute({ project: A.projects[0].name, view: DEFAULT_VIEW }), true);
+      return startProject(A.projects[0].name, parseRoute(location.hash));
     }
-    return loadProject(r.project, r);
+    return startProject(r.project, r);
   }).catch(function (e) {
     $('app-main').innerHTML = '';
     $('app-main').appendChild(errorCard('Fathom', e));
