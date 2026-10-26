@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en" data-harness="drawer">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fathom · Drawer harness</title>
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/drawer.css">
+<style>
+  .dr-h-view { padding: 12px calc(12px + var(--sar)) 24px calc(12px + var(--sal)); gap: 14px; }
+  .dr-h-view h2 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  .dr-h-view p { margin: 0 0 8px; color: var(--muted); max-width: 60ch; }
+  .dr-h-rows { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; max-width: 640px; }
+  .dr-h-rows li + li { border-top: 1px solid var(--border); }
+  .dr-h-rows button { display: flex; width: 100%; min-height: 40px; gap: 10px; align-items: center; text-align: left;
+    background: transparent; border: 0; border-radius: 0; padding: 8px 12px; }
+  .dr-h-rows button:hover { background: rgba(142,162,255,.08); }
+  .dr-h-rows .k { color: var(--muted); font-family: var(--mono); font-size: 12px; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dr-h-status { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1 !important; }
+  .dr-h-log { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 12px; color: var(--muted); max-width: 640px; }
+  .dr-h-log li { padding: 2px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+  .dr-h-selbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; align-items: center; gap: 8px; min-height: 48px;
+    padding: 4px calc(12px + var(--sar)) calc(4px + var(--sab)) calc(12px + var(--sal)); background: var(--panel-2); border-top: 1px solid var(--border-2); }
+  .dr-h-selbar[hidden] { display: none; }
+  .dr-h-selbar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dr-h-selbar button, .dr-h-ins button { min-height: 40px; min-width: 40px; }
+  .dr-h-ins header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+  .dr-h-ins header h2 { margin: 0; font-size: 15px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dr-h-ins .body { padding: 10px 12px 24px; display: flex; flex-direction: column; gap: 10px; }
+  .dr-h-ins label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; }
+  .dr-h-ins details { border: 1px solid var(--border); border-radius: var(--radius); padding: 0 10px; }
+  .dr-h-ins summary { min-height: 40px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+  .dr-h-ins details p { margin: 0 0 10px; color: var(--muted); }
+  .dr-h-ins .row { padding-bottom: 10px; }
+  @media (pointer: coarse) {
+    .dr-h-rows button, .dr-h-selbar button, .dr-h-ins button, .dr-h-ins summary { min-height: 44px; }
+    .dr-h-selbar button, .dr-h-ins button { min-width: 44px; }
+  }
+</style>
+</head>
+<body>
+<div id="app" class="app">
+  <header id="app-top" class="app-top">
+    <strong class="app-brand">Drawer harness</strong>
+    <span id="dr-h-status" class="dr-h-status" aria-live="polite"></span>
+  </header>
+  <div id="app-body" class="app-body">
+    <main id="app-main" class="app-main" tabindex="-1">
+      <div class="app-view dr-h-view">
+        <section>
+          <h2>List rows (explicit intent)</h2>
+          <p>A row opens the drawer at every width, writes <code>sel</code> (and <code>sec</code>) to the hash, and returns focus here on close.</p>
+          <ul class="dr-h-rows" id="dr-h-rows"></ul>
+        </section>
+        <section>
+          <h2>Canvas selection</h2>
+          <p>Selecting on a canvas opens the docked drawer at lg only; below 1100 it writes <code>drawer=0</code> and shows the selection bar.</p>
+          <ul class="dr-h-rows" id="dr-h-canvas"></ul>
+        </section>
+        <section>
+          <h2>Log</h2>
+          <ul class="dr-h-log" id="dr-h-log"></ul>
+        </section>
+      </div>
+    </main>
+    <aside id="app-inspector" class="app-inspector" aria-label="Inspector"></aside>
+  </div>
+  <div id="dr-h-selbar" class="dr-h-selbar" hidden>
+    <span id="dr-h-selbar-title"></span>
+    <button type="button" id="dr-h-selbar-open">Details &#x203A;</button>
+    <button type="button" id="dr-h-selbar-close" class="icon ghost" aria-label="Clear selection">&#x00D7;</button>
+  </div>
+</div>
+<div id="fathom-live" class="sr-only" aria-live="polite"></div>
+<script type="module" src="drawer-harness.js"></script>
+</body>
+</html>
