@@ -535,9 +535,15 @@ Exempt:
 
 #### D13. Merge order within a wave
 
-- **Wave 1:** `ROUTER` first (others import `dom.js` and `router-core.js`); then `EXPLORER`, `ENTITY`,
-  `TABLE`, `DRAWER`, `SEARCH`, `HOME`, `FEEDBACK`, `WIZARD` and `SRV` in any order; `SHELL` last.
-  `SHELL` is coded against this document's contracts and rebased before merge. Workers all start at once.
+- **Wave 1** runs as three sub-waves so that no unit has to import a module that is not yet on
+  `cursor/ui-uplift`:
+  - **1a:** `ROUTER` (with `tests/_ui.py`) and `SRV` start at once; `ROUTER` merges first because every
+    other unit imports `dom.js` and `router-core.js`. The test-first workers (B.7) also start here.
+  - **1b** (after `ROUTER` merged): `EXPLORER`, `ENTITY`, `TABLE`, `DRAWER`, `SEARCH`, `FEEDBACK` in any
+    order, plus `HOME`, `WIZARD` and `SHELL`, which depend on 1b siblings: they code against this
+    document's contracts, keep merging `origin/cursor/ui-uplift` into their branch as siblings land, and
+    finish only once their dependencies are merged and their own tests pass against the real modules.
+  - **1c:** `SHELL` merges last, after a final merge of `origin/cursor/ui-uplift` and a full gate run.
 - **Waves 2 and 3:** any order (disjoint files).
 - **Wave 4:** `QA` and `DOCS` in either order. The coordinator then fills Done / Deferred.
 
@@ -563,7 +569,9 @@ All 11 wave-1 units start in parallel off `cursor/ui-uplift`, in the merge order
 
 #### ROUTER: `router-core.js` and `dom.js`
 
-**Owns:** `fathom/static/js/router-core.js`, `fathom/static/js/dom.js`, `tests/js/router-core.test.mjs`.
+**Owns:** `fathom/static/js/router-core.js`, `fathom/static/js/dom.js`, `tests/js/router-core.test.mjs`,
+`tests/_ui.py` (the shared headless-Chrome test helper specified in B.2 SHELL item 10; ROUTER creates it
+so every other wave-1 unit can build its `tests/test_ui_<unit>.py` on it).
 **Depends on:** nothing.
 
 API (all pure):
@@ -641,7 +649,8 @@ Tests (`router-core.test.mjs`), each a named `test()`:
   `rack.css`, `inventory.css`, `schedules.css`, `admin.css`, `discovery.css`, `inspector.css`,
   `patchtable.css`
 - `fathom/static/dev/plans/harness.js` (only if needed for new ctx logging)
-- `tests/test_frontend_smoke.py`, `tests/_ui.py`, `tests/test_ui_shell.py`
+- `tests/test_frontend_smoke.py`, `tests/test_ui_shell.py` (`tests/_ui.py` is created by ROUTER to the
+  specification in item 10 below; SHELL reads it)
 
 **Depends on:** ROUTER, DRAWER, SEARCH, FEEDBACK, HOME (merges last; codes against their contracts).
 
@@ -728,7 +737,7 @@ Changes:
    - `test_app_shell_dom_ids` (lines 571–579): logic unchanged (still finds `[data-view]` anywhere);
      update the message text to "§6.4: no [data-view=%s] control (section menu or subnav)";
    - `test_sop_viewer_on_a_phone` line 667 is unchanged: `#app-tabbar [data-tab=sop]` must exist.
-10. **`tests/_ui.py`:**
+10. **`tests/_ui.py`** (specification; the file itself is created by ROUTER):
     - `UiServer` (temp `FATHOM_DATA` holding the `sunday-demo` fixture and the `campus-demo` sample
       copied as in `FrontendSmoke.setUpClass`; threaded WSGI server; `.base`);
     - `SIZES = {'d': (1280, 900, False), 't': (820, 1180, True), 'm': (390, 844, True)}`;
@@ -1799,23 +1808,26 @@ wave all units run in parallel. If fewer workers are available, start them in th
 - Wave 2: INV, SCH, INS, PDEV, PV, PT, RK, PROOM, ADM, FP, DISC, SOP.
 - Wave 3: ST-LISTS, ST-ENTITY, ST-CANVAS, ST-ADMIN, ST-SHELL.
 
-**Test-first workers (optional split, wave 1).** For each `*-core.js` contract, the coordinator may
-start a separate test-first worker that writes only the core test from this document. That worker then
-owns the test file, and the implementing unit must not edit it.
+**Test-first workers (wave 1).** For each `*-core.js` contract, a separate test-first worker writes a
+**contract test** from this document alone (never from the implementation) into
+`tests/js/<name>-contract.test.mjs`. The implementing unit keeps writing its own
+`tests/js/<name>-core.test.mjs`. The two files have different owners and never collide; a contract test
+that fails after the implementation lands means either the code or the contract drifted, and the
+coordinator decides which one is fixed (the document wins unless it is wrong).
 
 | Test-first worker | Owns |
 | --- | --- |
-| T-ROUTER | `tests/js/router-core.test.mjs` |
-| T-EXPLORER | `tests/js/explorer-core.test.mjs` |
-| T-ENTITY | `tests/js/entity-core.test.mjs` |
-| T-TABLE | `tests/js/datatable-core.test.mjs` |
-| T-DRAWER | `tests/js/drawer-core.test.mjs` |
-| T-SEARCH | `tests/js/search-core.test.mjs` |
-| T-HOME | `tests/js/home-core.test.mjs` |
-| T-FEEDBACK | `tests/js/feedback-core.test.mjs` |
-| T-WIZARD | `tests/js/wizard-core.test.mjs` |
+| T-ROUTER | `tests/js/router-contract.test.mjs` |
+| T-EXPLORER | `tests/js/explorer-contract.test.mjs` |
+| T-ENTITY | `tests/js/entity-contract.test.mjs` |
+| T-TABLE | `tests/js/datatable-contract.test.mjs` |
+| T-DRAWER | `tests/js/drawer-contract.test.mjs` |
+| T-SEARCH | `tests/js/search-contract.test.mjs` |
+| T-HOME | `tests/js/home-contract.test.mjs` |
+| T-FEEDBACK | `tests/js/feedback-contract.test.mjs` |
+| T-WIZARD | `tests/js/wizard-contract.test.mjs` |
 
-Without the split, each unit owns its core test. Either way, exactly one owner per file.
+Contract tests are merged only after the module they import has merged. Exactly one owner per file.
 
 **File ownership matrix.** One owner per file per wave; "—" means untouched in that wave. All paths are
 under `fathom/static/` unless they start with `tests/`, `docs/`, `fathom/` or are root files.
@@ -1823,27 +1835,29 @@ under `fathom/static/` unless they start with `tests/`, `docs/`, `fathom/` or ar
 | File | Wave 1 | Wave 2 | Wave 3 | Wave 4 |
 | --- | --- | --- | --- | --- |
 | `js/router-core.js`, `js/dom.js` | ROUTER | — | — | — |
-| `tests/js/router-core.test.mjs` | ROUTER (or T-ROUTER) | — | — | — |
+| `tests/js/router-core.test.mjs` | ROUTER | — | — | — |
+| `tests/js/<name>-contract.test.mjs` (nine files) | T-<NAME> | — | — | — |
 | `js/app.js`, `css/app.css`, `app.html`, `sw.js` | SHELL | — | ST-SHELL (`app.js`, `app.css` only) | — |
 | `dev/plans/harness.js` | SHELL | — | — | — |
-| `tests/test_frontend_smoke.py`, `tests/_ui.py`, `tests/test_ui_shell.py` | SHELL | — | — | — |
+| `tests/_ui.py` | ROUTER | — | — | — |
+| `tests/test_frontend_smoke.py`, `tests/test_ui_shell.py` | SHELL | — | — | — |
 | `js/explorer.js`, `js/explorer-core.js`, `css/explorer.css`, `dev/explorer.html`, `dev/explorer-harness.js`, `tests/test_ui_explorer.py` | EXPLORER | — | — | — |
-| `tests/js/explorer-core.test.mjs` | EXPLORER (or T-EXPLORER) | — | — | — |
+| `tests/js/explorer-core.test.mjs` | EXPLORER | — | — | — |
 | `js/entity-header.js`, `js/entity-core.js`, `css/entity-header.css`, `dev/entity.html`, `dev/entity-harness.js`, `tests/test_ui_entity.py` | ENTITY | — | — | — |
-| `tests/js/entity-core.test.mjs` | ENTITY (or T-ENTITY) | — | — | — |
+| `tests/js/entity-core.test.mjs` | ENTITY | — | — | — |
 | `js/datatable.js`, `js/datatable-core.js`, `css/datatable.css`, `dev/datatable.html`, `dev/datatable-harness.js`, `tests/test_ui_datatable.py` | TABLE | — | — | — |
-| `tests/js/datatable-core.test.mjs` | TABLE (or T-TABLE) | — | — | — |
+| `tests/js/datatable-core.test.mjs` | TABLE | — | — | — |
 | `js/drawer.js`, `js/drawer-core.js`, `css/drawer.css`, `dev/drawer.html`, `dev/drawer-harness.js`, `tests/test_ui_drawer.py` | DRAWER | — | — | — |
-| `tests/js/drawer-core.test.mjs` | DRAWER (or T-DRAWER) | — | — | — |
+| `tests/js/drawer-core.test.mjs` | DRAWER | — | — | — |
 | `js/search.js`, `js/search-core.js`, `css/search.css`, `dev/search.html`, `dev/search-harness.js`, `tests/test_ui_search.py` | SEARCH | — | — | — |
-| `tests/js/search-core.test.mjs` | SEARCH (or T-SEARCH) | — | — | — |
+| `tests/js/search-core.test.mjs` | SEARCH | — | — | — |
 | `js/home.js`, `js/home-core.js`, `css/home.css` | HOME | — | ST-SHELL (`home.js`, `home.css`) | — |
 | `tests/test_ui_home.py` | HOME | — | — | — |
-| `tests/js/home-core.test.mjs` | HOME (or T-HOME) | — | — | — |
+| `tests/js/home-core.test.mjs` | HOME | — | — | — |
 | `js/feedback.js`, `js/feedback-core.js`, `css/feedback.css`, `dev/feedback.html`, `dev/feedback-harness.js`, `tests/test_ui_feedback.py` | FEEDBACK | — | — | — |
-| `tests/js/feedback-core.test.mjs` | FEEDBACK (or T-FEEDBACK) | — | — | — |
+| `tests/js/feedback-core.test.mjs` | FEEDBACK | — | — | — |
 | `js/wizard.js`, `js/wizard-core.js`, `css/wizard.css`, `dev/wizard.html`, `dev/wizard-harness.js`, `tests/test_ui_wizard.py` | WIZARD | — | — | — |
-| `tests/js/wizard-core.test.mjs` | WIZARD (or T-WIZARD) | — | — | — |
+| `tests/js/wizard-core.test.mjs` | WIZARD | — | — | — |
 | `fathom/search.py`, `tests/test_search_kinds.py` | SRV | — | — | — |
 | `js/patchview.js`, `css/patchview.css` | — | PV | ST-CANVAS | — |
 | `tests/test_ui_pv.py` | — | PV | — | — |
