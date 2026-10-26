@@ -42,6 +42,7 @@
 .wz-map .wz-hint{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .wz-paste-sum,.wz-preview-sum{color:var(--muted);font-size:12px;margin:4px 0 8px}
+.wz-preview-sum:focus{outline:none}
 .wz-table{min-width:0}
 .wz-inc-wrap{display:inline-flex;align-items:center;justify-content:center;min-width:40px;min-height:40px;margin:-8px 0;cursor:pointer}
 .wz-row-bad td{color:var(--muted)}
