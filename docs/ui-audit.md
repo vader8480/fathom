@@ -13,9 +13,11 @@ How to read it:
 - "MUST" marks something a reviewer checks. Anything not stated is the worker's call, within the hard
   constraints restated in B.1.0.
 - Workflow: each unit is built by one worker on its own branch `cursor/ui-<unit>-<suffix>` off
-  `cursor/ui-uplift`, pushed, and reviewed by the coordinator, who opens the unit's PR against
-  `cursor/ui-uplift`, runs the full gate, merges or sends back a defect report. Nothing in this uplift
-  merges to `main` until the final draft PR `cursor/ui-uplift` → `main` is reviewed by the owner.
+  `cursor/ui-uplift`, pushed, and reviewed by the coordinator, who runs the full gate and either merges
+  it into `cursor/ui-uplift` with a `--no-ff` merge commit named after the unit (the per-unit record;
+  the coordinator's tooling cannot open pull requests whose base is `cursor/ui-uplift`) or sends back a
+  defect report. Nothing in this uplift merges to `main` until the final draft PR
+  `cursor/ui-uplift` → `main` is reviewed by the owner.
 
 Contents: [Audit](#audit) · [A.1 Method](#a1-method) · [A.2 Audit table](#a2-audit-table) ·
 [A.3 Domain mapping and entity set](#a3-domain-mapping-and-entity-set) ·
