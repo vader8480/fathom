@@ -1,11 +1,16 @@
 // Floor plan view: plan image + device markers, drag to place, calibrate,
 // measure, pan / zoom / pinch, layer toggles, upload. mount(el, ctx) (§6.4, §6.7).
+// Route plan/<fp> (docs/ui-audit.md D1, B.3 FP); the room's devices are an explorer
+// (#fp-unplaced) that is a sidebar at md/lg and a drawer at sm.
 import {
   findPlan, planSize, imageToNorm, normToImage, metersPerPx, distance, formatLength,
   markerOf, markerOps, removeMarkerOps, calibrateOps, unplacedDevices, roomDevices, nudge,
   plansForRoom, newPlanOps, renamePlanOps, deletePlanOps, reorderPlanOps, toggleLayerOps, layerVisible,
   fitView, zoomAt, panBy, pinchView, screenToWorld,
 } from './floorplan-core.js';
+import { h, on as listen } from './dom.js';
+import { layoutFor } from './router-core.js';
+import { mountExplorer } from './explorer.js';
 
 // Sample renders offered by the plan picker in harness mode (ctx.api === null).
 export const DEV_PLANS = [
@@ -22,21 +27,21 @@ export const DEV_PLANS = [
 
 const ACCEPT = '.png,.jpg,.jpeg,.svg,.pdf,.drawio,.xml,.dxf,.dwg';
 const DRAG_SLOP = 5;
+const EXPLORER_KEY = 'plan-unplaced';
 
-function h(tag, attrs, children) {
-  const n = document.createElement(tag);
-  if (attrs) {
-    Object.keys(attrs).forEach(function (k) {
-      const v = attrs[k];
-      if (v == null || v === false) return;
-      if (k === 'text') n.textContent = v;
-      else if (k === 'class') n.className = v;
-      else if (k === 'style') n.setAttribute('style', v);
-      else n.setAttribute(k, v === true ? '' : v);
-    });
-  }
-  (children || []).forEach(function (c) { if (c != null) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
-  return n;
+// The shell loads explorer.css through the VIEWS registry; the dev harness only
+// links plan.css, so put explorer.css beside it there.
+function ensureExplorerCss(ctx) {
+  if (typeof ctx.ensureCss === 'function') return Promise.resolve(ctx.ensureCss(['plan.css', 'explorer.css']));
+  if (document.querySelector('link[href*="explorer.css"]')) return Promise.resolve();
+  const plan = document.querySelector('link[href*="plan.css"]');
+  if (!plan) return Promise.resolve();
+  return new Promise(function (resolve) {
+    const link = h('link', {rel: 'stylesheet', href: plan.getAttribute('href').replace(/plan\.css/, 'explorer.css')});
+    link.addEventListener('load', function () { resolve(); });
+    link.addEventListener('error', function () { resolve(); });
+    document.head.appendChild(link);
+  });
 }
 
 function svgEl(tag, attrs) {
@@ -68,12 +73,10 @@ export function mount(el, ctx) {
   const S = {
     fpId: null, view: {x: 0, y: 0, k: 1}, fitted: {}, tool: '', points: [], measure: null,
     sel: null, pointers: {}, gesture: null, natural: {}, imgUrl: '', highlight: null, popFor: null,
+    pinned: false, routeSel: '', destroyed: false,
   };
-  const listeners = [];
-  function on(target, type, fn, opts) {
-    target.addEventListener(type, fn, opts);
-    listeners.push([target, type, fn, opts]);
-  }
+  const offs = [];
+  function on(target, type, fn, opts) { offs.push(listen(target, type, fn, opts)); }
 
   // ------------------------------------------------------------------ DOM
   el.innerHTML = '';
@@ -96,20 +99,23 @@ export function mount(el, ctx) {
   const btnFit = h('button', {id: 'fp-fit', type: 'button', class: 'fp-btn', 'aria-label': 'Fit plan to view', text: 'Fit'});
   const readout = h('span', {class: 'fp-readout', role: 'status'});
   const devGroup = h('span', {class: 'fp-group fp-devplans'}, [devSelect, devAdd]);
+  const uploadGroup = h('span', {class: 'fp-group fp-upload'}, [upload, uploadLabel]);
+  // Inline at lg when the row has room, otherwise inside the ⋯ menu (fitToolbar).
+  const tools = h('span', {class: 'fp-group fp-tools'}, [
+    uploadGroup, devGroup, btnCal, btnMeasure, h('span', {class: 'fp-layers-wrap'}, [btnLayers, layersPop]),
+    h('span', {class: 'fp-group fp-planedit'}, [btnUp, btnDown, btnRename, btnDelete]),
+  ]);
+  const menuBtn = h('button', {type: 'button', class: 'fp-btn fp-icon fp-menu-more', 'aria-haspopup': 'true', 'aria-expanded': 'false',
+    'aria-controls': 'fp-menu', 'aria-label': 'More floor plan tools', title: 'More tools', text: '\u22ef'});
+  const menu = h('div', {id: 'fp-menu', class: 'fp-menu', role: 'group', 'aria-label': 'More floor plan tools', hidden: true});
+  const menuWrap = h('span', {class: 'fp-menu-wrap'}, [menuBtn, menu]);
   const toolbar = h('div', {class: 'fp-toolbar', role: 'toolbar', 'aria-label': 'Floor plan tools'}, [
-    h('span', {class: 'fp-group'}, [select, btnUp, btnDown, btnRename, btnDelete]),
-    h('span', {class: 'fp-group'}, [upload, uploadLabel]),
-    devGroup,
-    h('span', {class: 'fp-group'}, [btnCal, btnMeasure, h('span', {class: 'fp-layers-wrap'}, [btnLayers, layersPop])]),
-    h('span', {class: 'fp-group'}, [btnZoomOut, btnZoomIn, btnFit]),
-    readout,
+    h('span', {class: 'fp-group fp-group-plan'}, [select]),
+    h('span', {class: 'fp-group fp-group-view'}, [btnFit, btnZoomOut, btnZoomIn]),
+    tools,
+    menuWrap,
   ]);
-  const devList = h('ul', {id: 'fp-unplaced', class: 'fp-devlist', 'aria-label': 'Room devices'});
-  const side = h('aside', {class: 'fp-side'}, [
-    h('h3', {text: 'Devices'}),
-    h('p', {class: 'fp-hint', text: 'Drag a device by its grip onto the plan, or press it to drop it in the middle.'}),
-    devList,
-  ]);
+  const main = h('div', {class: 'fp-main'});
   const img = h('img', {class: 'fp-img', alt: '', draggable: 'false'});
   const overlay = svgEl('svg', {class: 'fp-overlay'});
   const markersEl = h('div', {class: 'fp-markers'});
@@ -129,10 +135,10 @@ export function mount(el, ctx) {
   const delPop = h('div', {class: 'fp-pop fp-delpop', hidden: true, role: 'dialog', 'aria-labelledby': 'fp-del-title'});
   const viewport = h('div', {class: 'fp-viewport', role: 'application', tabindex: '0',
     'aria-label': 'Floor plan. Arrow keys pan, plus and minus zoom, F fits. With a marker focused, arrows move it, Delete removes it, Enter opens it.'},
-  [world, empty, crosshair, calForm, pop]);
+  [world, empty, crosshair, calForm, pop, readout]);
   const ghost = h('div', {class: 'fp-ghost', hidden: true, 'aria-hidden': 'true'});
   root.appendChild(toolbar);
-  root.appendChild(h('div', {class: 'fp-body'}, [side, viewport]));
+  root.appendChild(main);
   root.appendChild(ghost);
   root.appendChild(delPop);
   el.appendChild(root);
@@ -140,6 +146,75 @@ export function mount(el, ctx) {
   const harness = !ctx.api;
   devGroup.hidden = !harness;
   (ctx.devPlans || DEV_PLANS).forEach(function (p, i) { devSelect.appendChild(h('option', {value: String(i), text: p.name})); });
+
+  // ------------------------------------------------------------ explorer
+  // explorer.js builds its chips once, so a new discipline set remounts it (room change).
+  let ex = null;
+  let devList = null;
+  let exChipKey = null;
+  let exObserver = null;
+  let itemMeta = {};
+  const counts = {unplaced: 0, placed: 0};
+  const hint = h('p', {class: 'fp-hint fp-exhint', text: 'Drag a device by its grip onto the plan, or press it to drop it in the middle.'});
+
+  function discLabel(disc) {
+    const d = vocab.disciplines && vocab.disciplines[disc];
+    return (d && d.label) || disc.charAt(0).toUpperCase() + disc.slice(1);
+  }
+
+  function footerText(shown, total) {
+    if (!plan()) return 'Add a plan first.';
+    if (!total) return 'No devices in this room.';
+    if (shown !== total) return shown + ' of ' + total + ' devices';
+    return counts.unplaced + ' unplaced \u00b7 ' + counts.placed + ' placed';
+  }
+
+  function buildExplorer(discs) {
+    if (ex) {
+      if (exObserver) exObserver.disconnect();
+      ex.destroy();
+    }
+    exChipKey = discs.join(',');
+    ex = mountExplorer(main, {
+      key: EXPLORER_KEY, title: 'Devices', glyph: '\u25EB', items: [], listId: 'fp-unplaced', mobileLabel: 'Devices',
+      contentLabel: 'Floor plan canvas', footer: footerText, onSelect: onListSelect,
+      chips: discs.map(function (d) { return {key: d, label: discLabel(d), test: function (it) { return it.disc === d; }}; }),
+    });
+    devList = ex.list;
+    const head = ex.side.querySelector('.ex-head');
+    if (head) head.appendChild(hint);
+    ex.content.appendChild(viewport);
+    if (typeof MutationObserver !== 'undefined') {
+      exObserver = new MutationObserver(decorateList);
+      exObserver.observe(devList, {childList: true});
+    }
+  }
+
+  // explorer.js renders plain rows; this adds the drag grip (.fp-grip[data-device]) and
+  // the discipline dot after each of its renders.
+  function decorateList() {
+    if (!devList) return;
+    Array.prototype.forEach.call(devList.querySelectorAll('li.ex-item'), function (li) {
+      const id = li.getAttribute('data-id');
+      const meta = itemMeta[id];
+      if (!meta) return;
+      li.classList.add('fp-exitem');
+      li.classList.toggle('fp-placed', meta.placed);
+      const g = li.querySelector('.ex-item-glyph');
+      if (g && !g.classList.contains('fp-grip')) {
+        g.classList.add('fp-grip');
+        g.setAttribute('data-device', id);
+        g.setAttribute('title', 'Drag onto the plan');
+      }
+      let dot = li.querySelector('.fp-dot');
+      if (!dot) {
+        const text = li.querySelector('.ex-item-text');
+        dot = h('span', {class: 'fp-dot', 'aria-hidden': 'true'});
+        if (text && text.parentNode) text.parentNode.insertBefore(dot, text);
+      }
+      dot.style.background = meta.color;
+    });
+  }
 
   // -------------------------------------------------------------- state
   function doc() { return store.doc; }
@@ -198,6 +273,10 @@ export function mount(el, ctx) {
     uploadLabel.classList.toggle('fp-disabled', ro);
     devAdd.disabled = ro;
     btnCal.disabled = ro || !fp;
+    // D7: write actions are not rendered for viewers.
+    [btnUp, btnDown, btnRename, btnDelete, uploadGroup, btnCal].forEach(function (b) { b.hidden = ro; });
+    devGroup.hidden = !harness || ro;
+    if (ro !== S.ro) { S.ro = ro; fitToolbar(true); }
     btnMeasure.disabled = !fp;
     btnLayers.disabled = !fp || !(fp.layers && fp.layers.length);
     btnZoomIn.disabled = btnZoomOut.disabled = btnFit.disabled = !fp;
@@ -230,6 +309,9 @@ export function mount(el, ctx) {
     renderOverlay();
     renderTool();
     applyView();
+    const title = fp ? fp.name + ' \u00b7 Plan' : 'Plan';
+    if (title !== S.title) { S.title = title; if (typeof ctx.setTitle === 'function') ctx.setTitle(title); }
+    scheduleRouteSync();
   }
 
   function renderMarkers() {
@@ -256,27 +338,51 @@ export function mount(el, ctx) {
     });
   }
 
-  function renderDevList() {
-    devList.innerHTML = '';
-    const fp = plan();
-    if (!fp) { devList.appendChild(h('li', {class: 'fp-hint', text: 'Add a plan first.'})); return; }
-    const unplaced = unplacedDevices(doc(), fp.id);
-    const placed = roomDevices(doc(), fp.room).filter(function (d) { return markerOf(fp, d.id); });
-    if (!unplaced.length && !placed.length) devList.appendChild(h('li', {class: 'fp-hint', text: 'No devices in this room.'}));
-    unplaced.concat(placed).forEach(function (d) {
-      const isPlaced = !!markerOf(fp, d.id);
-      const grip = h('span', {class: 'fp-grip', 'data-device': d.id, 'aria-hidden': 'true', title: 'Drag onto the plan', text: '\u283f'});
-      const btn = h('button', {
-        type: 'button', class: 'fp-dev' + (isPlaced ? ' fp-placed' : ''), 'data-device': d.id,
-        'aria-label': (isPlaced ? 'Show ' : 'Place ') + d.name + (isPlaced ? ' on the plan' : ' in the middle of the plan'),
-        disabled: !isPlaced && readOnly(),
-      }, [
-        h('span', {class: 'fp-dot', style: 'background:' + discColor(disciplineOf(d, vocab), vocab)}),
-        h('span', {class: 'fp-devname', text: d.name}),
-        h('span', {class: 'fp-devstate', text: isPlaced ? 'placed' : ''}),
-      ]);
-      devList.appendChild(h('li', {class: 'fp-devitem'}, [readOnly() ? null : grip, btn]));
+  function listDevices(fp) {
+    if (!fp) return {unplaced: [], placed: []};
+    return {
+      unplaced: unplacedDevices(doc(), fp.id),
+      placed: roomDevices(doc(), fp.room).filter(function (d) { return markerOf(fp, d.id); }),
+    };
+  }
+
+  function discsFor(fp) {
+    const l = listDevices(fp);
+    const seen = {};
+    l.unplaced.concat(l.placed).forEach(function (d) { seen[disciplineOf(d, vocab)] = true; });
+    const order = Object.keys(vocab.disciplines || {});
+    return Object.keys(seen).sort(function (a, b) {
+      const ia = order.indexOf(a) < 0 ? 1e3 : order.indexOf(a);
+      const ib = order.indexOf(b) < 0 ? 1e3 : order.indexOf(b);
+      return ia - ib || (a < b ? -1 : a > b ? 1 : 0);
     });
+  }
+
+  function renderDevList() {
+    const fp = plan();
+    const discs = discsFor(fp);
+    if (!ex || discs.join(',') !== exChipKey) buildExplorer(discs);
+    const l = listDevices(fp);
+    const ro = readOnly();
+    const kinds = vocab.kinds || {};
+    counts.unplaced = l.unplaced.length;
+    counts.placed = l.placed.length;
+    itemMeta = {};
+    const items = [];
+    [[l.unplaced, false], [l.placed, true]].forEach(function (pair) {
+      pair[0].forEach(function (d) {
+        const disc = disciplineOf(d, vocab);
+        const kind = kinds[d.kind];
+        itemMeta[d.id] = {placed: pair[1], color: discColor(disc, vocab)};
+        items.push({
+          id: d.id, label: d.name || d.id, sub: (kind && kind.label) || '', disc: disc,
+          glyph: ro ? '' : '\u283f', group: pair[1] ? 'Placed' : 'Unplaced',
+        });
+      });
+    });
+    ex.setItems(items);
+    ex.setSelected(S.sel && itemMeta[S.sel] ? S.sel : null);
+    decorateList();
   }
 
   function renderLayers() {
@@ -588,17 +694,21 @@ export function mount(el, ctx) {
   let listDrag = null;
   let suppressClick = false;
 
+  // Pointer capture goes to the root, not the grip: at sm the explorer drawer hides
+  // (visibility) under the pointer once the drag starts.
   function onListDown(e) {
-    const grip = e.target.closest('.fp-grip');
-    if (!grip || readOnly() || !plan()) return;
+    const grip = e.target.closest && e.target.closest('.fp-grip');
+    if (!grip || !devList || !devList.contains(grip) || readOnly() || !plan()) return;
+    if (e.button != null && e.button > 0 && e.pointerType === 'mouse') return;
     e.preventDefault();
     listDrag = {id: grip.getAttribute('data-device'), x: e.clientX, y: e.clientY, pointer: e.pointerId, moved: false, src: grip};
-    capture(grip, e.pointerId);
+    capture(root, e.pointerId);
   }
 
   function onListMove(e) {
     if (!listDrag || listDrag.pointer !== e.pointerId) return;
     if (!listDrag.moved && Math.hypot(e.clientX - listDrag.x, e.clientY - listDrag.y) < DRAG_SLOP) return;
+    if (!listDrag.moved && ex && ex.isOpen()) ex.close({focus: false});
     listDrag.moved = true;
     const dev = deviceById(doc(), listDrag.id);
     ghost.textContent = dev ? dev.name : listDrag.id;
@@ -643,25 +753,37 @@ export function mount(el, ctx) {
     renderMarkers();
   }
 
-  function onListClick(e) {
-    const btn = e.target.closest('.fp-dev');
-    if (!btn || suppressClick) return;
-    const id = btn.getAttribute('data-device');
-    const fp = plan();
-    if (!fp) return;
+  // The click that ends a list drag lands on the grip or, with root capture, on the root.
+  function onClickCapture(e) {
+    if (!suppressClick || !(e.target === root || (devList && devList.contains(e.target)))) return;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function centerOn(fp, id) {
     const m = markerOf(fp, id);
-    if (m) {
-      const p = normToImage(fp, m);
-      const vs = vpSize();
-      setView({x: vs.w / 2 - p.x * S.view.k, y: vs.h / 2 - p.y * S.view.k, k: S.view.k}, true);
+    if (!m) return false;
+    const p = normToImage(fp, m);
+    const vs = vpSize();
+    setView({x: vs.w / 2 - p.x * S.view.k, y: vs.h / 2 - p.y * S.view.k, k: S.view.k}, true);
+    return true;
+  }
+
+  // Explorer activation (click, tap, Enter): a placed device is shown, an unplaced one
+  // is dropped in the middle of the plan (the keyboard alternative to dragging).
+  function onListSelect(item) {
+    const id = String(item.id);
+    const fp = plan();
+    if (!fp) { ctx.select({type: 'device', id: id}); return; }
+    if (centerOn(fp, id)) {
       selectDevice(id, true);
-      const mk = markersEl.querySelector('.fp-marker[data-device="' + cssEscape(id) + '"]');
-      if (mk) mk.focus();
+      refocusMarker(id);
       return;
     }
+    if (readOnly()) { selectDevice(id, false); return; }
     placeDevice(id, centerNorm());
-    const mk2 = markersEl.querySelector('.fp-marker[data-device="' + cssEscape(id) + '"]');
-    if (mk2) mk2.focus();
+    selectDevice(id, false);
+    refocusMarker(id);
   }
 
   function cssEscape(s) { return String(s).replace(/["\\]/g, '\\$&'); }
@@ -695,7 +817,7 @@ export function mount(el, ctx) {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         selectDevice(id, true);
-        if (ctx.openInspector) ctx.openInspector({type: 'device', id: id});
+        openDetails(id);
         return;
       }
       if (e.key === 'Escape') { e.preventDefault(); selectDevice(null, false); viewport.focus(); return; }
@@ -716,6 +838,13 @@ export function mount(el, ctx) {
     }
   }
 
+  // Explicit inspection opens the drawer at every width (D4); plain selection stays ctx.select.
+  function openDetails(id) {
+    const sel = {type: 'device', id: id};
+    if (typeof ctx.openDrawer === 'function') ctx.openDrawer(sel);
+    else if (ctx.openInspector) ctx.openInspector(sel);
+  }
+
   function refocusMarker(id) {
     const mk = markersEl.querySelector('.fp-marker[data-device="' + cssEscape(id) + '"]');
     if (mk) mk.focus();
@@ -732,10 +861,107 @@ export function mount(el, ctx) {
   // ---------------------------------------------------------- toolbar
   function onSelect() {
     S.fpId = select.value || null;
+    S.pinned = !!S.fpId;
     S.tool = '';
     S.points = [];
     hidePop();
     render();
+    if (routed()) ctx.navigateRoute({id: S.fpId || ''});
+  }
+
+  // ------------------------------------------------------------- route
+  // plan/<fp> (D1). The URL follows S.fpId: #fp-select pushes; fallbacks (missing or
+  // unknown id, deleted plan, room change, new plan) replace and keep the query.
+  function routed() {
+    const r = ctx.route;
+    return !!(r && r.view === 'plan' && typeof ctx.navigateRoute === 'function');
+  }
+
+  let syncTimer = 0;
+  function scheduleRouteSync() {
+    if (syncTimer || !routed()) return;
+    // Deferred: writing the hash while the shell is still mounting would remount the view.
+    syncTimer = setTimeout(function () {
+      syncTimer = 0;
+      if (S.destroyed || !routed()) return;
+      const r = ctx.route;
+      const want = S.fpId || '';
+      if ((r.id || '') !== want) ctx.navigateRoute({id: want, query: r.query}, {replace: true});
+    }, 0);
+  }
+
+  function knownPlan(id) {
+    return !!id && plans().some(function (p) { return p.id === id; });
+  }
+
+  function applyRouteId(id) {
+    if (knownPlan(id)) {
+      S.pinned = true;
+      if (id === S.fpId) return false;
+      S.fpId = id;
+    } else {
+      S.pinned = false;
+      if (knownPlan(S.fpId)) return false;
+      S.fpId = null;
+    }
+    S.tool = '';
+    S.points = [];
+    S.measure = null;
+    hidePop();
+    return true;
+  }
+
+  // -------------------------------------------------- toolbar and ⋯ menu
+  let fitKey = '';
+  function fitToolbar(force) {
+    if (S.destroyed) return;
+    const width = toolbar.clientWidth;
+    const lay = layoutFor(window.innerWidth);
+    const key = width + '|' + lay;
+    if (!force && key === fitKey) return;
+    fitKey = key;
+    let inline = lay === 'lg';
+    if (inline) {
+      if (tools.parentNode !== toolbar) toolbar.insertBefore(tools, menuWrap);
+      menuWrap.hidden = true;
+      toolbar.classList.add('fp-measuring');
+      inline = toolbar.scrollWidth <= toolbar.clientWidth + 1;
+      toolbar.classList.remove('fp-measuring');
+    }
+    if (!inline && tools.parentNode !== menu) menu.appendChild(tools);
+    menuWrap.hidden = inline;
+    root.classList.toggle('fp-tools-inline', inline);
+    if (inline) closeMenu(false);
+  }
+
+  function menuOpen() { return !menu.hidden; }
+
+  function openMenu() {
+    if (menuOpen()) return;
+    menu.hidden = false;
+    menuBtn.setAttribute('aria-expanded', 'true');
+    const first = menu.querySelector('button:not([disabled]):not([hidden]), label.fp-btn:not(.fp-disabled), select:not([disabled])');
+    if (first && first.offsetParent) first.focus();
+  }
+
+  function closeMenu(focusBtn) {
+    if (!menuOpen()) return;
+    menu.hidden = true;
+    menuBtn.setAttribute('aria-expanded', 'false');
+    layersPop.hidden = true;
+    btnLayers.setAttribute('aria-expanded', 'false');
+    if (focusBtn) menuBtn.focus();
+  }
+
+  function onMenuClick(e) {
+    const b = e.target.closest('button, label.fp-btn');
+    if (!b || b === btnLayers || layersPop.contains(b)) return;
+    // The label opens the file picker first; the menu closes after that click.
+    setTimeout(function () { closeMenu(false); }, 0);
+  }
+
+  function onDocPointer(e) {
+    if (menuOpen() && !menuWrap.contains(e.target)) closeMenu(false);
   }
 
   function onRename() {
@@ -900,7 +1126,7 @@ export function mount(el, ctx) {
     if (!b || !S.popFor) return;
     const id = S.popFor;
     const act = b.getAttribute('data-act');
-    if (act === 'details') { if (ctx.openInspector) ctx.openInspector({type: 'device', id: id}); }
+    if (act === 'details') openDetails(id);
     else if (act === 'remove') removeMarker(id);
     else if (act === 'close') { hidePop(); refocusMarker(id); }
   }
@@ -925,8 +1151,18 @@ export function mount(el, ctx) {
     if (id !== S.sel) { S.sel = id; renderMarkers(); }
   }
   function onHighlight(e) { S.highlight = e.detail; renderMarkers(); }
-  function onRoom() { S.fpId = null; S.tool = ''; hidePop(); render(); }
+  function onRoom() { S.fpId = null; S.pinned = false; S.tool = ''; hidePop(); render(); }
 
+  on(menuBtn, 'click', function () { if (menuOpen()) closeMenu(true); else openMenu(); });
+  on(menu, 'click', onMenuClick);
+  on(menu, 'keydown', function (e) {
+    if (e.key !== 'Escape' || layersPop.contains(e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeMenu(true);
+  });
+  on(upload, 'change', function () { closeMenu(false); });
+  on(document, 'pointerdown', onDocPointer, true);
   on(select, 'change', onSelect);
   on(btnUp, 'click', function () { commit(reorderPlanOps(doc(), S.fpId, -1), 'Reordered plans'); });
   on(btnDown, 'click', function () { commit(reorderPlanOps(doc(), S.fpId, 1), 'Reordered plans'); });
@@ -957,11 +1193,11 @@ export function mount(el, ctx) {
   on(viewport, 'gestureend', prevent, {passive: false});
   on(viewport, 'touchmove', onTouchMove, {passive: false});
   on(viewport, 'keydown', onKey);
-  on(devList, 'pointerdown', onListDown);
-  on(devList, 'pointermove', onListMove);
-  on(devList, 'pointerup', onListUp);
-  on(devList, 'pointercancel', onListCancel);
-  on(devList, 'click', onListClick);
+  on(root, 'pointerdown', onListDown);
+  on(root, 'pointermove', onListMove);
+  on(root, 'pointerup', onListUp);
+  on(root, 'pointercancel', onListCancel);
+  on(root, 'click', onClickCapture, true);
   on(pop, 'click', onPopClick);
   on(calForm, 'submit', onCalSubmit);
   on(calCancel, 'click', function () { setTool('calibrate'); });
@@ -988,33 +1224,67 @@ export function mount(el, ctx) {
     });
     resizeObs.observe(viewport);
   }
+  let toolbarObs = null;
+  if (typeof ResizeObserver !== 'undefined') {
+    toolbarObs = new ResizeObserver(function () { fitToolbar(false); });
+    toolbarObs.observe(toolbar);
+  } else {
+    on(window, 'resize', function () { fitToolbar(false); });
+  }
 
+  const initial = ctx.route;
+  S.routeSel = (initial && initial.query && initial.query.sel) || '';
+  applyRouteId(initial && initial.view === 'plan' ? initial.id : '');
+  ensurePlan();
+  buildExplorer(discsFor(plan()));
   render();
+  ensureExplorerCss(ctx).then(function () { fitToolbar(true); });
+
+  // Prefers the plan the selection names, then the current plan, then (unless the URL
+  // names a plan) the first plan of the room that has the device.
+  function focusSel(sel, center) {
+    const id = sel && (sel.device || sel.id);
+    if (!id) return;
+    let target = null;
+    if (sel.type === 'marker' && knownPlan(sel.floorplan) && markerOf(findPlan(doc(), sel.floorplan), id)) target = findPlan(doc(), sel.floorplan);
+    else if (plan() && markerOf(plan(), id)) target = plan();
+    else if (!S.pinned) target = plans().filter(function (p) { return markerOf(p, id); })[0] || null;
+    if (!target) return;
+    if (target.id !== S.fpId) { S.fpId = target.id; S.pinned = true; S.tool = ''; S.points = []; hidePop(); }
+    render();
+    if (center) centerOn(target, id);
+    selectDevice(id, true);
+  }
 
   return {
     destroy: function () {
-      listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], l[3]); });
+      S.destroyed = true;
+      if (syncTimer) clearTimeout(syncTimer);
+      offs.forEach(function (off) { off(); });
       if (resizeObs) resizeObs.disconnect();
+      if (toolbarObs) toolbarObs.disconnect();
+      if (exObserver) exObserver.disconnect();
+      if (ex) ex.destroy();
       el.innerHTML = '';
     },
-    focus: function (sel) {
-      const id = sel && (sel.device || sel.id);
-      if (!id) return;
-      const target = plans().filter(function (p) { return markerOf(p, id); })[0];
-      if (!target) return;
-      S.fpId = target.id;
-      render();
-      const m = markerOf(target, id);
-      const p = normToImage(target, m);
-      const vs = vpSize();
-      setView({x: vs.w / 2 - p.x * S.view.k, y: vs.h / 2 - p.y * S.view.k, k: S.view.k}, true);
-      selectDevice(id, true);
+    focus: function (sel) { focusSel(sel, true); },
+    // Same-view URL change (D1): plan id, plus explicit marker deep links.
+    route: function (r) {
+      if (!r || r.view !== 'plan') return;
+      if (applyRouteId(r.id)) { ensurePlan(); render(); }
+      else scheduleRouteSync();
+      const s = (r.query && r.query.sel) || '';
+      const changed = s !== S.routeSel;
+      S.routeSel = s;
+      const sel = store.selection;
+      if (changed && sel && sel.type === 'marker') focusSel(sel, true);
     },
     getState: function () { return {fpId: S.fpId, view: S.view}; },
     setState: function (s) {
       if (!s) return;
-      if (s.fpId) { S.fpId = s.fpId; S.fitted[s.fpId] = !!s.view; }
-      if (s.view) S.view = s.view;
+      // A plan named by the URL wins over the remembered one.
+      if (s.fpId && !S.pinned && knownPlan(s.fpId)) S.fpId = s.fpId;
+      if (s.view && s.fpId === S.fpId) { S.view = s.view; S.fitted[S.fpId] = true; }
       render();
     },
     // test hooks (harness walkthroughs)

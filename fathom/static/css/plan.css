@@ -130,6 +130,47 @@
 .fp-ghost.fp-ok { border-color: var(--ok, #2fd4b4); }
 .fp-rename { width: 200px; }
 
+/* one-row toolbar: plan, view, then the tools inline (lg, when they fit) or in the ⋯ menu */
+.fp-root > .fp-toolbar { flex: none; flex-wrap: nowrap; gap: 6px; padding: 5px 8px; min-width: 0; position: relative; z-index: 6; }
+.fp-toolbar > .fp-group { flex: none; flex-wrap: nowrap; }
+.fp-toolbar > .fp-group-plan { flex: 0 1 auto; min-width: 0; }
+.fp-group-plan > #fp-select, .fp-group-plan > .fp-rename { min-width: 0; max-width: 100%; flex: 0 1 auto; text-overflow: ellipsis; }
+.fp-toolbar.fp-measuring > * { flex-shrink: 0 !important; }
+.fp-toolbar > .fp-tools { gap: 4px; }
+.fp-tools > .fp-group { flex-wrap: nowrap; }
+.fp-menu-wrap { position: relative; flex: none; margin-left: auto; display: inline-flex; }
+.fp-menu-more { font-size: 16px; line-height: 1; }
+.fp-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 220px; max-width: calc(100vw - 16px);
+  max-height: min(70vh, 560px); overflow: auto; padding: 8px; background: var(--panel, #111828);
+  border: 1px solid var(--border, rgba(255,255,255,.12)); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+}
+.fp-menu .fp-tools, .fp-menu .fp-tools > .fp-group { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.fp-menu .fp-planedit { flex-direction: row !important; flex-wrap: wrap !important; }
+.fp-menu .fp-planedit > .fp-btn:not(.fp-icon) { flex: 1 1 auto; }
+.fp-menu .fp-btn { justify-content: flex-start; }
+.fp-menu .fp-planedit > .fp-btn { justify-content: center; }
+.fp-menu .fp-layers-wrap { display: flex; flex-direction: column; gap: 6px; }
+.fp-menu .fp-layers-wrap > .fp-btn { width: 100%; }
+.fp-menu .fp-layers-pop { position: static; min-width: 0; box-shadow: none; padding: 6px 8px; }
+.fp-menu .fp-devplans select { min-width: 0; }
+
+/* status readout floats over the canvas */
+.fp-viewport > .fp-readout {
+  position: absolute; left: 8px; top: 8px; z-index: 3; margin: 0; width: auto; max-width: calc(100% - 16px);
+  padding: 2px 9px; border-radius: 999px; background: rgba(11,16,32,.82); border: 1px solid var(--border, rgba(255,255,255,.09));
+  pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fp-viewport > .fp-readout:empty { display: none; }
+
+/* devices explorer (#fp-unplaced): canvas fills the explorer page */
+.fp-main { position: relative; display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; }
+.fp-main .ex-page > .fp-viewport { flex: 1 1 auto; min-height: 0; }
+.fp-exhint { margin: 0; }
+.fp-exitem > a { gap: 6px; }
+.fp-exitem .fp-grip { width: 22px; min-height: 30px; }
+.fp-exitem.fp-placed .ex-item-label { color: var(--muted, #8e97ab); }
+
 /* ----------------------------------------------------------------- racks */
 .rk-subhead { margin: 10px 0 2px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted, #8e97ab); }
 .rk-devitem { padding: 2px 0; }
@@ -322,8 +363,6 @@ span.inv-planned { color: var(--accent, #8ea2ff); border-style: dashed; }
   .fp-grip, .rk-grip { color: var(--text, #e6eaf4); background: rgba(255,255,255,.05); }
 }
 @media (max-width: 699px) {
-  .fp-body { flex-direction: column-reverse; }
-  .fp-side { width: auto; max-height: 34%; border-right: 0; border-top: 1px solid var(--border, rgba(255,255,255,.09)); }
   .rk-body { flex-direction: column; }
   .rk-side { width: auto; max-height: 30%; border-right: 0; border-bottom: 1px solid var(--border, rgba(255,255,255,.09)); }
   .fp-readout, .rk-readout, .sch-count { margin-left: 0; width: 100%; }
@@ -333,6 +372,9 @@ span.inv-planned { color: var(--accent, #8ea2ff); border-style: dashed; }
 }
 
 /* ----------------------------------------------------------------- print */
+@media print {
+  .fp-root .ex-side, .fp-root .ex-resizer, .fp-root .ex-open, .fp-menu-wrap { display: none !important; }
+}
 @media print {
   .fp-toolbar, .fp-side, .rk-toolbar, .rk-side, .rk-form, .sch-tabs, .sch-toolbar, .sch-tagpanel, .inv-toolbar, .inv-bulk, .inv-actcol, .inv-cbcol { display: none !important; }
   .fp-root, .rk-root, .sch-root, .inv-root { color: #000; height: auto; }
