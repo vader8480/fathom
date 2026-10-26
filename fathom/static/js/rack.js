@@ -8,7 +8,7 @@ import {
   fits, placeOps, unplaceOps, firstFit, uToY, yToU, ruLabel, newRackOps, deleteRackOps, rackDevices,
 } from './rack-core.js';
 import { mountExplorer } from './explorer.js';
-import { confirmScope } from './feedback.js';
+import { confirmScope, emptyState } from './feedback.js';
 import { mountRackPage } from './page-rack.js';
 
 const DRAG_SLOP = 4;
@@ -178,7 +178,7 @@ export function createElevation(el, ctx, opts) {
     root.appendChild(body);
     ex = mountExplorer(body, {
       key: 'racks-unracked', title: 'Unracked devices', listId: 'rk-unracked', mobileLabel: 'Unracked',
-      contentLabel: 'Rack elevations', items: [], chips: [],
+      contentLabel: 'Rack elevations', items: [], chips: disciplineChips(),
       footer: function (shown, total) { return total ? (shown === total ? total : shown + ' of ' + total) + ' unracked' : 'Everything is racked'; },
       onSelect: function (it) { if (it && it.id) ctx.select({type: 'device', id: it.id}); },
     });
@@ -213,6 +213,12 @@ export function createElevation(el, ctx, opts) {
     return true;
   }
   function devName(id) { const d = deviceById(doc(), id); return d ? d.name : id; }
+  function roomName() {
+    const r = room();
+    if (r === '*' || !r) return 'this project';
+    const m = (doc().rooms || []).filter(function (x) { return x.id === r; })[0];
+    return m ? (m.name || m.id) : r;
+  }
   function rackHref(id) {
     if (typeof ctx.routeHref !== 'function') return '';
     const href = ctx.routeHref({view: 'racks', id: id, tab: '', sub: '', query: {}});
@@ -271,7 +277,13 @@ export function createElevation(el, ctx, opts) {
     racksEl.innerHTML = '';
     const rs = shownRacks();
     if (!rs.length) {
-      racksEl.appendChild(h('p', {class: 'rk-empty', text: embedded ? 'This rack no longer exists.' : readOnly() ? 'No racks in this room.' : 'No racks in this room yet. Press "New rack" to create one.'}));
+      if (embedded) { racksEl.appendChild(h('p', {class: 'rk-empty', text: 'This rack no longer exists.'})); return; }
+      const ro = readOnly();
+      racksEl.appendChild(h('div', {class: 'rk-empty'}, [emptyState({
+        title: 'No racks in ' + roomName() + '.',
+        text: ro ? '' : 'Add a rack, then drag devices from the unracked list onto it.',
+        action: ro ? null : {label: 'Add rack', run: function () { openForm(null); }},
+      })]));
       return;
     }
     rs.forEach(function (rack) {
@@ -380,13 +392,27 @@ export function createElevation(el, ctx, opts) {
     return out.concat(shared.map(function (d) { return item(d, 'Shared inventory'); }));
   }
 
-  function disciplineChips(items) {
+  // explorer.js builds its chips once, so every discipline gets one at mount and syncChips shows
+  // only those present in the current list (none when fewer than two are).
+  function disciplineChips() {
+    const ds = (vocab && vocab.disciplines) || {};
+    const keys = Object.keys(ds);
+    if (keys.indexOf('other') < 0) keys.push('other');
+    return keys.map(function (k) { return {key: k, label: (ds[k] && ds[k].label) || k.charAt(0).toUpperCase() + k.slice(1), test: function (it) { return it.disc === k; }}; });
+  }
+
+  function syncChips(items) {
+    const box = ex && ex.side.querySelector('.ex-chips');
+    if (!box) return;
     const seen = {};
     items.forEach(function (it) { seen[it.disc] = true; });
-    const ds = (vocab && vocab.disciplines) || {};
-    const keys = Object.keys(ds).filter(function (k) { return seen[k]; });
-    if (keys.length < 2) return [];
-    return keys.map(function (k) { return {key: k, label: (ds[k] && ds[k].label) || k, test: function (it) { return it.disc === k; }}; });
+    const show = Object.keys(seen).length >= 2;
+    Array.prototype.forEach.call(box.querySelectorAll('[data-chip]'), function (b) {
+      const off = !show || !seen[b.getAttribute('data-chip')];
+      if (off && b.getAttribute('aria-pressed') === 'true') b.click();
+      b.hidden = off;
+    });
+    box.hidden = !show;
   }
 
   function renderList() {
@@ -395,6 +421,7 @@ export function createElevation(el, ctx, opts) {
     if (sig === S.listSig) { decorate(); return; }
     S.listSig = sig;
     ex.setItems(items);
+    syncChips(items);
     decorate();
   }
 

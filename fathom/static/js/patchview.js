@@ -4,11 +4,11 @@
 import * as core from './patchview-core.js';
 import {
   canConnect, connectOps, disconnectOps, repatchOps, deleteDeviceOps, duplicateDeviceOps, renameOps,
-  addDeviceFromTemplateOps, setPortsOps,
+  addDeviceFromTemplateOps, setPortsOps, applyOps,
 } from './model-core.js';
 import { esc, on } from './dom.js';
 import { layoutFor } from './router-core.js';
-import { emptyState } from './feedback.js';
+import { emptyState, confirmScope, staleBadge } from './feedback.js';
 
 const DISC_ORDER = ['audio', 'video', 'lighting', 'network', 'control', 'power', 'other'];
 const STATUS_ORDER = ['installed', 'planned', 'spare', 'retired'];
@@ -136,6 +136,7 @@ export function mount(el, ctx) {
       '<div class="pv-badge" aria-hidden="true"><span class="pv-badge-dot"></span>Patch view</div>' +
       '<div class="pv-hint" aria-hidden="true">Drag gear \u00b7 re-patch wires \u00b7 rename anything</div>' +
       '<div class="pv-empty" hidden></div>' +
+      '<div class="pv-stale-host" hidden></div>' +
       '<div class="pv-box" hidden></div>' +
     '</div>' +
     '<p class="pv-sr" id="' + uid + '-help">Tab moves between devices. Arrow keys move the selected device; hold Shift for larger steps. ' +
@@ -154,6 +155,7 @@ export function mount(el, ctx) {
   const tempPath = $('.pv-temp');
   const cardsEl = $('.pv-cards');
   const emptyEl = $('.pv-empty');
+  const staleHost = $('.pv-stale-host');
   const boxEl = $('.pv-box');
   const menuEl = $('.pv-menu');
   const zoomLabel = $('.pv-zoomlabel');
@@ -554,6 +556,7 @@ export function mount(el, ctx) {
     renderRoutes();
     const n = S.scene.cards.length;
     renderEmpty(n);
+    renderStale();
     const nAuto = S.scene.cards.filter(function (c) { return !c.placed && !c.auto; }).length;
     $('#pv-save-arrangement').hidden = !nAuto || ro();
     stats.cards = n;
@@ -587,6 +590,32 @@ export function mount(el, ctx) {
         action: {label: 'Clear filters', run: clearFilters}})
       : emptyState({title: title, text: ro() ? '' : 'Add gear to start patching.',
         action: ro() ? null : {label: 'Add gear', run: addGear}}));
+  }
+
+  // Imported cards and network routes come from the server overlay; once the project moves on
+  // (another revision) or it ages, the badge offers a refetch. Hidden while fresh.
+  let stale = null;
+  function overlayShown() {
+    return S.scene.cards.some(function (c) { return c.auto; }) || (S.showRoutes && S.scene.routes.length > 0);
+  }
+  function renderStale() {
+    if (typeof ctx.overlayInfo !== 'function') return;
+    const shown = overlayShown();
+    if (shown && !stale) {
+      stale = staleBadge({
+        fetchedAt: function () { return ctx.overlayInfo().fetchedAt; },
+        fetchedRev: function () { return ctx.overlayInfo().revision; },
+        currentRev: function () { return store.revision; },
+        onRefresh: typeof ctx.refreshOverlay === 'function' ? function () {
+          return Promise.resolve(ctx.refreshOverlay()).then(function () { if (stale) stale.refresh(); }, function (err) {
+            toast('Could not refresh the import overlay: ' + ((err && err.message) || 'error'), 'err');
+          });
+        } : null,
+      });
+      staleHost.appendChild(stale);
+    }
+    staleHost.hidden = !shown;
+    if (stale) stale.refresh();
   }
 
   // ------------------------------------------------------------ selection & highlight
@@ -804,19 +833,33 @@ export function mount(el, ctx) {
     ids = ids.filter(function (id) { return (store.doc.devices || []).some(function (d) { return d.id === id; }); });
     if (!ids.length || ro()) return;
     const names = ids.map(function (id) { return endName({device: id}); });
-    const msg = ids.length === 1 ? 'Delete ' + names[0] + ' and its cables?' : 'Delete ' + ids.length + ' devices and their cables?';
-    Promise.resolve(ctx.confirm ? ctx.confirm(msg, {danger: true}) : true).then(function (ok) {
+    const one = ids.length === 1;
+    const doomed = {};
+    ids.forEach(function (id) {
+      deleteDeviceOps(store.doc, id).forEach(function (op) { if (op.op === 'del' && op.coll === 'cables') doomed[op.id] = true; });
+    });
+    const nc = Object.keys(doomed).length;
+    const who = one ? 'it' : 'them';
+    const detail = nc ? nc + (nc === 1 ? ' cable is' : ' cables are') + ' deleted with ' + who + '.' : 'No cables are connected to ' + who + '.';
+    const asked = typeof ctx.confirm === 'function'
+      ? confirmScope(ctx, {verb: 'Delete', count: one ? undefined : ids.length, noun: one ? names[0] : {one: 'device', many: 'devices'},
+        scope: one ? '' : roomLabel(), danger: true, ok: one ? 'Delete' : undefined, detail: detail})
+      : Promise.resolve(true);
+    asked.then(function (ok) {
       if (!ok || S.destroyed) return;
       let doc = store.doc;
       const ops = [];
       const seen = {};
+      // Each device's ops see the previous deletions, so marker and extra-card merges stack.
       ids.forEach(function (id) {
-        deleteDeviceOps(doc, id).forEach(function (op) {
+        const devOps = deleteDeviceOps(doc, id);
+        devOps.forEach(function (op) {
           const key = op.op + op.coll + op.id;
           if (op.op === 'del' && seen[key]) return;
           seen[key] = true;
           ops.push(op);
         });
+        doc = applyOps(doc, devOps).doc;
       });
       commit(ops, 'Deleted ' + (ids.length === 1 ? names[0] : ids.length + ' devices'));
       clearSelection();
@@ -1154,7 +1197,7 @@ export function mount(el, ctx) {
   function onPointerDown(e) {
     if (S.destroyed) return;
     if (S.rename && e.target !== S.rename.input) endRename(true);
-    if (e.target.closest && e.target.closest('.pv-more, .pv-empty')) return;
+    if (e.target.closest && e.target.closest('.pv-more, .pv-empty, .pv-stale-host')) return;
     if (S.menu) closeMenu(false);
     if (S.kb) kbCancel(true);
     if (e.pointerType === 'mouse' && e.button === 2) return;
@@ -1621,6 +1664,7 @@ export function mount(el, ctx) {
     if (mod && (key === 'z' || key === 'Z')) { e.preventDefault(); if (e.shiftKey) doRedo(); else doUndo(); return; }
     if (mod && (key === 'y' || key === 'Y')) { e.preventDefault(); doRedo(); return; }
     if (toolbar.contains(t)) return;
+    if (t && t.closest && t.closest('.pv-empty, .pv-stale-host')) return;
     if (S.kb) {
       e.preventDefault();
       if (key === 'Escape') kbCancel(false);
@@ -1743,8 +1787,10 @@ export function mount(el, ctx) {
   function onOverlay() { render(true); }
   function onMode() { cancelGesture(); endRename(false); kbCancel(true); render(false); }
   function onSelection() { syncSelFromStore(); applySelection(); }
+  function onRevision() { if (stale) stale.refresh(); }
 
-  const storeListeners = {doc: onDoc, filter: onFilter, room: onRoom, highlight: onHighlight, overlay: onOverlay, mode: onMode, selection: onSelection};
+  const storeListeners = {doc: onDoc, filter: onFilter, room: onRoom, highlight: onHighlight, overlay: onOverlay, mode: onMode, selection: onSelection,
+    revision: onRevision};
   Object.keys(storeListeners).forEach(function (k) { store.addEventListener(k, storeListeners[k]); });
 
   const opt = {passive: false};
@@ -1801,6 +1847,7 @@ export function mount(el, ctx) {
       win.removeEventListener('blur', onBlur);
       doc0.removeEventListener('pointerdown', onDocPointerDown, true);
       offs.forEach(function (off) { off(); });
+      if (stale) stale.destroy();
       if (root.parentNode) root.parentNode.removeChild(root);
     },
     // Same-view URL change (D1): the query is authoritative, then the selection is focused as the

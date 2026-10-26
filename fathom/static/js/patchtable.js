@@ -9,7 +9,7 @@
 import { h } from './dom.js';
 import { createTable } from './datatable.js';
 import { loadState, saveState } from './datatable-core.js';
-import { confirmScope } from './feedback.js';
+import { confirmScope, emptyState } from './feedback.js';
 import { buildPatchTable, patchTableCsv, patchCellOps, blockPortCount, patchRows, pickMode, peerPortText, rowCables, PT_MODES } from './patchtable-core.js';
 import { mediumInfo, connectOps, disconnectOps } from './model-core.js';
 
@@ -267,12 +267,52 @@ export function mount(el, ctx) {
     const top = scroll.scrollTop;
     scroll.innerHTML = '';
     blocks.forEach(function (b) { scroll.appendChild(blockEl(b)); });
-    if (!blocks.length) scroll.appendChild(h('div', { class: 'app-empty' }, 'No devices match these filters.'));
+    if (!blocks.length) scroll.appendChild(h('div', { class: 'pt-empty' }, emptyNode(null)));
     scroll.scrollTop = top;
     if (key) {
       const again = scroll.querySelector('[data-key="' + key.replace(/"/g, '\\"') + '"]');
       if (again) again.focus();
     }
+  }
+
+  // ---------------------------------------------------------- empty state
+
+  // The view's own filters (room picked away from the shell room, disciplines, Only patched, the
+  // Blocks text) plus, in Rows mode, the DataTable search and column filters.
+  function filtered(dt) {
+    if (state.discs.length || state.onlyPatched || (!state.followRoom && state.room !== store.room)) return true;
+    if (dt) return !!dt.q || Object.keys(dt.filters || {}).some(function (k) { return (dt.filters[k] || []).length > 0; });
+    return !!state.text;
+  }
+
+  function clearFilters() {
+    if (tTimer) { clearTimeout(tTimer); tTimer = null; }
+    state.discs = [];
+    state.onlyPatched = false;
+    only.checked = false;
+    state.text = '';
+    text.value = '';
+    if (!state.followRoom) {
+      state.followRoom = true;
+      state.room = store.room === undefined ? '*' : store.room;
+      roomSel.value = state.room;
+    }
+    fillDiscs();
+    if (table) table.setState({ q: '', filters: {} });
+    else setParams({ q: null });
+    schedule();
+  }
+
+  function emptyNode(dt) {
+    if (filtered(dt)) {
+      return emptyState({ title: 'No ports match these filters.', text: 'Clear them to see every port in ' + scopeName() + '.',
+        action: { label: 'Clear filters', run: clearFilters } });
+    }
+    const where = state.room === '*' ? 'this project' : scopeName();
+    const href = typeof ctx.routeHref === 'function' ? ctx.routeHref({ view: 'patch' }) : '';
+    return emptyState({ title: 'No ports in ' + where + ' yet.',
+      text: readOnly() ? '' : 'Add gear in the patch view; its ports are listed here.',
+      action: href && href !== '#' && !readOnly() ? { label: 'Open patch view', href: href } : null });
   }
 
   // ---------------------------------------------------------- Rows mode (DataTable)
@@ -363,7 +403,7 @@ export function mount(el, ctx) {
       pageSize: ROWS_PAGE_SIZE,
       csvName: csvName(),
       searchPlaceholder: 'Search ports, devices, cable tags',
-      empty: 'No ports match these filters.',
+      empty: function (s) { return emptyNode(s || {}); },
     });
     rowsHost.addEventListener('dt:state', onTableState);
   }
