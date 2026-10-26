@@ -371,6 +371,7 @@ class ListStatesUi(UiCase):
             self.assertEqual(self._text(pg, "#sch-dt .fb-empty-action"), "Open patch")
             self.assertFalse(pg.js("!!document.querySelector('#sch-dt .fb-empty-secondary')"))
             self.assertFalse(pg.js("!!document.getElementById('sch-bulk-add')"), "no Bulk add cables for viewers")
+            self.assertFalse(pg.js("!!document.getElementById('sch-assign-tags')"), "no Assign tags for viewers")
             self._no_hscroll(pg, "schedules empty (viewer)")
             pg.shot("st-sch-empty-viewer-m")
 

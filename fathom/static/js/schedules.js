@@ -658,7 +658,8 @@ export function mount(el, ctx) {
   }
 
   function actionsFor(kind) {
-    return [stateSel, roomSel, kind === 'cables' ? btnTags : null, kind === 'cables' && !readOnly() ? btnBulk : null, btnPrint, csvAll]
+    const write = kind === 'cables' && !readOnly();
+    return [stateSel, roomSel, write ? btnTags : null, write ? btnBulk : null, btnPrint, csvAll]
       .filter(function (n) { return !!n; });
   }
 
@@ -836,6 +837,7 @@ export function mount(el, ctx) {
     t.classList.add('sch-table');
     t.setAttribute('data-kind', kind);
     btnTags.disabled = readOnly();
+    if (readOnly()) tagPanel.hidden = true;
   }
 
   function decorate(kind, rows) {

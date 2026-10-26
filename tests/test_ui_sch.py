@@ -452,5 +452,5 @@ class SchedulesUi(UiCase):
             self.assertEqual(pg.smoke["errors"], [])
             self.assertEqual(pg.js("document.querySelectorAll('.sch-root [data-edit]').length"), 0, "no editors when read-only")
             self.assertFalse(pg.js("!!document.getElementById('sch-bulk-add')"))
-            self.assertTrue(pg.js("document.getElementById('sch-assign-tags').disabled"))
+            self.assertFalse(pg.js("!!document.getElementById('sch-assign-tags')"), "no Assign tags when read-only")
             self.assertEqual(pg.js("document.getElementById('sch-room').tagName"), "SELECT", "the harness keeps its room picker")
