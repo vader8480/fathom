@@ -2056,3 +2056,40 @@ Corrections to this document recorded by DOCS (the merged code is the source of 
 - `tests/test_ui_router.py` exercises the `_ui.py` harness rather than the router (router behaviour is covered by `tests/js/router-core*.test.mjs` and `test_ui_shell.py`).
 - Old SPEC said the service worker `VERSION` equals `__version__`; `sw.js` is `0.4.0` while `__version__` is `0.3.0` — SPEC now documents the literal.
 - `tests/test_discovery.ActiveGuard.test_snmp_pacer_counts_and_pauses` has no skip guard when `puresnmp` (the `discovery` extra) is missing — deferred test fix.
+
+### Wave 4 — QA and fix-up merged
+
+| Unit | Merge | Notes |
+| --- | --- | --- |
+| QA | merge of `cursor/ui-qa-2964` | `tests/test_ui_acceptance.py`: 12 tests covering every B.8 row (owner-criteria smoke of every view at d/t/m, every list is a DataTable, entity tabs survive reload, row click opens the drawer in place, nav memory and explorer persistence, global search with keyboard, phone layout, trace drawer, PWA service worker and manifest, viewer read-only and viewer PUT 403). All B.8 criteria PASS. Four minor defects found, all fixed by FIX-QA. QA's manual report is kept by the coordinator (`internal/ui-uplift-qa-report.md`). |
+| FIX-QA | merge of `cursor/ui-fix-qa-2f39` | Device Notes editor disabled for viewers (`bound()` now honours read-only like `fieldRow`; pre-existing defect); patch canvas hint reads "Select gear to see its connections" for viewers; `.dt-csv` and the columns `summary` are 44 px wide under a coarse pointer; `.sop-more` is 40 px wide (44 px coarse) everywhere, not only in the top bar. Regression assertions added to `test_ui_ins/pv/datatable/sop.py`; the acceptance test's `expectedFailure` removed. |
+
+## Summary: Done, by reference pattern
+
+1. **App shell and nav memory** — Done. Persistent header with centred search (`#app-search`, Ctrl/⌘-K), section row with underline marking, per-section last-page memory (`fathom.ui.nav`, session), role-filtered sections, `#app-banner` strip above the header, `#app-tabbar` icon bar at sm. (SHELL, ROUTER; `tests/test_ui_shell.py`, `test_ui_router.py`, `tests/js/router-core*.test.mjs`.)
+2. **Explorer sidebar + drill-in** — Done. `explorer.js` with filter, chips, resizable (240–480 px) and collapsible rail, persisted per key (`fathom.ui.explorer.<key>`), drawer at sm with auto-close on selection; used by device, room and rack pages, racks landing, floor plan and SOP. (EXPLORER, PDEV, PROOM, RK, FP, PRIM-FIX.)
+3. **Entity pages: sticky header + URL tabs** — Done. `entity-header.js` with facts, status pill, compact mode, ⋯ actions; `devices/<id>/<tab>/<sub>`, `rooms/<id>/<tab>`, `racks/<id>/<tab>/<sub>`; reload lands on the tab; recents per type (`fathom.ui.recent.<project>`). (ENTITY, PDEV, PROOM, RK.)
+4. **Shared DataTable** — Done. `datatable.js` powers every list (D9 exemptions only): search, per-column distinct-value filters with "(empty)", column toggle, filtered CSV, sort, pagination 25/50/100/200, sticky header, density, skeleton rows, empty message, row click, deep-link highlight, select-all on the filtered set, per-`stateKey` persistence (`fathom.ui.table.*`). Migrated: inventory, schedules (6 kinds), patch table rows, imports, history, builds, settings tables, discovery tabs, SOP problems, device/room/rack page tabs, devices/rooms/racks landings. (TABLE, INV, SCH, PT, ADM, DISC, SOP, PDEV, PROOM, RK, PRIM-FIX.)
+5. **Progressive disclosure / drawer** — Done. `drawer.js` hosts the inspector as a right-side drawer (bottom sheet at sm) with `sel`/`sec`/`drawer` in the URL; `openTableDialog` drill-downs from summary counts; trace stays a drawer. Port, cable and inventory rows open the drawer without navigation. (DRAWER, INS, SHELL.)
+6. **Launchpad home + global search** — Done. `home.js` role-filtered section cards, per-room quick cards, project cards and recents; `search.js` grouped results (device, room, port, cable, rack, network, inventory, page) with category filter and ↑/↓/Enter/Esc; server `network` kind. (HOME, SEARCH, SRV.)
+7. **States and feedback** — Done on every view touched. `feedback.js`: skeletons per view kind, empty copy that names the cause and the next action, `inlineError` + Retry, `confirmScope` on deletes/bulk writes/restores, `staleBadge` on overlay data and discovery runs, `reviewBadge` for duplicates, problems and unresolved findings, bell notices (D6). (FEEDBACK, ST-SHELL, ST-LISTS, ST-CANVAS, ST-ADMIN, ST-ENTITY.)
+8. **Wizards and bulk add** — Done. `wizard.js` step list, per-step validation, review and result steps; bulk add devices/cables from pasted rows or CSV with per-row errors, prefilled from the current room, column mappings remembered (`fathom.ui.form.*`); reachable from inventory, schedules and device pages. (WIZARD, INV, SCH, PDEV.)
+9. **URL as state** — Done. D1 grammar `#/<project>/<room>/<view>[/<id>[/<tab>[/<sub>]]]?…` with `sel, sec, drawer, filter, q, sort, f.<col>, pg, hl, mode, run, quick`; legacy hashes still resolve; push for view/id/tab, replace for selection and table state. (ROUTER, all views.)
+10. **Responsive** — Done. Breakpoints sm <700 / md 700–1099 / lg ≥1100; labels → icons, `hideOnMobile` columns, side panes → drawers, 40 px targets (44 px coarse); no page horizontal scroll on any view at 390 (guarded by `test_ui_shell.py` and the acceptance smoke). (SHELL, EXPLORER, TABLE, every view.)
+
+Not restyled: colours, typography and icons are unchanged (new CSS reuses existing variables and glyphs). No feature removed; relocated features are listed per unit above. No new runtime dependency, no on-disk format change, no new server route.
+
+## Summary: Deferred (one line each, with reason)
+
+- Views adopting the PRIM-FIX API in place of their local workarounds (`schedules.js`, `floorplan.js`, `rack.js`, `patchtable.js`, `page-room.js`, `page-device.js`) — behaviour is correct today; pure cleanup for a follow-up PR.
+- A canvas skeleton kind in `feedback.js`; DataTable body-only loading/error slots and a filtered-empty-aware function form of `empty` — views carry small local versions; API change belongs in its own PR.
+- `app.js` `restoreRevision` still uses the old confirm and toast-only failures (History restore now bypasses it); `api.js` `resync()` emits only `doc` — out of every wave-3 slice; low user impact.
+- `merge-ui.js` duplicates check: no Retry and "Re-check" does not refresh the inspector badge — file was out of scope (assistant/merge UI untouched by the plan).
+- `views-admin.js` one-shot import apply leaves no bell notice (commits locally without `ctx.api.upload`) — minor; needs a small shell hook.
+- `rack.js`: viewers see "New rack" disabled rather than hidden and still see "Edit rack" — `test_ui_rk` enshrines the current behaviour; change together with that test.
+- SOP tree header buttons are 33 px tall at 1280 (global `app.css` button height) — below the 40 px desktop minimum; a shell-wide change outside the sweep.
+- `tests/test_importers.py::test_templates_listed_in_meta` reads the ambient `FATHOM_DATA`; `test_discovery` SNMP pacer test lacks a `puresnmp` skip guard — test hygiene, not UI.
+- Blank projects default to the title "Signal flow, mic to speaker" (`project.py`/`model.py`) which Home shows as the heading — data default, not UI.
+- `model-core.searchLocal` does not index SOP pages offline; `vlan 20` does not match a network — search index scope (D14 candidate).
+- `tests/_ui.py` cannot hold a request open; two suites carry a local `Hold` helper — lift into `_ui.py` in a follow-up.
+- No screen recording of the manual pass (headless screenshots only).
