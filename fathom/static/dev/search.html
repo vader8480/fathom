@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en" data-harness="search">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fathom · Search harness</title>
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/search.css">
+<style>
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+  .h-top { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 12px; padding-top: env(safe-area-inset-top, 0px);
+    border-bottom: 1px solid var(--border); background: var(--panel); }
+  .h-top strong { flex: none; }
+  .h-spacer { flex: 1 1 0; min-width: 0; }
+  #app-search { flex: 0 1 420px; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 34px; color: var(--muted); text-align: left; }
+  #app-search .h-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #app-search kbd { flex: none; font: 11px var(--mono); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+  .h-main { flex: 1 1 auto; padding: 12px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  .h-main code { color: var(--text); }
+  #h-log { list-style: none; margin: 8px 0 0; padding: 0; }
+  #h-log li { padding: 3px 0; border-bottom: 1px solid var(--border); }
+  @media (max-width: 699px) {
+    .h-top strong, .h-spacer:first-of-type { display: none; }
+    #app-search { flex: none; width: 40px; justify-content: center; padding: 0; }
+    #app-search .h-label, #app-search kbd { display: none; }
+  }
+  @media (pointer: coarse) { #app-search { min-height: 44px; min-width: 44px; } }
+</style>
+</head>
+<body>
+  <header class="h-top">
+    <strong>Search harness</strong>
+    <span class="h-spacer"></span>
+    <button type="button" id="app-search" aria-label="Search" aria-keyshortcuts="Meta+K Control+K"><span aria-hidden="true">&#x2315;</span><span class="h-label">Search devices, cables, rooms&#x2026;</span><kbd>&#x2318;K</kbd></button>
+    <span class="h-spacer"></span>
+  </header>
+  <main class="h-main">
+    <div id="h-status">Loading&#x2026;</div>
+    <div>Route: <code id="h-route"></code></div>
+    <div>Modes: <a href="?">campus-demo online</a> · <a href="?fixture=1">fixture offline</a> · <a href="?role=viewer">viewer</a> · <a href="?q=foh">open with &#x201c;foh&#x201d;</a></div>
+    <ul id="h-log"></ul>
+  </main>
+  <div id="fathom-live" class="sr-only" aria-live="polite"></div>
+  <script type="module" src="search-harness.js"></script>
+</body>
+</html>
