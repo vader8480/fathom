@@ -134,7 +134,7 @@ class CanvasStatesUi(UiCase):
         self.assertGreater(n, 1)
         name = [d for d in doc["devices"] if d["id"] == dev][0]["name"]
         for size in SIZES:
-            with self.subTest(size=size), self.open(MAIN + "patch?sel=device:" + dev, size) as pg:
+            with self.subTest(size=size), self.open(MAIN + "patch?sel=device:" + dev + "&drawer=0", size) as pg:
                 pg.wait_for("!!document.querySelector('.pv-card.pv-selected[data-device=\"%s\"]')" % dev)
                 pg.js("document.querySelector('.pv-card[data-device=\"%s\"]').focus()" % dev)
                 pg.press("Delete")
@@ -254,12 +254,22 @@ class CanvasStatesUi(UiCase):
 
     def test_marker_deep_link_keeps_marker(self):
         link = "sel=marker:fp-main-floor:foh-cl5"
-        with self.open(MAIN + "plan/fp-main-floor?" + link, "d") as pg:
+        for size in SIZES:
+            with self.subTest(size=size), self.open(MAIN + "plan/fp-main-floor?" + link, size) as pg:
+                pg.wait_for("!!document.querySelector('.fp-marker.fp-selected[data-device=\"foh-cl5\"]')")
+                pg.js("new Promise(function (r) { setTimeout(r, 800); })")
+                self.assertIn(link, pg.hash, "the marker selection is not rewritten to device:")
+                pg.wait_for("document.getElementById('app-inspector').classList.contains('dr-open')")
+                pg.wait_for("(document.querySelector('#app-inspector .ins-head') || {getAttribute: function () {}})"
+                            ".getAttribute('data-kind') === 'marker'")
+                self.assertIn("FOH CL5", self.text(pg, "#app-inspector"))
+                self.settle(pg, "fp-marker-link")
+        with self.open(MAIN + "plan/fp-main-floor?" + link + "&drawer=0", "m") as pg:
             pg.wait_for("!!document.querySelector('.fp-marker.fp-selected[data-device=\"foh-cl5\"]')")
-            pg.js("new Promise(function (r) { setTimeout(r, 800); })")
-            self.assertIn(link, pg.hash, "the marker selection is not rewritten to device:")
-            self.assertTrue(self.visible(pg, "#app-selbar"))
-            self.settle(pg, "fp-marker-link")
+            self.assertTrue(self.visible(pg, "#app-selbar"), "canvas selection below lg uses the selection bar (D4)")
+            self.assertEqual(self.text(pg, "#app-selbar .app-selbar-title"), "FOH CL5")
+            self.assertIn(link, pg.hash)
+            self.settle(pg, "fp-marker-selbar")
 
     # --------------------------------------------------------------- racks
 
@@ -302,11 +312,10 @@ class CanvasStatesUi(UiCase):
             with self.subTest(size=size), self.open(MAIN + "racks", size) as pg:
                 pg.wait_for("document.querySelectorAll('#rk-unracked .ex-item').length > 0")
                 info = pg.js("""(function () {
-                  var root = document.getElementById('rk-unracked');
-                  var box = root.querySelector('.ex-chips');
-                  var shown = Array.prototype.filter.call(root.querySelectorAll('.ex-chips [data-chip]'), function (b) { return !b.hidden; })
-                    .map(function (b) { return b.getAttribute('data-chip'); });
-                  return {box: !!box && !box.hidden, shown: shown, items: root.querySelectorAll('.ex-item').length};
+                  var box = document.querySelector('.rk-root .ex-chips');
+                  var shown = box ? Array.prototype.filter.call(box.querySelectorAll('[data-chip]'), function (b) { return !b.hidden; })
+                    .map(function (b) { return b.getAttribute('data-chip'); }) : [];
+                  return {box: !!box && !box.hidden, shown: shown, items: document.querySelectorAll('#rk-unracked .ex-item').length};
                 })()""")
                 self.assertTrue(info["box"], "the unracked list mixes disciplines, so chips show")
                 self.assertGreaterEqual(len(info["shown"]), 2)
@@ -314,10 +323,10 @@ class CanvasStatesUi(UiCase):
                 if size != "d":
                     continue
                 chip = info["shown"][0]
-                pg.click("#rk-unracked .ex-chips [data-chip=\"%s\"]" % chip)
+                pg.click(".rk-root .ex-chips [data-chip=\"%s\"]" % chip)
                 pg.wait_for("document.querySelectorAll('#rk-unracked .ex-item').length < %d" % info["items"])
-                self.assertEqual(pg.js("document.querySelector('#rk-unracked [data-chip=\"%s\"]').getAttribute('aria-pressed')" % chip), "true")
-                pg.click("#rk-unracked .ex-chips [data-chip=\"%s\"]" % chip)
+                self.assertEqual(pg.js("document.querySelector('.rk-root .ex-chips [data-chip=\"%s\"]').getAttribute('aria-pressed')" % chip), "true")
+                pg.click(".rk-root .ex-chips [data-chip=\"%s\"]" % chip)
                 pg.wait_for("document.querySelectorAll('#rk-unracked .ex-item').length === %d" % info["items"])
 
 
