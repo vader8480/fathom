@@ -11,6 +11,7 @@ import {
 import { h, on as listen } from './dom.js';
 import { layoutFor } from './router-core.js';
 import { mountExplorer } from './explorer.js';
+import { emptyState, inlineError, skeleton } from './feedback.js';
 
 // Sample renders offered by the plan picker in harness mode (ctx.api === null).
 export const DEV_PLANS = [
@@ -73,7 +74,7 @@ export function mount(el, ctx) {
   const S = {
     fpId: null, view: {x: 0, y: 0, k: 1}, fitted: {}, tool: '', points: [], measure: null,
     sel: null, pointers: {}, gesture: null, natural: {}, imgUrl: '', highlight: null, popFor: null,
-    pinned: false, routeSel: '', destroyed: false,
+    pinned: false, routeSel: '', destroyed: false, emptyKey: '', imgState: '',
   };
   const offs = [];
   function on(target, type, fn, opts) { offs.push(listen(target, type, fn, opts)); }
@@ -121,6 +122,10 @@ export function mount(el, ctx) {
   const markersEl = h('div', {class: 'fp-markers'});
   const world = h('div', {class: 'fp-world'}, [img, overlay, markersEl]);
   const empty = h('div', {class: 'fp-empty', hidden: true});
+  // Plan image state: a skeleton under the (hidden) image while it loads, an inline error with
+  // Retry over the canvas when it fails. Markers stay usable in both.
+  const imgLoad = h('div', {class: 'fp-imgload', hidden: true});
+  const imgError = h('div', {class: 'fp-imgerror', hidden: true});
   const crosshair = h('div', {class: 'fp-crosshair', 'aria-hidden': 'true', hidden: true});
   const calForm = h('form', {class: 'fp-pop fp-calform', hidden: true, 'aria-label': 'Calibration distance'});
   const calInput = h('input', {id: 'fp-cal-distance', type: 'number', inputmode: 'decimal', min: '0', step: 'any', required: true});
@@ -135,7 +140,7 @@ export function mount(el, ctx) {
   const delPop = h('div', {class: 'fp-pop fp-delpop', hidden: true, role: 'dialog', 'aria-labelledby': 'fp-del-title'});
   const viewport = h('div', {class: 'fp-viewport', role: 'application', tabindex: '0',
     'aria-label': 'Floor plan. Arrow keys pan, plus and minus zoom, F fits. With a marker focused, arrows move it, Delete removes it, Enter opens it.'},
-  [world, empty, crosshair, calForm, pop, readout]);
+  [imgLoad, world, empty, imgError, crosshair, calForm, pop, readout]);
   const ghost = h('div', {class: 'fp-ghost', hidden: true, 'aria-hidden': 'true'});
   root.appendChild(toolbar);
   root.appendChild(main);
@@ -284,11 +289,12 @@ export function mount(el, ctx) {
     empty.hidden = !!fp;
     world.hidden = !fp;
     if (!fp) {
-      empty.textContent = harness ? 'No floor plan in this room yet. Pick a sample plan and press "Add plan".'
-        : 'No floor plan in this room yet. Upload a PNG, JPG, SVG, PDF, Draw.io or DXF file.';
+      renderEmpty();
       img.removeAttribute('src');
       S.imgUrl = '';
+      setImgState('');
     } else {
+      S.emptyKey = '';
       const sz = planSize(fp);
       img.style.width = sz.w + 'px';
       img.style.height = sz.h + 'px';
@@ -300,7 +306,7 @@ export function mount(el, ctx) {
       img.alt = 'Floor plan: ' + fp.name;
       img.classList.toggle('fp-img-dark', !!(fp.source && fp.source.kind === 'dxf'));
       const url = imageUrl(fp);
-      if (url !== S.imgUrl) { S.imgUrl = url; img.src = url; }
+      if (url !== S.imgUrl) { S.imgUrl = url; setImgState(url ? 'loading' : ''); img.src = url; }
       if (!S.fitted[fp.id]) { fit(); S.fitted[fp.id] = true; }
     }
     renderMarkers();
@@ -312,6 +318,61 @@ export function mount(el, ctx) {
     const title = fp ? fp.name + ' \u00b7 Plan' : 'Plan';
     if (title !== S.title) { S.title = title; if (typeof ctx.setTitle === 'function') ctx.setTitle(title); }
     scheduleRouteSync();
+  }
+
+  function roomName() {
+    const r = room();
+    const m = (doc().rooms || []).filter(function (x) { return x.id === r; })[0];
+    return m ? (m.name || m.id) : r;
+  }
+
+  function renderEmpty() {
+    const ro = readOnly();
+    const all = room() === '*' || room() === '';
+    const key = [all ? '*' : roomName(), ro, harness].join('|');
+    if (S.emptyKey === key) return;
+    S.emptyKey = key;
+    const title = all ? 'No floor plans in this project yet.' : 'No floor plan for ' + roomName() + '.';
+    let text = '';
+    let action = null;
+    if (!ro && harness) {
+      text = 'Pick a sample plan and press \u201CAdd plan\u201D.';
+      action = {label: 'Add plan', run: onDevAdd};
+    } else if (!ro) {
+      text = 'Upload a PDF, SVG or image (PNG, JPG); Draw.io and DXF drawings work too.';
+      action = {label: 'Upload', run: function () { upload.click(); }};
+    }
+    empty.innerHTML = '';
+    empty.appendChild(emptyState({title: title, text: text, action: action}));
+  }
+
+  // '' (no image), 'loading' or 'error'.
+  function setImgState(st) {
+    if (st === S.imgState) return;
+    S.imgState = st;
+    img.classList.toggle('fp-img-pending', st !== '');
+    imgLoad.innerHTML = '';
+    if (st === 'loading') imgLoad.appendChild(skeleton('cards', 1));
+    imgLoad.hidden = st !== 'loading';
+    imgError.innerHTML = '';
+    imgError.hidden = st !== 'error';
+    if (st === 'error') {
+      const fp = plan();
+      imgError.appendChild(inlineError({message: 'The image for ' + (fp ? fp.name : 'this plan') + ' did not load.'}, retryImage));
+    }
+  }
+
+  function retryImage() {
+    const url = S.imgUrl;
+    if (!url) return;
+    setImgState('loading');
+    img.removeAttribute('src');
+    return new Promise(function (resolve) {
+      setTimeout(function () {
+        if (!S.destroyed && S.imgUrl === url) img.src = url;
+        resolve();
+      }, 0);
+    });
   }
 
   function renderMarkers() {
@@ -583,7 +644,7 @@ export function mount(el, ctx) {
 
   function onDown(e) {
     if (e.button != null && e.button > 0 && e.pointerType === 'mouse') return;
-    if (e.target.closest('.fp-pop')) return;
+    if (e.target.closest('.fp-pop, .fp-empty, .fp-imgerror')) return;
     const pt = localPt(e);
     S.pointers[e.pointerId] = {id: e.pointerId, x: pt.x, y: pt.y};
     const ps = pointerList();
@@ -790,7 +851,7 @@ export function mount(el, ctx) {
 
   // ----------------------------------------------------------- keyboard
   function onKey(e) {
-    if (e.target.closest('input,select,textarea,form,.fp-pop')) {
+    if (e.target.closest('input,select,textarea,form,.fp-pop,.fp-empty,.fp-imgerror')) {
       if (e.key === 'Escape') { if (S.tool) setTool(S.tool); hidePop(); viewport.focus(); }
       return;
     }
@@ -1202,13 +1263,14 @@ export function mount(el, ctx) {
   on(calForm, 'submit', onCalSubmit);
   on(calCancel, 'click', function () { setTool('calibrate'); });
   on(img, 'load', function () {
+    if (img.getAttribute('src')) setImgState('');
     const fp = plan();
     if (fp && !S.natural[fp.id] && img.naturalWidth) {
       S.natural[fp.id] = {width: img.naturalWidth, height: img.naturalHeight};
       if (!(fp.image && Number(fp.image.width) > 0)) { S.fitted[fp.id] = false; render(); }
     }
   });
-  on(img, 'error', function () { if (S.imgUrl) readout.textContent = 'Could not load the plan image.'; });
+  on(img, 'error', function () { if (S.imgUrl) setImgState('error'); });
   on(store, 'doc', onDoc);
   on(store, 'selection', onSelection);
   on(store, 'highlight', onHighlight);
@@ -1253,7 +1315,15 @@ export function mount(el, ctx) {
     if (target.id !== S.fpId) { S.fpId = target.id; S.pinned = true; S.tool = ''; S.points = []; hidePop(); }
     render();
     if (center) centerOn(target, id);
-    selectDevice(id, true);
+    if (sel.type !== 'marker') { selectDevice(id, true); return; }
+    // A marker deep link stays a marker selection: the inspector has a marker panel.
+    const cur = store.selection;
+    if (!(cur && cur.type === 'marker' && cur.floorplan === target.id && (cur.device || cur.id) === id)) {
+      ctx.select({type: 'marker', id: id, floorplan: target.id, device: id});
+    }
+    S.sel = id;
+    renderMarkers();
+    showPop(id);
   }
 
   return {

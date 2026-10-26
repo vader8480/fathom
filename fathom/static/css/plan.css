@@ -106,7 +106,15 @@
 .fp-crosshair::before, .fp-crosshair::after { content: ""; position: absolute; background: var(--warn, #ff9548); }
 .fp-crosshair::before { left: 11px; top: 0; width: 2px; height: 24px; }
 .fp-crosshair::after { top: 11px; left: 0; height: 2px; width: 24px; }
-.fp-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--muted, #8e97ab); }
+.fp-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--muted, #8e97ab); cursor: default; }
+.fp-empty .fb-empty { max-width: 100%; }
+.fp-img.fp-img-pending { visibility: hidden; }
+.fp-imgload { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; pointer-events: none; }
+.fp-imgload .fb-skeleton { width: min(520px, 100%); }
+.fp-imgload .fb-skel-cards { grid-template-columns: 1fr; }
+.fp-imgload .fb-skel-card { min-height: 220px; }
+.fp-imgerror { position: absolute; left: 12px; right: 12px; top: 12px; display: flex; justify-content: center; pointer-events: none; }
+.fp-imgerror .fb-error { margin: 0; pointer-events: auto; cursor: default; }
 .fp-pop {
   position: absolute; z-index: 5; background: var(--panel, #111828); border: 1px solid var(--border, rgba(255,255,255,.12));
   border-radius: 8px; padding: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5); cursor: default;
