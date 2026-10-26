@@ -2039,3 +2039,20 @@ Deferred from wave 3 (not in any unit's slice; candidates for a follow-up PR unl
 - `tests/test_importers.py::test_templates_listed_in_meta` reads the ambient `FATHOM_DATA` and fails with `KeyError: 'importers'` against a data dir with users.
 - Blank projects default to the title "Signal flow, mic to speaker" (`project.py`/`model.py`), which Home shows as the heading.
 - `tests/_ui.py` cannot hold a request open; ST-SHELL and ST-LISTS each carry a local `Hold` helper (QA may lift one into `_ui.py` if it owns it — it does not; DOCS/QA note).
+
+### Wave 4 — DOCS merged
+
+| Unit | Merge | Notes |
+| --- | --- | --- |
+| DOCS | (merge of `cursor/ui-docs-3c1f`) | SPEC §6.4 rewritten (shell, router, ctx, view contract), new §6.13 (ten shared components, all 189 exported names) and §6.14 (storage keys), FR-UX-09…14 with §9 rows, §6.5–6.8 per-view ids, §6.10 PWA precache, §5.11/FR-SRCH `network` kind; AGENTS.md "Frontend conventions" and corrected test commands (788 tests, `discover -p` single-suite form); README module map. |
+
+Corrections to this document recorded by DOCS (the merged code is the source of truth; SPEC documents the code):
+
+- D8 is missing `fathom.ui.seen.<project>` (problem-report high-water mark) and `fathom.ui.inspector` (toggled sections); `fathom.addgear.tab` and `fathom:login-bounces` predate the prefix and stay as they are.
+- D6 subnav chips: the code uses 28 px (36 px coarse) chips inside a 44 px bar, not "36 px (44 coarse)".
+- SEARCH `targetFor`: for an attachment with no device it returns `null` rather than using `pick()`.
+- WIZARD result: the result link goes to the devices landing or the device page, not inventory.
+- B.2 SHELL ctx table omits members the shell exposes: `flush`, `endTimeTravel`, `restoreRevision`, `queue`, `appRoot`, `isTimeTravel`, `session`, `meta`, `role`, `env`, `prompt`, `openDialog`, `ensureCss`, `viewCss`, `reload`, `timeTravel`, plus wave-3 `projectsStatus`, `reloadProjects`.
+- `tests/test_ui_router.py` exercises the `_ui.py` harness rather than the router (router behaviour is covered by `tests/js/router-core*.test.mjs` and `test_ui_shell.py`).
+- Old SPEC said the service worker `VERSION` equals `__version__`; `sw.js` is `0.4.0` while `__version__` is `0.3.0` — SPEC now documents the literal.
+- `tests/test_discovery.ActiveGuard.test_snmp_pacer_counts_and_pauses` has no skip guard when `puresnmp` (the `discovery` extra) is missing — deferred test fix.
