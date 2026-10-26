@@ -445,10 +445,9 @@ class SchedulesUi(UiCase):
         with self.open(HARNESS + "?walk=1", "d") as pg:
             self.assertEqual(pg.smoke["errors"], [])
             walk = json.loads(pg.wait_for("document.documentElement.getAttribute('data-walk')", 30))
-            # The walk's inventory half still drives the pre-DataTable inventory
-            # view (ST-LISTS restores it and asserts walk["ok"]); this suite
-            # owns the schedules half.
             self.assertTrue(walk.get("schedulesOk"), walk)
+            self.assertTrue(walk.get("inventoryOk"), walk)
+            self.assertTrue(walk.get("ok"), walk)
         with self.open(HARNESS + "?readonly=1", "d") as pg:
             self.assertEqual(pg.smoke["errors"], [])
             self.assertEqual(pg.js("document.querySelectorAll('.sch-root [data-edit]').length"), 0, "no editors when read-only")
