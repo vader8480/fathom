@@ -171,6 +171,24 @@ T('summaryCards: ctxInfo falls back to doc.pages and doc.problems', () => {
   assert.equal(byKey(empty, 'procedures').count, 0, 'given lists win over the doc');
 });
 
+T('summaryCards: validation results (ctx.problems()) are not problem reports', () => {
+  const doc = fx();
+  doc.problems = [{ id: 'pr-1', text: 'a', status: 'open', device: 'atem-mini' }];
+  const dev = device(doc, 'atem-mini');
+  const validation = [
+    { level: 'error', code: 'port-unknown', ref: 'devices/atem-mini', path: 'ports[0]', message: 'x' },
+    { level: 'warning', code: 'no-room', ref: 'devices/atem-mini', message: 'y', device: 'atem-mini' },
+  ];
+  const fallback = mod.summaryCards('device', doc, dev, { problems: validation });
+  assert.deepEqual(byKey(fallback, 'problems').drill.ids, ['pr-1'], 'a list of only validation results falls back to doc.problems');
+  const mixed = mod.summaryCards('device', doc, dev, {
+    problems: validation.concat([{ id: 'pr-9', text: 'z', device: 'atem-mini' }]),
+  });
+  assert.deepEqual(byKey(mixed, 'problems').drill.ids, ['pr-9'], 'a report list wins; validation entries in it are skipped');
+  const none = mod.summaryCards('device', doc, dev, { problems: [] });
+  assert.equal(byKey(none, 'problems').count, 0, 'an empty given list still wins');
+});
+
 T('summaryCards rack: height, used and free cards go to the elevation tab', () => {
   const doc = fx();
   const cards = mod.summaryCards('rack', doc, doc.racks[0], {});
