@@ -267,6 +267,10 @@ body.sop-sheet-open{overflow:hidden}
 .sop-landing{padding-top:16px}
 .sop-landing>*{max-width:960px}
 .sop-landing-empty{display:flex;align-items:center;justify-content:center;min-height:40vh}
+.sop-load-error{padding:16px 0}
+.sop-load-error h2{font-size:18px;margin:0 0 4px}
+.sop-load-error .fb-error{margin:12px 0}
+.sop .sop-loading{display:block;flex:1 1 auto;min-width:0}
 .sop-landing-sec{margin:0 0 24px}
 .sop-landing-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 6px}
 .sop-landing-head h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0}

@@ -4,7 +4,7 @@
 // role-filtered by the shell. Data shaping lives in home-core.js.
 
 import { h, on } from './dom.js';
-import { emptyState } from './feedback.js';
+import { emptyState, inlineError, skeleton } from './feedback.js';
 import { layoutFor, parseRoute, buildRoute, mergeRoute, sectionsFor, DEFAULT_VIEW } from './router-core.js';
 import {
   sectionCards, roomCards, recentStrip, projectCards, recentInput, recentKey, projectTitle, RECENT_TYPES,
@@ -125,6 +125,24 @@ function roomsSection(ctx, doc, recent) {
   return h('section', { class: 'hm-rooms', 'aria-labelledby': 'hm-rooms-h' }, body);
 }
 
+// Rooms but nothing documented in them yet (a new blank project). Without rooms the rooms
+// section carries the empty state instead.
+function startSection(ctx, doc) {
+  const rooms = doc.rooms || [];
+  const devices = (doc.devices || []).filter(function (d) { return d && !d.auto; });
+  if (!rooms.length || devices.length || (doc.cables || []).length) return null;
+  const edit = canEdit(ctx);
+  const room = rooms[0].id;
+  return h('section', { class: 'hm-start', 'aria-label': 'Get started' }, emptyState({
+    title: 'Nothing here yet',
+    text: edit
+      ? 'Add a room, then add gear in Patch. A spreadsheet in Data \u25B8 Imports works too.'
+      : 'Nobody has documented gear in this project yet.',
+    action: edit ? { label: 'Add gear in Patch', href: hrefFor(ctx, { room: room, view: 'patch', query: {} }) } : null,
+    secondary: edit ? { label: 'Add a room', href: hrefFor(ctx, { view: 'settings', tab: 'rooms', query: {} }) } : null,
+  }));
+}
+
 function recentSection(ctx, doc, recent) {
   const items = recentStrip(doc, recent);
   if (!items.length) return null;
@@ -142,9 +160,22 @@ function recentSection(ctx, doc, recent) {
   ]);
 }
 
-function projectsSection(ctx, layout) {
+function projectsStatus(ctx) {
+  const fn = fnOf(ctx, 'projectsStatus');
+  const st = fn ? fn() : null;
+  return { loading: !!(st && st.loading), error: (st && st.error) || null };
+}
+
+function projectsSection(ctx, layout, retry) {
   let list = Array.isArray(ctx.projects) ? ctx.projects : [];
   const current = ctx.project || currentRoute(ctx).project;
+  const st = projectsStatus(ctx);
+  if (st.loading || st.error) {
+    return h('section', { class: 'hm-projects', 'aria-labelledby': 'hm-projects-h' }, [
+      h('h2', { id: 'hm-projects-h', class: 'hm-h' }, 'Projects'),
+      st.loading ? skeleton('cards', 2) : inlineError(st.error, retry),
+    ]);
+  }
   if (!list.length && current) list = [{ name: current, title: projectTitle(ctx.store && ctx.store.doc, current) }];
   const cards = projectCards(list, current);
   if (!cards.length || (cards.length < 2 && layout !== 'sm')) return null;
@@ -184,8 +215,19 @@ export function mount(el, ctx) {
       h('h1', { class: 'hm-title' }, projectTitle(doc, ctx.project || currentRoute(ctx).project)),
       h('p', { class: 'hm-lede' }, LEDE),
     ]));
-    [sectionsSection(ctx), roomsSection(ctx, doc, recent), recentSection(ctx, doc, recent), projectsSection(ctx, layout)]
+    [startSection(ctx, doc), sectionsSection(ctx), roomsSection(ctx, doc, recent), recentSection(ctx, doc, recent), projectsSection(ctx, layout, retryProjects)]
       .forEach(function (s) { if (s) root.appendChild(s); });
+  }
+
+  // Retry for a failed project list: the section shows a skeleton while the request runs, then
+  // the cards or the new error. Always resolves, so the Retry button never reports an error itself.
+  function retryProjects() {
+    const fn = fnOf(ctx, 'reloadProjects');
+    if (!fn) return Promise.resolve();
+    let p;
+    try { p = Promise.resolve(fn()); } catch (e) { p = Promise.reject(e); }
+    schedule();
+    return p.then(function () { schedule(); }, function () { schedule(); });
   }
 
   function schedule() {

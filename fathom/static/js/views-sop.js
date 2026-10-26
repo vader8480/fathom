@@ -8,7 +8,7 @@ import { parseHash, buildHash } from './app.js';
 import { h } from './dom.js';
 import { deviceTitle } from './model-core.js';
 import { createTable } from './datatable.js';
-import { reviewBadge as reviewCount } from './feedback.js';
+import { reviewBadge as reviewCount, emptyState, inlineError, skeleton } from './feedback.js';
 
 const KINDS = [['sop', 'SOP'], ['troubleshooting', 'Troubleshooting'], ['checklist', 'Checklist'], ['reference', 'Reference']];
 const STATUSES = [['draft', 'Draft'], ['published', 'Published'], ['archived', 'Archived']];
@@ -365,7 +365,11 @@ export function mount(el, ctx) {
     const pages = pagesOf(doc).filter(listed);
     const landing = h('div', { class: 'sop-main sop-landing' });
     if (!pages.length) {
-      landing.appendChild(h('div', { class: 'sop-landing-empty' }, h('p', { class: 'muted' }, 'No procedures yet.')));
+      landing.appendChild(h('div', { class: 'sop-landing-empty' }, emptyState({
+        title: 'No procedures yet.',
+        text: canEdit ? 'Write the first page: a checklist, a how-to or a reference.' : 'Nobody has written a procedure for this project yet.',
+        action: canEdit ? { label: 'New page', run: function () { openNew(); } } : null,
+      })));
       return landing;
     }
     const recentIds = ctx.recent && typeof ctx.recent.list === 'function' ? ctx.recent.list('page') : [];
@@ -621,7 +625,9 @@ export function mount(el, ctx) {
     const my = ++token;
     dropTable();
     root.innerHTML = '';
-    root.appendChild(h('div', { class: 'app-loading' }, 'Loading\u2026'));
+    const busy = skeleton('page');
+    busy.classList.add('app-loading', 'sop-loading');
+    root.appendChild(busy);
     return Promise.resolve(ctx.flush ? ctx.flush() : null).catch(function () { return null; }).then(function () {
       return api.getPage(project, slug);
     }).then(function (data) {
@@ -633,7 +639,10 @@ export function mount(el, ctx) {
       root.className = 'sop';
       root.appendChild(h('div', { class: 'sop-main' }, [
         h('div', { class: 'sop-topbar' }, [h('button', { type: 'button', class: 'sop-back', onclick: openTree }, '\u2039 Procedures')]),
-        h('div', { class: 'app-error-card', role: 'alert' }, [h('h3', null, e && e.status === 404 ? 'Page not found' : 'Could not load this page'), h('pre', null, (e && e.message) || String(e))]),
+        h('div', { class: 'sop-load-error' }, [
+          h('h2', null, e && e.status === 404 ? 'Page not found' : 'Could not load this page'),
+          inlineError(e, e && e.status === 404 ? null : function () { return loadPage(slug); }),
+        ]),
       ]));
     });
   }
@@ -809,7 +818,7 @@ export function mount(el, ctx) {
       rowClass: function (r) { return 'sop-problem' + (isOpen(r) ? '' : ' resolved'); },
       cards: true, noun: { one: 'report', many: 'reports' }, csvName: project + '-problems.csv',
       searchPlaceholder: 'Search reports',
-      empty: 'No problems reported. Every procedure page has a "Report a problem" button.',
+      empty: 'No problem reports. Report one from any procedure page with \u26A0 Report a problem.',
     });
     setTitle('Problems');
   }
