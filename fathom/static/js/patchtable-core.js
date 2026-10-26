@@ -251,4 +251,87 @@ export function blockPortCount(block) {
   return n;
 }
 
+// ------------------------------------------------------------ Rows mode (docs/ui-audit.md B.3 PT)
+
+export const PT_MODES = ['blocks', 'rows'];
+
+// URL `mode` beats the stored explicit choice (table state extra.mode), which
+// beats the layout default (rows at sm, blocks at md/lg).
+export function pickMode(query, stored, layout) {
+  const q = query && query.mode;
+  if (PT_MODES.indexOf(q) >= 0) return { mode: q, source: 'url' };
+  if (PT_MODES.indexOf(stored) >= 0) return { mode: stored, source: 'stored' };
+  return { mode: layout === 'sm' ? 'rows' : 'blocks', source: 'default' };
+}
+
+export function peerPortText(row) {
+  if (!row || !row.peer_device) return '';
+  return row.peer_label || row.peer_port_name || row.peer_port || 'device';
+}
+
+// One flat record per patch-table row (the DataTable rows of Rows mode). Ids are
+// stable across renders: device|port|cable, or a per-port counter for import rows.
+export function patchRows(blocks, doc, vocab) {
+  const rooms = {};
+  ((doc && doc.rooms) || []).forEach(function (r) { rooms[r.id] = r.name || r.id; });
+  const devs = {};
+  ((doc && doc.devices) || []).forEach(function (d) { devs[d.id] = d; });
+  const discs = (vocab && vocab.disciplines) || {};
+  const out = [];
+  (blocks || []).forEach(function (b) {
+    const ports = {};
+    devicePorts(devs[b.device] || {}).forEach(function (p) { ports[p.id] = p; });
+    const seen = {};
+    (b.sections || []).forEach(function (s) {
+      (s.rows || []).forEach(function (r) {
+        const p = r.port ? ports[r.port] : null;
+        const dir = (p && p.dir) || s.dir || 'io';
+        const disc = mediumDiscipline(r.medium, vocab);
+        const media = (vocab && vocab.media) || {};
+        const m = media[r.medium] || null;
+        let tail = 'free';
+        if (r.cable) tail = 'c:' + r.cable;
+        else if (r.source) {
+          const k = b.device + '|' + (r.port || '') + '|' + r.source;
+          seen[k] = (seen[k] || 0) + 1;
+          tail = 's:' + r.source + ':' + seen[k];
+        }
+        out.push({
+          id: b.device + '|' + (r.port || '') + '|' + tail,
+          device: b.device,
+          device_name: b.name,
+          discipline: b.discipline,
+          room: b.room || '',
+          room_name: b.room ? (rooms[b.room] || b.room) : 'Shared inventory',
+          port: r.port || null,
+          port_name: r.port ? (r.port_name || r.port) : '',
+          label: r.label || '',
+          dir: dir === 'in' ? 'In' : dir === 'out' ? 'Out' : 'I/O',
+          signal: r.medium ? ((discs[disc] && discs[disc].label) || disc) : '',
+          signal_key: r.medium ? disc : '',
+          medium: r.medium || '',
+          medium_label: r.medium ? ((m && m.label) || r.medium) : '',
+          peer_device: r.peer_device || null,
+          peer_name: r.peer_device ? (r.peer_name || r.peer_device) : '',
+          peer_port: r.peer_port || null,
+          peer_port_text: peerPortText(r),
+          cable: r.cable || null,
+          tag: r.tag || '',
+          source: r.source || null,
+        });
+      });
+    });
+  });
+  return out;
+}
+
+// Distinct doc cables among rows (a cable shows twice when both of its ends are listed).
+export function rowCables(rows) {
+  const out = [];
+  (rows || []).forEach(function (r) {
+    if (r && r.cable && r.source === 'cable' && out.indexOf(r.cable) < 0) out.push(r.cable);
+  });
+  return out;
+}
+
 export { portLabel };

@@ -1,30 +1,20 @@
-// Editable patch table view (§6.6, FR-PT, Knox screenshot c): one block per
-// device, inputs (Device · Source · ← · Input) beside outputs (Output · → ·
-// Dest · Device), colored port-group headings, live on store events.
+// Editable patch table view (§6.6, FR-PT, Knox screenshot c). Two layouts
+// (docs/ui-audit.md B.3 PT), toggled by #pt-mode and the URL `mode`:
+// - Blocks: one printable block per device, inputs (Device · Source · ← · Input)
+//   beside outputs (Output · → · Dest · Device), colored port-group headings;
+// - Rows: one shared DataTable row per port (key `patch-rows`), rows open the
+//   port drawer, editors bulk-remove patches.
+// Both re-render live on store events.
 
-import { buildPatchTable, patchTableCsv, patchCellOps, blockPortCount } from './patchtable-core.js';
+import { h } from './dom.js';
+import { createTable } from './datatable.js';
+import { loadState, saveState } from './datatable-core.js';
+import { confirmScope } from './feedback.js';
+import { buildPatchTable, patchTableCsv, patchCellOps, blockPortCount, patchRows, pickMode, peerPortText, rowCables, PT_MODES } from './patchtable-core.js';
 import { mediumInfo, connectOps, disconnectOps } from './model-core.js';
 
-function h(tag, attrs, children) {
-  const el = document.createElement(tag);
-  if (attrs) {
-    Object.keys(attrs).forEach(function (k) {
-      const v = attrs[k];
-      if (v === undefined || v === null || v === false) return;
-      if (k === 'class') el.className = v;
-      else if (k.indexOf('on') === 0 && typeof v === 'function') el.addEventListener(k.slice(2), v);
-      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
-      else if (k === 'value') el.value = v;
-      else if (v === true) el.setAttribute(k, '');
-      else el.setAttribute(k, String(v));
-    });
-  }
-  (Array.isArray(children) ? children : (children == null ? [] : [children])).forEach(function (c) {
-    if (c === null || c === undefined || c === false) return;
-    el.appendChild(typeof c === 'string' || typeof c === 'number' ? document.createTextNode(String(c)) : c);
-  });
-  return el;
-}
+const ROWS_KEY = 'patch-rows';
+const ROWS_PAGE_SIZE = 100;
 
 function download(name, text, type) {
   const blob = new Blob([text], { type: type || 'text/plain' });
@@ -36,43 +26,93 @@ function download(name, text, type) {
   setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 800);
 }
 
+function localStore() {
+  try { return window.localStorage; } catch (e) { return null; }
+}
+
+function own(o, k) { return !!o && Object.prototype.hasOwnProperty.call(o, k); }
+
 export function mount(el, ctx) {
   const store = ctx.store;
   const vocab = ctx.vocab || {};
+  const scope = ctx.project || '';
+  function readOnly() { return !!store.readOnly || ctx.role === 'viewer'; }
+  function routeQuery() {
+    const r = ctx.route;
+    return (r && r.query) || {};
+  }
+  function layoutNow() {
+    if (typeof ctx.layout === 'function') return ctx.layout();
+    return window.innerWidth < 700 ? 'sm' : window.innerWidth < 1100 ? 'md' : 'lg';
+  }
+  function setParams(patch) {
+    if (typeof ctx.setParams === 'function') ctx.setParams(patch);
+  }
+
+  const query0 = routeQuery();
   const state = {
     room: store.room === undefined ? '*' : store.room,
     followRoom: true,
     discs: (store.filter && store.filter.disciplines) ? store.filter.disciplines.slice() : [],
-    text: '',
+    text: typeof query0.q === 'string' ? query0.q : '',
     onlyPatched: false,
     overlay: false,
     split: false,
+    mode: 'blocks',
+    modeSource: 'default',
   };
   let splitHandle = null;
   let raf = 0;
   let selfEdit = false;
+  let table = null;
+  let hlId = null;
+  let rowPick = false;
+  const offs = [];
+
+  if (ctx.viewCss) ctx.viewCss('table');
+
+  // The explicit Blocks/Rows choice lives in the Rows table's persisted state (D8, extra.mode).
+  function storedMode() {
+    const s = loadState(localStore(), scope, ROWS_KEY, null, { pageSize: ROWS_PAGE_SIZE });
+    return s.extra ? s.extra.mode : null;
+  }
+  function storeMode(mode) {
+    const st = localStore();
+    const s = loadState(st, scope, ROWS_KEY, null, { pageSize: ROWS_PAGE_SIZE });
+    s.extra = Object.assign({}, s.extra || {}, { mode: mode });
+    saveState(st, scope, ROWS_KEY, s);
+  }
 
   const root = h('div', { class: 'pt-root' });
   const splitTop = h('div', { class: 'pt-split-top hidden', 'aria-label': 'Patch view' });
   const countEl = h('span', { class: 'muted', style: { fontSize: '12px' } });
+  const modeBtns = {
+    blocks: h('button', { type: 'button', 'data-mode': 'blocks', 'aria-pressed': 'false', title: 'One block per device (printable)' }, 'Blocks'),
+    rows: h('button', { type: 'button', 'data-mode': 'rows', 'aria-pressed': 'false', title: 'One row per port: search, sort, filter' }, 'Rows'),
+  };
+  const modeWrap = h('div', { id: 'pt-mode', class: 'pt-mode no-print', role: 'group', 'aria-label': 'Layout' }, [modeBtns.blocks, modeBtns.rows]);
+  const splitBtn = h('button', { type: 'button', id: 'pt-split', class: 'small no-print', 'aria-pressed': 'false', title: 'Patch view above, table below' }, 'Split view');
+  const printBtn = h('button', { type: 'button', id: 'pt-print', class: 'small' }, 'Export PDF');
+  const csvBtn = h('button', { type: 'button', id: 'pt-csv', class: 'small' }, 'CSV');
   const head = h('div', { class: 'pt-head' }, [
     h('span', { class: 'title' }, 'Patch table'), countEl,
-    h('span', { class: 'pt-live', role: 'status' }, [h('span', { class: 'dot' }), 'Live \u2014 edits update every view']),
+    h('span', { class: 'pt-live', role: 'status' }, [h('span', { class: 'dot' }), 'Live', h('span', { class: 'pt-live-more' }, '\u2014 edits update every view')]),
     h('span', { class: 'grow' }),
-    h('button', { type: 'button', id: 'pt-split', class: 'small no-print', 'aria-pressed': 'false', title: 'Patch view above, table below' }, 'Split view'),
-    h('button', { type: 'button', id: 'pt-print', class: 'small' }, 'Export PDF'),
-    h('button', { type: 'button', id: 'pt-csv', class: 'small' }, 'CSV'),
+    modeWrap, splitBtn, printBtn, csvBtn,
   ]);
   const roomSel = h('select', { id: 'pt-filter-room', 'aria-label': 'Room' });
   const discWrap = h('div', { id: 'pt-filter-disc', class: 'row', role: 'group', 'aria-label': 'Disciplines' });
   const text = h('input', { id: 'pt-filter-text', type: 'search', placeholder: 'Filter devices', 'aria-label': 'Filter devices' });
+  text.value = state.text;
   const only = h('input', { id: 'pt-only-patched', type: 'checkbox' });
   const ovl = h('input', { id: 'pt-show-overlay', type: 'checkbox' });
+  const onlyLabel = h('label', { class: 'row', for: 'pt-only-patched' }, [only, 'Only patched']);
   const filters = h('div', { class: 'pt-filters' }, [roomSel, discWrap, text,
-    h('label', { class: 'row', for: 'pt-only-patched' }, [only, 'Only patched']),
+    onlyLabel,
     h('label', { class: 'row', for: 'pt-show-overlay', title: 'Dante / Videohub routes from imports' }, [ovl, 'Show import rows']),
   ]);
   const scroll = h('div', { class: 'pt-scroll' });
+  const rowsHost = h('div', { class: 'pt-rows' });
   root.appendChild(splitTop);
   root.appendChild(head);
   root.appendChild(filters);
@@ -94,11 +134,44 @@ export function mount(el, ctx) {
       discWrap.appendChild(h('button', { type: 'button', class: 'chip' + (on ? ' on' : ''), 'data-disc': k, 'aria-pressed': on ? 'true' : 'false', style: { color: ds[k].color } }, [h('i'), ds[k].label]));
     });
   }
+  function scopeName() {
+    if (state.room === '*') return 'all rooms';
+    if (!state.room) return 'Shared inventory';
+    const r = (store.doc.rooms || []).filter(function (x) { return x.id === state.room; })[0];
+    return r ? (r.name || r.id) : state.room;
+  }
+  function csvName() {
+    return (ctx.project || 'fathom') + '-patch-table' + (state.room && state.room !== '*' ? '-' + state.room : '') + '.csv';
+  }
+
+  // ---------------------------------------------------------- shared cell controls
+
+  function patchButton(device, deviceName, port, portName) {
+    if (readOnly() || !port) return h('span', { class: 'pt-dash' }, 'Patch\u2026');
+    return h('button', { type: 'button', class: 'pt-patch', 'data-port': port, 'data-device': device, 'aria-label': 'Patch ' + deviceName + ' ' + portName, onclick: function () {
+      ctx.pickPort({ compatibleWith: { device: device, port: port }, room: state.room === '*' ? '*' : state.room }).then(function (t) {
+        if (!t) return;
+        const ops = patchCellOps(store.doc, { device: device, port: port }, 'peer', t);
+        const peer = (store.doc.devices || []).filter(function (d) { return d.id === t.device; })[0];
+        const pp = peer && t.port ? (peer.ports || []).filter(function (p) { return p.id === t.port; })[0] : null;
+        ctx.commit(ops, 'Connected ' + deviceName + ' ' + portName + ' to ' + (peer ? peer.name : t.device) + (pp ? ' ' + (pp.name || pp.id) : ''));
+      });
+    } }, 'Patch\u2026');
+  }
+
+  function removeButton(cls, deviceName, portName, peerName, cable) {
+    return h('button', { type: 'button', class: cls, 'aria-label': 'Remove patch ' + deviceName + ' ' + (portName || '') + ' to ' + (peerName || ''), title: 'Remove patch', onclick: function () {
+      ctx.commit(disconnectOps(store.doc, cable), 'Removed patch ' + deviceName + ' ' + (portName || '') + ' \u2194 ' + (peerName || ''));
+    } }, '\u00d7');
+  }
+
+  // ---------------------------------------------------------- Blocks mode
 
   function labelInput(block, row) {
-    const input = h('input', { value: row.label || '', placeholder: row.port_name || '', 'aria-label': 'Label for ' + block.name + ' ' + (row.port_name || ''), 'data-key': block.device + ':' + row.port, readonly: store.readOnly ? true : null });
+    const input = h('input', { placeholder: row.port_name || '', 'aria-label': 'Label for ' + block.name + ' ' + (row.port_name || ''), 'data-key': block.device + ':' + row.port, readonly: readOnly() ? true : null });
+    input.value = row.label || '';
     function commit() {
-      if (store.readOnly) return;
+      if (readOnly()) return;
       const v = input.value.trim();
       if (v === (row.label || '')) return;
       const ops = patchCellOps(store.doc, { device: block.device, port: row.port }, 'label', v);
@@ -121,29 +194,9 @@ export function mount(el, ctx) {
     return h('div', { class: 'lbl' }, [dot, labelInput(block, row)]);
   }
 
-  function patchButton(block, row) {
-    if (store.readOnly || !row.port) return h('span', { class: 'pt-dash' }, 'Patch\u2026');
-    return h('button', { type: 'button', class: 'pt-patch', 'data-port': row.port, 'data-device': block.device, 'aria-label': 'Patch ' + block.name + ' ' + row.port_name, onclick: function () {
-      ctx.pickPort({ compatibleWith: { device: block.device, port: row.port }, room: state.room === '*' ? '*' : state.room }).then(function (t) {
-        if (!t) return;
-        const ops = patchCellOps(store.doc, { device: block.device, port: row.port }, 'peer', t);
-        const peer = (store.doc.devices || []).filter(function (d) { return d.id === t.device; })[0];
-        const pp = peer && t.port ? (peer.ports || []).filter(function (p) { return p.id === t.port; })[0] : null;
-        ctx.commit(ops, 'Connected ' + block.name + ' ' + row.port_name + ' to ' + (peer ? peer.name : t.device) + (pp ? ' ' + (pp.name || pp.id) : ''));
-      });
-    } }, 'Patch\u2026');
-  }
-
   function clearButton(block, row) {
-    if (store.readOnly || !row.cable || row.source !== 'cable') return null;
-    return h('button', { type: 'button', class: 'pt-x', 'aria-label': 'Remove patch ' + block.name + ' ' + (row.port_name || '') + ' to ' + (row.peer_name || ''), title: 'Remove patch', onclick: function () {
-      ctx.commit(disconnectOps(store.doc, row.cable), 'Removed patch ' + block.name + ' ' + (row.port_name || '') + ' \u2194 ' + (row.peer_name || ''));
-    } }, '\u00d7');
-  }
-
-  function peerPortText(row) {
-    if (!row.peer_device) return null;
-    return row.peer_label || row.peer_port_name || (row.peer_port ? row.peer_port : 'device');
+    if (readOnly() || !row.cable || row.source !== 'cable') return null;
+    return removeButton('pt-x', block.name, row.port_name, row.peer_name, row.cable);
   }
 
   function inputTable(block, sec) {
@@ -152,7 +205,7 @@ export function mount(el, ctx) {
       const patched = !!r.peer_device;
       tb.appendChild(h('tr', { 'data-port': r.port || '', 'data-cable': r.cable || '' }, [
         h('td', { class: 'x' }, clearButton(block, r)),
-        h('td', null, patched ? (r.peer_name || r.peer_device) : patchButton(block, r)),
+        h('td', null, patched ? (r.peer_name || r.peer_device) : patchButton(block.device, block.name, r.port, r.port_name)),
         h('td', { class: r.source && r.source !== 'cable' ? 'ovl' : '' }, patched ? peerPortText(r) : h('span', { class: 'pt-dash' }, '\u2014')),
         h('td', { class: 'arrow', 'aria-hidden': 'true' }, '\u2190'),
         h('td', { class: 'pn' }, r.port_name || ''),
@@ -174,7 +227,7 @@ export function mount(el, ctx) {
         h('td', null, portCell(block, r)),
         h('td', { class: 'arrow', 'aria-hidden': 'true' }, '\u2192'),
         h('td', { class: r.source && r.source !== 'cable' ? 'ovl' : '' }, patched ? peerPortText(r) : h('span', { class: 'pt-dash' }, '\u2014')),
-        h('td', null, patched ? (r.peer_name || r.peer_device) : patchButton(block, r)),
+        h('td', null, patched ? (r.peer_name || r.peer_device) : patchButton(block.device, block.name, r.port, r.port_name)),
         h('td', { class: 'x' }, clearButton(block, r)),
       ]));
     });
@@ -208,39 +261,209 @@ export function mount(el, ctx) {
     return sec;
   }
 
-  function currentBlocks() {
-    return buildPatchTable(store.doc, store.overlay, vocab, { room: state.room, disciplines: state.discs, query: state.text, onlyPatched: state.onlyPatched, includeOverlay: state.overlay });
-  }
-
-  function render() {
-    raf = 0;
+  function renderBlocks(blocks) {
     const active = document.activeElement;
     const key = active && root.contains(active) && active.getAttribute ? active.getAttribute('data-key') : null;
     const top = scroll.scrollTop;
-    const blocks = currentBlocks();
     scroll.innerHTML = '';
-    let rows = 0;
-    blocks.forEach(function (b) { rows += blockPortCount(b); scroll.appendChild(blockEl(b)); });
+    blocks.forEach(function (b) { scroll.appendChild(blockEl(b)); });
     if (!blocks.length) scroll.appendChild(h('div', { class: 'app-empty' }, 'No devices match these filters.'));
-    countEl.textContent = blocks.length + ' devices \u00b7 ' + rows + ' rows';
     scroll.scrollTop = top;
     if (key) {
       const again = scroll.querySelector('[data-key="' + key.replace(/"/g, '\\"') + '"]');
       if (again) again.focus();
     }
   }
+
+  // ---------------------------------------------------------- Rows mode (DataTable)
+
+  function dotText(color, label) {
+    return h('span', { class: 'pt-dot-text' }, [h('span', { class: 'dot', style: { color: color } }), label]);
+  }
+
+  function rowColumns(editable) {
+    const ds = vocab.disciplines || {};
+    const cols = [
+      { key: 'room', header: 'Room', value: function (r) { return r.room_name; }, hideOnMobile: true },
+      { key: 'device', header: 'Device', sticky: true, value: function (r) { return r.device_name; } },
+      { key: 'port', header: 'Port',
+        value: function (r) { return r.port ? r.port_name + (r.label && r.label !== r.port_name ? ' \u00b7 ' + r.label : '') : ''; },
+        cell: function (r) {
+          if (!r.port) return h('span', { class: 'muted' }, 'device');
+          return h('span', null, [r.port_name, r.label && r.label !== r.port_name ? h('span', { class: 'muted' }, ' \u00b7 ' + r.label) : null]);
+        } },
+      { key: 'dir', header: 'Dir', filterable: true, value: function (r) { return r.dir; } },
+      { key: 'signal', header: 'Signal', hideOnMobile: true, value: function (r) { return r.signal; },
+        cell: function (r) { return r.signal ? dotText((ds[r.signal_key] || {}).color || '#9aa3b5', r.signal) : ''; } },
+      { key: 'peer_device', header: 'Connected device', value: function (r) { return r.peer_name; },
+        cell: function (r) {
+          if (r.peer_device) return r.peer_name;
+          if (!r.source && r.port) return patchButton(r.device, r.device_name, r.port, r.port_name);
+          return h('span', { class: 'pt-dash' }, '\u2014');
+        } },
+      { key: 'peer_port', header: 'Connected port', value: function (r) { return r.peer_port_text; },
+        cell: function (r) { return r.source && r.source !== 'cable' ? h('span', { class: 'ovl' }, r.peer_port_text) : r.peer_port_text; } },
+      { key: 'tag', header: 'Cable tag', value: function (r) { return r.tag || (r.source && r.source !== 'cable' ? 'from import' : ''); },
+        cell: function (r) { return r.source && r.source !== 'cable' ? h('span', { class: 'ovl' }, 'from import') : r.tag; } },
+      { key: 'medium', header: 'Medium', filterable: true, hideOnMobile: true, value: function (r) { return r.medium_label; },
+        cell: function (r) { return r.medium ? dotText(mediumInfo(r.medium, vocab).color, r.medium_label) : ''; } },
+    ];
+    if (editable) {
+      cols.push({ key: 'remove', header: 'Remove', sortable: false, searchable: false, csv: false, align: 'center', value: function () { return ''; },
+        cell: function (r) { return r.source === 'cable' && r.cable ? removeButton('pt-x pt-remove', r.device_name, r.port_name, r.peer_name, r.cable) : null; } });
+    }
+    return cols;
+  }
+
+  function openRow(row) {
+    const sel = row.port ? { type: 'port', id: row.device, device: row.device, port: row.port } : { type: 'device', id: row.device, device: row.device };
+    rowPick = true;
+    try { (ctx.openDrawer || ctx.openInspector)(sel); } finally { rowPick = false; }
+  }
+
+  function bulkRemove(rows) {
+    const ids = rowCables(rows);
+    if (!ids.length) return Promise.resolve();
+    const where = scopeName();
+    return confirmScope(ctx, { verb: 'Remove', count: ids.length, noun: { one: 'patch', many: 'patches' }, scope: where, danger: true }).then(function (ok) {
+      if (!ok) return;
+      let ops = [];
+      ids.forEach(function (id) { ops = ops.concat(disconnectOps(store.doc, id)); });
+      ctx.commit(ops, 'Removed ' + ids.length + (ids.length === 1 ? ' patch' : ' patches') + ' in ' + where);
+      if (table) table.clearSelection();
+    });
+  }
+
+  function onTableState(e) {
+    const s = e.detail || {};
+    if (typeof s.q === 'string') state.text = s.q;
+  }
+
+  function createRowsTable() {
+    const editable = !readOnly();
+    scroll.innerHTML = '';
+    rowsHost.innerHTML = '';
+    scroll.appendChild(rowsHost);
+    hlId = null;
+    table = createTable(rowsHost, {
+      key: ROWS_KEY,
+      scope: scope,
+      caption: 'Patch rows',
+      columns: rowColumns(editable),
+      rows: [],
+      rowId: function (r) { return r.id; },
+      onRow: openRow,
+      rowAttrs: function (r) { return { 'data-device': r.device, 'data-port': r.port || '', 'data-cable': r.cable || '' }; },
+      rowClass: function (r) { return r.source && r.source !== 'cable' ? 'pt-ovl-row' : ''; },
+      selectable: editable ? function (r) { return r.source === 'cable' && !!r.cable; } : false,
+      bulkActions: editable ? [{ label: 'Remove patch', danger: true, run: bulkRemove }] : [],
+      noun: { one: 'row', many: 'rows' },
+      ids: { search: 'pt-filter-text', csv: 'pt-csv' },
+      url: { get: routeQuery, set: setParams },
+      pageSize: ROWS_PAGE_SIZE,
+      csvName: csvName(),
+      searchPlaceholder: 'Search ports, devices, cable tags',
+      empty: 'No ports match these filters.',
+    });
+    rowsHost.addEventListener('dt:state', onTableState);
+  }
+
+  function destroyRowsTable() {
+    if (!table) return;
+    rowsHost.removeEventListener('dt:state', onTableState);
+    table.destroy();
+    table = null;
+    hlId = null;
+  }
+
+  function renderRows(blocks) {
+    if (!table) createRowsTable();
+    table.setRows(patchRows(blocks, store.doc, vocab));
+  }
+
+  // ---------------------------------------------------------- render + mode
+
+  function currentBlocks(forRows) {
+    return buildPatchTable(store.doc, store.overlay, vocab, { room: state.room, disciplines: state.discs, query: forRows ? '' : state.text, onlyPatched: state.onlyPatched, includeOverlay: state.overlay });
+  }
+
+  function render() {
+    raf = 0;
+    const rowsMode = state.mode === 'rows';
+    const blocks = currentBlocks(rowsMode);
+    let rows = 0;
+    blocks.forEach(function (b) { rows += blockPortCount(b); });
+    countEl.textContent = blocks.length + ' devices \u00b7 ' + rows + ' rows';
+    if (rowsMode) renderRows(blocks);
+    else renderBlocks(blocks);
+  }
   function schedule() {
     if (!raf) raf = requestAnimationFrame(render);
   }
 
-  // events
-  head.querySelector('#pt-csv').addEventListener('click', function () {
-    const name = (ctx.project || 'fathom') + '-patch-table' + (state.room && state.room !== '*' ? '-' + state.room : '') + '.csv';
-    download(name, patchTableCsv(currentBlocks()), 'text/csv');
+  // One #pt-filter-text and one #pt-csv at a time: the DataTable's in Rows mode.
+  function syncModeUi() {
+    const rowsMode = state.mode === 'rows';
+    PT_MODES.forEach(function (m) { modeBtns[m].setAttribute('aria-pressed', m === state.mode ? 'true' : 'false'); });
+    root.setAttribute('data-mode', state.mode);
+    scroll.classList.toggle('pt-scroll--rows', rowsMode);
+    if (rowsMode) {
+      if (text.parentNode) text.parentNode.removeChild(text);
+      if (csvBtn.parentNode) csvBtn.parentNode.removeChild(csvBtn);
+    } else {
+      if (!text.parentNode) filters.insertBefore(text, onlyLabel);
+      if (document.activeElement !== text) text.value = state.text;
+      if (!csvBtn.parentNode) head.insertBefore(csvBtn, printBtn.nextSibling);
+    }
+  }
+
+  function modeParams(mode) {
+    const p = { mode: mode };
+    if (mode === 'blocks') {
+      p.q = state.text || null;
+      p.sort = null;
+      p.pg = null;
+      Object.keys(routeQuery()).forEach(function (k) { if (k.indexOf('f.') === 0) p[k] = null; });
+    }
+    return p;
+  }
+
+  // opts: {explicit} persists the choice and writes the URL `mode`.
+  function setMode(mode, opts) {
+    const o = opts || {};
+    if (PT_MODES.indexOf(mode) < 0) return;
+    if (state.mode === 'rows' && table) state.text = table.getState().q;
+    if (o.explicit) {
+      storeMode(mode);
+      state.modeSource = 'stored';
+      setParams(modeParams(mode));
+    } else if (o.source) {
+      state.modeSource = o.source;
+    }
+    if (mode === state.mode && (mode === 'blocks' || table)) { syncModeUi(); return; }
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    destroyRowsTable();
+    state.mode = mode;
+    syncModeUi();
+    if (mode === 'rows') {
+      createRowsTable();
+      if (table.getState().q !== state.text) table.setState({ q: state.text });
+    }
+    render();
+    if (store.selection) onSel({ detail: store.selection });
+  }
+
+  // ---------------------------------------------------------- events
+
+  csvBtn.addEventListener('click', function () {
+    download(csvName(), patchTableCsv(currentBlocks(false)), 'text/csv');
   });
-  head.querySelector('#pt-print').addEventListener('click', function () { window.print(); });
-  const splitBtn = head.querySelector('#pt-split');
+  printBtn.addEventListener('click', function () { window.print(); });
   splitBtn.addEventListener('click', function () { setSplit(!state.split); });
+  modeWrap.addEventListener('click', function (e) {
+    const b = e.target.closest('[data-mode]');
+    if (b) setMode(b.getAttribute('data-mode'), { explicit: true });
+  });
   roomSel.addEventListener('change', function () { state.room = roomSel.value; state.followRoom = false; schedule(); });
   discWrap.addEventListener('click', function (e) {
     const b = e.target.closest('[data-disc]');
@@ -252,7 +475,15 @@ export function mount(el, ctx) {
     schedule();
   });
   let tTimer = null;
-  text.addEventListener('input', function () { if (tTimer) clearTimeout(tTimer); tTimer = setTimeout(function () { state.text = text.value; schedule(); }, 120); });
+  text.addEventListener('input', function () {
+    if (tTimer) clearTimeout(tTimer);
+    tTimer = setTimeout(function () {
+      tTimer = null;
+      state.text = text.value;
+      setParams({ q: state.text || null });
+      schedule();
+    }, 120);
+  });
   only.addEventListener('change', function () { state.onlyPatched = only.checked; schedule(); });
   ovl.addEventListener('change', function () { state.overlay = ovl.checked; schedule(); });
 
@@ -288,44 +519,101 @@ export function mount(el, ctx) {
   function onRoom() {
     if (state.followRoom) { state.room = store.room; roomSel.value = state.room; schedule(); }
   }
-  function onMode() { schedule(); }
+  function onMode() {
+    if (table) { destroyRowsTable(); createRowsTable(); }
+    schedule();
+  }
   function onOverlay() { if (state.overlay) schedule(); }
   function onSel(e) {
     const sel = e.detail;
     if (!sel) return;
     const dev = sel.device || (sel.type === 'device' ? sel.id : null);
     if (!dev) return;
+    if (table) {
+      if (rowPick) return;
+      const prefix = dev + '|' + (sel.type === 'port' && sel.port ? sel.port + '|' : '');
+      const rows = patchRows(currentBlocks(true), store.doc, vocab);
+      const hit = rows.filter(function (r) { return r.id.indexOf(prefix) === 0; })[0];
+      const id = hit ? hit.id : null;
+      if (id && id !== hlId) { hlId = id; table.setHighlight(id); }
+      return;
+    }
     const b = scroll.querySelector('section.pt-block[data-device="' + dev.replace(/"/g, '\\"') + '"]');
     if (b && !b.contains(document.activeElement)) b.scrollIntoView({ block: 'nearest' });
+  }
+  function onLayout() {
+    if (state.modeSource !== 'default') return;
+    const m = pickMode({}, null, layoutNow()).mode;
+    if (m !== state.mode) setMode(m, {});
   }
   store.addEventListener('doc', onDoc);
   store.addEventListener('room', onRoom);
   store.addEventListener('mode', onMode);
   store.addEventListener('overlay', onOverlay);
   store.addEventListener('selection', onSel);
+  if (typeof ctx.subscribe === 'function') offs.push(ctx.subscribe('layout', onLayout));
 
   fillRooms();
   fillDiscs();
+  const first = pickMode(query0, storedMode(), layoutNow());
+  state.mode = first.mode;
+  state.modeSource = first.source;
+  syncModeUi();
+  if (state.mode === 'rows') {
+    createRowsTable();
+    if (table.getState().q !== state.text) table.setState({ q: state.text });
+  }
   render();
 
   return {
     destroy: function () {
       if (raf) cancelAnimationFrame(raf);
+      if (tTimer) clearTimeout(tTimer);
       store.removeEventListener('doc', onDoc);
       store.removeEventListener('room', onRoom);
       store.removeEventListener('mode', onMode);
       store.removeEventListener('overlay', onOverlay);
       store.removeEventListener('selection', onSel);
+      offs.forEach(function (f) { try { f(); } catch (e) { /* ignore */ } });
+      destroyRowsTable();
       if (splitHandle) { try { splitHandle.destroy(); } catch (e) { /* ignore */ } }
       el.innerHTML = '';
     },
     focus: function (sel) { onSel({ detail: sel }); },
-    getState: function () { return { room: state.room, followRoom: state.followRoom, discs: state.discs.slice(), text: state.text, onlyPatched: state.onlyPatched, overlay: state.overlay, scroll: scroll.scrollTop }; },
+    // Same-view URL change (D1): back/forward or an edited hash with another mode or q.
+    route: function (r) {
+      const q = (r && r.query) || {};
+      const want = pickMode(q, storedMode(), layoutNow());
+      if (want.mode !== state.mode) setMode(want.mode, { source: want.source });
+      if (table) table.readUrl();
+      else {
+        const t = typeof q.q === 'string' ? q.q : '';
+        if (t !== state.text) {
+          state.text = t;
+          if (document.activeElement !== text) text.value = t;
+          schedule();
+        }
+      }
+      if (store.selection) onSel({ detail: store.selection });
+    },
+    getState: function () {
+      return { room: state.room, followRoom: state.followRoom, discs: state.discs.slice(), text: state.text, onlyPatched: state.onlyPatched, overlay: state.overlay, mode: state.mode, modeSource: state.modeSource, scroll: scroll.scrollTop };
+    },
+    // Restores the session state of an earlier visit; the URL's `mode` and `q` win over it.
     setState: function (s) {
       if (!s) return;
-      Object.assign(state, { room: s.followRoom ? store.room : s.room, followRoom: s.followRoom, discs: s.discs || [], text: s.text || '', onlyPatched: !!s.onlyPatched, overlay: !!s.overlay });
-      text.value = state.text; only.checked = state.onlyPatched; ovl.checked = state.overlay; roomSel.value = state.room;
+      const q = routeQuery();
+      Object.assign(state, { room: s.followRoom ? store.room : s.room, followRoom: s.followRoom, discs: s.discs || [], onlyPatched: !!s.onlyPatched, overlay: !!s.overlay });
+      only.checked = state.onlyPatched; ovl.checked = state.overlay; roomSel.value = state.room;
       fillDiscs();
+      if (!own(q, 'mode') && PT_MODES.indexOf(s.mode) >= 0 && s.modeSource && s.modeSource !== 'default' && s.mode !== state.mode) {
+        setMode(s.mode, { source: s.modeSource });
+      }
+      if (!own(q, 'q') && s.text) {
+        state.text = s.text;
+        if (table) table.setState({ q: s.text });
+        else { text.value = s.text; setParams({ q: s.text }); }
+      }
       render();
       scroll.scrollTop = s.scroll || 0;
     },
