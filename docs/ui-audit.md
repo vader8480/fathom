@@ -12,6 +12,10 @@ How to read it:
   and the verification matrix (B.8).
 - "MUST" marks something a reviewer checks. Anything not stated is the worker's call, within the hard
   constraints restated in B.1.0.
+- Workflow: each unit is built by one worker on its own branch `cursor/ui-<unit>-<suffix>` off
+  `cursor/ui-uplift`, pushed, and reviewed by the coordinator, who opens the unit's PR against
+  `cursor/ui-uplift`, runs the full gate, merges or sends back a defect report. Nothing in this uplift
+  merges to `main` until the final draft PR `cursor/ui-uplift` → `main` is reviewed by the owner.
 
 Contents: [Audit](#audit) · [A.1 Method](#a1-method) · [A.2 Audit table](#a2-audit-table) ·
 [A.3 Domain mapping and entity set](#a3-domain-mapping-and-entity-set) ·
@@ -500,8 +504,10 @@ Exempt:
 - No wave-2 or wave-3 unit edits `tests/test_frontend_smoke.py`. Only `SHELL` (wave 1) edits it, as
   listed in B.2 SHELL. If a migration would break an existing assertion, the unit keeps the selector
   working (adds the class or attribute to the new markup).
-- Each UI unit owns one new `tests/test_ui_<unit>.py` built on `tests/_ui.py` (created by `SHELL`; read
-  by everyone else). Files named `_ui.py` are not collected by `unittest discover`.
+- Each UI unit owns one new `tests/test_ui_<unit>.py` built on `tests/_ui.py` (created by `ROUTER`,
+  which merges first, to the specification in B.2 SHELL item 10; read by everyone else, extended by
+  nobody — a unit needing another helper defines it in its own test file). Files named `_ui.py` are not
+  collected by `unittest discover`.
 - Each `*-core.js` gets `tests/js/<name>-core.test.mjs` using `loadModule` from
   `tests/js/fixtures/helpers.mjs`.
 - Each wave-1 component also owns a dev harness page `fathom/static/dev/<name>.html` with
