@@ -47,7 +47,6 @@ a.hm-recent:hover{border-color:var(--accent)}
 .hm-project-title{font-weight:600;overflow-wrap:anywhere}
 .hm-project-sub{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
 
-.hm-root .fb-empty{margin:8px 0}
 
 @media (max-width:699px){
   .hm-root{padding:14px calc(12px + var(--sar)) 24px calc(12px + var(--sal))}
