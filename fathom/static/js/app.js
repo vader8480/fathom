@@ -18,7 +18,7 @@ import {
 import { createDrawer } from './drawer.js';
 import { parseDrawer, selectionOpensDrawer } from './drawer-core.js';
 import { openSearch } from './search.js';
-import { createNotices, mountBell } from './feedback.js';
+import { createNotices, mountBell, skeleton, inlineError } from './feedback.js';
 
 export { h, esc, selToString, selFromString };
 
@@ -44,6 +44,14 @@ export const VIEWS = {
   json: { label: 'JSON', module: null, internal: true },
 };
 const BOOT_CSS = ['drawer.css', 'inspector.css', 'search.css', 'feedback.css'];
+// Loading skeleton per view (feedback.js kinds). Canvas views (patch, plan, map) have no canvas
+// kind; patch and plan draw cards on a canvas, so 'cards' is the closest shape.
+const SKELETON_KIND = {
+  home: 'cards', patch: 'cards', plan: 'cards', map: 'cards', sop: 'list',
+  table: 'table', inventory: 'table', schedules: 'table', imports: 'table', discovery: 'table',
+  history: 'table', builds: 'table', settings: 'table',
+};
+const PAGE_VIEWS = { devices: true, rooms: true, racks: true };
 const RECENT_TYPES = ['device', 'room', 'rack', 'page'];
 const RECENT_MAX = 8;
 const EMPTY_ROUTE = { project: '', room: '', view: '', id: '', tab: '', sub: '', extra: [], query: {} };
@@ -614,7 +622,12 @@ export function makeCtx(store, extras) {
         return null;
       }
     },
-    select: function (sel) { ctx.store.select(sel); },
+    // While the shell hands a view the current selection (focusView), the view re-selecting that
+    // same item is a no-op, so the selection is set once per route.
+    select: function (sel) {
+      if (A.focusing && selToString(sel) === selToString(ctx.store.selection)) return;
+      ctx.store.select(sel);
+    },
     highlight: function (hl) { ctx.store.highlight(hl); },
     ensureCss: ensureCss,
     viewCss: function (key) { return ensureCss((VIEWS[key] || {}).css); },
@@ -639,6 +652,8 @@ export function makeCtx(store, extras) {
     notify: function (n) { if (n && n.text) ctx.toast(n.text, n.level); },
     sections: SECTIONS,
     projects: [],
+    projectsStatus: function () { return { loading: false, error: null }; },
+    reloadProjects: function () { return Promise.resolve([]); },
     setTitle: function () {},
     problems: function () { return []; },
     overlayInfo: function () { return { fetchedAt: null, revision: null }; },
@@ -684,8 +699,15 @@ const A = {
   offline: false, travel: null, banner: null, unsubs: [], problems: [],
   route: copyRoute(EMPTY_ROUTE), layout: 'lg', nav: null, drawer: null, drawerOpen: false, intent: null, pendingSection: '',
   applyingRoute: false, subs: {}, recent: null, notices: null, bell: null, overlayInfo: { fetchedAt: null, revision: null },
-  saveTrack: { last: '', offlineMax: 0 }, noteSig: '',
+  saveTrack: { last: '', offlineMax: 0 }, noteSig: '', focusing: false, projectsError: null, projectsLoading: false,
 };
+
+function focusView(sel) {
+  const handle = A.viewHandle;
+  if (!sel || !handle || typeof handle.focus !== 'function') return;
+  A.focusing = true;
+  try { handle.focus(sel); } catch (e) { /* ignore */ } finally { A.focusing = false; }
+}
 
 function storageOf(kind) {
   try { return window[kind]; } catch (e) { return null; }
@@ -1008,8 +1030,13 @@ function ensureInspector() {
     A.inspector = m.mountInspector(el, ctx) || { destroy: function () {} };
     if (A.pendingSection) focusSection(A.pendingSection);
   }, function (e) {
+    if (A.ctx !== ctx) return;
     el.innerHTML = '';
-    el.appendChild(errorCard('Inspector', e));
+    el.appendChild(errorCard('Inspector', e, function () {
+      if (A.ctx !== ctx) return;
+      A.inspector = null;
+      ensureInspector();
+    }));
   });
 }
 
@@ -1212,12 +1239,25 @@ function navigate(view, params) {
   writeHash(navigateHash(view, params), false);
 }
 
-function errorCard(name, e) {
+function errorCard(name, e, retry) {
   return h('div', { class: 'app-error-card', role: 'alert', 'data-error-view': name }, [
     h('h3', null, name + ' is not available'),
     h('div', null, 'This part of Fathom failed to load. The rest of the app keeps working.'),
     h('pre', null, errMsg(e)),
+    typeof retry === 'function' ? h('div', { class: 'app-error-actions' }, h('button', { type: 'button', class: 'fb-retry app-retry', onclick: function () { retry(); } }, 'Retry')) : null,
   ]);
+}
+
+function skeletonKind(view, route) {
+  if (PAGE_VIEWS[view]) return route && route.id ? 'page' : 'table';
+  return SKELETON_KIND[view] || 'page';
+}
+
+// The skeleton is its own aria-busy wrapper; .app-loading stays as the "not mounted yet" hook.
+function loadingNode(view, route) {
+  const node = skeleton(skeletonKind(view, route));
+  node.classList.add('app-loading');
+  return node;
 }
 
 function mountInternal(key, el, ctx) {
@@ -1247,14 +1287,14 @@ function mountView(key) {
     A.viewHandle = handle || { destroy: function () {} };
     const st = A.viewStates[key];
     if (st && A.viewHandle.setState) { try { A.viewHandle.setState(st); } catch (e) { /* ignore */ } }
-    if (A.store && A.store.selection && A.viewHandle.focus) { try { A.viewHandle.focus(A.store.selection); } catch (e) { /* ignore */ } }
+    if (A.store) focusView(A.store.selection);
     markRendered();
   };
   if (def.internal) { done(mountInternal(key, el, A.ctx)); return Promise.resolve(); }
   ensureCss(def.css);
   let mod = def.module;
   if (urlParam('debug_missing_view') === key) mod = './__missing_view_' + key + '.js';
-  el.appendChild(h('div', { class: 'app-loading' }, 'Loading ' + def.label + '\u2026'));
+  el.appendChild(loadingNode(key, A.route));
   return import(mod).then(function (m) {
     if (token !== A.viewToken) return;
     const fn = m[def.export];
@@ -1264,7 +1304,7 @@ function mountView(key) {
   }).catch(function (e) {
     if (token !== A.viewToken) return;
     el.innerHTML = '';
-    el.appendChild(errorCard(def.label, e));
+    el.appendChild(errorCard(def.label, e, function () { if (token === A.viewToken) mountView(key); }));
     done({ destroy: function () {} });
   });
 }
@@ -1538,7 +1578,10 @@ function toggleAssistant(force) {
       el.innerHTML = '';
       A.assistant = m.mountAssistant(el, Object.assign({}, A.ctx, { closePanel: function () { toggleAssistant(false); } })) || { destroy: function () {} };
       if (A.assistant.focus) A.assistant.focus();
-    }, function (e) { el.innerHTML = ''; el.appendChild(errorCard('Assistant', e)); });
+    }, function (e) {
+      el.innerHTML = '';
+      el.appendChild(errorCard('Assistant', e, function () { A.assistant = null; toggleAssistant(true); }));
+    });
   } else if (open && A.assistant && A.assistant.focus) {
     A.assistant.focus();
   }
@@ -1596,9 +1639,8 @@ function newProjectDialog() {
     if (v !== 'ok') { renderPickers(); return; }
     const n = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name.value) ? name.value : slug(name.value);
     return A.api.createProject({ name: n, template: tpl.value, org: org.value }).then(function () {
-      return A.api.listProjects();
-    }).then(function (r) {
-      A.projects = (r && r.projects) || [];
+      return listProjects();
+    }).then(function () {
       location.hash = buildHash(n, '', DEFAULT_VIEW);
     }).catch(function (e) { toast(errMsg(e), 'err'); renderPickers(); });
   });
@@ -1745,11 +1787,55 @@ function refreshOverlay() {
   return A.api.overlay(A.project).then(function (o) { if (A.store === store) store.setOverlay(o); return o; });
 }
 
+// The overlay (imported data) failed to load: patch, imports and schedules show it as stale.
+// Offline is left to the banner.
+function overlayFailed(e) {
+  if (!A.store || (e instanceof ApiError && e.status === 0) || navigator.onLine === false) return;
+  notify({ level: 'warn', text: 'Imported data could not be refreshed: ' + errMsg(e).slice(0, 120), href: routeHref({ view: 'imports' }) });
+}
+
+function fileNames(files) {
+  return Array.prototype.map.call(files || [], function (f) { return (f && f.name) || ''; }).filter(Boolean).join(', ');
+}
+
+// ctx.api for views: long-running calls also leave a notice in the bell (views keep their own
+// immediate feedback), so a result that lands while the user is elsewhere is not lost.
+function noticeApi(api, project) {
+  const out = Object.assign({}, api);
+  function mine(name) { return name === project && A.project === project; }
+  out.build = function (name, o) {
+    return api.build(name, o).then(function (r) {
+      if (mine(name) && r && r.build) {
+        const n = (r.files || []).length;
+        notify({ level: 'ok', text: 'Build ' + r.build + ' finished (' + n + ' file' + (n === 1 ? '' : 's') + ')', href: routeHref({ view: 'builds', query: { hl: r.build } }) });
+      }
+      return r;
+    }, function (e) {
+      if (mine(name)) notify({ level: 'err', text: 'Build failed: ' + errMsg(e).slice(0, 160), href: routeHref({ view: 'builds' }) });
+      throw e;
+    });
+  };
+  out.upload = function (name, target, files, params) {
+    const p = api.upload(name, target, files, params);
+    if (target !== 'imports') return p;
+    return p.then(function (r) {
+      if (!mine(name)) return r;
+      const imp = (r && r.import) || {};
+      const what = fileNames(files) || imp.path || 'file';
+      notify({ level: 'ok', text: 'Import applied: ' + what + (imp.id ? ' (' + imp.id + ')' : ''), href: routeHref({ view: 'imports', query: imp.id ? { hl: imp.id } : {} }) });
+      return r;
+    });
+  };
+  return out;
+}
+
 function loadProject(name, route) {
   teardown();
   A.project = name;
   A.recent = recentStore(name);
-  $('app-main').innerHTML = '<div class="app-loading">Loading ' + esc(name) + '\u2026</div>';
+  const main0 = $('app-main');
+  main0.innerHTML = '';
+  main0.appendChild(loadingNode(route.view || DEFAULT_VIEW, route));
   return A.api.getProject(name).then(function (p) {
     A.offline = !!p.offline;
     A.role = p.role || 'admin';
@@ -1765,12 +1851,17 @@ function loadProject(name, route) {
     A.queue = queue;
     const restored = queue.takeRestored();
     if (restored.length && !store.readOnly) {
-      try { store.applyRemote(restored, 'pending'); toast(restored.length + ' offline edits restored; sending\u2026'); } catch (e) { toast('Could not re-apply offline edits: ' + errMsg(e), 'warn'); }
+      try {
+        store.applyRemote(restored, 'pending');
+        toast(restored.length + ' offline edits restored; sending\u2026');
+        // The bell records the moment they reach the server ("Saved N queued changes", trackSave).
+        A.saveTrack.offlineMax = Math.max(A.saveTrack.offlineMax, queue.pending);
+      } catch (e) { toast('Could not re-apply offline edits: ' + errMsg(e), 'warn'); }
       queue.flush();
     }
     const recent = A.recent;
     const ctx = makeCtx(store, {
-      api: A.api, project: name, meta: A.meta, role: A.role, session: A.session,
+      api: noticeApi(A.api, name), project: name, meta: A.meta, role: A.role, session: A.session,
       navigate: navigate,
       openInspector: openDrawer,
       closeInspector: closeDrawer,
@@ -1790,6 +1881,8 @@ function loadProject(name, route) {
       get route() { return copyRoute(A.route); },
       get recent() { return recent.snapshot(); },
       get projects() { return A.projects.map(function (x) { return { name: x.name, title: x.title || x.name }; }); },
+      projectsStatus: function () { return { loading: A.projectsLoading, error: A.projectsError }; },
+      reloadProjects: reloadProjects,
       reload: function () { return queue.resync().then(function (r) { afterResync(); return r; }); },
       flush: function () { return queue.flush(); },
       timeTravel: startTimeTravel,
@@ -1839,7 +1932,7 @@ function loadProject(name, route) {
     renderPickers();
     refreshBanner();
     updateSave(null);
-    refreshOverlay().catch(function () { /* overlay optional */ });
+    refreshOverlay().catch(overlayFailed);
     checkProblemReports(true);
     A.loading = '';
     const cur = parseRoute(location.hash);
@@ -1849,11 +1942,58 @@ function loadProject(name, route) {
     const main = $('app-main');
     main.innerHTML = '';
     if (e instanceof ApiError && e.status === 401) { location.href = appRoot() + 'login?next=' + encodeURIComponent(location.pathname + location.search + location.hash); return; }
-    const card = errorCard('Project "' + name + '"', e);
-    if (e instanceof ApiError && e.status === 0) card.appendChild(h('p', null, 'You are offline and this project has not been saved for offline use.'));
+    const card = errorCard('Project "' + name + '"', e, function () {
+      if (A.project === name && !A.store && !A.loading) startProject(name, parseRoute(location.hash));
+    });
+    if (e instanceof ApiError && e.status === 0) card.insertBefore(h('p', null, 'You are offline and this project has not been saved for offline use.'), card.querySelector('.app-error-actions'));
     main.appendChild(card);
     markRendered();
   });
+}
+
+function listProjects() {
+  A.projectsLoading = true;
+  return A.api.listProjects().then(function (r) {
+    A.projectsLoading = false;
+    A.projects = (r && r.projects) || [];
+    A.projectsError = null;
+    return A.projects;
+  }, function (e) {
+    A.projectsLoading = false;
+    A.projectsError = e;
+    throw e;
+  });
+}
+
+// ctx.reloadProjects: refetch the project list (home's Retry); rejects when it fails again.
+function reloadProjects() {
+  return listProjects().then(function (list) {
+    renderPickers();
+    return list.map(function (x) { return { name: x.name, title: x.title || x.name }; });
+  });
+}
+
+function projectsError() {
+  const main = $('app-main');
+  main.innerHTML = '';
+  main.appendChild(h('div', { class: 'app-empty app-projects-error' }, [
+    h('h2', null, 'Projects could not be loaded'),
+    inlineError(A.projectsError, function () {
+      return listProjects().then(function () { return routeFirstProject(); }, function () { projectsError(); });
+    }),
+  ]));
+  markRendered();
+}
+
+// No project in the URL: open the first one, or show why there is none.
+function routeFirstProject() {
+  if (!A.projects.length) {
+    renderPickers();
+    if (A.projectsError) projectsError(); else emptyState();
+    return null;
+  }
+  historyWrite(buildRoute({ project: A.projects[0].name, view: DEFAULT_VIEW }), true);
+  return startProject(A.projects[0].name, parseRoute(location.hash));
 }
 
 function startProject(name, r) {
@@ -1873,7 +2013,7 @@ function onHash() {
 }
 
 // URL → selection and drawer (D4: `sel` without drawer=0 opens the drawer at every width).
-function applySelection(r, focusView) {
+function applySelection(r, focus) {
   const store = A.store;
   const d = parseDrawer(r.query);
   const sel = selFromString(d.sel);
@@ -1884,7 +2024,7 @@ function applySelection(r, focusView) {
   }
   setDrawerOpen(d.open && !!sel, false);
   if (d.open && d.section) focusSection(d.section);
-  if (focusView && sel && A.viewHandle && A.viewHandle.focus) { try { A.viewHandle.focus(sel); } catch (e) { /* ignore */ } }
+  if (focus) focusView(sel);
 }
 
 function roomExists(id) {
@@ -1916,8 +2056,7 @@ function applyRoute(input) {
   else if (typeof A.viewHandle.route === 'function') { try { A.viewHandle.route(copyRoute(r)); } catch (e) { console.error(e); } }
   else if (prev.id !== r.id || prev.tab !== r.tab || prev.sub !== r.sub) mounted = mountView(r.view);
   else {
-    const sel = store.selection;
-    if (sel && A.viewHandle.focus) { try { A.viewHandle.focus(sel); } catch (e) { /* ignore */ } }
+    focusView(store.selection);
     renderNav();
   }
   recordRecent(r);
@@ -1949,7 +2088,8 @@ function globalKeys(e) {
   if ((mod && k === 'z' && e.shiftKey) || (e.ctrlKey && k === 'y')) { e.preventDefault(); if (A.store.canRedo) A.store.redo(); return; }
   if (e.key === 'Escape') {
     // D4 order: palette, dialog, trace and explorer handle their own Esc; then assistant, drawer, highlight.
-    if (document.querySelector('#app-palette, .app-dialog-backdrop, .trace-backdrop, .ex-backdrop')) return;
+    // The explorer always renders its backdrop; it is a layer only while shown (sm drawer open).
+    if (document.querySelector('#app-palette, .app-dialog-backdrop, .trace-backdrop, .ex-backdrop:not([hidden])')) return;
     const ast = $('app-assistant');
     if (ast && ast.classList.contains('open')) { e.preventDefault(); toggleAssistant(false); return; }
     if (A.drawerOpen && A.drawer) {
@@ -2041,25 +2181,20 @@ export function boot(root, opts) {
     $('app-user').title = s.user ? s.user.username + ' (' + s.user.role + ')' : 'Local mode';
     return Promise.all([
       A.api.meta().catch(function () { return null; }),
-      A.api.listProjects().catch(function () { return { projects: [] }; }),
+      listProjects().catch(function () { return []; }),
     ]);
   }).then(function (res) {
     if (!res) return null;
     A.meta = res[0];
     A.vocab = (A.meta && A.meta.vocab) || FALLBACK_VOCAB;
     disciplineVars(A.vocab);
-    A.projects = (res[1] && res[1].projects) || [];
     renderNav();
     const r = parseRoute(location.hash);
-    if (!r.project) {
-      if (!A.projects.length) { renderPickers(); emptyState(); return null; }
-      historyWrite(buildRoute({ project: A.projects[0].name, view: DEFAULT_VIEW }), true);
-      return startProject(A.projects[0].name, parseRoute(location.hash));
-    }
+    if (!r.project) return routeFirstProject();
     return startProject(r.project, r);
   }).catch(function (e) {
     $('app-main').innerHTML = '';
-    $('app-main').appendChild(errorCard('Fathom', e));
+    $('app-main').appendChild(errorCard('Fathom', e, function () { location.reload(); }));
     markRendered();
   });
 }

@@ -111,9 +111,13 @@ a{color:var(--accent)}
 .app-selbar-close{flex:none;min-height:40px;min-width:40px}
 .app-tabbar{display:none}
 .app-loading{display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted)}
+/* view and project loading: a feedback.js skeleton that keeps the .app-loading hook */
+.app-loading.fb-skeleton{display:block;height:auto;flex:none;color:inherit}
 .app-error-card{margin:24px;padding:16px 18px;border:1px solid rgba(240,106,168,.4);background:rgba(240,106,168,.07);border-radius:10px;max-width:640px}
 .app-error-card h3{margin:0 0 6px;font-size:14px;color:var(--err)}
 .app-error-card pre{white-space:pre-wrap;font-family:var(--mono);font-size:12px;color:var(--muted);margin:8px 0 0}
+.app-error-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.app-projects-error .fb-error{margin:12px auto;text-align:left}
 .app-empty{margin:40px auto;max-width:520px;text-align:center;color:var(--muted)}
 .app-empty h2{color:var(--text);font-size:18px}
 
@@ -139,7 +143,7 @@ a{color:var(--accent)}
   .app-assistant{width:100vw}
 }
 @media (pointer:coarse){
-  button,select,.chip{min-height:44px}
+  button,select,a.chip,label.chip,.chip[tabindex]{min-height:44px}
   input:not([type=checkbox]):not([type=radio]){min-height:44px}
   .app-top{padding-top:calc(2px + var(--sat));padding-bottom:2px}
   .app-banner:not(:empty)~.app-top{padding-top:2px}
@@ -152,10 +156,10 @@ a{color:var(--accent)}
 /* FR-MOB-02: 44x44 hit targets on touch in the shell and the W5 views; checkboxes get a
    22px box and a 44px label (W3/W4 view contents keep their own rules). */
 @media (pointer:coarse){
-  :is(.app-top,.app-tabbar,.app-banner,.app-inspector,.app-assistant,.app-dialog,.app-palette,.app-toasts,.pt-root,.adm,.login) :is(button,select,summary,a.btn,[role=tab],[role=button]){min-height:44px;min-width:44px}
-  :is(.app-top,.app-tabbar,.app-banner,.app-inspector,.app-assistant,.app-dialog,.app-palette,.app-toasts,.pt-root,.adm,.login) summary{display:flex;align-items:center}
-  :is(.app-top,.app-tabbar,.app-banner,.app-inspector,.app-assistant,.app-dialog,.app-palette,.app-toasts,.pt-root,.adm,.login) :is(input[type=checkbox],input[type=radio]){width:22px;height:22px;flex:none}
-  :is(.app-top,.app-tabbar,.app-banner,.app-inspector,.app-assistant,.app-dialog,.app-palette,.app-toasts,.pt-root,.adm,.login) :is(label:has(input[type=checkbox]),label:has(input[type=radio]),label.chk,.field:has(>input[type=checkbox])>label){display:inline-flex;align-items:center;gap:8px;min-height:44px;min-width:44px;cursor:pointer}
+  :is(.app-top,.app-tabbar,.app-banner,.app-inspector,.app-assistant,.app-dialog,.app-toasts,.pt-root,.adm,.login) :is(button,select,summary,a.btn,[role=tab],[role=button]){min-height:44px;min-width:44px}
+  :is(.app-top,.app-tabbar,.app-banner,.app-inspector,.app-assistant,.app-dialog,.app-toasts,.pt-root,.adm,.login) summary{display:flex;align-items:center}
+  :is(.app-top,.app-tabbar,.app-banner,.app-inspector,.app-assistant,.app-dialog,.app-toasts,.pt-root,.adm,.login) :is(input[type=checkbox],input[type=radio]){width:22px;height:22px;flex:none}
+  :is(.app-top,.app-tabbar,.app-banner,.app-inspector,.app-assistant,.app-dialog,.app-toasts,.pt-root,.adm,.login) :is(label:has(input[type=checkbox]),label:has(input[type=radio]),label.chk,.field:has(>input[type=checkbox])>label){display:inline-flex;align-items:center;gap:8px;min-height:44px;min-width:44px;cursor:pointer}
   .app-top>button{min-height:44px;flex:none}
   .pick-list li[role=option]{min-height:44px;box-sizing:border-box;align-items:center}
 }
@@ -476,11 +480,7 @@ a.btn.small{padding:2px 9px;font-size:12px;min-height:26px}
 .disc-toolbar{justify-content:space-between;margin-bottom:8px;gap:10px}
 .disc-toolbar>.muted{font-size:12px;flex:1;min-width:200px}
 .disc-room{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
-.disc-bulk{padding:4px 8px;border:1px solid var(--border-2);border-radius:8px;background:rgba(142,162,255,.08)}
-.disc-bulk-n{font-size:12px;color:var(--text)}
 .disc-table td{vertical-align:top}
-.disc-table .disc-sel{width:28px;padding-right:0}
-.disc-table .disc-sel input{margin:3px 0 0}
 .disc-name{font-weight:600}
 .disc-reasons{font-size:11px;margin-top:2px;max-width:260px}
 .disc-srcs{display:inline-flex;gap:3px;flex-wrap:wrap}
@@ -495,8 +495,6 @@ a.btn.small{padding:2px 9px;font-size:12px;min-height:26px}
 .disc-actions{white-space:nowrap}
 .disc-actions .adm-pre{white-space:pre-wrap;max-width:min(520px,80vw);margin-top:4px}
 .disc-actions button{margin:0 3px 3px 0}
-.disc-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.disc-conn{min-width:960px}
 .badge-discovered{display:inline-block;padding:0 6px;border-radius:4px;font-size:10px;border:1px dashed var(--ok);color:var(--ok);margin-left:6px;vertical-align:middle}
 .disc-diff .chip.warn{color:var(--warn);border-color:rgba(255,149,72,.5)}
 .ms-suggest{margin-top:6px;font-size:12px;max-width:420px}
@@ -526,9 +524,7 @@ a.btn.small{padding:2px 9px;font-size:12px;min-height:26px}
   .disc-table tr{display:block;padding:8px 6px;border-bottom:1px solid var(--border)}
   .disc-table td{display:block;border:0;padding:2px 0}
   .disc-table td::before{content:attr(data-label);display:block;color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.6px}
-  .disc-table td[data-label=""]::before,.disc-table td.disc-sel::before{content:none}
-  .disc-table .disc-sel{width:auto;float:right}
-  .disc-conn{min-width:0}
+  .disc-table td[data-label=""]::before{content:none}
   .disc-actions{white-space:normal;margin-top:4px}
   .disc-reasons{max-width:none}
   .disc-toolbar{flex-direction:column;align-items:stretch}
