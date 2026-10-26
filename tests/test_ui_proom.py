@@ -281,6 +281,7 @@ class RoomPageUi(UiCase):
                     self.assertFalse(pg.js("(function () { var s = document.querySelector('.ex-side'); var r = s.getBoundingClientRect(); return r.right > 0 && getComputedStyle(s).visibility !== 'hidden'; })()"))
                     pg.click(".ex-open")
                     pg.wait_for("document.querySelector('.ex-root').classList.contains('ex-is-open')")
+                    pg.js("new Promise(function (r) { setTimeout(r, 350); })")
                     pg.shot("room-explorer-m")
                     pg.press("Escape")
                     pg.wait_for("!document.querySelector('.ex-root').classList.contains('ex-is-open')")
