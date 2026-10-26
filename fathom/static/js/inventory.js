@@ -350,24 +350,6 @@ export function mount(el, ctx) {
     if (typeof ctx.openDrawer === 'function') ctx.openDrawer(sel, {section: 'inventory'});
     else if (typeof ctx.openInspector === 'function') ctx.openInspector(sel);
     else ctx.select(sel);
-    openSection('inventory');
-  }
-
-  // Opens the drawer's inventory <details> and scrolls it into view once the inspector
-  // has rendered it, for inspectors without focusSection.
-  function openSection(sec) {
-    let tries = 0;
-    (function tick() {
-      if (S.destroyed) return;
-      const d = document.querySelector('#app-inspector details[data-section="' + sec + '"]');
-      if (d) {
-        if (!d.open) d.open = true;
-        if (d.scrollIntoView) d.scrollIntoView({block: 'start'});
-        return;
-      }
-      tries += 1;
-      if (tries < 40) setTimeout(tick, 100);
-    })();
   }
 
   // ------------------------------------------------------------ bulk
@@ -671,8 +653,6 @@ export function mount(el, ctx) {
 
   S.quick = parseQuick(query().quick);
   build();
-  const q0 = query();
-  if (q0.sec === 'inventory' && /^device:/.test(q0.sel || '')) openSection('inventory');
 
   return {
     destroy: function () {
