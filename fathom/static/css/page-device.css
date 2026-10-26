@@ -19,6 +19,8 @@
 .pd-landing td[data-col=room],.pd-landing td[data-col=rack]{white-space:nowrap}
 
 /* ---- page */
+.pd-root .eh:not(.eh--compact) .eh-bar{flex-wrap:wrap}
+.pd-root .eh:not(.eh--compact) .eh-actions{flex-wrap:wrap}
 .pd-body{display:flex;flex-direction:column;gap:12px;min-width:0;padding:12px 16px calc(24px + var(--sab,0px))}
 .pd-body .dt-root{--dt-max-h:max(320px,calc(100vh - 300px))}
 @supports (height:100dvh){.pd-body .dt-root{--dt-max-h:max(320px,calc(100dvh - 300px))}}
