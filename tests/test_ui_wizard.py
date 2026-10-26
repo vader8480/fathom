@@ -113,6 +113,7 @@ class WizardUi(UiCase):
             # deselecting every row blocks Next
             pg.click(".wz .wz-none")
             self.assertTrue(self._next_disabled(pg))
+            self.assertIn("at least one valid row", pg.js("document.querySelector('.wz .wz-errors').textContent"))
             pg.click(".wz .wz-all")
             self.assertFalse(self._next_disabled(pg))
 

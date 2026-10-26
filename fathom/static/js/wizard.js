@@ -711,7 +711,7 @@ export function bulkAdd(ctx, opts) {
       allBtn.addEventListener('click', function () { setAll(true); });
       noneBtn.addEventListener('click', function () { setAll(false); });
       body.appendChild(sum);
-      const host = h('div', { class: 'wz-table', 'data-field': 'rows' });
+      const host = h('div', { class: 'wz-table' });
       body.appendChild(host);
       table = createTable(host, {
         key: 'wizard-' + kind,
