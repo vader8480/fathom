@@ -107,8 +107,12 @@ with `pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
  changes need only a reload. The editor UI is at `/` (there is no `/ui`).
 - **Backend tests:**
   `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -q`
-  (788 tests, about 14 min, all pass with one skip; most of the time is the
-  `test_ui_*.py` Chrome suites). Without `FATHOM_CHROME`
+  (788 tests, about 14 min, most of it the `test_ui_*.py` Chrome suites; all
+  pass with one skip when the `discovery` extra is installed, as in CI). This
+  VM installs only `.[dev,serve]`, so two discovery tests skip and
+  `test_discovery.ActiveGuard.test_snmp_pacer_counts_and_pauses` errors (no
+  `puresnmp`); `.venv/bin/pip install -e '.[dev,serve,discovery]'` matches
+  CI. Without `FATHOM_CHROME`
   the headless-Chrome smoke suite picks up `/usr/local/bin/google-chrome`, a
   desktop wrapper that pins `--remote-debugging-port=9222`; its parallel runs
   then time out (~57 failures, 15 min). Without Chrome work:
