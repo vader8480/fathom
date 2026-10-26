@@ -1,9 +1,15 @@
-// Inventory view: device table with configurable columns, sort, filters,
-// quick filters, bulk status/room/location, CSV, and a per-device inventory
-// form (serial, asset tag, location / rack / RU, IP, firmware, dates, vendor,
-// cost, status, photos, notes). mount(el, ctx) (§6.4, §6.7).
+// Inventory view: the device list as a shared DataTable (docs/ui-audit.md B.3 INV) with
+// configurable columns, sort, column filters, quick filters, group by location, bulk
+// status/room/location, CSV of the filtered rows, the server export, bulk add, and a
+// per-device inventory form (serial, asset tag, location / rack / RU, IP, firmware,
+// dates, vendor, cost, status, photos, notes). A row opens the device drawer at the
+// inventory section. mount(el, ctx) (§6.4, §6.7).
 import {fits, rackUnits} from './rack-core.js';
 import {openDuplicatesDialog, openMergeDialog} from './merge-ui.js';
+import {h, on} from './dom.js';
+import {createTable} from './datatable.js';
+import {confirmScope, emptyState} from './feedback.js';
+import {bulkAdd} from './wizard.js';
 
 const STATUSES = ['installed', 'planned', 'spare', 'retired'];
 
@@ -16,6 +22,11 @@ export const INV_COLUMNS = [
 const DEFAULT_VISIBLE = ['name', 'room', 'location', 'kind', 'model', 'status', 'serial', 'asset_tag', 'warranty_until', 'cost', 'rack', 'ru', 'ips'];
 const CSV_KEYS = ['id', 'name', 'room', 'location', 'kind', 'discipline', 'manufacturer', 'model', 'status', 'serial', 'asset_tag', 'firmware',
   'purchase_date', 'warranty_until', 'vendor', 'cost', 'currency', 'po', 'rack', 'ru', 'ips', 'notes'];
+const MOBILE_COLUMNS = ['name', 'status', 'room'];
+const FILTER_IDS = {room: 'inv-room', status: 'inv-status', location: 'inv-location', kind: 'inv-kind', system: 'inv-system'};
+const QUICK = ['warranty', 'serial'];
+const NO_LOCATION = 'No location';
+const DEVICE_NOUN = {one: 'device', many: 'devices'};
 
 function list(v) { return Array.isArray(v) ? v : []; }
 
@@ -24,6 +35,8 @@ function byId(arr) {
   list(arr).forEach(function (e) { if (e && e.id != null) m[e.id] = e; });
   return m;
 }
+
+function plural(n, noun) { return n + ' ' + (n === 1 ? noun.one : noun.many); }
 
 function disciplineOf(dev, vocab) {
   if (dev.discipline) return dev.discipline;
@@ -70,70 +83,77 @@ function csvString(keys, rows) {
   return [keys.join(',')].concat(rows.map(function (r) { return keys.map(function (k) { return q(r[k]); }).join(','); })).join('\r\n') + '\r\n';
 }
 
-function h(tag, attrs, children) {
-  const n = document.createElement(tag);
-  if (attrs) {
-    Object.keys(attrs).forEach(function (k) {
-      const v = attrs[k];
-      if (v == null || v === false) return;
-      if (k === 'text') n.textContent = v;
-      else if (k === 'class') n.className = v;
-      else if (k === 'style') n.setAttribute('style', v);
-      else n.setAttribute(k, v === true ? '' : v);
-    });
-  }
-  (children || []).forEach(function (c) { if (c != null) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
-  return n;
+function parseQuick(v) {
+  const out = [];
+  String(v || '').split('|').forEach(function (k) { if (QUICK.indexOf(k) >= 0 && out.indexOf(k) < 0) out.push(k); });
+  return out;
+}
+
+function quickString(arr) {
+  return QUICK.filter(function (k) { return arr.indexOf(k) >= 0; }).join('|');
+}
+
+function cssEsc(s) { return String(s).replace(/["\\]/g, '\\$&'); }
+
+export function invColumns(vocab) {
+  const today = Date.now();
+  const cols = INV_COLUMNS.map(function (c) {
+    const key = c[0];
+    const col = {key: key, header: c[1], hidden: DEFAULT_VISIBLE.indexOf(key) < 0, hideOnMobile: MOBILE_COLUMNS.indexOf(key) < 0};
+    if (FILTER_IDS[key]) col.filterable = true;
+    if (key === 'name') {
+      col.sticky = true;
+      col.cell = function (r) {
+        const d = vocab && vocab.disciplines && vocab.disciplines[r.discipline];
+        return h('span', {class: 'inv-name'}, [
+          h('span', {class: 'inv-dot', style: {background: (d && d.color) || '#9aa3b5'}, 'aria-hidden': 'true'}), r.name || r.id,
+        ]);
+      };
+    } else if (key === 'status') {
+      col.cell = function (r) { return h('span', {class: 'inv-status inv-' + r.status, text: r.status}); };
+    } else if (key === 'warranty_until') {
+      col.cell = function (r) {
+        if (!r.warranty_until) return '';
+        const dd = daysUntil(r.warranty_until, today);
+        return h('span', {class: dd != null && dd < 90 ? 'inv-warn' : null, text: r.warranty_until + (dd != null && dd < 0 ? ' (expired)' : '')});
+      };
+    } else if (key === 'cost') {
+      col.align = 'right';
+      col.cell = function (r) { return r.cost === '' ? '' : Number(r.cost).toFixed(2); };
+    } else if (key === 'ru') {
+      col.align = 'right';
+    }
+    return col;
+  });
+  return cols;
 }
 
 export function mount(el, ctx) {
   const store = ctx.store;
   const vocab = ctx.vocab || store.vocab || {};
-  const S = {room: 'current', status: '', location: '', kind: '', system: '', text: '', qWarranty: false, qSerial: false, group: false,
-    visible: DEFAULT_VISIBLE.slice(), sort: {key: 'name', dir: 1}, selected: {}, editing: null, csvUrl: ''};
-  const listeners = [];
-  function on(target, type, fn, opts) {
-    target.addEventListener(type, fn, opts);
-    listeners.push([target, type, fn, opts]);
-  }
+  const S = {scope: 'current', group: false, quick: [], csvAllUrl: '', editing: null, destroyed: false};
+  const offs = [];
+  let table = null;
+  let tableOpts = null;
+  let builtReadOnly = null;
 
-  el.innerHTML = '';
-  const root = h('div', {class: 'inv-root'});
-  const roomSel = h('select', {id: 'inv-room', 'aria-label': 'Room filter'});
-  const statusSel = h('select', {id: 'inv-status', 'aria-label': 'Status filter'});
-  const locSel = h('select', {id: 'inv-location', 'aria-label': 'Location filter'});
-  const kindSel = h('select', {id: 'inv-kind', 'aria-label': 'Kind filter'});
-  const sysSel = h('select', {id: 'inv-system', 'aria-label': 'System filter'});
-  const textIn = h('input', {id: 'inv-filter', type: 'search', placeholder: 'Search devices', 'aria-label': 'Search devices'});
-  const qWarranty = h('button', {id: 'inv-q-warranty', type: 'button', class: 'inv-btn', 'aria-pressed': 'false', text: 'Warranty < 90 days'});
-  const qSerial = h('button', {id: 'inv-q-serial', type: 'button', class: 'inv-btn', 'aria-pressed': 'false', text: 'Missing serial'});
-  const groupCb = h('input', {id: 'inv-group', type: 'checkbox'});
-  const colsBox = h('details', {id: 'inv-columns', class: 'inv-columns'});
-  const csv = h('a', {id: 'inv-csv', class: 'inv-btn', role: 'button', text: 'CSV'});
-  const dupsBtn = ctx.api ? h('button', {id: 'inv-dups', type: 'button', class: 'inv-btn', text: 'Duplicates', title: 'Find devices that are probably the same unit'}) : null;
-  const filters = h('div', {class: 'inv-toolbar'}, [roomSel, statusSel, locSel, kindSel, sysSel, textIn, qWarranty, qSerial,
-    h('span', {class: 'inv-check'}, [groupCb, h('label', {for: 'inv-group', text: 'Group by location'})]), colsBox, csv, dupsBtn]);
-  const selCount = h('span', {class: 'inv-selcount', role: 'status'});
-  const bulkStatus = h('select', {id: 'inv-bulk-status', 'aria-label': 'Set status of selected devices'});
-  const bulkRoom = h('select', {id: 'inv-bulk-room', 'aria-label': 'Move selected devices to room'});
-  const bulkLoc = h('select', {id: 'inv-bulk-location', 'aria-label': 'Set location of selected devices'});
-  const markInstalled = h('button', {id: 'inv-mark-installed', type: 'button', class: 'inv-btn', text: 'Mark installed'});
-  const mergeSel = h('button', {id: 'inv-merge', type: 'button', class: 'inv-btn', text: 'Merge\u2026', title: 'Merge the selected devices into one'});
-  const clearSel = h('button', {type: 'button', class: 'inv-btn', text: 'Clear selection'});
-  const bulk = h('div', {class: 'inv-bulk', role: 'group', 'aria-label': 'Bulk actions'}, [selCount, bulkStatus, bulkRoom, bulkLoc, markInstalled, mergeSel, clearSel]);
-  const tableWrap = h('div', {class: 'inv-scroll'});
-  const formHost = h('div', {class: 'inv-formhost'});
-  root.appendChild(filters);
-  root.appendChild(bulk);
-  root.appendChild(tableWrap);
-  root.appendChild(formHost);
-  el.appendChild(root);
-
+  function readOnly() { return !!store.readOnly || ctx.role === 'viewer'; }
   function doc() { return store.doc; }
-  function readOnly() { return !!store.readOnly; }
+  function route() { return ctx.route && typeof ctx.route === 'object' ? ctx.route : null; }
+  function routed() { const r = route(); return !!r && r.view === 'inventory' && typeof ctx.setParams === 'function'; }
+  function query() { const r = route(); return (r && r.query) || {}; }
   function room() {
-    if (S.room === '*') return '*';
+    if (S.scope === '*') return '*';
     return store.room && store.room !== '*' ? store.room : '*';
+  }
+  function roomName(id) {
+    const r = byId(doc().rooms)[id];
+    return r ? r.name : (id || 'shared inventory');
+  }
+  function scopeName() {
+    if (S.scope === '__shared') return 'shared inventory';
+    const r = room();
+    return r === '*' ? '' : roomName(r);
   }
   function commit(ops, label) {
     if (!ops.length) return;
@@ -141,195 +161,280 @@ export function mount(el, ctx) {
     ctx.commit(ops, label);
   }
 
+  // ------------------------------------------------------------ chrome
+
+  el.innerHTML = '';
+  const root = h('div', {class: 'inv-root'});
+  const tableHost = h('div', {class: 'inv-tablehost'});
+  const formHost = h('div', {class: 'inv-formhost'});
+  root.appendChild(tableHost);
+  root.appendChild(formHost);
+  el.appendChild(root);
+
+  const scopeSel = h('select', {id: 'inv-scope', class: 'inv-scope', 'aria-label': 'Rooms shown'});
+  const qWarranty = h('button', {id: 'inv-q-warranty', type: 'button', class: 'inv-btn inv-chip', 'data-quick': 'warranty', 'aria-pressed': 'false', text: 'Warranty < 90 days'});
+  const qSerial = h('button', {id: 'inv-q-serial', type: 'button', class: 'inv-btn inv-chip', 'data-quick': 'serial', 'aria-pressed': 'false', text: 'Missing serial'});
+  const groupCb = h('input', {id: 'inv-group', type: 'checkbox'});
+  const groupBox = h('span', {class: 'inv-check inv-chip'}, [groupCb, h('label', {for: 'inv-group', text: 'Group by location'})]);
+  const bulkAddBtn = h('button', {id: 'inv-bulk-add', type: 'button', class: 'inv-btn inv-primary', text: 'Bulk add\u2026', title: 'Add many devices from pasted spreadsheet rows'});
+  const dupsBtn = ctx.api ? h('button', {id: 'inv-dups', type: 'button', class: 'inv-btn', text: 'Duplicates', title: 'Find devices that are probably the same unit'}) : null;
+  const csvAll = h('a', {id: 'inv-csv-all', class: 'inv-menu-item', role: 'menuitem', href: '#', text: 'Export all (import format)'});
+  const more = h('details', {class: 'inv-more'}, [
+    h('summary', {class: 'inv-btn inv-more-btn', 'aria-label': 'More inventory actions', title: 'More'}, [h('span', {'aria-hidden': 'true', text: '\u22EF'})]),
+    h('div', {class: 'inv-menu', role: 'menu'}, [csvAll]),
+  ]);
+  const quickBar = h('div', {class: 'inv-quick', role: 'group', 'aria-label': 'Quick filters'}, [scopeSel, qWarranty, qSerial, groupBox]);
+
+  const bulkStatus = h('select', {id: 'inv-bulk-status', 'aria-label': 'Set status of selected devices'});
+  const bulkRoom = h('select', {id: 'inv-bulk-room', 'aria-label': 'Move selected devices to room'});
+  const bulkLoc = h('select', {id: 'inv-bulk-location', 'aria-label': 'Set location of selected devices'});
+  const markInstalled = h('button', {id: 'inv-mark-installed', type: 'button', class: 'inv-btn', text: 'Mark installed'});
+  const mergeSel = h('button', {id: 'inv-merge', type: 'button', class: 'inv-btn', text: 'Merge\u2026', title: 'Merge the selected devices into one', hidden: true});
+
   function fillSelect(sel, items, current, placeholder) {
     sel.innerHTML = '';
     if (placeholder != null) sel.appendChild(h('option', {value: '', text: placeholder}));
     items.forEach(function (it) { sel.appendChild(h('option', {value: it[0], text: it[1], selected: it[0] === current})); });
+    sel.value = current == null ? '' : current;
   }
 
-  function renderFilters() {
+  function renderControls() {
     const d = doc();
     const curRoom = store.room && store.room !== '*' ? (byId(d.rooms)[store.room] || {}).name || store.room : '';
-    fillSelect(roomSel, [['current', curRoom ? 'Room: ' + curRoom : 'Current room'], ['*', 'All rooms'], ['__shared', 'Shared inventory']], S.room, null);
-    fillSelect(statusSel, STATUSES.map(function (s) { return [s, s]; }), S.status, 'Any status');
-    fillSelect(locSel, list(d.locations).map(function (l) { return [l.id, l.name]; }).concat([['__none', 'No location']]), S.location, 'Any location');
-    const kinds = {};
-    list(d.devices).forEach(function (x) { kinds[x.kind] = true; });
-    fillSelect(kindSel, Object.keys(kinds).sort().map(function (k) { return [k, (vocab.kinds && vocab.kinds[k] && vocab.kinds[k].label) || k]; }), S.kind, 'Any kind');
-    fillSelect(sysSel, list(d.systems).map(function (s) { return [s.id, s.name]; }), S.system, 'Any system');
-    qWarranty.setAttribute('aria-pressed', S.qWarranty ? 'true' : 'false');
-    qSerial.setAttribute('aria-pressed', S.qSerial ? 'true' : 'false');
+    fillSelect(scopeSel, [['current', curRoom ? 'Room: ' + curRoom : 'Current room'], ['*', 'All rooms'], ['__shared', 'Shared inventory']], S.scope, null);
+    qWarranty.setAttribute('aria-pressed', S.quick.indexOf('warranty') >= 0 ? 'true' : 'false');
+    qSerial.setAttribute('aria-pressed', S.quick.indexOf('serial') >= 0 ? 'true' : 'false');
     groupCb.checked = S.group;
-    colsBox.innerHTML = '';
-    colsBox.appendChild(h('summary', {text: 'Columns'}));
-    const box = h('div', {class: 'inv-colslist', role: 'group', 'aria-label': 'Visible columns'});
-    INV_COLUMNS.forEach(function (c) {
-      const id = 'inv-col-' + c[0];
-      box.appendChild(h('div', {class: 'inv-check'}, [h('input', {type: 'checkbox', id: id, 'data-col': c[0], checked: S.visible.indexOf(c[0]) >= 0, disabled: c[0] === 'name'}),
-        h('label', {for: id, text: c[1]})]));
-    });
-    colsBox.appendChild(box);
-    const ro = readOnly();
     fillSelect(bulkStatus, STATUSES.map(function (s) { return [s, s]; }), '', 'Set status\u2026');
     fillSelect(bulkRoom, [['__shared', 'Shared inventory']].concat(list(d.rooms).map(function (r) { return [r.id, r.name]; })), '', 'Move to room\u2026');
-    fillSelect(bulkLoc, [['__none', 'No location']].concat(list(d.locations).map(function (l) { return [l.id, l.name]; })), '', 'Set location\u2026');
-    [bulkStatus, bulkRoom, bulkLoc, markInstalled].forEach(function (b) { b.disabled = ro; });
+    fillSelect(bulkLoc, [['__none', NO_LOCATION]].concat(list(d.locations).map(function (l) { return [l.id, l.name]; })), '', 'Set location\u2026');
+    bulkAddBtn.hidden = readOnly();
+    renderCsvAll();
   }
 
-  function filtered() {
-    const today = Date.now();
-    const t = S.text.trim().toLowerCase();
+  // ------------------------------------------------------------ rows
+
+  function scopedRows() {
     const r = room();
     return inventoryRows(doc(), vocab).filter(function (row) {
-      if (S.room === '__shared') { if (row.room_id !== '') return false; }
-      else if (r !== '*' && row.room_id !== r) return false;
-      if (S.status && row.status !== S.status) return false;
-      if (S.location === '__none' ? row.location_id : (S.location && row.location_id !== S.location)) return false;
-      if (S.kind && row.kind !== S.kind) return false;
-      if (S.system && row.system_id !== S.system) return false;
-      if (S.qSerial && row.serial) return false;
-      if (S.qWarranty) {
+      if (S.scope === '__shared') return row.room_id === '';
+      return r === '*' || row.room_id === r;
+    }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), undefined, {numeric: true}); });
+  }
+
+  function rows() {
+    const today = Date.now();
+    return scopedRows().filter(function (row) {
+      if (S.quick.indexOf('serial') >= 0 && row.serial) return false;
+      if (S.quick.indexOf('warranty') >= 0) {
         const dd = daysUntil(row.warranty_until, today);
         if (dd == null || dd >= 90) return false;
       }
-      if (t) {
-        const hay = [row.name, row.id, row.manufacturer, row.model, row.serial, row.asset_tag, row.vendor, row.ips, row.notes, row.location].join(' ').toLowerCase();
-        if (hay.indexOf(t) < 0) return false;
-      }
       return true;
-    }).sort(function (a, b) {
-      const k = S.sort.key;
-      const x = a[k];
-      const y = b[k];
-      const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), undefined, {numeric: true});
-      return c * S.sort.dir;
     });
   }
 
-  function render() {
-    renderFilters();
-    const rows = filtered();
-    const visibleIds = {};
-    rows.forEach(function (r) { visibleIds[r.id] = true; });
-    Object.keys(S.selected).forEach(function (id) { if (!visibleIds[id]) delete S.selected[id]; });
-    const nSel = Object.keys(S.selected).length;
-    selCount.textContent = nSel ? nSel + ' selected' : rows.length + ' device' + (rows.length === 1 ? '' : 's');
-    bulk.classList.toggle('inv-has-sel', nSel > 0);
-    [bulkStatus, bulkRoom, bulkLoc, markInstalled, clearSel].forEach(function (b) { b.hidden = !nSel; });
-    mergeSel.hidden = nSel < 2 || readOnly() || !ctx.api;
-    const columns = INV_COLUMNS.filter(function (c) { return S.visible.indexOf(c[0]) >= 0; });
-    const table = h('table', {id: 'inv-table', class: 'inv-table'});
-    table.appendChild(h('caption', {class: 'inv-sr', text: 'Inventory'}));
-    const allCb = h('input', {type: 'checkbox', id: 'inv-select-all', 'aria-label': 'Select all shown devices', checked: rows.length > 0 && nSel === rows.length});
-    const trh = h('tr', null, [h('th', {scope: 'col', class: 'inv-cbcol'}, [allCb])]);
-    columns.forEach(function (c) {
-      const sorted = S.sort.key === c[0];
-      trh.appendChild(h('th', {scope: 'col', 'aria-sort': sorted ? (S.sort.dir > 0 ? 'ascending' : 'descending') : 'none'}, [
-        h('button', {type: 'button', class: 'inv-sort', 'data-sort': c[0], text: c[1] + (sorted ? (S.sort.dir > 0 ? ' \u25b2' : ' \u25bc') : '')}),
-      ]));
-    });
-    trh.appendChild(h('th', {scope: 'col', class: 'inv-actcol', text: 'Edit'}));
-    table.appendChild(h('thead', null, [trh]));
-    const today = Date.now();
-    function rowEl(r) {
-      const cells = [h('td', {class: 'inv-cbcol'}, [h('input', {type: 'checkbox', 'data-select': r.id, 'aria-label': 'Select ' + r.name, checked: !!S.selected[r.id]})])];
-      columns.forEach(function (c) {
-        const v = r[c[0]];
-        if (c[0] === 'status') {
-          cells.push(h('td', null, [h('span', {class: 'inv-status inv-' + v, text: v})]));
-        } else if (c[0] === 'name') {
-          const color = (vocab.disciplines && vocab.disciplines[r.discipline] && vocab.disciplines[r.discipline].color) || '#9aa3b5';
-          cells.push(h('th', {scope: 'row', class: 'inv-name'}, [h('span', {class: 'inv-dot', style: 'background:' + color, 'aria-hidden': 'true'}), r.name]));
-        } else if (c[0] === 'warranty_until' && v) {
-          const dd = daysUntil(v, today);
-          cells.push(h('td', {class: dd != null && dd < 90 ? 'inv-warn' : null, text: v + (dd != null && dd < 0 ? ' (expired)' : '')}));
-        } else if (c[0] === 'cost' && v !== '') {
-          cells.push(h('td', {class: 'inv-num', text: Number(v).toFixed(2)}));
-        } else {
-          cells.push(h('td', {text: v == null ? '' : String(v)}));
-        }
-      });
-      cells.push(h('td', {class: 'inv-actcol'}, [h('button', {type: 'button', class: 'inv-btn', 'data-edit': r.id, 'aria-label': 'Edit inventory for ' + r.name, text: readOnly() ? 'View' : 'Edit'})]));
-      return h('tr', {'data-device': r.id, class: (S.selected[r.id] ? 'inv-selected' : '') + (r.status === 'planned' ? ' inv-planned' : '')}, cells);
-    }
-    if (S.group) {
-      const groups = {};
-      const order = [];
-      rows.forEach(function (r) {
-        const k = r.location || 'No location';
-        if (!groups[k]) { groups[k] = []; order.push(k); }
-        groups[k].push(r);
-      });
-      order.sort(function (a, b) { return a === 'No location' ? 1 : b === 'No location' ? -1 : a.localeCompare(b); });
-      order.forEach(function (k) {
-        const tb = h('tbody', {class: 'inv-group'});
-        tb.appendChild(h('tr', {class: 'inv-grouphead'}, [h('th', {scope: 'rowgroup', colspan: String(columns.length + 2), text: k + ' (' + groups[k].length + ')'})]));
-        groups[k].forEach(function (r) { tb.appendChild(rowEl(r)); });
-        table.appendChild(tb);
-      });
-    } else {
-      const tb = h('tbody');
-      rows.forEach(function (r) { tb.appendChild(rowEl(r)); });
-      table.appendChild(tb);
-    }
-    if (!rows.length) table.appendChild(h('tbody', null, [h('tr', null, [h('td', {colspan: String(columns.length + 2), class: 'inv-hint', text: 'No devices match these filters.'})])]));
-    tableWrap.innerHTML = '';
-    tableWrap.appendChild(table);
-    renderCsv(rows);
+  function refreshRows() {
+    renderControls();
+    if (table) table.setRows(rows());
   }
 
-  function renderCsv(rows) {
-    if (S.csvUrl && typeof URL !== 'undefined' && URL.revokeObjectURL) { URL.revokeObjectURL(S.csvUrl); S.csvUrl = ''; }
-    csv.setAttribute('download', (ctx.project || 'project') + '-inventory.csv');
+  function renderCsvAll() {
+    if (S.csvAllUrl && typeof URL !== 'undefined' && URL.revokeObjectURL) { URL.revokeObjectURL(S.csvAllUrl); S.csvAllUrl = ''; }
+    csvAll.setAttribute('download', (ctx.project || 'project') + '-inventory-all.csv');
     if (ctx.api && ctx.api.scheduleUrl) {
-      const r = S.room === '__shared' ? '' : room();
-      csv.setAttribute('href', ctx.api.scheduleUrl(ctx.project, 'inventory', {room: r, format: 'csv'}));
+      const r = S.scope === '__shared' ? '' : room();
+      csvAll.setAttribute('href', ctx.api.scheduleUrl(ctx.project, 'inventory', {room: r, format: 'csv'}));
       return;
     }
-    if (typeof Blob === 'undefined') return;
-    S.csvUrl = URL.createObjectURL(new Blob([csvString(CSV_KEYS, rows)], {type: 'text/csv;charset=utf-8'}));
-    csv.setAttribute('href', S.csvUrl);
+    if (typeof Blob === 'undefined' || typeof URL === 'undefined' || !URL.createObjectURL) return;
+    S.csvAllUrl = URL.createObjectURL(new Blob([csvString(CSV_KEYS, scopedRows())], {type: 'text/csv;charset=utf-8'}));
+    csvAll.setAttribute('href', S.csvAllUrl);
   }
 
-  // --------------------------------------------------------------- bulk
-  function selectedIds() { return Object.keys(S.selected); }
+  function groupLabel(r) { return r.location || NO_LOCATION; }
+  function groupOrder(a, b) {
+    if (a === NO_LOCATION || b === NO_LOCATION) return a === b ? 0 : (a === NO_LOCATION ? 1 : -1);
+    return a.localeCompare(b, undefined, {numeric: true});
+  }
+
+  function emptyNode(state, info) {
+    if (info && info.total > 0) {
+      return h('div', {class: 'inv-empty'}, [
+        h('p', {class: 'dt-empty-text', text: 'No devices match these filters.'}),
+        h('button', {type: 'button', class: 'dt-clear', onclick: function () { clearFilters(); }}, 'Clear filters'),
+      ]);
+    }
+    const where = scopeName();
+    const quick = S.quick.length > 0;
+    return emptyState({
+      title: quick ? 'No devices match the quick filters.' : (where ? 'No devices in ' + where + '.' : 'No devices yet.'),
+      text: quick ? '' : 'Add gear in Patch' + (readOnly() ? '.' : ' or bulk add from a spreadsheet.'),
+      action: quick ? {label: 'Clear filters', run: clearFilters} : (readOnly() ? null : {label: 'Bulk add\u2026', run: startBulkAdd}),
+    });
+  }
+
+  function clearFilters() {
+    if (S.quick.length) setQuick([]);
+    if (table) table.setState({q: '', filters: {}});
+    const s = table && table.root.querySelector('.dt-search');
+    if (s) { s.value = ''; s.focus(); }
+  }
+
+  // ------------------------------------------------------------ table
+
+  function urlBinding() {
+    if (!routed()) return null;
+    return {
+      get: function () { return query(); },
+      set: function (patch) { ctx.setParams(patch, {replace: true}); },
+    };
+  }
+
+  function build() {
+    if (table) table.destroy();
+    const ro = readOnly();
+    builtReadOnly = ro;
+    const q = query();
+    tableOpts = {
+      key: 'inventory',
+      scope: ctx.project || '',
+      caption: 'Inventory',
+      columns: invColumns(vocab).concat([editCol]),
+      rows: [],
+      rowAttrs: function (r) { return {'data-device': r.id}; },
+      rowClass: function (r) { return r.status === 'planned' ? 'inv-planned' : ''; },
+      groupBy: null,
+      groupOrder: groupOrder,
+      selectable: !ro,
+      noun: DEVICE_NOUN,
+      bulkActions: ro ? [] : [bulkStatus, bulkRoom, bulkLoc, markInstalled, mergeSel],
+      actions: [quickBar, bulkAddBtn, dupsBtn, more].filter(Boolean),
+      ids: {table: 'inv-table', columns: 'inv-columns', csv: 'inv-csv', search: 'inv-filter', selectAll: 'inv-select-all', filters: FILTER_IDS},
+      url: urlBinding(),
+      csvName: (ctx.project || 'project') + '-inventory.csv',
+      searchPlaceholder: 'Search devices',
+      highlight: q.hl || null,
+      empty: emptyNode,
+      onRow: function (row) { openRow(row.id); },
+    };
+    table = createTable(tableHost, tableOpts);
+    table.root.addEventListener('dt:select', onSelect);
+    const extra = table.getState().extra || {};
+    if (extra.scope === '*' || extra.scope === '__shared' || extra.scope === 'current') S.scope = extra.scope;
+    S.group = !!extra.group;
+    tableOpts.groupBy = S.group ? groupLabel : null;
+    refreshRows();
+    onSelect();
+  }
+
+  function setExtra() {
+    tableOpts.groupBy = S.group ? groupLabel : null;
+    table.setState({extra: {scope: S.scope, group: S.group}});
+    table.refresh();
+  }
+
+  function setQuick(next) {
+    S.quick = next;
+    if (routed()) ctx.setParams({quick: quickString(next) || null}, {replace: true});
+    refreshRows();
+  }
+
+  function onSelect() {
+    const n = table ? table.getSelection().length : 0;
+    mergeSel.hidden = n < 2 || readOnly() || !ctx.api;
+  }
+
+  function openRow(id) {
+    const sel = {type: 'device', id: id};
+    if (typeof ctx.openDrawer === 'function') ctx.openDrawer(sel, {section: 'inventory'});
+    else if (typeof ctx.openInspector === 'function') ctx.openInspector(sel);
+    else ctx.select(sel);
+    openSection('inventory');
+  }
+
+  // Opens the drawer's inventory <details> and scrolls it into view once the inspector
+  // has rendered it, for inspectors without focusSection.
+  function openSection(sec) {
+    let tries = 0;
+    (function tick() {
+      if (S.destroyed) return;
+      const d = document.querySelector('#app-inspector details[data-section="' + sec + '"]');
+      if (d) {
+        if (!d.open) d.open = true;
+        if (d.scrollIntoView) d.scrollIntoView({block: 'start'});
+        return;
+      }
+      tries += 1;
+      if (tries < 40) setTimeout(tick, 100);
+    })();
+  }
+
+  // ------------------------------------------------------------ bulk
+
+  function selectedIds() { return table ? table.getSelection() : []; }
 
   function bulkApply(field, value) {
     const ids = selectedIds();
-    if (!ids.length || value === '') return;
+    if (!ids.length || value === '') return Promise.resolve(false);
     const d = doc();
     const devs = byId(d.devices);
     let ops = [];
     let label = '';
+    let verb = '';
+    let detail = '';
     if (field === 'status') {
       ops = ids.filter(function (id) { return devs[id] && (devs[id].status || 'installed') !== value; })
         .map(function (id) { return {op: 'merge', coll: 'devices', id: id, value: {status: value === 'installed' ? null : value}}; });
-      label = 'Set ' + ops.length + ' device' + (ops.length === 1 ? '' : 's') + ' to ' + value;
+      label = 'Set ' + plural(ops.length, DEVICE_NOUN) + ' to ' + value;
+      verb = 'Set status of';
+      detail = 'New status: ' + value + '.';
     } else if (field === 'room') {
       const r = value === '__shared' ? '' : value;
       ops = ids.filter(function (id) { return devs[id] && (devs[id].room || '') !== r; })
         .map(function (id) { return {op: 'merge', coll: 'devices', id: id, value: {room: r}}; });
-      const rn = r ? (byId(d.rooms)[r] || {}).name || r : 'shared inventory';
-      label = 'Moved ' + ops.length + ' device' + (ops.length === 1 ? '' : 's') + ' to ' + rn;
+      const rn = r ? roomName(r) : 'shared inventory';
+      label = 'Moved ' + plural(ops.length, DEVICE_NOUN) + ' to ' + rn;
+      verb = 'Move';
+      detail = 'They move to ' + rn + '.';
     } else if (field === 'location') {
       const l = value === '__none' ? null : value;
       ops = ids.filter(function (id) { return devs[id] && (devs[id].location || null) !== l; })
         .map(function (id) { return {op: 'merge', coll: 'devices', id: id, value: {location: l}}; });
-      label = 'Set location of ' + ops.length + ' device' + (ops.length === 1 ? '' : 's');
+      label = 'Set location of ' + plural(ops.length, DEVICE_NOUN);
+      verb = 'Set location of';
+      detail = 'New location: ' + (l ? (byId(d.locations)[l] || {}).name || l : NO_LOCATION) + '.';
     }
-    if (!ops.length) { ctx.toast('Nothing to change.', 'info'); return; }
-    commit(ops, label);
+    if (!ops.length) { ctx.toast('Nothing to change.', 'info'); return Promise.resolve(false); }
+    return confirmBulk(ids.length, verb, ops.length, detail).then(function (ok) {
+      if (ok) commit(ops, label);
+      return ok;
+    });
+  }
+
+  function confirmBulk(selected, verb, count, detail) {
+    if (selected <= 1) return Promise.resolve(true);
+    return confirmScope(ctx, {verb: verb, count: count, noun: DEVICE_NOUN, scope: scopeName(), detail: detail});
   }
 
   function markAllInstalled() {
     const devs = byId(doc().devices);
-    const ids = selectedIds().filter(function (id) { return devs[id] && devs[id].status === 'planned'; });
+    const sel = selectedIds();
+    const ids = sel.filter(function (id) { return devs[id] && devs[id].status === 'planned'; });
     if (!ids.length) { ctx.toast('No planned devices selected.', 'info'); return; }
-    commit(ids.map(function (id) { return {op: 'merge', coll: 'devices', id: id, value: {status: 'installed'}}; }),
-      'Marked ' + ids.length + ' device' + (ids.length === 1 ? '' : 's') + ' installed');
+    confirmBulk(sel.length, 'Mark installed:', ids.length, 'Only planned devices change.').then(function (ok) {
+      if (!ok) return;
+      commit(ids.map(function (id) { return {op: 'merge', coll: 'devices', id: id, value: {status: 'installed'}}; }),
+        'Marked ' + plural(ids.length, DEVICE_NOUN) + ' installed');
+    });
   }
 
-  // --------------------------------------------------------------- form
+  function startBulkAdd() {
+    if (readOnly()) return;
+    bulkAdd(ctx, {kind: 'devices', room: S.scope === '__shared' ? '' : store.room});
+  }
+
+  // ------------------------------------------------------------ form
   function openForm(id, opener) {
     const d = doc();
     const dev = byId(d.devices)[id];
@@ -422,10 +527,9 @@ export function mount(el, ctx) {
     function finish() {
       formHost.innerHTML = '';
       S.editing = null;
-      render();
       if (opener && opener.isConnected) opener.focus();
       else {
-        const b = tableWrap.querySelector('[data-edit="' + String(id).replace(/["\\]/g, '\\$&') + '"]');
+        const b = tableHost.querySelector('.inv-edit[data-device="' + cssEsc(id) + '"]');
         if (b) b.focus();
       }
     }
@@ -510,100 +614,98 @@ export function mount(el, ctx) {
     });
   }
 
-  // ------------------------------------------------------------- events
-  on(roomSel, 'change', function () { S.room = roomSel.value; render(); });
-  on(statusSel, 'change', function () { S.status = statusSel.value; render(); });
-  on(locSel, 'change', function () { S.location = locSel.value; render(); });
-  on(kindSel, 'change', function () { S.kind = kindSel.value; render(); });
-  on(sysSel, 'change', function () { S.system = sysSel.value; render(); });
-  on(textIn, 'input', function () { S.text = textIn.value; render(); });
-  on(qWarranty, 'click', function () { S.qWarranty = !S.qWarranty; render(); qWarranty.focus(); });
-  on(qSerial, 'click', function () { S.qSerial = !S.qSerial; render(); qSerial.focus(); });
-  on(groupCb, 'change', function () { S.group = groupCb.checked; render(); groupCb.focus(); });
-  on(colsBox, 'change', function (e) {
-    const cb = e.target.closest('[data-col]');
-    if (!cb) return;
-    const k = cb.getAttribute('data-col');
-    S.visible = INV_COLUMNS.map(function (c) { return c[0]; }).filter(function (c) {
-      return c === k ? cb.checked : S.visible.indexOf(c) >= 0;
-    });
-    const open = colsBox.open;
-    render();
-    colsBox.open = open;
-    const again = colsBox.querySelector('[data-col="' + k + '"]');
-    if (again) again.focus();
+  // Row action column: appended after the data columns so it stays last and visible at sm.
+  const editCol = {
+    key: 'edit', header: 'Edit', sortable: false, searchable: false, csv: false, filterable: false,
+    value: function () { return ''; },
+    cell: function (r) {
+      return h('button', {type: 'button', class: 'inv-btn inv-edit', 'data-device': r.id, 'aria-label': (readOnly() ? 'View' : 'Edit') + ' inventory for ' + r.name, text: readOnly() ? 'View' : 'Edit'});
+    },
+  };
+  // ------------------------------------------------------------ events
+  offs.push(on(scopeSel, 'change', function () { S.scope = scopeSel.value || 'current'; setExtra(); refreshRows(); scopeSel.focus(); }));
+  offs.push(on(qWarranty, 'click', function () { toggleQuick('warranty'); qWarranty.focus(); }));
+  offs.push(on(qSerial, 'click', function () { toggleQuick('serial'); qSerial.focus(); }));
+  offs.push(on(groupCb, 'change', function () { S.group = groupCb.checked; setExtra(); groupCb.focus(); }));
+  offs.push(on(bulkAddBtn, 'click', startBulkAdd));
+  if (dupsBtn) offs.push(on(dupsBtn, 'click', function () { openDuplicatesDialog(ctx); }));
+  offs.push(on(csvAll, 'click', function () { more.open = false; }));
+  offs.push(on(more, 'keydown', function (e) {
+    if (e.key === 'Escape' && more.open) { e.preventDefault(); e.stopPropagation(); more.open = false; more.querySelector('summary').focus(); }
+  }));
+  offs.push(on(document, 'pointerdown', function (e) { if (more.open && !more.contains(e.target)) more.open = false; }, true));
+  [[bulkStatus, 'status'], [bulkRoom, 'room'], [bulkLoc, 'location']].forEach(function (b) {
+    offs.push(on(b[0], 'change', function () {
+      const v = b[0].value;
+      bulkApply(b[1], v).then(function () { b[0].value = ''; });
+    }));
   });
-  on(bulkStatus, 'change', function () { bulkApply('status', bulkStatus.value); });
-  on(bulkRoom, 'change', function () { bulkApply('room', bulkRoom.value); });
-  on(bulkLoc, 'change', function () { bulkApply('location', bulkLoc.value); });
-  on(markInstalled, 'click', markAllInstalled);
-  on(mergeSel, 'click', function () {
+  offs.push(on(markInstalled, 'click', markAllInstalled));
+  offs.push(on(mergeSel, 'click', function () {
     const ids = selectedIds();
     if (ids.length > 21) { ctx.toast('Merge at most 21 devices at a time.', 'warn'); return; }
-    openMergeDialog(ctx, ids).then(function (done) { if (done) { S.selected = {}; render(); } });
-  });
-  if (dupsBtn) on(dupsBtn, 'click', function () { openDuplicatesDialog(ctx); });
-  on(clearSel, 'click', function () { S.selected = {}; render(); });
-  on(tableWrap, 'click', function (e) {
-    const s = e.target.closest('[data-sort]');
-    if (s) {
-      const k = s.getAttribute('data-sort');
-      S.sort = S.sort.key === k ? {key: k, dir: -S.sort.dir} : {key: k, dir: 1};
-      render();
-      const again = tableWrap.querySelector('[data-sort="' + k + '"]');
-      if (again) again.focus();
-      return;
-    }
-    const ed = e.target.closest('[data-edit]');
-    if (ed) { openForm(ed.getAttribute('data-edit'), ed); return; }
-    const tr = e.target.closest('tr[data-device]');
-    if (tr && !e.target.closest('input,button,a')) ctx.select({type: 'device', id: tr.getAttribute('data-device')});
-  });
-  on(tableWrap, 'change', function (e) {
-    const cb = e.target;
-    if (cb.id === 'inv-select-all') {
-      S.selected = {};
-      if (cb.checked) filtered().forEach(function (r) { S.selected[r.id] = true; });
-      render();
-      const a = tableWrap.querySelector('#inv-select-all');
-      if (a) a.focus();
-      return;
-    }
-    const id = cb.getAttribute && cb.getAttribute('data-select');
-    if (!id) return;
-    if (cb.checked) S.selected[id] = true; else delete S.selected[id];
-    render();
-    const again = tableWrap.querySelector('[data-select="' + String(id).replace(/["\\]/g, '\\$&') + '"]');
-    if (again) again.focus();
-  });
-  on(store, 'doc', function () { if (!S.editing) render(); });
-  on(store, 'room', render);
-  on(store, 'mode', render);
+    openMergeDialog(ctx, ids).then(function (done) { if (done && table) table.clearSelection(); });
+  }));
+  offs.push(on(tableHost, 'click', function (e) {
+    const ed = e.target.closest('.inv-edit[data-device]');
+    if (ed) openForm(ed.getAttribute('data-device'), ed);
+  }));
 
-  render();
+  function toggleQuick(k) {
+    const next = S.quick.slice();
+    const i = next.indexOf(k);
+    if (i >= 0) next.splice(i, 1); else next.push(k);
+    setQuick(next);
+  }
+
+  function onDoc() { refreshRows(); }
+  function onMode() { if (readOnly() !== builtReadOnly) build(); else refreshRows(); }
+  store.addEventListener('doc', onDoc);
+  store.addEventListener('room', onDoc);
+  store.addEventListener('mode', onMode);
+  offs.push(function () {
+    store.removeEventListener('doc', onDoc);
+    store.removeEventListener('room', onDoc);
+    store.removeEventListener('mode', onMode);
+  });
+
+  S.quick = parseQuick(query().quick);
+  build();
+  const q0 = query();
+  if (q0.sec === 'inventory' && /^device:/.test(q0.sel || '')) openSection('inventory');
 
   return {
     destroy: function () {
-      listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], l[3]); });
-      if (S.csvUrl && URL.revokeObjectURL) URL.revokeObjectURL(S.csvUrl);
+      S.destroyed = true;
+      offs.forEach(function (f) { f(); });
+      if (table) { table.root.removeEventListener('dt:select', onSelect); table.destroy(); table = null; }
+      if (S.csvAllUrl && typeof URL !== 'undefined' && URL.revokeObjectURL) URL.revokeObjectURL(S.csvAllUrl);
       el.innerHTML = '';
+    },
+    route: function (r) {
+      if (!table || !r || r.view !== 'inventory') return;
+      const qq = r.query || {};
+      table.readUrl();
+      const nq = parseQuick(qq.quick);
+      if (quickString(nq) !== quickString(S.quick)) { S.quick = nq; refreshRows(); }
+      table.setHighlight(qq.hl || null);
     },
     focus: function (sel) {
       const id = sel && (sel.device || sel.id);
-      if (!id) return;
-      const row = tableWrap.querySelector('tr[data-device="' + String(id).replace(/["\\]/g, '\\$&') + '"]');
+      if (!id || !table) return;
+      const row = tableHost.querySelector('tr[data-device="' + cssEsc(id) + '"]');
       if (row && row.scrollIntoView) row.scrollIntoView({block: 'center'});
     },
-    getState: function () { return {room: S.room, visible: S.visible.slice(), sort: S.sort, group: S.group}; },
+    getState: function () { return {room: S.scope, group: S.group}; },
     setState: function (s) {
-      if (!s) return;
-      if (s.room) S.room = s.room;
-      if (s.visible) S.visible = s.visible;
-      if (s.sort) S.sort = s.sort;
+      if (!s || !table) return;
+      if (s.room === 'current' || s.room === '*' || s.room === '__shared') S.scope = s.room;
       S.group = !!s.group;
-      render();
+      setExtra();
+      refreshRows();
     },
     _state: S,
+    _table: function () { return table; },
     _openForm: openForm,
   };
 }
