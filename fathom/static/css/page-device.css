@@ -1,1 +1,66 @@
-/* page-device.css: placeholder (docs/ui-audit.md B.2 SHELL); its owner adds rules in wave 2. */
+/* Device landing and device page (docs/ui-audit.md B.3 PDEV, D3, D11). Prefix pd-.
+   The page is explorer (.ex-root) + entity header + tab body; .ex-content is the
+   scroller, so the sticky header and the tab body share .ex-page. Colours come
+   from app.css variables. */
+
+.pd-root{display:flex;flex-direction:column;flex:1 1 auto;min-width:0;min-height:0}
+.pd-root.pd-is-landing{flex:none}
+.pd-root>.ex-root{flex:1 1 auto;height:auto;min-height:0}
+
+/* ---- landing */
+.pd-landing{display:flex;flex-direction:column;gap:10px;min-width:0;padding:14px 16px calc(24px + var(--sab,0px))}
+.pd-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;min-width:0}
+.pd-title{display:flex;align-items:center;gap:8px;margin:0;font-size:16px;font-weight:700}
+.pd-glyph{color:var(--accent);font-size:18px;line-height:1}
+.pd-sub{margin:0;color:var(--muted);font-size:12.5px}
+.pd-landing .dt-root{--dt-max-h:max(320px,calc(100vh - 230px))}
+@supports (height:100dvh){.pd-landing .dt-root{--dt-max-h:max(320px,calc(100dvh - 230px))}}
+.pd-add,.pd-bulk{min-height:40px;white-space:nowrap}
+.pd-landing td[data-col=room],.pd-landing td[data-col=rack]{white-space:nowrap}
+
+/* ---- page */
+.pd-root .eh:not(.eh--compact) .eh-bar{flex-wrap:wrap}
+.pd-root .eh:not(.eh--compact) .eh-actions{flex-wrap:wrap}
+.pd-body{display:flex;flex-direction:column;gap:12px;min-width:0;padding:12px 16px calc(24px + var(--sab,0px))}
+.pd-body .dt-root{--dt-max-h:max(320px,calc(100vh - 300px))}
+@supports (height:100dvh){.pd-body .dt-root{--dt-max-h:max(320px,calc(100dvh - 300px))}}
+.pd-link{color:var(--text);text-decoration:none;border-bottom:1px dotted var(--border-2)}
+.pd-link:hover{color:var(--accent);border-bottom-color:var(--accent)}
+.pd-more{color:var(--muted);font-size:11.5px}
+.pd-muted{margin:0;color:var(--muted);font-size:12.5px}
+.pd-notfound{max-width:640px}
+.pd-back{display:inline-flex;align-items:center;min-height:40px}
+
+/* overview cards */
+.pd-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(180px,100%),1fr));gap:10px}
+.pd-card,.pd-notes,.pd-panel{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0;padding:12px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02)}
+.pd-card-title{margin:0;font-size:11px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--muted)}
+.pd-count{display:inline-flex;align-items:center;min-height:40px;margin:0;padding:0 2px;font-size:22px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;color:var(--text)}
+button.pd-count{min-width:40px;border:0;border-radius:6px;background:transparent;cursor:pointer;color:var(--accent)}
+button.pd-count:hover{background:rgba(142,162,255,.12)}
+.pd-card-sub{margin:0;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.pd-card-link{display:inline-flex;align-items:center;min-height:40px;margin-top:auto;color:var(--accent);font-size:12.5px;text-decoration:none}
+.pd-card-link:hover{text-decoration:underline}
+.pd-note{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.pd-edit{min-height:40px;margin-top:4px}
+
+/* inventory facts */
+.pd-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr));gap:10px 16px;width:100%;margin:0}
+.pd-fact{min-width:0}
+.pd-fact dt{color:var(--muted);font-size:10.5px;letter-spacing:.8px;text-transform:uppercase}
+.pd-fact dd{margin:2px 0 0;overflow-wrap:anywhere}
+
+@media (max-width:699px){
+  .pd-landing{padding:10px 10px calc(16px + var(--sab,0px))}
+  .pd-body{padding:10px 10px calc(16px + var(--sab,0px))}
+  .pd-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+}
+
+@media (pointer:coarse){
+  .pd-add,.pd-bulk,.pd-count,.pd-card-link,.pd-edit,.pd-back{min-height:44px}
+  button.pd-count{min-width:44px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .pd-root *{transition:none!important}
+}
