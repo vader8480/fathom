@@ -35,11 +35,17 @@
 .sch-host .dt-table .dt-al-right { font-variant-numeric: tabular-nums; }
 .sch-chips { display: inline-flex; align-items: center; white-space: nowrap; }
 .sch-host .sch-edit { display: block; }
+/* width: 100% in an auto-layout table collapses to min-width (44px under a coarse
+   pointer), so size the editors from their size attribute instead. */
+.sch-host .sch-edit input[size="6"] { width: 84px; }
+.sch-host .sch-edit input[size="12"] { width: 136px; }
+.sch-host .sch-edit input[size="18"] { width: 176px; }
+.sch-host .sch-edit select { width: 116px; }
 .sch-untagged td[data-col=tag] .sch-edit input { border-color: rgba(255,149,72,.35); }
 
 @media (max-width: 699px) {
-  .sch-tabs { padding: 6px 6px 0; }
-  .sch-tabs a[role=tab] { padding: 0 9px; }
+  .sch-tabs { padding: 6px 4px 0; gap: 0; }
+  .sch-tabs a[role=tab] { padding: 0 7px; }
   .sch-panel { padding: 8px; }
   .sch-host .dt-table.sch-table tbody tr.dt-row td.dt-sticky, .sch-host .dt-table.sch-table thead th.dt-sticky { background-color: var(--panel, #111828); }
 }

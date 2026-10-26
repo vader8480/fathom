@@ -269,6 +269,24 @@ class SchedulesUi(UiCase):
             pg.wait_for(DRAWER_OPEN)
             self.assertIn("sec=inventory", pg.js("location.hash"))
 
+    def test_inline_edit_saves_and_survives_reload(self):
+        with self.open(CAMPUS + "schedules/cables?q=c-0003", "d") as pg:
+            view_ready(pg)
+            rows_ready(pg, "cables")
+            inp = "#sch-dt tr[data-id=\"c-0003\"] td[data-col=tag] input[data-edit=tag]"
+            pg.wait_for("!!document.querySelector(%s)" % q(inp))
+            pg.js("""(function () { var i = document.querySelector(%s); i.focus(); i.value = 'T-777';
+              i.dispatchEvent(new Event('change', {bubbles: true})); })()""" % q(inp))
+            pg.press("Enter")
+            server_tag = ("fetch('/api/v2/projects/campus-demo/schedules/cables?room=main').then(function (r) { return r.json(); })"
+                          ".then(function (j) { return j.rows.filter(function (x) { return x.id === 'c-0003'; })[0].tag === 'T-777'; })")
+            pg.wait_for(server_tag, 20)
+            pg.reload()
+            view_ready(pg)
+            rows_ready(pg, "cables")
+            self.assertEqual(pg.js("document.querySelector(%s).value" % q(inp)), "T-777")
+            self.assertFalse(pg.js("document.querySelector('#sch-dt tr[data-id=\"c-0003\"]').classList.contains('sch-untagged')"))
+
     # ------------------------------------------------------------ CSV, print
 
     def _csv(self, pg, n):
@@ -374,6 +392,8 @@ class SchedulesUi(UiCase):
             heights = pg.js("Array.prototype.map.call(document.querySelectorAll('.sch-tabs [role=tab]'), function (a) { return a.getBoundingClientRect().height; })")
             self.assertTrue(all(hh >= 44 for hh in heights), heights)
             self.assertEqual(pg.offscreen(".sch-tabs [role=tab]", "x"), 0)
+            tops = pg.js("Array.prototype.map.call(document.querySelectorAll('.sch-tabs [role=tab]'), function (a) { return Math.round(a.getBoundingClientRect().top); })")
+            self.assertEqual(len(set(tops)), 1, "the seven tabs fit one row at 390px")
             pg.goto(CAMPUS + "schedules/labels")
             pg.wait_for("!!document.querySelector('.sch-labelbar')")
             self.assertLessEqual(pg.page_hscroll(), 0)
@@ -389,6 +409,11 @@ class SchedulesUi(UiCase):
                     self.assertLessEqual(pg.page_hscroll(), 0, kind)
                     self.assertTrue(shown(pg, "#sch-dt th[data-col=disc]"), "every column shows from 700px")
                     self.assertEqual(pg.offscreen("#sch-dt .dt-pager", "y"), 0, "the pager stays on screen")
+                    if kind in ("cables", "ip"):
+                        col = "tag" if kind == "cables" else "ip"
+                        cut = pg.js("""Array.prototype.filter.call(document.querySelectorAll('#sch-dt td[data-col=%s] input[data-edit]'),
+                          function (i) { return i.scrollWidth > i.clientWidth + 1; }).length""" % col)
+                        self.assertEqual(cut, 0, "inline %s editors show their whole value" % col)
                     pg.shot("schedules-%s-%s" % (kind, size))
 
     def test_room_and_discipline_filters(self):
