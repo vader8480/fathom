@@ -1,1 +1,74 @@
-/* discovery.css: placeholder (docs/ui-audit.md B.2 SHELL); its owner adds rules in wave 2. */
+/* Discovery view (docs/ui-audit.md B.3 DISC). The legacy .disc-* rules stay in app.css (D11);
+   this file holds the new layout (header badges, collapsed sources, URL tabs, DataTable findings)
+   and the overrides it needs. Breakpoints are D3 only. */
+
+/* ---- header: title, run age (staleBadge), unresolved review badge */
+.disc-head{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin:4px 0 10px}
+.disc-head h2{margin:0}
+.disc-badges{display:inline-flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
+.disc-badges [hidden]{display:none!important}
+
+/* ---- run panel */
+.disc-run-row+.disc-status{margin-top:6px}
+.disc-log-wrap{margin-top:4px}
+.disc-log-wrap>summary{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--muted);font-size:12px;list-style:none}
+.disc-log-wrap>summary::-webkit-details-marker{display:none}
+.disc-log-wrap>summary::before{content:'\25B8';display:inline-block;transition:transform .15s ease}
+.disc-log-wrap[open]>summary::before{transform:rotate(90deg)}
+.disc-run-pick-row{margin-top:8px;flex-wrap:nowrap;min-width:0}
+.disc-run-pick-row>.muted{flex:none}
+.disc-run-pick{flex:0 1 auto;min-width:0;max-width:100%;text-overflow:ellipsis}
+
+/* ---- sources, collapsed into one summary line */
+.disc-sources{margin:10px 0 4px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02)}
+.disc-sources>summary{display:flex;align-items:center;gap:6px;padding:4px 12px;cursor:pointer;font-size:12.5px;list-style:none;min-width:0}
+.disc-sources>summary::-webkit-details-marker{display:none}
+.disc-sources-glyph{flex:none;display:inline-block;color:var(--muted);transition:transform .15s ease}
+.disc-sources[open] .disc-sources-glyph{transform:rotate(90deg)}
+.disc-sources-text{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.disc-sources-edit{flex:none;color:var(--accent)}
+.disc-sources-body{padding:0 12px 12px}
+.disc-sources-body .disc-intro{margin-top:2px}
+.disc-card-acts{margin-top:6px}
+
+/* ---- findings: URL tabs and DataTables */
+.disc-tabs{margin-bottom:10px}
+.disc-hint{font-size:12px;margin:0 0 8px;max-width:860px}
+.disc-notes{font-size:12px}
+.disc-room{flex-wrap:nowrap}
+.disc-room select{min-width:0;max-width:220px}
+.disc-diff-table{margin-bottom:8px}
+.disc .dt-table td{vertical-align:top}
+.disc .dt-table td[data-col=actions]{white-space:nowrap}
+.disc .dt-clickable .dt-row{cursor:default}
+.disc .dt-clickable .dt-row.disc-linked{cursor:pointer}
+.disc-open{color:var(--accent)}
+.disc-shown{margin-left:6px;font-size:10.5px;min-height:20px;padding:0 6px}
+.disc .ms-suggest{margin-top:0;min-width:200px}
+.disc .disc-target{min-width:0;max-width:260px}
+.disc-addrs{min-width:0;overflow-wrap:anywhere}
+
+/* ---- 40px targets (D3); coarse pointers get 44px from app.css's .adm rules */
+.disc button,.disc select,.disc summary,.disc input:not([type=checkbox]):not([type=radio]){min-height:40px}
+/* status chips are not targets: keep them compact under the global coarse .chip rule */
+@media (pointer:coarse){.disc :is(.disc-summary,.disc-status) span.chip{min-height:26px}}
+
+/* ---- sm: tabs scroll in one row; findings rows are cards (DataTable cards: true) */
+@media (max-width:699px){
+  .disc-tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .disc-tabs::-webkit-scrollbar{display:none}
+  .disc-tab{flex:none;white-space:nowrap}
+  .disc-room{flex-wrap:wrap;width:100%}
+  .disc-room select{flex:1 1 160px;max-width:none}
+  .disc .dt-cards .dt-table td[data-col=actions]{white-space:normal}
+  .disc .dt-cards .dt-table td[data-col=actions]::before{display:none}
+  .disc .dt-cards .dt-table td:is([data-col=model],[data-col=match],[data-col=actions]){flex-direction:column;align-items:stretch;text-align:left}
+  .disc .dt-cards .disc-actions{white-space:normal;margin-top:4px}
+  .disc .ms-suggest{min-width:0}
+  .disc .disc-target{max-width:none;flex:1 1 160px}
+  .disc .disc-reasons{max-width:none}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .disc-sources-glyph,.disc-log-wrap>summary::before,.disc .disc-bar-fill{transition:none}
+}
