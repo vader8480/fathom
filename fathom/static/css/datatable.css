@@ -137,7 +137,7 @@ th[aria-sort=ascending],th[aria-sort=descending]{color:var(--text)}
   .dt-cards .dt-table td::before{content:attr(data-label);flex:none;color:var(--muted);font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;text-align:left}
   .dt-cards .dt-table td.dt-lead{justify-content:flex-start;font-weight:600;font-size:13.5px;text-align:left}
   .dt-cards .dt-table td.dt-lead::before{display:none}
-  .dt-cards .dt-table td.dt-check{position:absolute;top:4px;right:4px;width:auto}
+  .dt-cards .dt-table td.dt-check{position:absolute;top:4px;right:4px;left:auto;width:auto;background:none}
   .dt-cards .dt-table td.dt-check::before{display:none}
   .dt-cards .dt-table tr.dt-group{margin:12px 0 6px}
   .dt-cards .dt-table tr.dt-group th{display:block;height:auto;background:none;border:0;padding:0 2px}

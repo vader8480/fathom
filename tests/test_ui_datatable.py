@@ -253,6 +253,10 @@ class DataTableUi(UiCase):
             self.assertTrue(pg.js("(function (s) { return s.scrollWidth <= s.clientWidth + 1; })(document.querySelector('#h-main .dt-scroll'))"),
                             "cards do not scroll sideways")
             self.assertEqual(pg.js("getComputedStyle(document.querySelector('#h-main td[data-col=from]'), '::before').content"), '"From"')
+            self.assertTrue(pg.js("(function (td) { var r = td.getBoundingClientRect();"
+                                  " return td.contains(document.elementFromPoint(r.left + 8, r.top + r.height / 2)); })"
+                                  "(document.querySelector('#h-main tbody tr.dt-row td.dt-lead'))"),
+                            "the card title is not covered by the checkbox cell")
             pg.js("var s = document.querySelector('#h-main .dt-sort-select'); s.value = '-length'; s.dispatchEvent(new Event('change', {bubbles: true})); 1")
             pg.wait_for("location.hash.indexOf('sort=-length') > 0")
             self.assertGreater(pg.rect("#h-main .dt-sort-select")["height"], 0, "sort select is visible in card mode")
