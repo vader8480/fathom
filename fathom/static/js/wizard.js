@@ -102,7 +102,7 @@ function mountWizard(ctx, spec, resolve) {
   const box = h('div', { class: 'wz', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': uid + '-title', 'data-wizard': spec.key || '' }, [
     h('header', { class: 'wz-head' }, [title, closeBtn]), stepList, body, foot,
   ]);
-  const backdrop = h('div', { class: 'wz-backdrop' }, box);
+  const backdrop = h('div', { class: 'wz-backdrop app-dialog-backdrop' }, box);
 
   all.forEach(function (s, i) {
     stepList.appendChild(h('li', { class: 'wz-step', 'data-step': s.key }, [
@@ -368,7 +368,7 @@ function mountWizard(ctx, spec, resolve) {
   // backdrop click): Esc still closes, Tab comes back in.
   function onDocKey(e) {
     if (closed || confirming || box.contains(e.target)) return;
-    if (document.querySelector('.app-dialog-backdrop')) return;
+    if (document.querySelector('#app-dialog .app-dialog-backdrop')) return;
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); requestClose(); }
     else if (e.key === 'Tab') trapTab(e);
   }

@@ -1,8 +1,10 @@
 /* Wizard dialog and bulk add (docs/ui-audit.md B.2 WIZARD). Reuses app.css
-   variables and the #app-dialog look; full screen below 700px. Sits under
-   .app-dialog-backdrop (70) so the discard confirmation stacks on top. */
+   variables and the #app-dialog look; full screen below 700px. The backdrop
+   also carries .app-dialog-backdrop so Esc and focus layering (D4) see the
+   wizard as a dialog; it sits under #app-dialog (70) so the discard
+   confirmation stacks on top. */
 .wz-open body{overflow:hidden}
-.wz-backdrop{position:fixed;inset:0;z-index:65;background:rgba(3,6,14,.62);display:flex;align-items:center;justify-content:center;padding:calc(12px + var(--sat,0px)) 12px calc(12px + var(--sab,0px))}
+.app-dialog-backdrop.wz-backdrop{position:fixed;inset:0;z-index:65;background:rgba(3,6,14,.62);display:flex;align-items:center;justify-content:center;padding:calc(12px + var(--sat,0px)) 12px calc(12px + var(--sab,0px))}
 .wz{background:var(--panel);color:var(--text);border:1px solid var(--border-2);border-radius:12px;width:min(900px,100%);height:min(760px,100%);max-height:100%;min-width:0;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.6)}
 .wz [hidden]{display:none!important}
 .wz-head{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 14px;border-bottom:1px solid var(--border)}
@@ -64,7 +66,7 @@
   .wz input[type=checkbox]{width:22px;height:22px}
 }
 @media (max-width:699px){
-  .wz-backdrop{padding:0;align-items:stretch}
+  .app-dialog-backdrop.wz-backdrop{padding:0;align-items:stretch}
   .wz{width:100%;height:100%;max-height:none;border:0;border-radius:0;padding-top:var(--sat,0px);padding-bottom:var(--sab,0px)}
   .wz-step:not([aria-current=step]) .wz-step-label{display:none}
   .wz-step+.wz-step::before{width:8px}
