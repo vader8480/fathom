@@ -567,7 +567,7 @@ export function mountHistory(el, ctx) {
     return ctx.api.restore(ctx.project, rev, store.revision).then(function (r) {
       list.clear();
       ctx.toast('Restored as revision ' + r.revision, 'ok');
-      return ctx.reload ? ctx.reload() : null;
+      return (ctx.reload ? ctx.reload() : Promise.resolve()).then(function () { if (!destroyed) return load(); });
     }, function (e) { if (!destroyed) list.fail(actErr('Could not restore revision ' + rev, e), function () { return doRestore(rev); }); });
   }
   function ensureLoaded(n) {
