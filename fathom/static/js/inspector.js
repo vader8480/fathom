@@ -1,7 +1,16 @@
 // Entity inspector / editor (§6.8): device, port, cable, rack, floor plan,
 // marker, bundle, room. Field changes become ops through ctx.commit; text
 // edits debounce 400 ms into one op per field burst.
+//
+// It is the content of the drawer host #app-inspector (docs/ui-audit.md D4,
+// B.3 INS): drawer.js owns modes, focus and Esc; this module renders the
+// header (.ins-head), the sticky section index (nav.ins-index) and the
+// details[data-section] sections. The handle's focusSection(key) opens and
+// scrolls to a section and writes `sec` to the URL; collapse state persists
+// per entity kind in localStorage `fathom.ui.inspector`.
 
+import { h } from './dom.js';
+import { selToString } from './router-core.js';
 import {
   devicePorts, portLabel, deviceTitle, disciplineOf, mediumInfo, setPortsOps, deleteDeviceOps, duplicateDeviceOps,
   connectOps, disconnectOps, repatchOps, expandPortGroups, newId, slug, formatLength, parseLength, deepClone,
@@ -16,28 +25,58 @@ import { openTraceDrawer } from './trace-ui.js';
 
 const DEBOUNCE = 400;
 const CHANNEL_COLORS = ['Off', 'Blue', 'Orange', 'Yellow', 'Purple', 'Cyan', 'Magenta', 'Red', 'Green', 'Pink', 'White'];
+const STATE_KEY = 'fathom.ui.inspector';
+const GLYPH = { device: '\u25EB', port: '\u25CB', cable: '\u223F', rack: '\u2261', floorplan: '\u25A6', marker: '\u25A6', bundle: '\u223F', room: '\u25A3', channel: '\u25CF' };
+const KIND_NAME = { device: 'Device', port: 'Port', cable: 'Cable', rack: 'Rack', floorplan: 'Floor plan', marker: 'Marker', bundle: 'Bundle', room: 'Room', channel: 'Channel' };
+// Index chip labels; other sections use their title without the count.
+const SHORT = {
+  identity: 'Identity', map: 'Map', ports: 'Ports', console: 'Channels', rack: 'Rack', inventory: 'Inventory', net: 'Network', dmx: 'DMX',
+  files: 'Files', procedures: 'Procedures', problems: 'Problems', qr: 'QR', notes: 'Notes', dups: 'Duplicates', merged: 'Merges',
+  endpoints: 'Endpoints', cables: 'Connected', input: 'Input', fedby: 'Fed by', sends: 'Sends', groups: 'Groups', members: 'Members', outputs: 'Outputs',
+};
+const DEFAULT_OPEN = { identity: true, ports: true, endpoints: true, fields: true, console: true };
+const INDEX_MIN = 3;
+const SEC_RE = /^[A-Za-z0-9_-]+$/;
 let uid = 0;
 
-function h(tag, attrs, children) {
-  const el = document.createElement(tag);
-  if (attrs) {
-    Object.keys(attrs).forEach(function (k) {
-      const v = attrs[k];
-      if (v === undefined || v === null || v === false) return;
-      if (k === 'class') el.className = v;
-      else if (k === 'text') el.textContent = v;
-      else if (k.indexOf('on') === 0 && typeof v === 'function') el.addEventListener(k.slice(2), v);
-      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
-      else if (k === 'value') el.value = v;
-      else if (v === true) el.setAttribute(k, '');
-      else el.setAttribute(k, String(v));
-    });
+function localStore() {
+  try {
+    return typeof localStorage !== 'undefined' ? localStorage : null;
+  } catch (e) {
+    return null;
   }
-  (Array.isArray(children) ? children : (children == null ? [] : [children])).forEach(function (c) {
-    if (c === null || c === undefined || c === false) return;
-    el.appendChild(typeof c === 'string' || typeof c === 'number' ? document.createTextNode(String(c)) : c);
-  });
-  return el;
+}
+
+// {"v": 1, "open": {"<kind>": {"<section>": bool}}}; only sections the user toggled are stored.
+function readState(storage) {
+  const empty = { v: 1, open: {} };
+  try {
+    const raw = storage ? storage.getItem(STATE_KEY) : null;
+    const o = raw ? JSON.parse(raw) : null;
+    if (!o || typeof o !== 'object' || !o.open || typeof o.open !== 'object' || Array.isArray(o.open)) return empty;
+    const out = { v: 1, open: {} };
+    Object.keys(o.open).forEach(function (kind) {
+      const m = o.open[kind];
+      if (!m || typeof m !== 'object') return;
+      out.open[kind] = {};
+      Object.keys(m).forEach(function (k) { if (typeof m[k] === 'boolean') out.open[kind][k] = m[k]; });
+    });
+    return out;
+  } catch (e) {
+    return empty;
+  }
+}
+
+function prefersReducedMotion() {
+  try {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  } catch (e) {
+    return false;
+  }
+}
+
+function plainClick(e) {
+  return !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || (e.button && e.button !== 0));
 }
 
 function find(list, id) {
@@ -68,7 +107,14 @@ export function mountInspector(el, ctx) {
   const pendingTimers = {};
   const root = h('div', { class: 'ins' });
   el.appendChild(root);
-  let openSections = { identity: true, ports: true, endpoints: true, fields: true, console: true };
+  const storage = localStore();
+  const saved = readState(storage);
+  // Session open state per kind, seeded from the user's saved choices.
+  const openByKind = {};
+  Object.keys(saved.open).forEach(function (k) { openByKind[k] = Object.assign({}, saved.open[k]); });
+  let kind = '';
+  let resetScroll = false;
+  let echo = null;
   let consoleTab = 'inputs';
   let consoleQuery = '';
   let traceDrawer = null;
@@ -159,11 +205,178 @@ export function mountInspector(el, ctx) {
     return box;
   }
 
+  function openState() {
+    if (!openByKind[kind]) openByKind[kind] = {};
+    return openByKind[kind];
+  }
+  function persistOpen(k, key, value) {
+    if (!saved.open[k]) saved.open[k] = {};
+    if (saved.open[k][key] === value) return;
+    saved.open[k][key] = value;
+    try {
+      if (storage) storage.setItem(STATE_KEY, JSON.stringify(saved));
+    } catch (e) { /* storage full or disabled */ }
+  }
+
   function section(key, title, children, open) {
-    const isOpen = openSections[key] !== undefined ? openSections[key] : !!open;
-    const d = h('details', { class: 'ins-section', open: isOpen ? true : null, 'data-section': key }, [h('summary', null, title), h('div', { class: 'inner' }, children)]);
-    d.addEventListener('toggle', function () { openSections[key] = d.open; });
+    const st = openState();
+    const k = kind;
+    const isOpen = st[key] !== undefined ? st[key] : (DEFAULT_OPEN[key] !== undefined ? DEFAULT_OPEN[key] : !!open);
+    const summary = h('summary', null, title);
+    const d = h('details', {
+      class: 'ins-section', open: isOpen ? true : null, 'data-section': key,
+      'data-label': SHORT[key] || String(title).replace(/\s*\(.*$/, ''),
+    }, [summary, h('div', { class: 'inner' }, children)]);
+    let byUser = false;
+    summary.addEventListener('click', function () { byUser = true; });
+    d.addEventListener('toggle', function () {
+      st[key] = d.open;
+      if (!byUser) return;
+      byUser = false;
+      persistOpen(k, key, d.open);
+      if (d.open) { markIndex(key); writeSec(key); } else if (routeQuery().sec === key) { markIndex(''); writeSec(null); }
+    });
     return d;
+  }
+
+  // -------------------------------------------------- drawer, URL and navigation (D1, D4)
+
+  function routeQuery() {
+    const r = ctx.route;
+    return (r && r.query) || {};
+  }
+  function routed() {
+    const r = ctx.route;
+    return !!(r && r.project);
+  }
+  // `sec` is only written while the URL's `sel` is the entity shown here.
+  function writeSec(key) {
+    const q = routeQuery();
+    if (typeof ctx.setParams !== 'function' || !q.sel || q.sel !== selToString(store.selection)) return;
+    if ((q.sec || '') === (key || '')) return;
+    echo = { key: key || '', t: Date.now() };
+    ctx.setParams({ sec: key || null });
+  }
+  function closeDetails() {
+    if (typeof ctx.closeDrawer === 'function') ctx.closeDrawer();
+    else { if (ctx.closeInspector) ctx.closeInspector(); store.select(null); }
+  }
+  function inspect(sel) {
+    if (typeof ctx.openDrawer === 'function') ctx.openDrawer(sel);
+    else store.select(sel);
+  }
+  // In-app page link (device, rack, room), or null without a router or when already there.
+  function pageHref(p) {
+    if (typeof ctx.routeHref !== 'function' || !routed()) return null;
+    const r = ctx.route;
+    if (r.view === p.view && r.id === p.id) return null;
+    const partial = { view: p.view, id: p.id };
+    if (p.room) partial.room = p.room;
+    const href = ctx.routeHref(partial);
+    return href && href !== '#' ? href : null;
+  }
+  function selHref(sel, sec) {
+    if (typeof ctx.routeHref !== 'function' || !routed()) return '#';
+    const q = Object.assign({}, routeQuery(), { sel: selToString(sel), sec: sec || null, drawer: null });
+    return ctx.routeHref({ query: q }) || '#';
+  }
+  // A link that inspects `sel` in this drawer; modified clicks follow the href (a deep link).
+  function selLink(sel, text, cls, attrs) {
+    return h('a', Object.assign({ class: cls, href: selHref(sel), onclick: function (e) {
+      if (!plainClick(e)) return;
+      e.preventDefault();
+      inspect(sel);
+    } }, attrs || {}), text);
+  }
+  // Leaves the drawer for another view showing `sel`; canvas views keep the sheet closed below lg (D4).
+  function goTo(view, sel, opts) {
+    const o = opts || {};
+    if (typeof ctx.navigateRoute === 'function' && routed()) {
+      const lg = typeof ctx.layout !== 'function' || ctx.layout() === 'lg';
+      const partial = { view: view, query: { sel: sel, drawer: o.canvas && !lg ? '0' : null } };
+      if (o.tab) partial.tab = o.tab;
+      ctx.navigateRoute(partial);
+    } else {
+      ctx.navigate(view, { sel: sel });
+    }
+  }
+
+  // -------------------------------------------------- section index and focusSection
+
+  function topSections() {
+    return Array.prototype.filter.call(root.children, function (c) { return c.tagName === 'DETAILS' && c.hasAttribute('data-section'); });
+  }
+  function sectionEl(key) {
+    const all = topSections();
+    for (let i = 0; i < all.length; i++) if (all[i].getAttribute('data-section') === key) return all[i];
+    return null;
+  }
+  function buildIndex() {
+    const secs = topSections();
+    if (secs.length < INDEX_MIN) return;
+    const cur = routeQuery().sec || '';
+    const nav = h('nav', { class: 'ins-index', 'aria-label': 'Sections' }, secs.map(function (d) {
+      const key = d.getAttribute('data-section');
+      return h('a', { class: 'ins-index-chip', href: selHref(store.selection, key), 'data-sec': key, 'aria-current': key === cur ? 'true' : null, onclick: function (e) {
+        if (!plainClick(e)) return;
+        e.preventDefault();
+        focusSection(key, { user: true });
+      } }, d.getAttribute('data-label') || key);
+    }));
+    root.insertBefore(nav, secs[0]);
+  }
+  function markIndex(key) {
+    const nav = root.querySelector('.ins-index');
+    if (!nav) return;
+    Array.prototype.forEach.call(nav.querySelectorAll('.ins-index-chip'), function (a) {
+      const on = !!key && a.getAttribute('data-sec') === key;
+      if (on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+      if (on && (a.offsetLeft < nav.scrollLeft || a.offsetLeft + a.offsetWidth > nav.scrollLeft + nav.clientWidth)) {
+        nav.scrollLeft = Math.max(0, a.offsetLeft - 12);
+      }
+    });
+  }
+  function refreshIndex() {
+    const nav = root.querySelector('.ins-index');
+    if (!nav) return;
+    Array.prototype.forEach.call(nav.querySelectorAll('.ins-index-chip'), function (a) { a.setAttribute('href', selHref(store.selection, a.getAttribute('data-sec'))); });
+  }
+  function scrollToSection(d, smooth) {
+    const nav = root.querySelector('.ins-index');
+    const hostBox = el.getBoundingClientRect();
+    const pad = parseFloat(getComputedStyle(el).paddingTop) || 0;
+    const off = (nav ? nav.getBoundingClientRect().height : 0) + pad;
+    const top = Math.max(0, el.scrollTop + d.getBoundingClientRect().top - hostBox.top - el.clientTop - off);
+    if (el.scrollHeight <= el.clientHeight + 1) { d.scrollIntoView({ block: 'nearest' }); return; }
+    if (smooth && !prefersReducedMotion() && typeof el.scrollTo === 'function') el.scrollTo({ top: top, behavior: 'smooth' });
+    else el.scrollTop = top;
+  }
+  // Opens details[data-section=key], scrolls it below the index and writes `sec`. The shell calls this
+  // with the URL's `sec`; the echo of our own write is not scrolled again.
+  function focusSection(key, opts) {
+    const o = opts || {};
+    if (!key || typeof key !== 'string' || !SEC_RE.test(key)) return false;
+    const d = sectionEl(key);
+    if (!d) return false;
+    const isEcho = !o.user && !!echo && echo.key === key && Date.now() - echo.t < 1500;
+    echo = null;
+    if (!d.open) d.open = true;
+    openState()[key] = true;
+    markIndex(key);
+    if (!isEcho) scrollToSection(d, !!o.user);
+    if (o.user) {
+      const s = d.querySelector('summary');
+      if (s) { try { s.focus({ preventScroll: true }); } catch (e) { s.focus(); } }
+    }
+    writeSec(key);
+    return true;
+  }
+
+  function closeButton() {
+    return h('button', { type: 'button', class: 'icon ghost ins-close', 'aria-label': 'Close details', title: 'Close details', onclick: closeDetails }, '\u00d7');
+  }
+  function statusPill(s) {
+    return h('span', { class: 'ins-status', 'data-status': s }, s);
   }
 
   function mediaOptions() {
@@ -184,18 +397,29 @@ export function mountInspector(el, ctx) {
     return out;
   }
 
-  function head(kindLabel, color, title, sub, extra) {
-    return h('div', { class: 'ins-title' }, [
-      h('div', { class: 'row' }, [h('span', { class: 'kind', style: { color: color || 'var(--muted)' } }, kindLabel), h('span', { class: 'grow' }), extra || null,
-        h('button', { type: 'button', class: 'icon ghost', 'aria-label': 'Close inspector', onclick: function () { ctx.closeInspector(); store.select(null); } }, '\u00d7')]),
+  // .ins-head: kind glyph and label, badges (`extra`), "Open page", close; title; status pill and subtitle.
+  function head(kindLabel, color, title, sub, opts) {
+    const o = opts || {};
+    const c = color || 'var(--muted)';
+    const page = o.page ? pageHref(o.page) : null;
+    return h('div', { class: 'ins-head ins-title', 'data-kind': kind }, [
+      h('div', { class: 'ins-head-row' }, [
+        h('span', { class: 'ins-glyph', 'aria-hidden': 'true', style: { color: c } }, GLYPH[kind] || '\u25CF'),
+        h('span', { class: 'kind', style: { color: c } }, kindLabel),
+        h('span', { class: 'grow' }),
+        o.extra || null,
+        page ? h('a', { class: 'chip ins-open-page', href: page, title: 'Open the ' + (KIND_NAME[kind] || 'entity').toLowerCase() + ' page' }, 'Open page') : null,
+        closeButton(),
+      ]),
       h('h3', null, title),
-      sub ? h('div', { class: 'sub' }, sub) : null,
+      o.status || sub ? h('div', { class: 'ins-head-meta' }, [o.status ? statusPill(o.status) : null, sub ? h('span', { class: 'sub' }, sub) : null]) : null,
     ]);
   }
 
   // -------------------------------------------------- device
 
   function renderDevice(d) {
+    kind = 'device';
     const disc = disciplineOf(d, vocab);
     const dcol = vocab.disciplines && vocab.disciplines[disc] ? vocab.disciplines[disc].color : '#9aa3b5';
     const kinds = vocab.kinds || {};
@@ -203,16 +427,19 @@ export function mountInspector(el, ctx) {
     const devUrl = (ctx.appRoot || '') + 'p/' + proj + '/d/' + encodeURIComponent(d.id);
     const problems = problemsFor(d);
     const nOpen = problems.filter(function (r) { return (r.status || 'open') === 'open'; }).length;
+    // .ins-badges is where review badges go (B.5 ST-ENTITY adds duplicates).
     root.appendChild(head(((vocab.disciplines && vocab.disciplines[disc] && vocab.disciplines[disc].label) || disc) + ' \u00b7 ' + ((kinds[d.kind] && kinds[d.kind].label) || d.kind || 'device'), dcol, deviceTitle(d),
-      [((d.manufacturer || '') + ' ' + (d.model || '')).trim() || d.sub || '', d.status && d.status !== 'installed' ? ' \u00b7 ' + d.status : ''].join(''),
-      h('span', { class: 'row' }, [
-        nOpen ? h('button', { type: 'button', class: 'badge-problem', 'data-badge': 'problems', title: nOpen + ' open problem report' + (nOpen > 1 ? 's' : ''), onclick: function () {
-          const sec = root.querySelector('[data-section="problems"]'); if (sec) { sec.open = true; sec.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
-        } }, '\u26A0 ' + nOpen + ' open') : null,
-        d.status === 'planned' ? h('span', { class: 'badge-planned' }, 'planned') : null,
-      ])));
+      ((d.manufacturer || '') + ' ' + (d.model || '')).trim() || d.sub || '', {
+        status: d.status || 'installed',
+        page: { view: 'devices', id: d.id },
+        extra: h('span', { class: 'row ins-badges' }, [
+          nOpen ? h('button', { type: 'button', class: 'badge-problem', 'data-badge': 'problems', title: nOpen + ' open problem report' + (nOpen > 1 ? 's' : ''), onclick: function () {
+            focusSection('problems', { user: true });
+          } }, '\u26A0 ' + nOpen + ' open') : null,
+        ]),
+      }));
     const actions = h('div', { class: 'ins-actions' }, [
-      h('button', { type: 'button', class: 'small', onclick: function () { ctx.navigate('patch', { sel: 'device:' + d.id }); } }, 'Show in patch view'),
+      h('button', { type: 'button', class: 'small', onclick: function () { goTo('patch', 'device:' + d.id, { canvas: true }); } }, 'Show in patch view'),
       ctx.api ? h('button', { type: 'button', class: 'small', 'data-action': 'trace', onclick: function () { openTrace(d.id, deviceTitle(d), 'all ports', d); } }, 'Trace path') : null,
       h('a', { class: 'chip', href: devUrl, target: '_blank', rel: 'noopener' }, 'Device page'),
       ro() ? null : h('button', { type: 'button', class: 'small', onclick: function () {
@@ -564,7 +791,7 @@ export function mountInspector(el, ctx) {
       out.push(fieldRow('Face', boundSelect('devices', d.id, ['rack', 'face'], ['front', 'rear'])));
       out.push(fieldRow('Side', boundSelect('devices', d.id, ['rack', 'side'], ['full', 'left', 'right'], { defaultValue: 'full', default: 'full' })));
       out.push(fieldRow('Depth', boundSelect('devices', d.id, ['rack', 'depth'], ['full', 'half'], { defaultValue: 'full', default: 'full' })));
-      out.push(h('button', { type: 'button', class: 'small', onclick: function () { ctx.navigate('racks', { sel: 'rack:' + rk.id }); } }, 'Show in rack'));
+      out.push(h('button', { type: 'button', class: 'small', onclick: function () { goTo('racks', 'rack:' + rk.id, { canvas: true }); } }, 'Show in rack'));
     }
     return out;
   }
@@ -801,16 +1028,17 @@ export function mountInspector(el, ctx) {
   }
 
   function renderChannel(d, ch, eff) {
+    kind = 'channel';
     const cctx = channelCtx(d, eff);
     const idx = channelIndex(eff.links);
     const me = idx[ch.id] || { inputs: [], sends: [], feeds: [], outputs: [], direct: [], insertSend: [], insertReturn: [], dca: [], mute: [], members: [] };
     const editable = !ro() && eff.source === 'device';
     const kindLabel = { input: 'Input channel', stereo_input: 'Stereo input', mix: 'Mix bus', aux: 'Aux bus', group: 'Group bus', matrix: 'Matrix', stereo: 'Stereo bus', mono: 'Mono bus', dca: 'DCA', mute_group: 'Mute group', rack: 'Rack' }[ch.kind] || ch.kind;
     const back = h('button', { type: 'button', class: 'small ghost', 'aria-label': 'Back to ' + d.name, onclick: function () { store.select({ type: 'device', id: d.id, device: d.id }); } }, '\u2190 ' + (d.name || d.id));
-    root.appendChild(head(kindLabel, groupColor(ch), channelTitle(ch), [d.name || d.id, ch.source && ch.source !== 'user' ? ' \u00b7 from ' + ch.source + ' import' : ''].join(''), back));
+    root.appendChild(head(kindLabel, groupColor(ch), channelTitle(ch), [d.name || d.id, ch.source && ch.source !== 'user' ? ' \u00b7 from ' + ch.source + ' import' : ''].join(''), { extra: back }));
     root.appendChild(h('div', { class: 'ins-actions' }, [
       ctx.api ? h('button', { type: 'button', class: 'small primary', 'data-action': 'trace', onclick: function () { openTrace(channelRef(d.id, ch), channelTitle(ch), d.name || d.id, d); } }, 'Trace path') : null,
-      h('button', { type: 'button', class: 'small', onclick: function () { ctx.navigate('patch', { sel: 'device:' + d.id }); } }, 'Show console in patch view'),
+      h('button', { type: 'button', class: 'small', onclick: function () { goTo('patch', 'device:' + d.id, { canvas: true }); } }, 'Show console in patch view'),
     ]));
     if (eff.source === 'overlay') {
       root.appendChild(h('div', { class: 'ins-console-note pending', style: { margin: '0 12px 8px' } }, [
@@ -1003,7 +1231,7 @@ export function mountInspector(el, ctx) {
     traceDrawer = openTraceDrawer({
       from: ref, title: title, sub: sub, direction: 'down', dca: true,
       fetchPaths: function (params) { return ctx.api.trace(ctx.project, params); },
-      actions: [{ label: 'Open in patch view', onclick: function (st) { st.close(); ctx.navigate('patch', { sel: 'device:' + (d ? d.id : ref.split(':')[0]) }); } }],
+      actions: [{ label: 'Open in patch view', onclick: function (st) { st.close(); goTo('patch', 'device:' + (d ? d.id : ref.split(':')[0]), { canvas: true }); } }],
       onHop: function (hop) {
         if (!hop || !hop.device) return;
         if (hop.kind === 'channel' || hop.kind === 'dca') store.select({ type: 'channel', id: hop.device, device: hop.device, channel: hop.channel });
@@ -1018,8 +1246,43 @@ export function mountInspector(el, ctx) {
   // -------------------------------------------------- port
 
   function renderPort(d, p) {
+    kind = 'port';
     const m = mediumInfo(p.medium, vocab);
-    root.appendChild(head('Port \u00b7 ' + (p.dir || 'io'), m.color, (d.name || d.id) + ' \u00b7 ' + portLabel(p), (p.name || '') + (p.group ? ' \u00b7 ' + p.group : '') + ' \u00b7 ' + (m.label || p.medium)));
+    const cables = store.index.cablesByPort[d.id + ':' + p.id] || [];
+    root.appendChild(head('Port \u00b7 ' + (p.dir || 'io'), m.color, (d.name || d.id) + ' \u00b7 ' + portLabel(p), (p.name || '') + (p.group ? ' \u00b7 ' + p.group : '') + ' \u00b7 ' + (m.label || p.medium),
+      { status: cables.length ? 'patched' : 'not patched' }));
+
+    // "Now connected" leads: far end (port drawer), cable (cable drawer), Trace; then the port fields.
+    const list = h('div', { class: 'ins-now' });
+    cables.forEach(function (c) {
+      const mine = c.from.device === d.id && c.from.port === p.id ? 'from' : 'to';
+      const other = mine === 'from' ? c.to : c.from;
+      const od = find(store.doc.devices, other.device);
+      const op = od && other.port ? devicePorts(od).filter(function (x) { return x.id === other.port; })[0] : null;
+      const peerText = (od ? od.name : other.device) + (op ? ' \u00b7 ' + portLabel(op) : (other.port ? ' \u00b7 ' + other.port : ''));
+      const peerSel = op ? { type: 'port', id: od.id, device: od.id, port: op.id } : { type: 'device', id: other.device, device: other.device };
+      list.appendChild(h('div', { class: 'ins-now-row', 'data-cable': c.id }, [
+        h('span', { class: 'ins-now-dir', title: mine === 'from' ? 'Goes to' : 'Comes from' }, mine === 'from' ? '\u2192' : '\u2190'),
+        od ? selLink(peerSel, peerText, 'ins-now-peer', { 'data-peer': selToString(peerSel) }) : h('span', { class: 'ins-now-peer' }, peerText),
+        selLink({ type: 'cable', id: c.id }, c.tag || 'Cable', 'chip ins-now-cable', { 'aria-label': 'Cable ' + (c.tag || c.id), title: 'Cable ' + (c.tag || c.id) }),
+        ro() ? null : h('button', { type: 'button', class: 'small danger', 'aria-label': 'Disconnect', onclick: function () { commit(disconnectOps(store.doc, c.id), 'Disconnect ' + portLabel(p)); render(); } }, '\u00d7'),
+      ]));
+    });
+    if (!cables.length) list.appendChild(h('div', { class: 'muted' }, 'Not patched.'));
+    const tools = h('div', { class: 'row ins-now-tools' }, [
+      ctx.api ? h('button', { type: 'button', class: 'small', 'data-action': 'trace', onclick: function () { openTrace(d.id + ':' + p.id, (d.name || d.id) + ' \u00b7 ' + portLabel(p), p.channels > 1 ? p.channels + ' channels' : (m.label || p.medium || ''), d); } }, 'Trace path') : null,
+      ro() ? null : h('button', { type: 'button', class: 'small', onclick: function () {
+        ctx.pickPort({ compatibleWith: { device: d.id, port: p.id }, room: store.room }).then(function (t) {
+          if (!t) return;
+          const here = { device: d.id, port: p.id };
+          const ops = p.dir === 'in' ? connectOps(store.doc, t, here, {}, vocab) : connectOps(store.doc, here, t, {}, vocab);
+          commit(ops, 'Connect ' + (d.name || d.id) + ' ' + portLabel(p));
+          render();
+        });
+      } }, 'Patch\u2026'),
+    ]);
+    root.appendChild(section('cables', 'Now connected (' + cables.length + ')', [list, tools.children.length ? tools : null], true));
+
     function portField(label, key, opts) {
       opts = opts || {};
       const input = opts.select || h('input', { value: p[key] === undefined || p[key] === null ? '' : String(p[key]), list: opts.list, inputmode: opts.inputmode, placeholder: opts.placeholder });
@@ -1055,35 +1318,8 @@ export function mountInspector(el, ctx) {
       portField('Channels', 'channels', { inputmode: 'numeric', number: true }),
       portField('Note', 'note', { select: noteI }),
     ], true));
-    const cables = store.index.cablesByPort[d.id + ':' + p.id] || [];
-    const list = h('div');
-    cables.forEach(function (c) {
-      const mine = c.from.device === d.id && c.from.port === p.id ? 'from' : 'to';
-      const other = mine === 'from' ? c.to : c.from;
-      const od = find(store.doc.devices, other.device);
-      const op = od && other.port ? devicePorts(od).filter(function (x) { return x.id === other.port; })[0] : null;
-      list.appendChild(h('div', { class: 'row', style: { margin: '4px 0' } }, [
-        h('span', null, (mine === 'from' ? '\u2192 ' : '\u2190 ') + (od ? od.name : other.device) + (op ? ' \u00b7 ' + portLabel(op) : '')),
-        c.tag ? h('span', { class: 'chip' }, c.tag) : null,
-        h('span', { class: 'grow' }),
-        h('button', { type: 'button', class: 'small', onclick: function () { store.select({ type: 'cable', id: c.id }); } }, 'Cable'),
-        ro() ? null : h('button', { type: 'button', class: 'small danger', 'aria-label': 'Disconnect', onclick: function () { commit(disconnectOps(store.doc, c.id), 'Disconnect ' + portLabel(p)); render(); } }, '\u00d7'),
-      ]));
-    });
-    if (!cables.length) list.appendChild(h('div', { class: 'muted' }, 'Not patched.'));
-    if (!ro()) list.appendChild(h('button', { type: 'button', class: 'small', onclick: function () {
-      ctx.pickPort({ compatibleWith: { device: d.id, port: p.id }, room: store.room }).then(function (t) {
-        if (!t) return;
-        const here = { device: d.id, port: p.id };
-        const ops = p.dir === 'in' ? connectOps(store.doc, t, here, {}, vocab) : connectOps(store.doc, here, t, {}, vocab);
-        commit(ops, 'Connect ' + (d.name || d.id) + ' ' + portLabel(p));
-        render();
-      });
-    } }, 'Patch\u2026'));
-    root.appendChild(section('cables', 'Connections (' + cables.length + ')', [list], true));
     root.appendChild(h('div', { class: 'ins-actions' }, [
       h('button', { type: 'button', class: 'small', onclick: function () { store.select({ type: 'device', id: d.id, device: d.id }); } }, 'Device details'),
-      ctx.api ? h('button', { type: 'button', class: 'small', 'data-action': 'trace', onclick: function () { openTrace(d.id + ':' + p.id, (d.name || d.id) + ' \u00b7 ' + portLabel(p), p.channels > 1 ? p.channels + ' channels' : (m.label || p.medium || ''), d); } }, 'Trace path') : null,
     ]));
   }
 
@@ -1095,15 +1331,32 @@ export function mountInspector(el, ctx) {
     return (dd ? dd.name : (e && e.device) || '?') + (pp ? ' \u00b7 ' + portLabel(pp) : (e && e.port ? ' \u00b7 ' + e.port : ' (device)'));
   }
 
+  // Device name → device page (device drawer without a router) · port label → port drawer.
+  function endpointLinks(e) {
+    const dd = find(store.doc.devices, e && e.device);
+    const pp = dd && e.port ? devicePorts(dd).filter(function (x) { return x.id === e.port; })[0] : null;
+    if (!dd) return h('span', { class: 'ins-ep-text' }, endpointText(e));
+    const devHref = pageHref({ view: 'devices', id: dd.id });
+    const devSel = { type: 'device', id: dd.id, device: dd.id };
+    return h('span', { class: 'ins-ep-text' }, [
+      devHref ? h('a', { class: 'ins-ep-dev', href: devHref, title: 'Open the device page' }, dd.name || dd.id) : selLink(devSel, dd.name || dd.id, 'ins-ep-dev'),
+      ' \u00b7 ',
+      pp ? selLink({ type: 'port', id: dd.id, device: dd.id, port: pp.id }, portLabel(pp), 'ins-ep-port', { 'data-peer': 'port:' + dd.id + ':' + pp.id })
+        : h('span', { class: 'muted' }, e.port ? e.port : '(device)'),
+    ]);
+  }
+
   function renderCable(c) {
+    kind = 'cable';
     const m = mediumInfo(c.medium, vocab);
     const units = (store.doc.settings && store.doc.settings.units) || 'metric';
-    root.appendChild(head('Cable \u00b7 ' + (m.label || c.medium), m.color, c.tag || c.label || c.id, endpointText(c.from) + ' \u2192 ' + endpointText(c.to)));
+    root.appendChild(head('Cable \u00b7 ' + (m.label || c.medium), m.color, c.tag || c.label || c.id, endpointText(c.from) + ' \u2192 ' + endpointText(c.to),
+      { status: c.status || 'installed' }));
     function endRow(end) {
       const e = c[end];
-      return h('div', { class: 'row', style: { margin: '4px 0' } }, [
-        h('span', { class: 'muted', style: { width: '40px' } }, end === 'from' ? 'From' : 'To'),
-        h('span', { class: 'grow' }, endpointText(e)),
+      return h('div', { class: 'row ins-ep-row', 'data-end': end }, [
+        h('span', { class: 'muted ins-ep-label' }, end === 'from' ? 'From' : 'To'),
+        endpointLinks(e),
         ro() ? null : h('button', { type: 'button', class: 'small', onclick: function () {
           const other = end === 'from' ? c.to : c.from;
           ctx.pickPort({ compatibleWith: other && other.port ? other : null, room: store.room }).then(function (t) {
@@ -1117,26 +1370,32 @@ export function mountInspector(el, ctx) {
     root.appendChild(section('endpoints', 'Endpoints', [endRow('from'), endRow('to')], true));
     const lenI = bound('cables', c.id, ['length_m'], { inputmode: 'decimal', parse: function (v) { return parseLength(v, units); }, format: function (v) { return formatLength(v, units); }, placeholder: units === 'imperial' ? 'e.g. 25 ft' : 'e.g. 7.5 m', label: 'Set length' });
     root.appendChild(section('fields', 'Cable', [
-      fieldRow('Medium', boundSelect('cables', c.id, ['medium'], mediaOptions(), { label: 'Set medium' })),
       fieldRow('Tag', bound('cables', c.id, ['tag'], { placeholder: 'e.g. A-012', label: 'Set tag' })),
-      fieldRow('Type', bound('cables', c.id, ['type'], { placeholder: 'e.g. XLR3 M-F', list: connectorList() })),
+      fieldRow('Signal', bound('cables', c.id, ['signal'])),
+      fieldRow('Medium', boundSelect('cables', c.id, ['medium'], mediaOptions(), { label: 'Set medium' })),
       fieldRow('Length', lenI),
+      fieldRow('Status', boundSelect('cables', c.id, ['status'], (vocab.statuses || ['installed', 'planned', 'spare', 'retired']), { defaultValue: 'installed', default: 'installed' })),
+      fieldRow('Type', bound('cables', c.id, ['type'], { placeholder: 'e.g. XLR3 M-F', list: connectorList() })),
       fieldRow('Color', bound('cables', c.id, ['color'])),
       fieldRow('Channels', bound('cables', c.id, ['channels'], { inputmode: 'numeric', number: true })),
-      fieldRow('Status', boundSelect('cables', c.id, ['status'], (vocab.statuses || ['installed', 'planned', 'spare', 'retired']), { defaultValue: 'installed', default: 'installed' })),
       fieldRow('Bundle', boundSelect('cables', c.id, ['bundle'], (store.doc.bundles || []).map(function (b) { return [b.id, b.tag || b.label || b.id]; }), { empty: 'None' })),
-      fieldRow('Signal', bound('cables', c.id, ['signal'])),
       fieldRow('Map label', bound('cables', c.id, ['label'])),
       fieldRow('Two-way', boundCheck('cables', c.id, ['bidirectional'])),
       fieldRow('Note', bound('cables', c.id, ['note'], { multiline: true })),
     ], true));
-    if (!ro()) root.appendChild(h('div', { class: 'ins-actions' }, [h('button', { type: 'button', class: 'small danger', onclick: function () { commit(disconnectOps(store.doc, c.id), 'Delete cable ' + (c.tag || c.id)); store.select(null); } }, 'Delete cable')]));
+    const inSchedules = routed() && ctx.route.view === 'schedules' && (ctx.route.tab || 'cables') === 'cables';
+    const actions = h('div', { class: 'ins-actions' }, [
+      inSchedules ? null : h('button', { type: 'button', class: 'small', 'data-action': 'schedules', onclick: function () { goTo('schedules', 'cable:' + c.id, { tab: 'cables' }); } }, 'Open in schedules'),
+      ro() ? null : h('button', { type: 'button', class: 'small danger', onclick: function () { commit(disconnectOps(store.doc, c.id), 'Delete cable ' + (c.tag || c.id)); store.select(null); } }, 'Delete cable'),
+    ]);
+    if (actions.children.length) root.appendChild(actions);
   }
 
   // -------------------------------------------------- other entities
 
   function renderRack(r) {
-    root.appendChild(head('Rack', 'var(--accent)', r.name || r.id, (r.units || '?') + 'U'));
+    kind = 'rack';
+    root.appendChild(head('Rack', 'var(--accent)', r.name || r.id, (r.units || '?') + 'U', { page: { view: 'racks', id: r.id } }));
     root.appendChild(section('fields', 'Rack', [
       fieldRow('Name', bound('racks', r.id, ['name'])),
       fieldRow('Room', boundSelect('racks', r.id, ['room'], roomOptions(false), { empty: '\u2014' })),
@@ -1157,6 +1416,7 @@ export function mountInspector(el, ctx) {
   }
 
   function renderFloorplan(f) {
+    kind = 'floorplan';
     root.appendChild(head('Floor plan', 'var(--accent)', f.name || f.id, ((f.markers || []).length) + ' markers'));
     root.appendChild(section('fields', 'Floor plan', [
       fieldRow('Name', bound('floorplans', f.id, ['name'])),
@@ -1174,7 +1434,8 @@ export function mountInspector(el, ctx) {
     const dev = find(store.doc.devices, sel.device || sel.id);
     const markers = (f && f.markers) || [];
     const mk = markers.filter(function (m) { return m.device === (sel.device || sel.id); })[0];
-    if (!f || !mk) { renderEmpty(); return; }
+    if (!f || !mk) { renderEmpty(sel); return; }
+    kind = 'marker';
     root.appendChild(head('Marker', 'var(--accent)', dev ? dev.name : mk.device, f.name));
     function setMarker(patch, label) {
       const next = deepClone(markers).map(function (m) { return m.device === mk.device ? Object.assign(m, patch) : m; });
@@ -1196,6 +1457,7 @@ export function mountInspector(el, ctx) {
   }
 
   function renderBundle(b) {
+    kind = 'bundle';
     root.appendChild(head('Bundle \u00b7 ' + (b.kind || 'link'), 'var(--accent)', b.tag || b.label || b.id, ((store.doc.cables || []).filter(function (c) { return c.bundle === b.id; }).length) + ' cables'));
     root.appendChild(section('fields', 'Bundle', [
       fieldRow('Kind', boundSelect('bundles', b.id, ['kind'], ['multicore', 'loom', 'snake', 'link'])),
@@ -1209,7 +1471,8 @@ export function mountInspector(el, ctx) {
   }
 
   function renderRoom(r) {
-    root.appendChild(head('Room', 'var(--accent)', r.name || r.id, r.code || ''));
+    kind = 'room';
+    root.appendChild(head('Room', 'var(--accent)', r.name || r.id, r.code || '', { page: { view: 'rooms', id: r.id, room: r.id } }));
     root.appendChild(section('fields', 'Room', [
       fieldRow('Name', bound('rooms', r.id, ['name'])),
       fieldRow('Code', bound('rooms', r.id, ['code'], { parse: function (v) { return v.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8); } })),
@@ -1220,12 +1483,16 @@ export function mountInspector(el, ctx) {
     ], true));
   }
 
-  function renderEmpty() {
+  // `missing`: a selection whose entity is not in the document.
+  function renderEmpty(missing) {
+    kind = 'empty';
     const doc = store.doc;
     const room = store.room;
     const devs = (doc.devices || []).filter(function (d) { return room === '*' || (d.room || '') === room; });
-    root.appendChild(h('div', { class: 'sheet-head' }, [h('h2', null, 'Details'), h('button', { type: 'button', class: 'icon ghost', 'aria-label': 'Close inspector', onclick: function () { ctx.closeInspector(); } }, '\u00d7')]));
+    const what = missing ? (KIND_NAME[missing.type] || 'Item') + ' \u201c' + selToString(missing).replace(/^[a-z]+:/, '') + '\u201d not found.' : '';
+    root.appendChild(h('div', { class: 'sheet-head' }, [h('h2', null, 'Details'), closeButton()]));
     root.appendChild(h('div', { class: 'ins-empty' }, [
+      what ? h('p', { class: 'ins-missing' }, what) : null,
       h('p', null, 'Select a device, port or cable to see and edit its details.'),
       h('p', { class: 'muted' }, devs.length + ' devices in ' + (room === '*' ? 'all rooms' : 'this room') + '.'),
       ro() ? null : h('button', { type: 'button', onclick: function () {
@@ -1243,46 +1510,73 @@ export function mountInspector(el, ctx) {
 
   // -------------------------------------------------- render
 
+  // The first section still visible below the index, so a re-render (the channel overlay arriving,
+  // a commit elsewhere) keeps that section where it was instead of keeping a raw pixel offset.
+  function scrollAnchor() {
+    if (!el.scrollTop) return null;
+    const nav = root.querySelector('.ins-index');
+    const top = nav ? nav.getBoundingClientRect().bottom : el.getBoundingClientRect().top;
+    const secs = topSections();
+    for (let i = 0; i < secs.length; i++) {
+      const r = secs[i].getBoundingClientRect();
+      if (r.bottom > top + 1) return { key: secs[i].getAttribute('data-section'), dy: r.top - top };
+    }
+    return null;
+  }
+  function restoreAnchor(a, scroll) {
+    el.scrollTop = scroll;
+    const d = a && sectionEl(a.key);
+    if (!d) return;
+    const nav = root.querySelector('.ins-index');
+    const top = nav ? nav.getBoundingClientRect().bottom : el.getBoundingClientRect().top;
+    el.scrollTop += d.getBoundingClientRect().top - top - a.dy;
+  }
+
   function render() {
     flushTimers();
-    const scroll = el.scrollTop;
+    const scroll = resetScroll ? 0 : el.scrollTop;
+    const anchor = resetScroll ? null : scrollAnchor();
+    resetScroll = false;
+    echo = null;
     root.innerHTML = '';
     const sel = store.selection;
     const doc = store.doc;
-    if (!sel) { renderEmpty(); return; }
-    if (sel.type === 'device' || (sel.type === 'port' && !sel.port)) {
+    if (!sel) {
+      renderEmpty();
+    } else if (sel.type === 'device' || (sel.type === 'port' && !sel.port)) {
       const d = find(doc.devices, sel.device || sel.id);
-      if (d) renderDevice(d); else renderEmpty();
+      if (d) renderDevice(d); else renderEmpty(sel);
     } else if (sel.type === 'port') {
       const d = find(doc.devices, sel.device || sel.id);
       const p = d ? devicePorts(d).filter(function (x) { return x.id === sel.port; })[0] : null;
-      if (d && p) renderPort(d, p); else if (d) renderDevice(d); else renderEmpty();
+      if (d && p) renderPort(d, p); else if (d) renderDevice(d); else renderEmpty(sel);
     } else if (sel.type === 'channel') {
       const d = find(doc.devices, sel.device || sel.id);
       const eff = d ? effectiveChannels(d, store.overlay) : null;
       const ch = eff ? eff.channels.filter(function (x) { return x.id === sel.channel; })[0] : null;
-      if (d && ch) renderChannel(d, ch, eff); else if (d) renderDevice(d); else renderEmpty();
+      if (d && ch) renderChannel(d, ch, eff); else if (d) renderDevice(d); else renderEmpty(sel);
     } else if (sel.type === 'cable') {
       const c = find(doc.cables, sel.id);
-      if (c) renderCable(c); else renderEmpty();
+      if (c) renderCable(c); else renderEmpty(sel);
     } else if (sel.type === 'rack') {
       const r = find(doc.racks, sel.id);
-      if (r) renderRack(r); else renderEmpty();
+      if (r) renderRack(r); else renderEmpty(sel);
     } else if (sel.type === 'floorplan') {
       const f = find(doc.floorplans, sel.id);
-      if (f) renderFloorplan(f); else renderEmpty();
+      if (f) renderFloorplan(f); else renderEmpty(sel);
     } else if (sel.type === 'marker') {
       renderMarker(sel);
     } else if (sel.type === 'bundle') {
       const b = find(doc.bundles, sel.id);
-      if (b) renderBundle(b); else renderEmpty();
+      if (b) renderBundle(b); else renderEmpty(sel);
     } else if (sel.type === 'room') {
       const r = find(doc.rooms, sel.id);
-      if (r) renderRoom(r); else renderEmpty();
+      if (r) renderRoom(r); else renderEmpty(sel);
     } else {
       renderEmpty();
     }
-    el.scrollTop = scroll;
+    buildIndex();
+    restoreAnchor(anchor, scroll);
   }
 
   function selRefs() {
@@ -1300,9 +1594,11 @@ export function mountInspector(el, ctx) {
   let lastSelKey = '';
   function onSelection() {
     const sel = store.selection;
-    const key = sel ? JSON.stringify(sel) : '';
+    // canonical, so re-selecting the same entity in another shape ({type,id} vs {type,id,device}) keeps the scroll
+    const key = selToString(sel);
     if (key === lastSelKey) return;
     lastSelKey = key;
+    resetScroll = true;
     render();
   }
   function onDoc(e) {
@@ -1314,8 +1610,9 @@ export function mountInspector(el, ctx) {
     const touched = d.touched || [];
     const hit = touched.some(function (t) { return refs.some(function (r) { return r.charAt(r.length - 1) === '/' ? t.indexOf(r) === 0 : t === r; }); });
     if (!hit) return;
-    // do not yank the field the user is typing in
-    if (el.contains(document.activeElement) && d.source === 'local') return;
+    // do not yank the field the user is typing in (the drawer host itself takes focus on open)
+    const ae = document.activeElement;
+    if (ae && ae !== el && el.contains(ae) && d.source === 'local') return;
     render();
   }
   function onMode() { render(); }
@@ -1327,7 +1624,8 @@ export function mountInspector(el, ctx) {
   store.addEventListener('doc', onDoc);
   store.addEventListener('mode', onMode);
   store.addEventListener('overlay', onOverlay);
-  lastSelKey = store.selection ? JSON.stringify(store.selection) : '';
+  const offRoute = typeof ctx.subscribe === 'function' ? ctx.subscribe('route', refreshIndex) : null;
+  lastSelKey = selToString(store.selection);
   render();
   return {
     destroy: function () {
@@ -1336,10 +1634,13 @@ export function mountInspector(el, ctx) {
       store.removeEventListener('doc', onDoc);
       store.removeEventListener('mode', onMode);
       store.removeEventListener('overlay', onOverlay);
+      if (typeof offRoute === 'function') offRoute();
       if (traceDrawer) traceDrawer.close();
       el.innerHTML = '';
     },
     focus: function (sel) { if (sel) store.select(sel); },
     render: render,
+    focusSection: function (key) { return focusSection(key); },
+    sections: function () { return topSections().map(function (d) { return d.getAttribute('data-section'); }); },
   };
 }
