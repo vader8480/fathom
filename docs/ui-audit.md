@@ -1756,6 +1756,16 @@ Acceptance for each ST unit:
 - Text matches the copy above (exact wording may improve; the meaning must hold).
 - No page horizontal scroll at m.
 
+**PRIM-FIX (added by the coordinator after wave 2).** Wave 3 has no owner for the wave-1 primitives, and
+the view migrations reported API gaps they worked around. One extra wave-3 unit, PRIM-FIX, owns
+`explorer.js`, `explorer.css`, `entity-header.js`, `entity-header.css`, `entity-core.js`, `datatable.js`,
+`datatable-core.js`, `datatable.css`, `drawer.js`, `dom.js`, their `tests/js/*-core.test.mjs` and
+`tests/test_ui_<primitive>.py` files, and `dev/index.html`, `dev/patchtable.html`, `dev/floorplan.html`,
+`dev/schedules.html`. Changes are **additive**: every existing contract test (`tests/js/*-contract.test.mjs`,
+which PRIM-FIX does not own) and every wave-2 UI suite must keep passing unchanged. The gap list is in
+"Done / Deferred → Wave 2 → Follow-ups → Primitives". ST-LISTS additionally owns `dev/plans/harness.js`
+(its inventory walk).
+
 ---
 
 ### B.6 Docs
