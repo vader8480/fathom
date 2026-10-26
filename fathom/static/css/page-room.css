@@ -18,6 +18,7 @@ a.pr-room-link:hover{text-decoration:underline}
 /* page body below the sticky header */
 .pr-body{flex:1 0 auto;min-width:0;padding:14px 16px 24px}
 .pr-panel{display:flex;flex-direction:column;gap:14px;min-width:0}
+.pr-panel .dt-table td[data-col=tag],.pr-panel .dt-table td[data-col=length],.pr-panel .dt-table td[data-col=ports]{white-space:nowrap}
 .pr-h2{margin:0 0 6px;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
 
 /* overview cards */
