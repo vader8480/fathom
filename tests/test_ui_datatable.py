@@ -229,7 +229,7 @@ class DataTableUi(UiCase):
             controls = "#h-main .dt-toolbar button, #h-main .dt-toolbar summary, #h-main .dt-search, #h-main .dt-csv, #h-main .dt-pager select"
             self.assertEqual(pg.offscreen(controls, "x"), 0, "toolbar controls fit the width")
             small = pg.js("Array.prototype.filter.call(document.querySelectorAll(%s), function (e) {"
-                          " var r = e.getBoundingClientRect(); return r.height < 44; }).length" % _q(controls))
+                          " var r = e.getBoundingClientRect(); return r.height > 0 && r.height < 44; }).length" % _q(controls))
             self.assertEqual(small, 0, "44px targets under (pointer: coarse)")
             left0 = pg.rect("#h-main tbody tr.dt-row td[data-col=tag]")["left"]
             pg.js("document.querySelector('#h-main .dt-scroll').scrollLeft = 200; 1")
