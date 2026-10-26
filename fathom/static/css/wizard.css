@@ -1,0 +1,82 @@
+/* Wizard dialog and bulk add (docs/ui-audit.md B.2 WIZARD). Reuses app.css
+   variables and the #app-dialog look; full screen below 700px. Sits under
+   .app-dialog-backdrop (70) so the discard confirmation stacks on top. */
+.wz-open body{overflow:hidden}
+.wz-backdrop{position:fixed;inset:0;z-index:65;background:rgba(3,6,14,.62);display:flex;align-items:center;justify-content:center;padding:calc(12px + var(--sat,0px)) 12px calc(12px + var(--sab,0px))}
+.wz{background:var(--panel);color:var(--text);border:1px solid var(--border-2);border-radius:12px;width:min(900px,100%);height:min(760px,100%);max-height:100%;min-width:0;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.wz [hidden]{display:none!important}
+.wz-head{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 14px;border-bottom:1px solid var(--border)}
+.wz-title{margin:0;font-size:15px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wz .wz-close{min-width:40px;min-height:40px}
+
+.wz-steps{list-style:none;margin:0;padding:8px 14px;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.wz-steps::-webkit-scrollbar{display:none}
+.wz-step{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;white-space:nowrap;flex:none}
+.wz-step+.wz-step::before{content:"";width:14px;height:1px;background:var(--border-2)}
+.wz-step-n{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;border:1px solid var(--border-2);font-size:11px;font-variant-numeric:tabular-nums}
+.wz-step[aria-current=step]{color:var(--text);font-weight:600}
+.wz-step[aria-current=step] .wz-step-n{border-color:var(--accent);background:rgba(142,162,255,.14)}
+.wz-step.wz-done .wz-step-n{border-color:var(--ok);color:var(--ok)}
+
+.wz-body{flex:1 1 auto;min-height:0;overflow:auto;padding:12px 14px;-webkit-overflow-scrolling:touch;outline:none}
+.wz-foot{display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap}
+.wz-foot-msg{flex:1 1 auto;min-width:0;color:var(--muted);font-size:12px}
+.wz-foot button{min-height:40px;min-width:96px}
+
+.wz-field{display:flex;flex-direction:column;gap:4px;margin:0 0 12px;min-width:0}
+.wz-label{font-weight:600;font-size:12.5px}
+.wz-hint{color:var(--muted);font-size:12px;margin:0}
+.wz-field select,.wz-field input:not([type=checkbox]):not([type=radio]){min-height:40px;max-width:100%}
+.wz-paste{font-family:var(--mono);font-size:13px;min-height:170px;white-space:pre;overflow:auto;overflow-wrap:normal}
+.wz-file input{padding:6px}
+.wz-check label{display:inline-flex;align-items:center;gap:8px;min-height:40px;cursor:pointer}
+.wz input[type=checkbox]{width:18px;height:18px;margin:0}
+.wz-err{color:var(--err);font-size:12px;margin:2px 0 0}
+.wz [aria-invalid=true]{border-color:var(--err)}
+.wz-errors{list-style:none;margin:0 0 12px;padding:8px 10px;border:1px solid var(--err);border-radius:var(--radius,8px);color:var(--err);font-size:12.5px}
+.wz-submit-error{margin:0 0 12px}
+
+.wz-map{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:2px 14px;margin-top:4px}
+.wz-map select{width:100%}
+.wz-map .wz-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wz-map .wz-hint{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.wz-paste-sum,.wz-preview-sum{color:var(--muted);font-size:12px;margin:4px 0 8px}
+.wz-table{min-width:0}
+.wz-inc-wrap{display:inline-flex;align-items:center;justify-content:center;min-width:40px;min-height:40px;margin:-8px 0;cursor:pointer}
+.wz-row-bad td{color:var(--muted)}
+.wz-bad{color:var(--err)}
+.wz-warn{color:var(--warn)}
+.wz-ok{color:var(--ok)}
+
+.wz-review-title{font-size:15px;margin:4px 0 10px}
+.wz-review-list{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.wz-names{overflow-wrap:anywhere}
+.wz-result-text{font-size:15px;margin:8px 0 12px}
+.wz-result-link{display:inline-flex;align-items:center;min-height:40px;color:var(--accent);font-weight:600}
+
+@media (pointer:coarse){
+  .wz button,.wz select,.wz input:not([type=checkbox]):not([type=radio]){min-height:44px}
+  .wz .wz-close{min-width:44px;min-height:44px}
+  .wz-check label,.wz-result-link,.wz-inc-wrap{min-height:44px}
+  .wz-inc-wrap{min-width:44px}
+  .wz input[type=checkbox]{width:22px;height:22px}
+}
+@media (max-width:699px){
+  .wz-backdrop{padding:0;align-items:stretch}
+  .wz{width:100%;height:100%;max-height:none;border:0;border-radius:0;padding-top:var(--sat,0px);padding-bottom:var(--sab,0px)}
+  .wz-step:not([aria-current=step]) .wz-step-label{display:none}
+  .wz-step+.wz-step::before{width:8px}
+  .wz-foot-msg{flex-basis:100%}
+  .wz-foot-msg:empty{display:none}
+  .wz-foot button{flex:1 1 0}
+  .wz-map{grid-template-columns:minmax(0,1fr)}
+  .wz-paste{min-height:140px}
+}
+@media (prefers-reduced-motion:no-preference){
+  .wz{animation:wz-in .16s ease-out}
+}
+@keyframes wz-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){
+  .wz,.wz *{transition:none!important;animation:none!important}
+}

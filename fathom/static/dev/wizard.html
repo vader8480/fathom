@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en" data-harness="wizard">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fathom · Wizard harness</title>
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/datatable.css">
+<link rel="stylesheet" href="../css/feedback.css">
+<link rel="stylesheet" href="../css/wizard.css">
+<style>
+  .wzh{max-width:900px;margin:0 auto;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+  .wzh h1{font-size:13px;letter-spacing:1.8px;text-transform:uppercase;color:var(--accent);margin:0 0 6px}
+  .wzh p{color:var(--muted);margin:4px 0 12px}
+  .wzh-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+  .wzh-actions button{min-height:40px}
+  .wzh h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:16px 0 4px}
+  #wz-h-log{list-style:none;margin:0;padding:0;font-size:12px;color:#b9c2d6}
+  #wz-h-log li{padding:4px 0;border-bottom:1px solid var(--border);overflow-wrap:anywhere}
+  #wz-h-status{font-size:12px}
+</style>
+</head>
+<body>
+  <main class="wzh">
+    <h1>Wizard harness</h1>
+    <p>Bulk add on the <code>sunday-demo</code> fixture with a fake ctx: <code>commit</code> records the ops it would send and applies them to an in-memory store; nothing reaches the API. <span id="wz-h-status"></span></p>
+    <div class="wzh-actions">
+      <button type="button" id="wz-h-devices" class="primary">Bulk add devices</button>
+      <button type="button" id="wz-h-cables">Bulk add cables</button>
+      <button type="button" id="wz-h-generic">Generic wizard</button>
+      <button type="button" id="wz-h-undo">Undo</button>
+    </div>
+    <h2>Recorded writes</h2>
+    <ul id="wz-h-log" aria-live="polite"></ul>
+  </main>
+  <div id="fathom-live" class="sr-only" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"></div>
+  <script type="module" src="wizard-harness.js"></script>
+</body>
+</html>
