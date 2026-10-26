@@ -55,8 +55,8 @@ a.hm-recent:hover{border-color:var(--accent)}
   .hm-lede{font-size:13px}
   .hm-root section{margin-bottom:18px}
   .hm-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-  .hm-card{flex-direction:column;gap:4px;padding:10px 12px}
-  .hm-card-glyph{width:auto;text-align:left}
+  .hm-card{gap:8px;padding:10px}
+  .hm-card-glyph{width:18px;font-size:16px}
   .hm-card-text{font-size:12px}
 }
 @media (min-width:700px) and (max-width:1099px){
