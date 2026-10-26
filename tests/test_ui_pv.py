@@ -329,6 +329,8 @@ class PatchViewUi(UiCase):
                     self.assertEqual(pg.js("document.querySelectorAll('#%s').length" % ident), 1, "#%s stays in the DOM" % ident)
                 for sel in ("#pv-add", ".pv-menu-arrange", "#pv-undo", "#pv-redo", "#pv-arrange"):
                     self.assertFalse(self.visible(pg, sel), "%s is not shown read-only at %s" % (sel, size))
+                hint = pg.js("document.querySelector('.pv-hint').textContent")
+                self.assertNotRegex(hint, r"(?i)drag|re-patch|rename", "the canvas hint offers no edits read-only")
                 if size == "m":
                     pg.click(".pv-menu-more")
                     self.assertFalse(self.visible(pg, "#pv-arrange"))

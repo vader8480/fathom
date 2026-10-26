@@ -730,6 +730,7 @@ export function mount(el, ctx) {
     $('.pv-pop-arrange').hidden = r;
     homes.arrange.node.hidden = r;
     homes.undo.node.hidden = r;
+    $('.pv-hint').textContent = r ? 'Select gear to see its connections' : 'Drag gear \u00b7 re-patch wires \u00b7 rename anything';
     $('#pv-add').disabled = r;
     $('#pv-arrange').disabled = r;
     const u = $('#pv-undo'), re = $('#pv-redo');

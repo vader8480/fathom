@@ -505,10 +505,9 @@ class AcceptanceViewer(UiCase):
     # Enabled form controls a viewer may use: search, filters, paging and scope selects.
     ALLOWED_CONTROLS = ("input[type=search], .dt-toolbar *, .dt-foot *, .dt-pager *, .dt-pop *, .ex-head *, #sch-state, #pt-filter-room,"
                         " #pt-only-patched, #pt-show-overlay, #fp-select, #rk-select, #inv-scope, select[aria-label='Rows per page']")
-    # Known defect (inspector.js renderDevice 'notes' section): reported, guarded by test_viewer_device_notes_read_only.
-    KNOWN = "#app-inspector [data-section=notes] textarea"
+    NOTES = "#app-inspector [data-section=notes] textarea"
 
-    CONTROLS = """(function (allowed, known) {
+    CONTROLS = """(function (allowed) {
       var out = {buttons: [], fields: [], checks: 0, bulk: 0};
       function shown(el) { var r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'; }
       Array.prototype.forEach.call(document.querySelectorAll('#app-main button, #app-main a[role=button], #app-inspector button, #app-inspector a[role=button]'), function (b) {
@@ -516,14 +515,14 @@ class AcceptanceViewer(UiCase):
         out.buttons.push((b.getAttribute('aria-label') || b.textContent || '').trim());
       });
       Array.prototype.forEach.call(document.querySelectorAll('#app-main input, #app-main select, #app-main textarea, #app-inspector input, #app-inspector select, #app-inspector textarea, #app-main [contenteditable=true], #app-inspector [contenteditable=true]'), function (f) {
-        if (!shown(f) || f.disabled || f.readOnly || f.matches(allowed) || f.matches(known)) return;
+        if (!shown(f) || f.disabled || f.readOnly || f.matches(allowed)) return;
         if (f.type === 'checkbox' && f.closest('.dt-cols-panel')) return;
         out.fields.push((f.id ? '#' + f.id + ' ' : '') + (f.getAttribute('aria-label') || f.name || f.type || f.tagName));
       });
       out.checks = document.querySelectorAll('#app-main .dt-row-check').length;
       out.bulk = Array.prototype.filter.call(document.querySelectorAll('#app-main .dt-bulk'), shown).length;
       return out;
-    })(%s, %s)"""
+    })(%s)"""
 
     ROUTES = ["home", "patch", "table", "plan", "racks", "racks/rk-foh/elevation", "inventory", "schedules/cables", "schedules/ip",
               "devices", "devices/foh-cl5/overview", "devices/foh-cl5/ports", "rooms", "rooms/main/overview", "imports",
@@ -561,7 +560,7 @@ class AcceptanceViewer(UiCase):
                 pg.wait_for(DRAWER_OPEN)
                 pg.wait_for("!!document.querySelector('#app-inspector .ins-head')")
             pg.js("new Promise(function (r) { setTimeout(r, 200); })")
-            c = pg.js(self.CONTROLS % (q(self.ALLOWED_CONTROLS), q(self.KNOWN)))
+            c = pg.js(self.CONTROLS % q(self.ALLOWED_CONTROLS))
             writes = [b for b in c["buttons"] if self.WRITE_WORDS.match(b)]
             bad = {}
             if writes:
@@ -570,6 +569,10 @@ class AcceptanceViewer(UiCase):
                 bad["editable fields"] = sorted(set(c["fields"]))[:10]
             if c["checks"] or c["bulk"]:
                 bad["selection"] = {"row checks": c["checks"], "bulk bars": c["bulk"]}
+            if r == "patch":
+                hint = pg.js("(document.querySelector('.pv-hint') || {}).textContent || ''")
+                if re.search(r"(?i)drag|re-patch|rename", hint):
+                    bad["canvas hint"] = hint
             if bad:
                 found[r] = bad
             if r in ("patch", "inventory", "settings"):
@@ -577,14 +580,13 @@ class AcceptanceViewer(UiCase):
         self.assertEqual(pg.js("window.__fathomErrors || []"), [])
         self.assertEqual(found, {}, "write actions rendered for a viewer")
 
-    @unittest.expectedFailure
     def test_viewer_device_notes_read_only(self):
-        """The device drawer's Notes editor is enabled for viewers (inspector.js: bound() outside fieldRow)."""
+        """The device drawer's standalone Notes editor (bound() outside fieldRow) is disabled for viewers."""
         pg = self.signed_in("viewer1", "/#/campus-demo/main/inventory?sel=device:foh-cl5&sec=inventory")
         view_ready(pg, "inventory")
         pg.wait_for(DRAWER_OPEN)
-        pg.wait_for("!!document.querySelector(%s)" % q(self.KNOWN))
-        self.assertTrue(pg.js("(function (t) { return t.disabled || t.readOnly; })(document.querySelector(%s))" % q(self.KNOWN)),
+        pg.wait_for("!!document.querySelector(%s)" % q(self.NOTES))
+        self.assertTrue(pg.js("(function (t) { return t.disabled || t.readOnly; })(document.querySelector(%s))" % q(self.NOTES)),
                         "viewer gets an enabled Notes textarea in the device drawer")
 
     def test_viewer_put_is_403(self):

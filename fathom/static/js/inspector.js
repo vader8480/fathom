@@ -153,6 +153,7 @@ export function mountInspector(el, ctx) {
     if (opts.multiline) input = h('textarea', { rows: 3 });
     else input = h('input', { type: opts.type || 'text', inputmode: opts.inputmode, list: opts.list, placeholder: opts.placeholder, autocomplete: 'off' });
     input.value = cur === undefined || cur === null ? '' : (opts.format ? opts.format(cur) : String(cur));
+    if (ro()) input.disabled = true;
     const key = coll + '/' + id + '/' + path.join('.');
     function send() {
       const raw = input.value;

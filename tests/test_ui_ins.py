@@ -254,6 +254,7 @@ class InspectorUi(UiCase):
             for kept in ("Show in patch view", "Device page"):
                 self.assertIn(kept, labels)
             self.assertTrue(pg.js("document.querySelector('#app-inspector [data-section=identity] input').disabled"))
+            self.assertTrue(pg.js("document.querySelector('#app-inspector [data-section=notes] textarea').disabled"), "Notes is read-only for a viewer")
             self.assertTrue(pg.js("!!document.querySelector('#app-inspector a.ins-open-page')"))
             self.assertTrue(pg.js("!!document.querySelector('#app-inspector nav.ins-index')"))
             self.layout_checks(pg, "m")
