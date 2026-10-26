@@ -1,1 +1,52 @@
-/* schedules.css: placeholder (docs/ui-audit.md B.2 SHELL); its owner adds rules in wave 2. */
+/* Schedules view (docs/ui-audit.md B.3 SCH): routed tabs over one DataTable per
+   kind. Colours and type come from plan.css / datatable.css; this file only lays
+   the table into the panel and keeps plan.css's .sch-table rules (kept for the
+   tag preview and the print sheet) from overriding the DataTable. */
+
+/* ---- tabs are links (a[role=tab][href]) */
+.sch-tabs a[role=tab] { display: inline-flex; align-items: center; min-height: 40px; text-decoration: none; }
+.sch-tabs a[role=tab]:hover { color: var(--text, #e6eaf4); }
+.sch-root a.sch-btn { display: inline-flex; align-items: center; text-decoration: none; color: var(--text, #e6eaf4); }
+
+/* ---- panel: tag panel, warnings, table, totals */
+.sch-panel > * { flex-shrink: 0; }
+.sch-problems { padding: 0 0 6px; }
+.sch-totals { margin: 8px 0 0; }
+.sch-error { margin: 0 0 8px; }
+.sch-tagpanel { margin: 0 0 10px; }
+.sch-host .dt-actions .sch-btn, .sch-host .dt-actions select, .sch-labelbar .sch-btn, .sch-labelbar select { min-height: 40px; }
+.sch-labelbar { padding: 0 0 10px; background: none; border: 0; }
+
+@media (min-width: 700px) {
+  .sch-panel { display: flex; flex-direction: column; }
+  .sch-panel > .sch-host { flex: 1 1 auto; min-height: 280px; display: flex; flex-direction: column; }
+  .sch-host > .dt-root { flex: 1 1 auto; min-height: 0; --dt-max-h: none; }
+  .sch-host > .dt-root > .dt-scroll { flex: 0 1 auto; min-height: 120px; }
+}
+
+/* ---- DataTable over plan.css .sch-table (load order is not fixed: the Table view
+   can load datatable.css before plan.css) */
+.sch-host .dt-table.sch-table { border-collapse: separate; border-spacing: 0; }
+.sch-host .dt-table.sch-table th, .sch-host .dt-table.sch-table td { padding: 6px 10px; }
+.sch-host .dt-compact .dt-table.sch-table td { padding-top: 3px; padding-bottom: 3px; }
+.sch-host .dt-table.sch-table thead th { font-size: 10.5px; letter-spacing: .8px; }
+.sch-host .dt-table.sch-table tbody tr.dt-row:hover td { background: none; background-image: linear-gradient(rgba(255,255,255,.03), rgba(255,255,255,.03)); }
+.sch-host .dt-table.sch-table tbody tr.dt-row.dt-hl td { background-image: linear-gradient(rgba(142,162,255,.18), rgba(142,162,255,.18)); }
+.sch-host .dt-table .dt-al-right { font-variant-numeric: tabular-nums; }
+.sch-chips { display: inline-flex; align-items: center; white-space: nowrap; }
+.sch-host .sch-edit { display: block; }
+.sch-untagged td[data-col=tag] .sch-edit input { border-color: rgba(255,149,72,.35); }
+
+@media (max-width: 699px) {
+  .sch-tabs { padding: 6px 6px 0; }
+  .sch-tabs a[role=tab] { padding: 0 9px; }
+  .sch-panel { padding: 8px; }
+  .sch-host .dt-table.sch-table tbody tr.dt-row td.dt-sticky, .sch-host .dt-table.sch-table thead th.dt-sticky { background-color: var(--panel, #111828); }
+}
+
+/* ---- print: every filtered row (the DataTable alone prints its current page) */
+@media print {
+  .sch-panel { display: block; }
+  .sch-host.sch-printing > .dt-root { display: none !important; }
+  .sch-root .sch-host .sch-printsheet[hidden] { display: table !important; }
+}
