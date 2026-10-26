@@ -6,7 +6,10 @@
 .ins-head .ins-head-row{display:flex;align-items:center;gap:6px;min-width:0}
 .ins-head .ins-glyph{font-size:14px;line-height:1;flex:none}
 .ins-head .kind{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ins-head .ins-badges{flex:none;flex-wrap:nowrap}
+.ins-head .ins-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;min-width:0}
+.ins-head .ins-badges:empty{display:none}
+.ins-head .ins-badges .fb-review{max-width:100%}
+.ins-dups-error.fb-error{margin:0}
 .ins-head h3{overflow-wrap:anywhere}
 .ins-head-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;min-width:0}
 .ins-head-meta .sub{min-width:0;overflow-wrap:anywhere}

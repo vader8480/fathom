@@ -41,6 +41,12 @@ a.pr-card-tab:hover{background:rgba(142,162,255,.08)}
 .pr-notfound{display:flex;flex-direction:column;gap:8px;padding:16px;min-width:0}
 .pr-notfound p{margin:0}
 a.pr-back{display:inline-flex;align-items:center;min-height:40px}
+.pr-notfound .fb-error{margin:0;max-width:640px}
+
+/* states (B.5 ST-ENTITY): skeleton, per-tab empty copy inside the DataTable's .dt-empty */
+.pr-skeleton{flex:1 1 auto}
+.pr-empty.fb-empty{margin:8px auto}
+.pr-empty .fb-empty-text{overflow-wrap:anywhere}
 
 /* md: let the room links wrap under the title instead of pushing past the content edge */
 @media (min-width:700px) and (max-width:1099px){

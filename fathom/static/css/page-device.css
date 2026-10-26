@@ -29,6 +29,11 @@
 .pd-more{color:var(--muted);font-size:11.5px}
 .pd-muted{margin:0;color:var(--muted);font-size:12.5px}
 .pd-notfound{max-width:640px}
+/* states (B.5 ST-ENTITY): skeleton, per-tab empty copy inside the DataTable's .dt-empty */
+.pd-skeleton{flex:1 1 auto}
+.pd-empty.fb-empty{margin:8px auto}
+.pd-empty .fb-empty-text{overflow-wrap:anywhere}
+.pd-panel.pd-inventory-empty{align-items:stretch;border-style:dashed}
 .pd-back{display:inline-flex;align-items:center;min-height:40px}
 
 /* overview cards */

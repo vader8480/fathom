@@ -16,7 +16,7 @@ import { mountExplorer } from './explorer.js';
 import { mountEntityHeader } from './entity-header.js';
 import { deviceFacts, deviceTabs, resolveTab, summaryCards, statusPill, rackPosition, tabLabel } from './entity-core.js';
 import { createTable, openTableDialog } from './datatable.js';
-import { inlineError, reviewBadge, confirmScope } from './feedback.js';
+import { inlineError, reviewBadge, confirmScope, skeleton, emptyState } from './feedback.js';
 import { bulkAdd } from './wizard.js';
 import { fetchDuplicates, openMergeDialog } from './merge-ui.js';
 import { openTraceDrawer } from './trace-ui.js';
@@ -70,6 +70,7 @@ export function mount(el, ctxIn) {
     mode: '', id: '', tab: '', device: null,
     root: null, table: null, ex: null, eh: null, body: null,
     dups: {}, dupsFor: {}, timer: 0, destroyed: false, pending: 0,
+    skel: null, boot: 0, focusSel: null,
   };
   const offs = [];
 
@@ -87,10 +88,12 @@ export function mount(el, ctxIn) {
   }
   function toast(msg, level) { if (typeof ctx.toast === 'function') ctx.toast(msg, level); }
   function commit(ops, label) { return typeof ctx.commit === 'function' ? ctx.commit(ops, label) : null; }
+  // Problem reports live in the document; ctx.problems() holds validation warnings, which name no device.
   function problems() {
-    const p = typeof ctx.problems === 'function' ? ctx.problems() : null;
+    const p = doc().problems;
     return Array.isArray(p) ? p : [];
   }
+  function docReady() { return !!(store && store.doc); }
   function later(fn) {
     Promise.resolve().then(function () { if (!S.destroyed) fn(); });
   }
@@ -147,6 +150,25 @@ export function mount(el, ctxIn) {
   function pageHref(target, tab, sub) {
     return href({ view: 'devices', id: target.id, tab: tab || '', sub: sub || '', room: deviceRoomFor(target), query: {} });
   }
+  // DataTable `empty` callback: our copy when the table has no rows at all, the table's own
+  // "No rows match" + Clear filters when filters hide every row.
+  function emptyTable(build) {
+    return function (state, info) {
+      if (info && info.total) {
+        return h('div', { class: 'pd-filtered' }, [
+          h('p', { class: 'dt-empty-text' }, 'No rows match these filters.'),
+          h('button', { type: 'button', class: 'dt-clear', onclick: function () { if (S.table) S.table.setState({ q: '', filters: {} }); } }, 'Clear filters'),
+        ]);
+      }
+      const node = build();
+      node.classList.add('pd-empty');
+      return node;
+    };
+  }
+  function patchHref(d) {
+    const lg = typeof ctx.layout !== 'function' || ctx.layout() === 'lg';
+    return href({ view: 'patch', id: '', tab: '', sub: '', room: d.room || room(), query: { sel: 'device:' + d.id, drawer: lg ? null : '0' } });
+  }
   function scoped() {
     const r = room();
     return (doc().devices || []).filter(function (d) {
@@ -164,10 +186,10 @@ export function mount(el, ctxIn) {
     offs.push(on(store, 'doc', schedule));
     offs.push(on(store, 'overlay', schedule));
   }
-  if (typeof ctx.subscribe === 'function') offs.push(ctx.subscribe('problems', schedule));
 
   function refresh() {
     if (S.destroyed) return;
+    if (S.skel) { boot(); return; }
     if (S.mode === 'landing') {
       if (S.table) S.table.setRows(landingRows());
       if (S.landSub) S.landSub.textContent = landingSub();
@@ -285,7 +307,15 @@ export function mount(el, ctxIn) {
       onRow: function (row) { go({ view: 'devices', id: row.id, query: {} }); },
       url: tableUrl(), highlight: S.route.query.hl || null, actions: actions,
       noun: { one: 'device', many: 'devices' }, csvName: 'devices-' + (r === '*' ? 'all' : r) + '.csv',
-      empty: r === '*' ? 'No devices in this project yet.' : 'No devices in ' + roomName(r) + ' yet.',
+      empty: emptyTable(function () {
+        const editor = !ro();
+        return emptyState({
+          title: r === '*' ? 'No devices in this project yet.' : 'No devices in ' + roomName(r) + ' yet.',
+          text: editor ? 'Add one from a template, or bulk add them from a spreadsheet.' : 'Devices appear here once an editor documents them.',
+          action: editor ? { label: 'Add device', run: addDevice } : null,
+          secondary: editor ? { label: 'Bulk add', run: function () { bulkAdd(ctx, { kind: 'devices', room: r === '*' ? '' : r }); } } : null,
+        });
+      }),
     });
     if (typeof ctx.setTitle === 'function') ctx.setTitle('Devices');
     loadDuplicates(function () { if (S.mode === 'landing' && S.table) S.table.setRows(landingRows()); });
@@ -740,6 +770,55 @@ export function mount(el, ctxIn) {
       onclick: function () { drawer({ type: 'device', id: d.id, device: d.id }, section); } }, ro() ? 'Details' : label);
   }
 
+  // o: {title, editor, viewer, write: action for editors only, nav: action for everyone}.
+  function tabEmpty(o) {
+    const editor = !ro();
+    return emptyState({
+      title: o.title,
+      text: editor ? o.editor : o.viewer,
+      action: (editor && o.write) || o.nav || null,
+      secondary: editor && o.write ? o.nav || null : null,
+    });
+  }
+  function drawerAction(d, label, section) {
+    return { label: label, run: function () { drawer({ type: 'device', id: d.id, device: d.id }, section); } };
+  }
+  const TAB_EMPTY = {
+    ports: function (d, name) {
+      return tabEmpty({ title: name + ' has no ports yet.', editor: 'Add its inputs and outputs in the inspector\u2019s Ports section.',
+        viewer: 'Nobody has recorded its inputs and outputs yet.', write: drawerAction(d, 'Add ports', 'ports') });
+    },
+    cables: function (d, name) {
+      return tabEmpty({ title: 'No cables connected to ' + name + '.', editor: 'Drag between its ports in the patch view to connect it.',
+        viewer: 'Nothing is patched to it yet.', nav: { label: 'Open in patch view', href: patchHref(d) } });
+    },
+    network: function (d, name) {
+      return tabEmpty({ title: 'No interfaces on ' + name + '.', editor: 'Add one in the inspector\u2019s Network section.',
+        viewer: 'No IP address, MAC or hostname has been recorded.', write: drawerAction(d, 'Add interface', 'net') });
+    },
+    channels: function (d, name) {
+      return tabEmpty({ title: 'No console channels on ' + name + '.', editor: 'Add channels in the inspector\u2019s Console channels section.',
+        viewer: 'No channels have been recorded.', write: drawerAction(d, 'Add channels', 'console') });
+    },
+    inventory: function (d, name) {
+      return tabEmpty({ title: 'No inventory details for ' + name + '.', editor: 'Record the serial, asset tag and warranty in the inspector\u2019s Inventory section.',
+        viewer: 'No serial, asset tag or warranty has been recorded.', write: drawerAction(d, 'Add inventory details', 'inventory') });
+    },
+    procedures: function (d, name) {
+      return tabEmpty({ title: 'No procedures mention ' + name + ' yet.',
+        editor: 'Write an SOP page for it, or link it from a page with [[device:' + d.id + ']].',
+        viewer: 'Procedures that list this device appear here.',
+        write: { label: 'New procedure', href: href({ view: 'sop', id: '', tab: '', sub: '', query: { 'new': '1', device: d.id } }) } });
+    },
+    files: function (d, name) {
+      return tabEmpty({ title: 'No photos or documents for ' + name + '.', editor: 'Upload them in the inspector\u2019s Photos & documents section.',
+        viewer: 'Photos and manuals attached to it appear here.', write: drawerAction(d, 'Upload files', 'files') });
+    },
+  };
+  function emptyFor(key, d, name) {
+    return emptyTable(function () { return TAB_EMPTY[key](S.device || d, name); });
+  }
+
   function factsList(items) {
     return h('dl', { class: 'pd-facts' }, items.map(function (f) {
       return h('div', { class: 'pd-fact', 'data-fact': f.key }, [h('dt', null, f.label), h('dd', null, f.value || '\u2014')]);
@@ -761,14 +840,14 @@ export function mount(el, ctxIn) {
       tabTable(body, 'device.ports', { rows: function () { return portRows(S.device); }, opts: {
         caption: 'Ports' + DOT + name, columns: portColumns(), noun: { one: 'port', many: 'ports' },
         onRow: function (row) { openPort(S.device, row); }, csvName: d.id + '-ports.csv',
-        empty: name + ' has no ports yet. Add them in Edit \u203A Ports.',
+        empty: emptyFor('ports', d, name),
       } });
     },
     cables: function (body, d, name) {
       tabTable(body, 'device.cables', { rows: function () { return cableRows(S.device); }, opts: {
         caption: 'Cables' + DOT + name, columns: cableColumns(), noun: { one: 'cable', many: 'cables' },
         onRow: function (row) { drawer({ type: 'cable', id: row.id }); }, csvName: d.id + '-cables.csv',
-        empty: 'No cables connected to ' + name + '.',
+        empty: emptyFor('cables', d, name),
       } });
     },
     network: function (body, d, name) {
@@ -794,7 +873,7 @@ export function mount(el, ctxIn) {
           { key: 'sw', header: 'Switch port', value: function (r) { return r.sw; }, hideOnMobile: true },
         ],
         onRow: function () { drawer({ type: 'device', id: S.device.id, device: S.device.id }, 'net'); },
-        empty: 'No network interfaces recorded for ' + name + '.',
+        empty: emptyFor('network', d, name),
       } });
     },
     dmx: function (body, d, name) {
@@ -831,12 +910,20 @@ export function mount(el, ctxIn) {
           { key: 'kind', header: 'Kind', value: function (r) { return r.kind; }, filterable: true, hideOnMobile: true },
         ],
         onRow: function (row) { drawer({ type: 'channel', id: S.device.id, device: S.device.id, channel: row.id }); },
+        empty: emptyFor('channels', d, name),
       } });
     },
-    inventory: function (body, d) {
+    inventory: function (body, d, name) {
       const inv = d.inventory || {};
       const loc = find(doc().locations, d.location);
       const pill = statusPill(d.status || 'installed');
+      S.tabRows = null;
+      if (!['serial', 'asset_tag', 'purchase_date', 'warranty_until'].some(function (k) { return str(inv[k]).trim(); }) && !d.location) {
+        const box = TAB_EMPTY.inventory(d, name);
+        box.classList.add('pd-empty');
+        body.appendChild(h('section', { class: 'pd-panel pd-inventory pd-inventory-empty' }, box));
+        return;
+      }
       body.appendChild(h('section', { class: 'pd-panel pd-inventory' }, [
         factsList([
           { key: 'serial', label: 'Serial', value: str(inv.serial) },
@@ -854,14 +941,14 @@ export function mount(el, ctxIn) {
       tabTable(body, 'device.procedures', { rows: function () { return procRows(S.device); }, opts: {
         caption: 'Procedures' + DOT + name, columns: procColumns(), noun: { one: 'procedure', many: 'procedures' },
         onRow: openProc, csvName: d.id + '-procedures.csv',
-        empty: 'No procedures mention ' + name + ' yet.',
+        empty: emptyFor('procedures', d, name),
       } });
     },
     files: function (body, d, name) {
       tabTable(body, 'device.files', { rows: function () { return fileRows(S.device); }, opts: {
         caption: 'Files' + DOT + name, columns: fileColumns(), noun: { one: 'file', many: 'files' },
         onRow: openFile, csvName: d.id + '-files.csv',
-        empty: 'No photos or documents for ' + name + '. Upload them in Edit \u203A Photos & documents.',
+        empty: emptyFor('files', d, name),
       } });
     },
   };
@@ -902,20 +989,44 @@ export function mount(el, ctxIn) {
     }
   }
 
-  apply(S.route, null);
+  // First render: a page-shaped skeleton until the doc is ready, replaced by the content on a later
+  // task so mount() returns (and the shell paints its frame) before the tables are built.
+  function boot() {
+    if (S.boot) { clearTimeout(S.boot); S.boot = 0; }
+    if (S.destroyed || !S.skel || !docReady()) return;
+    const sk = S.skel;
+    S.skel = null;
+    apply(S.route, null);
+    if (sk.parentNode) sk.parentNode.removeChild(sk);
+    if (S.focusSel) { const sel = S.focusSel; S.focusSel = null; focusSel(sel); }
+  }
+
+  function focusSel(sel) {
+    if (S.destroyed || S.mode !== 'page' || !S.table || !sel || sel.device !== S.id) return;
+    if (sel.type === 'port' && S.tab === 'ports') S.table.setHighlight(sel.port);
+    else if (sel.type === 'channel' && S.tab === 'channels') S.table.setHighlight(sel.channel);
+  }
+
+  S.skel = skeleton(S.route.id ? 'page' : 'table');
+  S.skel.classList.add('pd-skeleton');
+  el.appendChild(S.skel);
+  S.boot = setTimeout(boot, 0);
 
   return {
     route: function (r) {
       if (S.destroyed || !r) return;
+      if (S.skel) { S.route = r; return; }
       apply(r, S.route);
     },
     focus: function (sel) {
-      if (S.destroyed || S.mode !== 'page' || !S.table || !sel || sel.device !== S.id) return;
-      if (sel.type === 'port' && S.tab === 'ports') S.table.setHighlight(sel.port);
-      else if (sel.type === 'channel' && S.tab === 'channels') S.table.setHighlight(sel.channel);
+      if (S.skel) { S.focusSel = sel; return; }
+      focusSel(sel);
     },
     destroy: function () {
       if (S.destroyed) return;
+      if (S.boot) { clearTimeout(S.boot); S.boot = 0; }
+      if (S.skel && S.skel.parentNode) S.skel.parentNode.removeChild(S.skel);
+      S.skel = null;
       teardown();
       S.destroyed = true;
       if (S.timer) clearTimeout(S.timer);

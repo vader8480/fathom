@@ -16,7 +16,8 @@ import {
   connectOps, disconnectOps, repatchOps, expandPortGroups, newId, slug, formatLength, parseLength, deepClone,
   normalizeMac,
 } from './model-core.js';
-import { duplicateHints, openMergeDialog } from './merge-ui.js';
+import { duplicateHints, fetchDuplicates, openMergeDialog } from './merge-ui.js';
+import { inlineError, reviewBadge } from './feedback.js';
 import {
   GROUPS, BUS_KINDS, effectiveChannels, groupChannels, channelMap, channelIndex, channelLabel, channelTitle, channelSummary, filterChannels,
   endpointText as linkEndpointText, routePeer, channelRef, setInputPatch, toggleSend, toggleMembership, addOutput, removeLink, updateChannel, nextChannel,
@@ -397,7 +398,8 @@ export function mountInspector(el, ctx) {
     return out;
   }
 
-  // .ins-head: kind glyph and label, badges (`extra`), "Open page", close; title; status pill and subtitle.
+  // .ins-head: kind glyph and label, `extra`, "Open page", close; title; status pill and subtitle;
+  // then `badges` (div.ins-badges, review badges on their own wrapping row).
   function head(kindLabel, color, title, sub, opts) {
     const o = opts || {};
     const c = color || 'var(--muted)';
@@ -413,7 +415,20 @@ export function mountInspector(el, ctx) {
       ]),
       h('h3', null, title),
       o.status || sub ? h('div', { class: 'ins-head-meta' }, [o.status ? statusPill(o.status) : null, sub ? h('span', { class: 'sub' }, sub) : null]) : null,
+      o.badges || null,
     ]);
+  }
+
+  // Review badge (B.5 checklist 6) that jumps to its section; `data-badge` names the section.
+  function sectionBadge(key, count, label, title) {
+    const b = reviewBadge({ count: count, label: label, title: title, onClick: function () { focusSection(key, { user: true }); } });
+    if (b) b.setAttribute('data-badge', key);
+    return b;
+  }
+  function addDupBadge(box, n) {
+    if (!box.isConnected || box.querySelector('[data-badge=dups]')) return;
+    const b = sectionBadge('dups', n, n === 1 ? 'possible duplicate' : 'possible duplicates', 'Review likely duplicates of this device');
+    if (b) box.appendChild(b);
   }
 
   // -------------------------------------------------- device
@@ -427,17 +442,17 @@ export function mountInspector(el, ctx) {
     const devUrl = (ctx.appRoot || '') + 'p/' + proj + '/d/' + encodeURIComponent(d.id);
     const problems = problemsFor(d);
     const nOpen = problems.filter(function (r) { return (r.status || 'open') === 'open'; }).length;
-    // .ins-badges is where review badges go (B.5 ST-ENTITY adds duplicates).
+    const badges = h('div', { class: 'ins-badges' }, [
+      sectionBadge('problems', nOpen, nOpen === 1 ? 'open problem' : 'open problems', 'Show the open problem reports'),
+    ]);
     root.appendChild(head(((vocab.disciplines && vocab.disciplines[disc] && vocab.disciplines[disc].label) || disc) + ' \u00b7 ' + ((kinds[d.kind] && kinds[d.kind].label) || d.kind || 'device'), dcol, deviceTitle(d),
       ((d.manufacturer || '') + ' ' + (d.model || '')).trim() || d.sub || '', {
         status: d.status || 'installed',
         page: { view: 'devices', id: d.id },
-        extra: h('span', { class: 'row ins-badges' }, [
-          nOpen ? h('button', { type: 'button', class: 'badge-problem', 'data-badge': 'problems', title: nOpen + ' open problem report' + (nOpen > 1 ? 's' : ''), onclick: function () {
-            focusSection('problems', { user: true });
-          } }, '\u26A0 ' + nOpen + ' open') : null,
-        ]),
+        badges: badges,
       }));
+    // Duplicates are advisory: a failed check shows in the section (with Retry), not in the header.
+    if (ctx.api) fetchDuplicates(ctx, { device: d.id }).then(function (list) { addDupBadge(badges, (list || []).length); }, function () { /* see the section */ });
     const actions = h('div', { class: 'ins-actions' }, [
       h('button', { type: 'button', class: 'small', onclick: function () { goTo('patch', 'device:' + d.id, { canvas: true }); } }, 'Show in patch view'),
       ctx.api ? h('button', { type: 'button', class: 'small', 'data-action': 'trace', onclick: function () { openTrace(d.id, deviceTitle(d), 'all ports', d); } }, 'Trace path') : null,
@@ -532,12 +547,30 @@ export function mountInspector(el, ctx) {
       const host = h('div', { class: 'ins-dups' });
       const dups = section('dups', 'Possible duplicates', [host], true);
       let filled = false;
+      const load = function () {
+        host.textContent = '';
+        host.appendChild(h('div', { class: 'muted' }, 'Looking for duplicates\u2026'));
+        return fetchDuplicates(ctx, { device: id }).then(function (list) {
+          if (!host.isConnected) return;
+          host.textContent = '';
+          host.appendChild(duplicateHints(ctx, id, function (res) {
+            if (res && res.survivor) store.select({ type: 'device', id: res.survivor, device: res.survivor });
+          }));
+          addDupBadge(badges, (list || []).length);
+        }, function (e) {
+          if (!host.isConnected) return;
+          host.textContent = '';
+          const msg = (e && e.message) || '';
+          const err = inlineError({ name: e && e.name, status: e && e.status, code: e && e.code,
+            message: 'Could not check for duplicates' + (msg ? ': ' + msg : '.') }, load, { compact: true });
+          err.classList.add('ins-dups-error');
+          host.appendChild(err);
+        });
+      };
       function fill() {
         if (filled) return;
         filled = true;
-        host.appendChild(duplicateHints(ctx, id, function (res) {
-          if (res && res.survivor) store.select({ type: 'device', id: res.survivor, device: res.survivor });
-        }));
+        load();
       }
       if (dups.open) fill();
       dups.addEventListener('toggle', function () { if (dups.open) fill(); });
