@@ -1,0 +1,69 @@
+/* Home view (docs/ui-audit.md B.2 HOME). Layout only: colours, type and
+   radii come from app.css variables. Breakpoints per D3: sm <700, md
+   700-1099, lg >=1100. Targets are >=40px, 44px under (pointer: coarse). */
+.hm-root{width:100%;max-width:1180px;margin:0 auto;padding:20px calc(20px + var(--sar)) 32px calc(20px + var(--sal));min-width:0}
+.hm-head{margin:0 0 18px}
+.hm-kicker{margin:0 0 2px;color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.6px;text-transform:uppercase}
+.hm-title{margin:0 0 6px;font-size:24px;line-height:1.2;overflow-wrap:anywhere}
+.hm-lede{margin:0;max-width:62ch;color:var(--muted);font-size:14px}
+.hm-h{margin:0 0 8px;font-size:12px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+.hm-root section{margin:0 0 24px;min-width:0}
+
+/* section cards */
+.hm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(240px,100%),1fr));gap:10px}
+.hm-card{display:flex;gap:12px;align-items:flex-start;min-height:40px;min-width:0;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);color:var(--text);text-decoration:none;transition:border-color .15s,background-color .15s}
+.hm-card:hover{border-color:var(--accent)}
+.hm-card-glyph{flex:none;width:28px;font-size:20px;line-height:1.2;text-align:center;color:var(--accent)}
+.hm-card-body{display:flex;flex-direction:column;gap:2px;min-width:0}
+.hm-card-name{font-weight:600;font-size:14px}
+.hm-card-text{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+
+/* room cards */
+.hm-room-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:10px}
+.hm-room{min-width:0;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel)}
+.hm-room-head{display:flex;align-items:baseline;gap:8px;min-width:0}
+.hm-room-name{margin:0;font-size:15px;min-width:0;overflow-wrap:anywhere}
+.hm-room-code{flex:none;color:var(--muted);font-family:var(--mono);font-size:11px}
+.hm-room-counts{margin:2px 0 10px;color:var(--muted);font-size:12.5px}
+.hm-links{display:flex;flex-wrap:wrap;gap:6px}
+.hm-link{display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border:1px solid var(--border);border-radius:999px;color:var(--text);text-decoration:none;font-size:13px;transition:border-color .15s}
+.hm-link:hover{border-color:var(--accent)}
+.hm-link[data-link=room]{color:var(--accent)}
+
+/* recents strip: scrolls inside itself, never the page */
+.hm-strip{display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;padding-bottom:4px;min-width:0}
+a.hm-recent{flex:0 0 auto;display:flex;align-items:center;gap:10px;min-height:40px;max-width:240px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);color:var(--text);text-decoration:none;scroll-snap-align:start;transition:border-color .15s}
+a.hm-recent:hover{border-color:var(--accent)}
+.hm-recent-glyph{flex:none;color:var(--accent);font-size:16px}
+.hm-recent-body{display:flex;flex-direction:column;min-width:0}
+.hm-recent-title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hm-recent-kind{color:var(--muted);font-size:11.5px}
+
+/* project cards */
+.hm-project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(240px,100%),1fr));gap:10px}
+.hm-project{display:flex;flex-direction:column;justify-content:center;gap:2px;min-height:40px;min-width:0;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);color:var(--text);text-decoration:none;transition:border-color .15s}
+.hm-project:hover{border-color:var(--accent)}
+.hm-project[aria-current=page]{border-color:var(--border-2);background:rgba(142,162,255,.14)}
+.hm-project-title{font-weight:600;overflow-wrap:anywhere}
+.hm-project-sub{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+
+
+@media (max-width:699px){
+  .hm-root{padding:14px calc(12px + var(--sar)) 24px calc(12px + var(--sal))}
+  .hm-title{font-size:20px}
+  .hm-lede{font-size:13px}
+  .hm-root section{margin-bottom:18px}
+  .hm-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .hm-card{gap:8px;padding:10px}
+  .hm-card-glyph{width:18px;font-size:16px}
+  .hm-card-text{font-size:12px}
+}
+@media (min-width:700px) and (max-width:1099px){
+  .hm-root{padding:18px calc(16px + var(--sar)) 28px calc(16px + var(--sal))}
+}
+@media (pointer:coarse){
+  .hm-card,.hm-link,a.hm-recent,.hm-project{min-height:44px}
+}
+@media (prefers-reduced-motion:reduce){
+  .hm-card,.hm-link,a.hm-recent,.hm-project{transition:none}
+}
