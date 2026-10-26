@@ -1,0 +1,99 @@
+/* Entity page header (docs/ui-audit.md B.2 ENTITY, D3, D11). Prefix eh-. Layout
+   modes come from data-layout (router-core layoutFor: sm < 700, md 700–1099,
+   lg ≥ 1100) and .eh--compact (stuck after scroll, or sm). */
+
+.eh-sentinel{height:1px;margin-bottom:-1px;pointer-events:none}
+.eh{position:sticky;top:0;z-index:20;display:flex;flex-direction:column;gap:8px;min-width:0;padding:12px 16px 0;
+  background:var(--panel,#111828);border-bottom:1px solid var(--border,rgba(255,255,255,.09));transition:box-shadow .15s ease}
+.eh--stuck{box-shadow:0 6px 16px rgba(0,0,0,.35)}
+
+.eh-bar{display:flex;align-items:center;gap:8px 12px;min-width:0}
+.eh-main{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;flex:1 1 auto;min-width:0}
+.eh-glyph{flex:none;font-size:18px;line-height:1;color:var(--accent,#8ea2ff)}
+.eh-titles{display:flex;flex-direction:column;min-width:0;max-width:100%}
+.eh-title{margin:0;font-size:16px;font-weight:700;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eh-subtitle{color:var(--muted,#8e97ab);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.eh-status{flex:none;display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:999px;border:1px solid currentColor;
+  font-size:11.5px;line-height:18px;white-space:nowrap}
+.eh-status::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.eh-ok{color:var(--ok,#2fd4b4)}
+.eh-warn{color:var(--warn,#ff9548)}
+.eh-err{color:var(--err,#f06aa8)}
+.eh-muted{color:var(--muted,#8e97ab)}
+
+.eh-badges{display:inline-flex;flex-wrap:wrap;gap:4px}
+.eh-badge{display:inline-flex;align-items:center;font-size:11.5px}
+button.eh-badge{min-height:40px;padding:0 2px;border:0;background:transparent}
+.eh-badge-pill{display:inline-block;padding:1px 8px;border-radius:999px;border:1px solid currentColor;line-height:18px;white-space:nowrap}
+button.eh-badge:hover .eh-badge-pill{background:rgba(142,162,255,.14)}
+
+.eh-actions{flex:none;display:flex;align-items:center;gap:6px}
+.eh-action{min-height:40px;padding:0 12px;white-space:nowrap}
+a.eh-action{display:inline-flex;align-items:center;border:1px solid var(--border,rgba(255,255,255,.09));border-radius:6px;
+  background:var(--panel-2,#161d2e);color:var(--text,#e6eaf4);text-decoration:none}
+a.eh-action:hover{border-color:var(--accent,#8ea2ff)}
+.eh-more-wrap{position:relative}
+.eh-more{min-width:40px;min-height:40px;padding:0 8px;font-size:16px;line-height:1}
+.eh-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:30;min-width:180px;max-width:calc(100vw - 16px);margin:0;padding:4px;list-style:none;
+  background:var(--panel-2,#161d2e);border:1px solid var(--border-2,rgba(255,255,255,.16));border-radius:var(--radius,8px);box-shadow:0 10px 28px rgba(0,0,0,.45)}
+.eh-menu[hidden]{display:none}
+.eh-menu-item{display:flex;align-items:center;width:100%;min-height:40px;padding:0 12px;border:0;border-radius:6px;background:transparent;
+  color:var(--text,#e6eaf4);text-align:left;text-decoration:none;white-space:nowrap;cursor:pointer}
+.eh-menu-item:hover,.eh-menu-item:focus{background:rgba(142,162,255,.14);outline:none}
+.eh-menu-item:focus-visible{outline:2px solid var(--accent,#8ea2ff);outline-offset:-2px}
+.eh-menu-item.danger{color:var(--err,#f06aa8)}
+.eh-sep{height:1px;margin:4px 6px;background:var(--border,rgba(255,255,255,.09))}
+
+.eh-body{display:flex;align-items:flex-start;gap:12px;min-width:0}
+.eh-facts{display:flex;flex-wrap:wrap;gap:6px 22px;flex:1 1 auto;min-width:0;margin:0}
+.eh-fact{display:flex;flex-direction:column;min-width:0}
+.eh-fact dt{color:var(--muted,#8e97ab);font-size:10.5px;letter-spacing:.6px;text-transform:uppercase}
+.eh-fact dd{margin:0;overflow-wrap:anywhere}
+.eh-thumb{flex:none;display:block;width:132px;height:80px;border:1px solid var(--border,rgba(255,255,255,.09));border-radius:6px;overflow:hidden;
+  background:var(--bg,#0b1020)}
+.eh-thumb img{display:block;width:100%;height:100%;object-fit:cover}
+
+.eh-tabs{position:relative;display:flex;gap:2px;min-width:0;margin:0 -16px;padding:0 12px;overflow-x:auto;overflow-y:hidden;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.eh-tabs::-webkit-scrollbar{display:none}
+.eh-tab{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 10px;border-bottom:2px solid transparent;
+  color:var(--muted,#8e97ab);text-decoration:none;white-space:nowrap}
+.eh-tab:hover{color:var(--text,#e6eaf4)}
+.eh-tab[aria-selected="true"]{color:var(--text,#e6eaf4);border-bottom-color:var(--accent,#8ea2ff)}
+.eh-tab:focus-visible{outline-offset:-2px}
+.eh-count{display:inline-block;min-width:18px;padding:0 5px;border-radius:999px;background:rgba(255,255,255,.07);color:var(--muted,#8e97ab);
+  font-size:11px;line-height:16px;text-align:center}
+
+/* compact: one row of glyph, title, status and ⋯ (primary action kept at md/lg) */
+.eh--compact{gap:4px;padding-top:6px}
+.eh--compact .eh-main{flex-wrap:nowrap}
+.eh--compact .eh-subtitle{display:none}
+.eh--compact .eh-badges{flex:none;flex-wrap:nowrap}
+.eh--compact .eh-titles{flex:0 1 auto}
+.eh--compact[data-layout="md"] .eh-body,.eh--compact[data-layout="lg"] .eh-body{display:none}
+
+/* sm: facts behind a details, thumbnail hidden, facts hidden once stuck */
+.eh[data-layout="sm"]{padding-left:12px;padding-right:8px}
+.eh[data-layout="sm"] .eh-tabs{margin:0 -8px 0 -12px;padding:0 8px}
+.eh[data-layout="sm"] .eh-thumb{display:none}
+.eh[data-layout="sm"].eh--stuck .eh-body{display:none}
+.eh-facts-more{flex:1 1 auto;min-width:0}
+.eh-facts-more summary{display:flex;align-items:center;gap:6px;min-height:40px;color:var(--muted,#8e97ab);cursor:pointer;list-style:none;-webkit-tap-highlight-color:transparent}
+.eh-facts-more summary::-webkit-details-marker{display:none}
+.eh-facts-more summary::before{content:"\25B8";font-size:10px;transition:transform .15s ease}
+.eh-facts-more[open] summary::before{transform:rotate(90deg)}
+.eh-facts-more .eh-facts{display:grid;grid-template-columns:1fr;gap:6px;padding:2px 0 8px}
+.eh-facts-more .eh-fact{flex-direction:row;align-items:baseline;gap:10px}
+.eh-facts-more .eh-fact dt{flex:0 0 84px}
+
+@media (pointer:coarse){
+  .eh-action,.eh-more,.eh-tab,.eh-menu-item,.eh-facts-more summary,button.eh-badge{min-height:44px}
+  .eh-more{min-width:44px}
+  .eh-fact dd a{display:inline-block;padding:13px 0;margin:-13px 0}
+  .eh-facts-more .eh-fact{align-items:center;min-height:44px}
+  .eh-facts-more .eh-fact dd a{display:inline-flex;align-items:center;min-height:44px;padding:0;margin:0}
+}
+@media (prefers-reduced-motion:reduce){
+  .eh,.eh *{transition:none!important}
+}
