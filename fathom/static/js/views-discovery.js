@@ -917,7 +917,8 @@ export function mount(el, ctx) {
   function runsTab(host) {
     if (!S.runs.length) { host.appendChild(empty(S.loaded ? (ro() ? 'Discovery has not been run for this project.' : 'No runs yet. Run discovery to see what is on the network.') : 'Loading runs\u2026')); return; }
     const t = table(host, 'runs', {
-      primary: true, caption: 'Discovery runs', rows: S.runs, noun: { one: 'run', many: 'runs' }, highlight: S.runId || null,
+      // Not `highlight`: that scrolls the row into view after render and moves the tab strip away on sm.
+      primary: true, caption: 'Discovery runs', rows: S.runs, noun: { one: 'run', many: 'runs' },
       columns: [
         { key: 'started', header: 'Started', sticky: true, value: function (r) { return Number(r.started || r.finished) || 0; }, csv: function (r) { return fmtTime(r.started || r.finished); },
           cell: function (r) { return h('div', { class: 'disc-name' }, [fmtTime(r.started || r.finished), r.id === S.runId ? h('span', { class: 'chip on disc-shown' }, 'shown') : null]); } },

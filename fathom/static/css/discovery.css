@@ -44,14 +44,15 @@
 .disc .dt-clickable .dt-row.disc-linked{cursor:pointer}
 .disc-open{color:var(--accent)}
 .disc-shown{margin-left:6px;font-size:10.5px;min-height:20px;padding:0 6px}
+.disc .dt-row.disc-run-shown td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .disc .ms-suggest{margin-top:0;min-width:200px}
 .disc .disc-target{min-width:0;max-width:260px}
 .disc-addrs{min-width:0;overflow-wrap:anywhere}
 
 /* ---- 40px targets (D3); coarse pointers get 44px from app.css's .adm rules */
 .disc button,.disc select,.disc summary,.disc input:not([type=checkbox]):not([type=radio]){min-height:40px}
-/* status chips are not targets: keep them compact under the global coarse .chip rule */
-@media (pointer:coarse){.disc :is(.disc-summary,.disc-status) span.chip{min-height:26px}}
+/* span chips (status, sources, confidence, flags) are not targets: keep them compact under the global coarse .chip rule */
+@media (pointer:coarse){.disc span.chip{min-height:26px}}
 
 /* ---- sm: tabs scroll in one row; findings rows are cards (DataTable cards: true) */
 @media (max-width:699px){
@@ -60,6 +61,8 @@
   .disc-tab{flex:none;white-space:nowrap}
   .disc-room{flex-wrap:wrap;width:100%}
   .disc-room select{flex:1 1 160px;max-width:none}
+  .disc .dt-cards .dt-row.disc-run-shown{border-color:var(--accent)}
+  .disc .dt-cards .dt-row.disc-run-shown td:first-child{box-shadow:none}
   .disc .dt-cards .dt-table td[data-col=actions]{white-space:normal}
   .disc .dt-cards .dt-table td[data-col=actions]::before{display:none}
   .disc .dt-cards .dt-table td:is([data-col=model],[data-col=match],[data-col=actions]){flex-direction:column;align-items:stretch;text-align:left}
