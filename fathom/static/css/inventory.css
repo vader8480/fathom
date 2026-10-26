@@ -51,8 +51,8 @@
   /* one row of filter buttons, then Columns · CSV · Bulk add · Duplicates · ⋯, then a scrolling chip row */
   .inv-root .dt-filters { flex: 1 0 100%; }
   .inv-root .dt-filter { padding-left: 8px; padding-right: 8px; gap: 4px; }
-  .inv-root .dt-table td[data-col=name] { white-space: normal; min-width: 8em; max-width: 44vw; }
-  .inv-root .dt-table td[data-col=room] { white-space: normal; max-width: 30vw; }
+  .inv-root .dt-table td[data-col=name] { white-space: normal; min-width: 7em; max-width: 38vw; }
+  .inv-root .dt-table td[data-col=room] { white-space: normal; max-width: 26vw; }
   .inv-root .dt-filter .dt-caret { display: none; }
   .inv-root .dt-actions { display: contents; }
   .inv-quick { order: 9; flex: 1 0 100%; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }

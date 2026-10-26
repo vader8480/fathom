@@ -353,14 +353,18 @@ export function mount(el, ctx) {
     openSection('inventory');
   }
 
-  // Opens the drawer's inventory <details> once the inspector has rendered it, for
-  // inspectors without focusSection; a no-op when the section is already open.
+  // Opens the drawer's inventory <details> and scrolls it into view once the inspector
+  // has rendered it, for inspectors without focusSection.
   function openSection(sec) {
     let tries = 0;
     (function tick() {
       if (S.destroyed) return;
       const d = document.querySelector('#app-inspector details[data-section="' + sec + '"]');
-      if (d) { if (!d.open) d.open = true; return; }
+      if (d) {
+        if (!d.open) d.open = true;
+        if (d.scrollIntoView) d.scrollIntoView({block: 'start'});
+        return;
+      }
       tries += 1;
       if (tries < 40) setTimeout(tick, 100);
     })();
