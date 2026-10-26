@@ -9,7 +9,9 @@
 //                                    return); null/undefined keeps `base`. The li
 //                                    (role=option, data-id, aria-selected) stays
 //                                    the explorer's. Controls inside a row that must
-//                                    not pick the item carry [data-ex-ignore].
+//                                    not pick the item carry [data-ex-ignore]. To
+//                                    put controls beside it, return a div.ex-item-row
+//                                    holding `base` (a.ex-item-link) and the controls.
 //   itemAttrs(item) -> {}            extra li attributes (class is added; role, id,
 //                                    data-id, data-index, aria-selected are kept)
 //   headSlot: Node                   shown between the head and the list (hints,
@@ -224,7 +226,7 @@ export function mountExplorer(el, opts) {
   function itemEl(item, i) {
     const id = str(item.id);
     const depth = Math.max(0, Math.min(8, Number(item.depth) || 0));
-    const a = h('a', { href: item.href || null, tabindex: '-1', draggable: 'false',
+    const a = h('a', { class: 'ex-item-link', href: item.href || null, tabindex: '-1', draggable: 'false',
       style: depth ? { paddingLeft: (12 + depth * 14) + 'px' } : null }, [
       item.glyph ? h('span', { class: 'ex-item-glyph', 'aria-hidden': 'true', text: str(item.glyph) }) : null,
       h('span', { class: 'ex-item-text' }, [

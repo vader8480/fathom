@@ -241,7 +241,7 @@ class ExplorerUi(UiCase):
 
 
 RENDER_ITEM = """function (item, base) {
-  var w = document.createElement('div'); w.className = 'x-row'; w.appendChild(base);
+  var w = document.createElement('div'); w.className = 'x-row ex-item-row'; w.appendChild(base);
   var b = document.createElement('button'); b.type = 'button'; b.className = 'x-btn'; b.setAttribute('data-ex-ignore', '');
   b.textContent = '+'; b.addEventListener('click', function () { window.__xClicks = (window.__xClicks || 0) + 1; });
   w.appendChild(b); return w;
@@ -299,6 +299,9 @@ class ExplorerPrimFixUi(UiCase):
             li = "document.querySelector('.ex-item[data-id=%s]')" % json.dumps(first)
             self.assertTrue(pg.js(li + ".querySelector(':scope > .x-row > a .ex-item-label') && !!" + li + ".querySelector('.x-btn')"))
             self.assertTrue(pg.js(li + ".classList.contains('x-item') && " + li + ".classList.contains('ex-item')"))
+            self.assertEqual(pg.js("getComputedStyle(%s.querySelector('a.ex-item-link')).display" % li), "flex",
+                             "a wrapped default link keeps the row look")
+            self.assertGreaterEqual(pg.js(li + ".querySelector('a.ex-item-link').getBoundingClientRect().height"), 40)
             self.assertEqual(pg.js(li + ".getAttribute('data-disc')"), pg.js("__ex.items[0].disc"))
             self.assertEqual(pg.js(li + ".getAttribute('role')"), "option", "role stays the explorer's")
             self.assertEqual(pg.js(li + ".getAttribute('aria-selected')"), "false")
