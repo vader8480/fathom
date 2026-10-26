@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en" data-harness="datatable">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Harness · DataTable</title>
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/datatable.css">
+<style>
+  body { min-height: 100vh; }
+  .h-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top));
+    border-bottom: 1px solid var(--border); background: var(--panel); }
+  .h-bar b { letter-spacing: 1.4px; text-transform: uppercase; font-size: 11px; color: var(--accent); }
+  .h-bar a { white-space: nowrap; }
+  .h-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 12px; max-width: 1400px; margin: 0 auto; }
+  .h-main h2 { margin: 0 0 8px; font-size: 13px; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+  .h-log { list-style: none; margin: 0; padding: 0; max-height: 160px; overflow: auto; font: 11.5px/1.4 var(--mono); color: var(--muted); }
+  .h-log li { padding: 2px 0; border-bottom: 1px solid var(--border); word-break: break-word; }
+  @media (min-width: 1100px) { .h-main { grid-template-columns: minmax(0, 1fr) 280px; } .h-side { grid-row: 1 / span 2; grid-column: 2; } }
+</style>
+</head>
+<body>
+<div class="h-bar">
+  <b>Harness</b><span>datatable.js</span>
+  <a href="?">240 rows</a> · <a href="?rows=20000">20k rows</a> · <a href="?cards=1">cards at sm</a> · <a href="?readonly=1">read-only</a> · <a href="?appdialog=1">app dialog</a>
+  <span class="grow"></span>
+  <a class="chip" href="index.html">All harnesses</a>
+</div>
+<div class="h-main">
+  <section aria-labelledby="h-main-title"><h2 id="h-main-title">Synthetic cables</h2><div id="h-main-table"></div></section>
+  <section aria-labelledby="h-ports-title"><h2 id="h-ports-title">Fixture ports (fixture-v2.json, grouped by device)</h2><div id="h-ports-table"></div></section>
+  <aside class="h-side" aria-label="Event log"><h2>Events</h2><ul id="h-log" class="h-log"></ul></aside>
+</div>
+<div id="app-dialog"></div>
+<div id="fathom-live" class="sr-only" aria-live="polite"></div>
+<script type="module" src="datatable-harness.js"></script>
+</body>
+</html>
