@@ -696,6 +696,7 @@ export function buildHash(project, room, view, params) {
 const A = {
   api: null, session: null, meta: null, vocab: FALLBACK_VOCAB, projects: [], project: '', store: null, queue: null,
   ctx: null, role: 'admin', view: '', viewHandle: null, viewToken: 0, viewStates: {}, inspector: null, assistant: null,
+  importRetries: {},
   offline: false, travel: null, banner: null, unsubs: [], problems: [],
   route: copyRoute(EMPTY_ROUTE), layout: 'lg', nav: null, drawer: null, drawerOpen: false, intent: null, pendingSection: '',
   applyingRoute: false, subs: {}, recent: null, notices: null, bell: null, overlayInfo: { fetchedAt: null, revision: null },
@@ -1019,12 +1020,27 @@ function ensureDrawer() {
   return A.drawer;
 }
 
+// Browsers keep a failed module fetch in the module map (Safari, Chrome before 156), so a Retry that
+// re-imports the same specifier fails again without touching the network. Each retry of a module
+// that failed before gets a fresh specifier; the first attempt stays cache- and precache-friendly.
+function importModule(spec) {
+  const n = A.importRetries[spec] || 0;
+  const url = n ? spec + (spec.indexOf('?') >= 0 ? '&' : '?') + 'retry=' + n : spec;
+  return import(url).then(function (m) {
+    delete A.importRetries[spec];
+    return m;
+  }, function (e) {
+    A.importRetries[spec] = n + 1;
+    throw e;
+  });
+}
+
 function ensureInspector() {
   if (A.inspector || !A.ctx) return;
   A.inspector = { destroy: function () {} };
   const ctx = A.ctx;
   const el = $('app-inspector');
-  import('./inspector.js').then(function (m) {
+  importModule('./inspector.js').then(function (m) {
     if (A.ctx !== ctx) return;
     el.innerHTML = '';
     A.inspector = m.mountInspector(el, ctx) || { destroy: function () {} };
@@ -1295,7 +1311,7 @@ function mountView(key) {
   let mod = def.module;
   if (urlParam('debug_missing_view') === key) mod = './__missing_view_' + key + '.js';
   el.appendChild(loadingNode(key, A.route));
-  return import(mod).then(function (m) {
+  return importModule(mod).then(function (m) {
     if (token !== A.viewToken) return;
     const fn = m[def.export];
     if (typeof fn !== 'function') throw new Error(def.module + ' has no export "' + def.export + '"');
@@ -1574,7 +1590,7 @@ function toggleAssistant(force) {
   if ($('app')) $('app').classList.toggle('ast-open', open);
   if (open && !A.assistant) {
     A.assistant = { destroy: function () {} };
-    import('./assistant-ui.js').then(function (m) {
+    importModule('./assistant-ui.js').then(function (m) {
       el.innerHTML = '';
       A.assistant = m.mountAssistant(el, Object.assign({}, A.ctx, { closePanel: function () { toggleAssistant(false); } })) || { destroy: function () {} };
       if (A.assistant.focus) A.assistant.focus();
