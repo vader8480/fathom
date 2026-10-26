@@ -63,6 +63,9 @@ class SopUi(UiCase):
                 self.assertGreaterEqual(land["main"], 3, "pages per room: Main Auditorium")
                 self.assertEqual(land["chapel"], 1, "pages per room: Chapel (draft visible to editors)")
                 self.assertGreaterEqual(land["minTap"], 44 if size == "t" else 40, "landing links are tap targets")
+                more = pg.rect(".sop-tree-head .sop-more")
+                self.assertGreaterEqual(min(more["width"], more["height"]) if size == "t" else more["width"], (44 if size == "t" else 40) - 0.5,
+                                        "the procedures-tree \u22ef is a tap target")
                 self.assertLessEqual(pg.page_hscroll(), 0, "no horizontal page scroll")
                 pg.shot("sop-" + size)
 
@@ -89,6 +92,8 @@ class SopUi(UiCase):
             self.assertFalse(pg.js("!!document.querySelector('.sop-landing')"), "the landing is wide-screen only")
             self.assertTrue(pg.js("!!document.querySelector('#app-tabbar [data-tab=sop]')"))
             self.assertLessEqual(pg.page_hscroll(), 0)
+            more = pg.rect(".sop-tree-head .sop-more")
+            self.assertGreaterEqual(min(more["width"], more["height"]), 44 - 0.5, "the procedures-tree \u22ef is a 44px target")
             pg.shot("sop-m")
             pg.goto(SOP + "?page=power-up")
             pg.wait_for("!!document.querySelector('.sop-page[data-page=power-up] h1')")

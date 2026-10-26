@@ -61,6 +61,8 @@
 .sop-topbar{position:sticky;top:0;z-index:4;display:flex;align-items:center;gap:6px;min-height:48px;margin:0 calc(-16px - var(--sar)) 0 calc(-16px - var(--sal));padding:0 calc(8px + var(--sar)) 0 calc(4px + var(--sal));background:var(--bg);border-bottom:1px solid var(--border)}
 .sop-topbar button{min-height:44px}
 .sop-topbar .sop-more{min-width:44px;font-size:22px;background:transparent;border:0;color:var(--text)}
+.sop-more{min-width:40px}
+@media (pointer:coarse){.sop-more{min-width:44px;min-height:44px}}
 @media (min-width:700px){.sop-topbar{margin:0 -32px;padding:0 24px}}
 .sop-crumbs{font-size:14px;color:var(--muted);padding:10px 0 0;overflow-wrap:anywhere}
 .sop-crumbs a{color:var(--muted)}
