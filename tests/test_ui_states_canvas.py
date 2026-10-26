@@ -198,6 +198,7 @@ class CanvasStatesUi(UiCase):
             self.assertEqual(self.text(pg, ".fp-empty .fb-empty-title"), "No floor plan for Empty Hall.")
             self.assertFalse(pg.js("!!document.querySelector('.fp-empty .fb-empty-action')"), "viewers get no Upload")
             self.assertFalse(pg.js("!!document.querySelector('.fp-empty .fb-empty-text')"))
+            self.assertFalse(self.visible(pg, ".fp-exhint"), "viewers get no drag-to-place hint")
             self.settle(pg, "fp-empty-viewer")
 
     def test_floor_plan_image_error_and_retry(self):

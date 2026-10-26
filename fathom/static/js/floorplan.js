@@ -281,6 +281,7 @@ export function mount(el, ctx) {
     // D7: write actions are not rendered for viewers.
     [btnUp, btnDown, btnRename, btnDelete, uploadGroup, btnCal].forEach(function (b) { b.hidden = ro; });
     devGroup.hidden = !harness || ro;
+    hint.hidden = ro;
     if (ro !== S.ro) { S.ro = ro; fitToolbar(true); }
     btnMeasure.disabled = !fp;
     btnLayers.disabled = !fp || !(fp.layers && fp.layers.length);
