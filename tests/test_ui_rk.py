@@ -222,6 +222,35 @@ class RacksUi(UiCase):
             self.assertLessEqual(pg.page_hscroll(), 0)
             pg.shot("rack-page-d")
 
+    def test_print_and_delete_confirm(self):
+        with self.open(PAGE + "/devices", "d") as pg:
+            self.ready(pg, "rack devices")
+            self.page_ready(pg, "devices")
+            pg.js("window.print = function () { window.__printed = Array.prototype.map.call("
+                  "document.querySelectorAll('.rp-print .rk-slots'), function (s) { return s.getAttribute('data-face'); }); }")
+            pg.click(".eh-action[data-action=print]")
+            pg.wait_for("!!window.__printed")
+            self.assertEqual(pg.js("window.__printed"), ["front", "rear"], "Print renders both faces of this rack only")
+            pg.command("Emulation.setEmulatedMedia", {"media": "print"})
+            try:
+                self.assertEqual(pg.js("getComputedStyle(document.querySelector('.rp-print')).display"), "block")
+                self.assertEqual(pg.js("getComputedStyle(document.querySelector('.rp-root > .ex-root')).display"), "none")
+            finally:
+                pg.command("Emulation.setEmulatedMedia", {"media": ""})
+            pg.js("window.dispatchEvent(new Event('afterprint'))")
+            pg.wait_for("!document.querySelector('.rp-root').classList.contains('rp-printing')")
+            self.assertEqual(pg.js("document.querySelectorAll('.rp-print *').length"), 0)
+
+            pg.click(".eh-more")
+            pg.click(".eh-menu [data-action=delete]")
+            pg.wait_for("(document.getElementById('app-dialog') || {}).textContent && "
+                        "document.getElementById('app-dialog').textContent.indexOf('Delete FOH rack?') >= 0")
+            self.assertIn("5 devices become unracked.", pg.js("document.getElementById('app-dialog').textContent"))
+            pg.press("Escape")
+            pg.wait_for("document.getElementById('app-dialog').textContent.indexOf('Delete FOH rack?') < 0")
+            self.assertTrue(pg.hash.startswith(PAGE + "/devices"), "cancel keeps the rack page")
+            self.assertEqual(pg.js("document.querySelector('.eh-title').textContent"), "FOH rack")
+
     def test_editor_and_viewer_actions(self):
         with self.open(PAGE + "/elevation", "d") as pg:
             self.ready(pg, "rack elevation")

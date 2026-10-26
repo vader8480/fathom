@@ -5,9 +5,10 @@
 // elevation through createElevation.
 import {
   RU_PX, RACK_W, findRack, rackUnits, heightOf, placement, faceBlocks, collisions, outOfRange,
-  fits, placeOps, unplaceOps, firstFit, uToY, yToU, ruLabel, newRackOps, deleteRackOps,
+  fits, placeOps, unplaceOps, firstFit, uToY, yToU, ruLabel, newRackOps, deleteRackOps, rackDevices,
 } from './rack-core.js';
 import { mountExplorer } from './explorer.js';
+import { confirmScope } from './feedback.js';
 import { mountRackPage } from './page-rack.js';
 
 const DRAG_SLOP = 4;
@@ -674,7 +675,11 @@ export function createElevation(el, ctx, opts) {
     if (b.getAttribute('data-act') === 'cancel') closeForm();
     if (b.getAttribute('data-act') === 'delete') {
       const rack = findRack(doc(), S.editing);
-      Promise.resolve(ctx.confirm('Delete rack "' + rack.name + '"? Its devices become unracked.', {danger: true})).then(function (ok) {
+      const n = rackDevices(doc(), rack.id).length;
+      confirmScope(ctx, {
+        verb: 'Delete', noun: rack.name, danger: true, ok: 'Delete rack',
+        detail: n ? n + (n === 1 ? ' device becomes' : ' devices become') + ' unracked.' : 'The rack is empty.',
+      }).then(function (ok) {
         if (!ok) return;
         commit(deleteRackOps(doc(), rack.id), 'Deleted rack ' + rack.name);
         S.rack = '*';
