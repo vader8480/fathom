@@ -1,0 +1,37 @@
+/* Drawer modes on the inspector host (docs/ui-audit.md D3, D4, B.2 DRAWER).
+   drawer.js sets .dr-host, one of .dr-docked / .dr-sheet / .dr-full, and
+   .dr-open; the host's parent gets .dr-docked-open while docked and open.
+   Selectors are two classes deep so they win over the legacy .app-inspector
+   rules in app.css whatever the load order; display is !important because
+   the drawer, not the shell's has-inspector/sheet-open classes, decides it. */
+.dr-host{background:var(--panel,#111828);min-width:0;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.dr-host:not(.dr-open){display:none!important}
+.dr-host.dr-open{display:block!important}
+.dr-host:focus{outline:none}
+
+/* lg: docked column beside the main area, non-modal */
+body .dr-docked-open{grid-template-columns:minmax(0,1fr) 360px}
+.dr-host.dr-docked{position:relative;top:auto;right:auto;bottom:auto;left:auto;width:auto;height:auto;z-index:auto;
+  border:0;border-left:1px solid var(--border,rgba(255,255,255,.09));border-radius:0;box-shadow:none;padding:0}
+
+/* md: slide-over sheet from the right, modal */
+.dr-host.dr-sheet{position:fixed;top:0;right:0;bottom:0;left:auto;width:min(420px,92vw);height:auto;z-index:35;
+  border:0;border-left:1px solid var(--border,rgba(255,255,255,.09));border-radius:0;box-shadow:-20px 0 40px rgba(0,0,0,.4);
+  padding:var(--sat,env(safe-area-inset-top,0px)) 0 var(--sab,env(safe-area-inset-bottom,0px))}
+
+/* sm: the 88dvh bottom sheet with safe-area padding, modal */
+.dr-host.dr-full{position:fixed;top:auto;right:0;bottom:0;left:0;width:auto;height:88vh;height:88dvh;z-index:35;
+  border:0;border-top:1px solid var(--border,rgba(255,255,255,.09));border-radius:14px 14px 0 0;box-shadow:0 -20px 40px rgba(0,0,0,.4);
+  padding:0 var(--sar,env(safe-area-inset-right,0px)) var(--sab,env(safe-area-inset-bottom,0px)) var(--sal,env(safe-area-inset-left,0px))}
+
+.dr-backdrop{position:fixed;top:0;right:0;bottom:0;left:0;z-index:34;background:rgba(3,6,14,.55);touch-action:none;-webkit-tap-highlight-color:transparent}
+
+@keyframes dr-in-right{from{transform:translateX(100%)}to{transform:none}}
+@keyframes dr-in-up{from{transform:translateY(100%)}to{transform:none}}
+@keyframes dr-fade{from{opacity:0}to{opacity:1}}
+.dr-host.dr-sheet.dr-open{animation:dr-in-right .18s ease}
+.dr-host.dr-full.dr-open{animation:dr-in-up .2s ease}
+.dr-backdrop{animation:dr-fade .18s ease}
+@media (prefers-reduced-motion:reduce){
+  .dr-host.dr-sheet.dr-open,.dr-host.dr-full.dr-open,.dr-backdrop{animation:none}
+}
