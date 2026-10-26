@@ -115,8 +115,9 @@ with `pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
   CI. Without `FATHOM_CHROME`
   the headless-Chrome smoke suite picks up `/usr/local/bin/google-chrome`, a
   desktop wrapper that pins `--remote-debugging-port=9222`; its parallel runs
-  then time out (~57 failures, 15 min). Without Chrome work:
-  `-p 'test_[!u]*.py'` plus `-p 'test_u[!i]*.py'`. Single suite:
+  then time out (~57 failures, 15 min). To leave out the `test_ui_*.py`
+  suites run `-p 'test_[!u]*.py'` and `-p 'test_u[!i]*.py'` (keep
+  `FATHOM_CHROME` set; `test_frontend_smoke.py` still uses Chrome). Single suite:
   `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -p test_backup.py -v`
   (not `python -m unittest tests.test_backup`: the `discovery` extra installs
   `x690`, whose stray top-level `tests` package shadows ours).
