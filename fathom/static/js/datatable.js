@@ -290,14 +290,24 @@ export function createTable(host, opts) {
     sortSelect.value = state.sort ? (state.sort.dir < 0 ? '-' : '') + state.sort.col : '';
   }
 
+  const colChecks = {};
+  columns.forEach(function (c) {
+    const cb = h('input', { type: 'checkbox', 'data-col': c.key });
+    colChecks[c.key] = cb;
+    colsList.appendChild(h('label', { class: 'dt-opt' }, [
+      cb, h('span', { text: c.header || c.key }), c.hideOnMobile ? h('span', { class: 'dt-opt-note', text: 'wider screens' }) : null,
+    ]));
+  });
+
   function renderColsPanel() {
-    colsList.innerHTML = '';
-    const vis = visibleColumns();
+    const nVis = visibleColumns().length;
     columns.forEach(function (c) {
+      const cb = colChecks[c.key];
       const shown = state.hidden.indexOf(c.key) < 0;
-      const cb = h('input', { type: 'checkbox', 'data-col': c.key, checked: shown, disabled: shown && vis.length <= 1 });
-      const note = c.hideOnMobile && layout === 'sm' ? h('span', { class: 'dt-opt-note', text: 'wider screens' }) : null;
-      colsList.appendChild(h('label', { class: 'dt-opt' }, [cb, h('span', { text: c.header }), note]));
+      cb.checked = shown;
+      cb.disabled = shown && nVis <= 1;
+      const noteEl = cb.parentNode.querySelector('.dt-opt-note');
+      if (noteEl) noteEl.hidden = layout !== 'sm';
     });
     densityBox.checked = state.density === 'compact';
   }
@@ -462,7 +472,7 @@ export function createTable(host, opts) {
       b.setAttribute('aria-label', 'Filter ' + c.header + (n ? ' (' + n + ' selected)' : ''));
     });
     root.classList.toggle('dt-compact', state.density === 'compact');
-    if (colsBox.open) renderColsPanel();
+    renderColsPanel();
   }
 
   function renderSelection() {
@@ -697,7 +707,6 @@ export function createTable(host, opts) {
   offs.push(on(colsBox, 'toggle', function () {
     if (colsBox.open) {
       closePop(false);
-      renderColsPanel();
       place(colsPanel, colsSummary);
     }
   }));
@@ -709,7 +718,6 @@ export function createTable(host, opts) {
     const hidden = state.hidden.filter(function (x) { return x !== k; });
     if (!t.checked) hidden.push(k);
     commit({ hidden: hidden });
-    renderColsPanel();
   }));
   offs.push(on(colsBox, 'keydown', function (e) {
     if (e.key === 'Escape' && colsBox.open) { e.preventDefault(); e.stopPropagation(); colsBox.open = false; colsSummary.focus(); }
@@ -790,7 +798,7 @@ export function createTable(host, opts) {
     if (l === layout) return;
     layout = l;
     root.setAttribute('data-layout', l);
-    if (colsBox.open) renderColsPanel();
+    renderColsPanel();
   }));
   root.setAttribute('data-layout', layout);
 
