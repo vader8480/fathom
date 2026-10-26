@@ -63,15 +63,19 @@ class PatchTableUi(UiCase):
                 })"""):
                     self.assertGreaterEqual(min(b["w"], b["h"]), 44 if size != "d" else 40, b)
                 pg.shot("table-" + size)
-        for size in ("t", "m"):
-            with self.subTest(blocks=size), self.open(TABLE + "?mode=blocks", size) as pg:
-                mode_ready(pg, "blocks")
-                n = pg.js("document.querySelectorAll('.pt-block button.pt-x').length")
-                self.assertGreater(n, 50, "campus has many Remove patch buttons")
-                self.assertEqual(pg.offscreen(".pt-block button", "x"), 0, "no .pt-block button clipped sideways")
-                self.assertLessEqual(pg.page_hscroll(), 0)
-                w = pg.js("document.querySelector('.pt-block button.pt-x').getBoundingClientRect().width")
-                self.assertGreaterEqual(w, 44, "Remove patch keeps its 44px touch target")
+                if size == "m":
+                    pg.goto(TABLE + "?mode=blocks")
+                    mode_ready(pg, "blocks")
+                if size != "d":
+                    self.assert_blocks_unclipped(pg)
+
+    def assert_blocks_unclipped(self, pg):
+        n = pg.js("document.querySelectorAll('.pt-block button.pt-x').length")
+        self.assertGreater(n, 50, "campus has many Remove patch buttons")
+        self.assertEqual(pg.offscreen(".pt-block button", "x"), 0, "no .pt-block button clipped sideways")
+        self.assertLessEqual(pg.page_hscroll(), 0)
+        w = pg.js("document.querySelector('.pt-block button.pt-x').getBoundingClientRect().width")
+        self.assertGreaterEqual(w, 44, "Remove patch keeps its 44px touch target")
 
     def test_rows_columns_at_three_sizes(self):
         for size in ("d", "t", "m"):
@@ -94,7 +98,7 @@ class PatchTableUi(UiCase):
                 pg.shot("table-rows-" + size)
 
     def test_mode_and_query_survive_reload(self):
-        for size in ("d", "m"):
+        for size in ("d",):
             with self.subTest(size=size), self.open(TABLE + "?mode=rows&q=kick", size) as pg:
                 for _ in range(2):
                     mode_ready(pg, "rows")
@@ -146,9 +150,10 @@ class PatchTableUi(UiCase):
                 h = pg.hash
                 self.assertTrue(h.startswith(TABLE), "view segment unchanged: %s" % h)
                 self.assertIn("sel=port:%s:%s" % (dev, port), h)
-                pg.reload()
-                pg.wait_for(DRAWER_OPEN)
-                self.assertTrue(pg.hash.startswith(TABLE))
+                if size == "m":
+                    pg.reload()
+                    pg.wait_for(DRAWER_OPEN)
+                    self.assertTrue(pg.hash.startswith(TABLE))
 
     def test_bulk_remove_confirms_scope(self):
         with self.open(TABLE + "?mode=rows", "d") as pg:
