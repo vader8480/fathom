@@ -71,6 +71,7 @@
 
 /* ---- bell and notices (menu look as .app-menu, rows as .app-toast) */
 .fb-bell{position:relative}
+button.fb-bell{min-width:40px;min-height:40px}
 .fb-bell-count{position:absolute;top:2px;right:2px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--err);color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center;pointer-events:none}
 .fb-bell-pop{position:fixed;z-index:72;display:flex;flex-direction:column;overflow:hidden;background:var(--panel);border:1px solid var(--border-2);border-radius:10px;box-shadow:0 18px 40px rgba(0,0,0,.5)}
 .fb-bell-head{padding:10px 12px 4px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
@@ -95,7 +96,7 @@
 
 @media (pointer:coarse){
   .fb-empty-actions button,.fb-btn,.fb-retry,.fb-stale-refresh,.fb-review,.fb-notices [role=menuitem]{min-height:44px}
-  .fb-bell{min-width:44px;min-height:44px}
+  button.fb-bell{min-width:44px;min-height:44px}
 }
 @media (prefers-reduced-motion:reduce){
   .fb-skel-bar,.fb-skel-dot,.fb-skel-tab{animation:none}

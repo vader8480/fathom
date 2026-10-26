@@ -1,10 +1,11 @@
 // Harness for js/feedback.js (docs/ui-audit.md B.2 FEEDBACK, D10): every state side by side.
 // ?smoke=1 writes data-smoke once rendered. window.__fb exposes the live objects for tests:
-// notices, bell, badges, counts, clock offset (ms added to Date.now() for the badges and notices).
+// api (the feedback.js module), notices, bell, badges, counts, clock offset (ms added to Date.now()
+// for the badges and notices).
 import { h } from '../js/dom.js';
-import {
-  skeleton, emptyState, inlineError, confirmScope, staleBadge, reviewBadge, createNotices, mountBell,
-} from '../js/feedback.js';
+import * as feedback from '../js/feedback.js';
+
+const { skeleton, emptyState, inlineError, confirmScope, staleBadge, reviewBadge, createNotices, mountBell } = feedback;
 
 window.__fathomErrors = window.__fathomErrors || [];
 (function () {
@@ -17,7 +18,7 @@ window.__fathomErrors = window.__fathomErrors || [];
 
 const params = new URLSearchParams(location.search);
 const MIN = 60 * 1000;
-const fb = window.__fb = { counts: { retry: 0, emptyAction: 0, emptySecondary: 0, refresh: 0, review: 0 }, offset: 0, badges: {}, confirms: [] };
+const fb = window.__fb = { api: feedback, counts: { retry: 0, emptyAction: 0, emptySecondary: 0, refresh: 0, review: 0 }, offset: 0, badges: {}, confirms: [] };
 function now() { return Date.now() + fb.offset; }
 function later(ms, v) { return new Promise(function (res) { setTimeout(function () { res(v); }, ms); }); }
 
