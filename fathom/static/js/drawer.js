@@ -9,7 +9,9 @@
 // Options beyond the contract: `layers()` returns the {palette, dialog, trace,
 // assistant, explorer} flags used for the Esc order (default: read from the
 // DOM); `open({focus: false})` opens without moving focus (canvas selection
-// at lg); `relayout(width)` takes an explicit width.
+// at lg); `relayout(width)` takes an explicit width. domLayers(doc, host) also
+// reports `dialog` for any rendered [role=dialog][aria-modal=true] outside the
+// drawer host and the palette, assistant, explorer and trace layers.
 
 import { h, on } from './dom.js';
 import { drawerMode, isModal, topLayer, trapIndex, LAYERS } from './drawer-core.js';
@@ -37,13 +39,31 @@ function shown(doc, selector) {
   return false;
 }
 
-// Layers above the drawer, read from the shell's DOM (D4 Esc order).
-export function domLayers(doc) {
+// Modal dialogs that belong to another layer (or are the drawer itself) and so
+// do not count as a generic dialog.
+const OWN_LAYER = '#app-palette, #app-assistant, .ex-side, .trace-backdrop, .trace-sheet';
+
+// Any rendered [role=dialog][aria-modal=true] outside `host` and the other
+// layers: wizard and admin dialogs that have no .app-dialog-backdrop.
+function genericDialog(d, host) {
+  const all = d.querySelectorAll('[role="dialog"][aria-modal="true"]');
+  for (let i = 0; i < all.length; i++) {
+    const el = all[i];
+    if (host && (el === host || host.contains(el) || el.contains(host))) continue;
+    if (el.closest(OWN_LAYER)) continue;
+    if (rendered(el)) return true;
+  }
+  return false;
+}
+
+// Layers above the drawer, read from the shell's DOM (D4 Esc order). `host` (the
+// drawer element) is left out of the generic modal-dialog check.
+export function domLayers(doc, host) {
   const d = doc || document;
   const ast = d.getElementById('app-assistant');
   return {
     palette: shown(d, '#app-palette'),
-    dialog: shown(d, '.app-dialog-backdrop, .sop-sheet, .sop-lightbox'),
+    dialog: shown(d, '.app-dialog-backdrop, .sop-sheet, .sop-lightbox') || genericDialog(d, host || null),
     trace: shown(d, '.trace-backdrop'),
     assistant: !!ast && ast.classList.contains('open'),
     explorer: shown(d, '.ex-backdrop'),
@@ -84,7 +104,7 @@ export function createDrawer(host, opts) {
   function flags() {
     let f = null;
     try {
-      f = o.layers ? o.layers() : domLayers(doc);
+      f = o.layers ? o.layers() : domLayers(doc, host);
     } catch (e) {
       f = null;
     }

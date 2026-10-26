@@ -7,7 +7,14 @@
 //
 //   const eh = mountEntityHeader(el, {kind, id, glyph, title, subtitle, status, facts, badges,
 //     actions, overflow, tabs, activeTab, thumb, onTab});
-//   eh.update(partial); eh.setTab(key); eh.destroy();
+//   eh.update(partial); eh.setTab(key); eh.setTabs(tabs, activeTab); eh.destroy();
+//
+// setTabs(tabs[, activeTab]) changes tab labels, counts and hrefs in place (a data
+// change, a room switch) without rebuilding the header; a different tab set
+// rebuilds only the tab strip. update(partial) with only tabs/activeTab/onTab
+// takes the same path; any other key re-renders the header and puts focus back on
+// the same tab, action, ⋯ or badge when it was inside. Actions with `href` render
+// as links (a.eh-action) and take the primary/danger look of the button form.
 
 import { h, on } from './dom.js';
 import { layoutFor } from './router-core.js';
@@ -46,6 +53,10 @@ function scrollParent(el) {
     if (/(auto|scroll|overlay)/.test(getComputedStyle(p).overflowY)) return p;
   }
   return null;
+}
+
+function cssEsc(s) {
+  return String(s).replace(/["\\]/g, '\\$&');
 }
 
 function modified(e) {
@@ -127,9 +138,10 @@ export function mountEntityHeader(host, options) {
       'data-tab': t.key, href: t.href || null }, [h('span', { class: 'eh-tab-label' }, txt(t.label || t.key)), count]);
     a.addEventListener('click', function (e) {
       if (modified(e)) return;
-      if (typeof o.onTab === 'function') o.onTab(t.key, e);
-      if (!t.href) e.preventDefault();
-      if (!e.defaultPrevented || !t.href) setTab(t.key);
+      const cur = o.tabs.filter(function (x) { return x.key === t.key; })[0] || t;
+      if (typeof o.onTab === 'function') o.onTab(cur.key, e);
+      if (!cur.href) e.preventDefault();
+      if (!e.defaultPrevented || !cur.href) setTab(cur.key);
     });
     return a;
   }
@@ -358,13 +370,76 @@ export function mountEntityHeader(host, options) {
     revealActive();
   }
 
+  function patchTab(a, t) {
+    const label = a.querySelector('.eh-tab-label');
+    if (label) label.textContent = txt(t.label || t.key);
+    let count = a.querySelector('.eh-count');
+    const n = t.count === undefined || t.count === null || t.count === '' ? null : String(t.count);
+    if (n === null && count) a.removeChild(count);
+    else if (n !== null) {
+      if (!count) { count = h('span', { class: 'eh-count' }); a.appendChild(count); }
+      count.textContent = n;
+    }
+    if (t.href) a.setAttribute('href', t.href); else a.removeAttribute('href');
+  }
+
+  // Focus inside the header as a selector for the equivalent control after a re-render.
+  function focusKey() {
+    const ae = document.activeElement;
+    if (!ae || !header.contains(ae)) return null;
+    if (ae.classList.contains('eh-tab')) return '.eh-tab[data-tab="' + cssEsc(ae.getAttribute('data-tab')) + '"]';
+    if (ae.classList.contains('eh-more')) return '.eh-more';
+    if (ae.getAttribute('data-action') && !ae.classList.contains('eh-menu-item')) return '.eh-action[data-action="' + cssEsc(ae.getAttribute('data-action')) + '"]';
+    return null;
+  }
+
+  function refocus(sel) {
+    const el = sel ? header.querySelector(sel) : null;
+    if (!el) return;
+    try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+  }
+
+  function setTabs(tabs, activeTab) {
+    const next = normalize({ tabs: tabs }).tabs;
+    if (activeTab !== undefined && activeTab !== null) o.activeTab = String(activeTab);
+    const nav = header.querySelector('.eh-tabs');
+    const links = nav ? Array.prototype.slice.call(nav.querySelectorAll('.eh-tab')) : [];
+    const same = !!nav && links.length === next.length && next.every(function (t, i) { return links[i].getAttribute('data-tab') === t.key; });
+    o.tabs = next;
+    if (same) {
+      next.forEach(function (t, i) { patchTab(links[i], t); });
+      setTab(o.activeTab);
+      return;
+    }
+    const keep = focusKey();
+    const built = tabsBlock();
+    if (nav && built) header.replaceChild(built, nav);
+    else if (nav) header.removeChild(nav);
+    else if (built) header.appendChild(built);
+    revealActive();
+    refocus(keep);
+  }
+
+  const TAB_KEYS = { tabs: 1, activeTab: 1, onTab: 1 };
+
   return {
     el: header,
     update: function (partial) {
-      o = normalize(Object.assign({}, o, partial || {}));
+      const p = partial || {};
+      const keys = Object.keys(p);
+      if (keys.length && keys.every(function (k) { return TAB_KEYS[k]; })) {
+        if (Object.prototype.hasOwnProperty.call(p, 'onTab')) o.onTab = p.onTab;
+        if (Object.prototype.hasOwnProperty.call(p, 'tabs')) setTabs(p.tabs, p.activeTab);
+        else if (Object.prototype.hasOwnProperty.call(p, 'activeTab')) setTab(p.activeTab);
+        return;
+      }
+      const keep = focusKey();
+      o = normalize(Object.assign({}, o, p));
       render();
+      refocus(keep);
     },
     setTab: setTab,
+    setTabs: setTabs,
     isCompact: compact,
     destroy: function () {
       if (destroyed) return;

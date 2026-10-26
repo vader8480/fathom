@@ -224,9 +224,19 @@ function pagesOf(doc, ctxInfo) {
   return pages.filter(function (p) { return p && p.status !== 'archived'; });
 }
 
+// Problem reports ({id, text, status, device, room, page}: doc.problems, GET
+// /problems). Validation results ({level, code, ref, path, message}, what the
+// shell's ctx.problems() holds) are not reports and never count.
+function isReport(p) {
+  return !!p && typeof p === 'object' && has(p.id) && !(has(p.code) && has(p.level));
+}
+
+// ctxInfo.problems wins when it is a report list (an empty list included); a
+// list holding only validation results falls back to doc.problems.
 function problemsOf(doc, ctxInfo) {
-  const probs = ctxInfo && Array.isArray(ctxInfo.problems) ? ctxInfo.problems : list(doc && doc.problems);
-  return probs.filter(function (p) { return p && (p.status || 'open') === 'open'; });
+  const given = ctxInfo && Array.isArray(ctxInfo.problems) ? ctxInfo.problems : null;
+  const probs = given && (!given.length || given.some(isReport)) ? given : list(doc && doc.problems);
+  return probs.filter(function (p) { return isReport(p) && (p.status || 'open') === 'open'; });
 }
 
 function bodyRefs(body, type) {
@@ -322,9 +332,10 @@ function rackCards(doc, rack, ctxInfo) {
 }
 
 // Overview cards: [{key, label, count, sub, tab, drill: {title, kind, ids} | null}].
-// ctxInfo = {problems, pages} (ctx.problems() and the SOP pages); each falls
-// back to the doc collection when absent. Only open problems and non-archived
-// pages count.
+// ctxInfo = {problems, pages}: problem reports (not ctx.problems(), which holds
+// validation results; see problemsOf) and the SOP pages. Each falls back to the
+// doc collection (doc.problems, doc.pages) when absent. Only open problem reports
+// and non-archived pages count.
 export function summaryCards(kind, doc, entity, ctxInfo) {
   if (!entity) return [];
   if (kind === 'device') return deviceCards(doc, entity, ctxInfo);

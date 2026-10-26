@@ -25,6 +25,9 @@
 .dt-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-left:auto}
 
 /* ---- popovers: filter values and the column chooser */
+/* Chrome lays out the content of a closed <details>; keep the panel out of layout
+   (and of overflow checks) until it opens. */
+.dt-cols:not([open])>.dt-cols-panel{display:none}
 .dt-pop,.dt-cols-panel{position:absolute;z-index:30;min-width:220px;max-width:min(340px,calc(100vw - 24px));max-height:min(440px,70vh);overflow:auto;-webkit-overflow-scrolling:touch;padding:8px;background:var(--panel);border:1px solid var(--border-2);border-radius:var(--radius);box-shadow:0 14px 44px rgba(0,0,0,.55)}
 .dt-pop-head{display:flex;align-items:center;gap:6px;padding:0 0 6px 6px;border-bottom:1px solid var(--border);margin-bottom:6px}
 .dt-pop-head strong{flex:1;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}

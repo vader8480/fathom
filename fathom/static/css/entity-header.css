@@ -33,6 +33,10 @@ button.eh-badge:hover .eh-badge-pill{background:rgba(142,162,255,.14)}
 a.eh-action{display:inline-flex;align-items:center;border:1px solid var(--border,rgba(255,255,255,.09));border-radius:6px;
   background:var(--panel-2,#161d2e);color:var(--text,#e6eaf4);text-decoration:none}
 a.eh-action:hover{border-color:var(--accent,#8ea2ff)}
+/* Same look as button.primary / button.danger in app.css, for the link form. */
+a.eh-action.eh-primary{background:#2a3a7a;border-color:#3b4fa8;color:#fff}
+a.eh-action.eh-primary:hover{border-color:var(--accent,#8ea2ff)}
+a.eh-action.danger{color:var(--err,#f06aa8)}
 .eh-more-wrap{position:relative}
 .eh-more{min-width:40px;min-height:40px;padding:0 8px;font-size:16px;line-height:1}
 .eh-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:30;min-width:180px;max-width:calc(100vw - 16px);margin:0;padding:4px;list-style:none;

@@ -2,6 +2,21 @@
 // app.js's, so components can import them without an import cycle through the
 // shell. Nothing here touches the DOM at import time, so the module loads in
 // Node.
+//
+// h(tag, attrs, children): `class`, `text`, `html`, `on<event>` functions
+// (listeners, never inline attributes: CSP), `style` as a string or an object.
+// Style object keys are camelCase properties ({paddingLeft: '4px'}), CSS custom
+// properties ({'--x': '1'}) or hyphenated names ({'grid-column': '2'}); null or
+// undefined values are skipped.
+
+function setStyle(el, style) {
+  Object.keys(style).forEach(function (k) {
+    const v = style[k];
+    if (v === undefined || v === null) return;
+    if (k.indexOf('-') >= 0) el.style.setProperty(k, String(v));
+    else el.style[k] = v;
+  });
+}
 
 export function h(tag, attrs, children) {
   const el = document.createElement(tag);
@@ -13,7 +28,7 @@ export function h(tag, attrs, children) {
       else if (k === 'text') el.textContent = v;
       else if (k === 'html') el.innerHTML = v;
       else if (k.indexOf('on') === 0 && typeof v === 'function') el.addEventListener(k.slice(2), v);
-      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+      else if (k === 'style' && typeof v === 'object') setStyle(el, v);
       else if (v === true) el.setAttribute(k, '');
       else el.setAttribute(k, String(v));
     });
