@@ -3,7 +3,8 @@
 // {label, ops} in window.__wz.commits and applies them to the in-memory store.
 // Query: ?smoke=1 sets data-smoke; ?open=devices|cables|generic opens a wizard;
 // &sample=1 fills the paste step; &step=map|preview|review|result walks to it;
-// ?readonly=1 makes the store read-only.
+// ?readonly=1 makes the store read-only; window.__wz.failNext = true makes the
+// next commit fail (returns null, as makeCtx's commit does on an error).
 window.__fathomErrors = window.__fathomErrors || [];
 (function () {
   const errs = window.__fathomErrors;
@@ -60,6 +61,7 @@ async function main() {
     ensureCss: function () { return Promise.resolve(); },
     commit: function (ops, label) {
       if (store.readOnly) return null;
+      if (state.failNext) { state.failNext = false; return null; }
       state.commits.push({ label: label, ops: JSON.parse(JSON.stringify(ops)) });
       const d = store.commit(ops, label);
       log(label + ' \u00b7 ' + ops.length + ' ops: ' + ops.map(function (o) { return o.op + ' ' + o.coll + '/' + o.id; }).join(', '));

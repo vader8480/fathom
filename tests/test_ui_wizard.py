@@ -169,6 +169,20 @@ class WizardUi(UiCase):
             href = pg.js("document.querySelector('.wz .wz-result-link').getAttribute('href')")
             self.assertTrue(href.startswith("#/sunday-demo/main/schedules/cables?hl="), href)
 
+    def test_submit_failure_shows_inline_error_with_retry(self):
+        with self.open(HARNESS + "?open=devices&step=review", "d") as pg:
+            self._wait_step(pg, "review")
+            pg.js("window.__wz.failNext = true")
+            pg.click(".wz .wz-next")
+            pg.wait_for("!!document.querySelector('.wz .fb-error[role=alert]')")
+            self.assertIn("Nothing was added", pg.js("document.querySelector('.wz .fb-error').textContent"))
+            self.assertEqual(self._step(pg), "review")
+            self.assertEqual(pg.js("window.__wz.commits.length"), 0)
+            self.assertTrue(pg.js("document.activeElement === document.querySelector('.wz .fb-retry')"))
+            pg.click(".wz .fb-retry")
+            self._wait_step(pg, "result")
+            self.assertEqual(pg.js("window.__wz.commits.length"), 1)
+
     def test_inline_errors_and_describedby(self):
         with self.open(HARNESS, "d") as pg:
             self._open(pg, "generic")
