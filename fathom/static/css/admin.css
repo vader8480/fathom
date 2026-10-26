@@ -23,6 +23,7 @@
 
 /* ---- tables */
 .adm-acts{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center}
+.adm .dt-table td[data-col=actions] .adm-acts{flex-wrap:nowrap;white-space:nowrap}
 .adm-kinds{font-size:11.5px;white-space:nowrap}
 .adm .dt-table td>input:not([type=checkbox]),.adm .dt-table td>select{width:100%;min-width:72px;padding:4px 6px}
 .adm .dt-table td[data-col=vlan]>input,.adm .dt-table td[data-col=order]>input{min-width:56px;max-width:90px}
