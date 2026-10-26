@@ -1510,9 +1510,32 @@ export function mountInspector(el, ctx) {
 
   // -------------------------------------------------- render
 
+  // The first section still visible below the index, so a re-render (the channel overlay arriving,
+  // a commit elsewhere) keeps that section where it was instead of keeping a raw pixel offset.
+  function scrollAnchor() {
+    if (!el.scrollTop) return null;
+    const nav = root.querySelector('.ins-index');
+    const top = nav ? nav.getBoundingClientRect().bottom : el.getBoundingClientRect().top;
+    const secs = topSections();
+    for (let i = 0; i < secs.length; i++) {
+      const r = secs[i].getBoundingClientRect();
+      if (r.bottom > top + 1) return { key: secs[i].getAttribute('data-section'), dy: r.top - top };
+    }
+    return null;
+  }
+  function restoreAnchor(a, scroll) {
+    el.scrollTop = scroll;
+    const d = a && sectionEl(a.key);
+    if (!d) return;
+    const nav = root.querySelector('.ins-index');
+    const top = nav ? nav.getBoundingClientRect().bottom : el.getBoundingClientRect().top;
+    el.scrollTop += d.getBoundingClientRect().top - top - a.dy;
+  }
+
   function render() {
     flushTimers();
     const scroll = resetScroll ? 0 : el.scrollTop;
+    const anchor = resetScroll ? null : scrollAnchor();
     resetScroll = false;
     echo = null;
     root.innerHTML = '';
@@ -1553,7 +1576,7 @@ export function mountInspector(el, ctx) {
       renderEmpty();
     }
     buildIndex();
-    el.scrollTop = scroll;
+    restoreAnchor(anchor, scroll);
   }
 
   function selRefs() {
@@ -1571,7 +1594,8 @@ export function mountInspector(el, ctx) {
   let lastSelKey = '';
   function onSelection() {
     const sel = store.selection;
-    const key = sel ? JSON.stringify(sel) : '';
+    // canonical, so re-selecting the same entity in another shape ({type,id} vs {type,id,device}) keeps the scroll
+    const key = selToString(sel);
     if (key === lastSelKey) return;
     lastSelKey = key;
     resetScroll = true;
@@ -1601,7 +1625,7 @@ export function mountInspector(el, ctx) {
   store.addEventListener('mode', onMode);
   store.addEventListener('overlay', onOverlay);
   const offRoute = typeof ctx.subscribe === 'function' ? ctx.subscribe('route', refreshIndex) : null;
-  lastSelKey = store.selection ? JSON.stringify(store.selection) : '';
+  lastSelKey = selToString(store.selection);
   render();
   return {
     destroy: function () {
