@@ -368,6 +368,44 @@ settings), `floorplan.py` (DXF / Draw.io / PDF / SVG), `cables.py`, `network.py`
 `samples/campus-demo` (three rooms, audio/video/lighting, every importer),
 `samples/floorplans` (one file per supported format).
 
+Frontend module map (`fathom/static/`, contract in `docs/SPEC.md` §6; each
+`*-core.js` is pure and runs in Node):
+
+| Files | What |
+| --- | --- |
+| `js/app.js`, `app.html`, `css/app.css`, `sw.js` | shell: sections nav, tab bar, router wiring, ctx, change queue, service worker |
+| `js/router-core.js` | route grammar, `SECTIONS`, roles, nav memory, breakpoints (`layoutFor`) |
+| `js/dom.js` | `h`, `esc`, `on` |
+| `js/explorer.js`, `js/explorer-core.js`, `css/explorer.css` | filterable, resizable side list (drawer on phones) |
+| `js/entity-header.js`, `js/entity-core.js`, `css/entity-header.css` | sticky entity header, facts, URL tabs |
+| `js/datatable.js`, `js/datatable-core.js`, `css/datatable.css` | shared table: search, sort, filters, paging, CSV, URL and stored state |
+| `js/drawer.js`, `js/drawer-core.js`, `css/drawer.css` | inspector drawer: docked / sheet / full, Esc order, `sel`/`sec`/`drawer` |
+| `js/search.js`, `js/search-core.js`, `css/search.css` | search palette, categories, recents, targets |
+| `js/home.js`, `js/home-core.js`, `css/home.css` | Home view (launchpad) |
+| `js/feedback.js`, `js/feedback-core.js`, `css/feedback.css` | skeleton, empty, error, confirm, stale and review states; bell notices |
+| `js/wizard.js`, `js/wizard-core.js`, `css/wizard.css` | step dialogs and bulk add from pasted rows |
+| `js/page-device.js`, `js/page-room.js`, `js/page-rack.js`, `css/page-device.css`, `css/page-room.css`, `css/rack.css` | device, room and rack pages |
+| `js/patchview*.js`, `js/patchtable*.js`, `css/patchview.css`, `css/patchtable.css` | patch view and patch table |
+| `js/floorplan*.js`, `js/rack*.js`, `css/plan.css` | floor plans and rack elevations |
+| `js/schedules.js`, `js/inventory.js`, `css/schedules.css`, `css/inventory.css` | schedules and inventory (DataTables) |
+| `js/inspector.js`, `css/inspector.css`, `js/console-core.js`, `js/trace-ui.js`, `css/trace.css` | drawer content, console channels, trace drawer |
+| `js/views-admin.js`, `css/admin.css`, `js/views-discovery.js`, `css/discovery.css`, `js/views-sop.js`, `css/sop.css` | Imports / History / Builds / Settings, Discovery, SOPs |
+| `js/model-core.js`, `js/api.js`, `js/merge-ui.js`, `js/presets-core.js`, `js/suggest-ui.js`, `js/assistant-ui.js` | doc store and ops, API client, duplicate merge, presets, suggestions, assistant |
+| `dev/*.html`, `dev/*-harness.js`, `dev/fixture-gen.js`, `dev/fixture-v2.json` | harnesses (index at `/static/dev/index.html`): patchview, patchtable, floorplan, rack, schedules, datatable, explorer, entity, drawer, search, feedback, wizard |
+
+Tests: `tests/test_*.py` (backend, `unittest`), `tests/js/*.test.mjs`
+(`<name>-core.test.mjs` for the pure cores, `<name>-contract.test.mjs` for
+the DOM contracts, `dom.test.mjs`, `syntax.test.mjs` for ES2018),
+`tests/test_frontend_smoke.py` (every view and harness loads in headless
+Chrome), `tests/test_search_kinds.py` (network hits, `status`), and the UI
+suites `tests/test_ui_*.py` on the shared helper `tests/_ui.py`: `shell`,
+`router` (the helper itself), `explorer`, `entity`, `datatable`, `drawer`,
+`search`, `home`, `feedback`, `wizard`, the views (`pv`, `pt`, `fp`, `rk`,
+`sch`, `inv`, `pdev`, `proom`, `ins`, `adm`, `disc`, `sop`) and the
+loading / empty / error states (`states_shell`, `states_entity`,
+`states_lists`, `states_canvas`, `states_admin`). UI suites skip without
+Chrome (`FATHOM_CHROME`); `FATHOM_UI_SHOTS=<dir>` saves screenshots.
+
 ## Limits
 
 - DWG is a closed format: export DXF, PDF or SVG, or configure the ODA File
