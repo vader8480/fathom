@@ -43,6 +43,21 @@
 .sch-host .sch-edit select { width: 116px; }
 .sch-untagged td[data-col=tag] .sch-edit input { border-color: rgba(255,149,72,.35); }
 
+/* ---- loading and load failure: the state box stands in for the table body; the toolbar stays */
+.sch-statebox { margin: 8px 0 0; min-width: 0; }
+.sch-host.sch-busy > .dt-root > .dt-scroll, .sch-host.sch-busy > .dt-root > .dt-empty, .sch-host.sch-busy > .dt-root > .dt-pager,
+.sch-host.sch-failed > .dt-root > .dt-scroll, .sch-host.sch-failed > .dt-root > .dt-empty, .sch-host.sch-failed > .dt-root > .dt-pager,
+.sch-host.sch-failed > .dt-root > .dt-error { display: none; }
+.sch-host.sch-failed .dt-count { visibility: hidden; }
+.sch-loadfail { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.sch-loadfail > .fb-error { align-self: stretch; }
+.sch-loadfail .sch-btn, .sch-tagresult .fb-retry { min-height: 40px; }
+.sch-error-note { margin: 0; color: var(--muted); }
+.sch-empty p { margin: 0 0 8px; }
+@media (pointer: coarse) {
+  .sch-loadfail .sch-btn, .sch-tagresult .fb-retry { min-height: 44px; }
+}
+
 @media (max-width: 699px) {
   .sch-tabs { padding: 6px 4px 0; gap: 0; }
   .sch-tabs a[role=tab] { padding: 0 7px; }

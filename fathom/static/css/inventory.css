@@ -40,6 +40,8 @@
 .inv-root .dt-table .inv-edit { min-height: 32px; padding: 2px 10px; font-size: 12px; }
 .inv-root .dt-table td[data-col=edit], .inv-root .dt-table th[data-col=edit] { width: 1%; white-space: nowrap; }
 .inv-empty p { margin: 0 0 8px; }
+.inv-review:not([hidden]) { display: inline-flex; align-items: center; }
+.inv-tablehost > .fb-skeleton { margin-top: 4px; }
 
 @media (pointer: coarse) {
   .inv-root .dt-root input[type=search].dt-search, .inv-root .dt-root select, .inv-root .inv-btn, .inv-root .inv-check, .inv-menu-item { min-height: 44px; }
