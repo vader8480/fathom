@@ -7,6 +7,7 @@ import {rackDevices, findRack, ruLabel} from './rack-core.js';
 import {h, on} from './dom.js';
 import {createTable, openTableDialog} from './datatable.js';
 import {applyState, normalizeColumns, storageKey, textOf} from './datatable-core.js';
+import {confirmScope, emptyState, inlineError, skeleton} from './feedback.js';
 import {selToString} from './router-core.js';
 
 const FT = 0.3048;
@@ -435,6 +436,17 @@ const NOUNS = {
   cables: {one: 'cable', many: 'cables'}, ip: {one: 'address', many: 'addresses'}, dmx: {one: 'patch', many: 'patches'},
   bom: {one: 'line', many: 'lines'}, patch: {one: 'port', many: 'ports'}, racks: {one: 'placement', many: 'placements'},
 };
+// Empty schedule per kind: why it has no rows ({in} is " in <room>" or nothing) and
+// which view creates them.
+const EMPTY = {
+  cables: {title: 'No cables{in} yet.', text: 'Patch ports in the Patch view to create cables.', editorText: 'Patch ports in the Patch view, or bulk add cables from a spreadsheet.', view: 'patch', label: 'Open patch'},
+  ip: {title: 'No IP addresses recorded{in} yet.', text: 'Add interfaces in a device\u2019s Network tab.', view: 'devices', label: 'Open devices'},
+  dmx: {title: 'No DMX addresses{in} yet.', text: 'Set a universe/address on a lighting device.', view: 'devices', label: 'Open devices'},
+  bom: {title: 'Nothing to count{in} yet.', text: 'The bill of materials counts the devices and cables you add in Patch or Inventory.', view: 'inventory', label: 'Open inventory'},
+  patch: {title: 'No ports{in} yet.', text: 'Add gear in the Patch view; every port of every device gets a row here.', view: 'patch', label: 'Open patch'},
+  racks: {title: 'No racks{in} yet.', text: 'Add a rack in the Racks view, then place devices in it.', view: 'racks', label: 'Open racks'},
+};
+const STATE_HIDES = {planned: ['Planned + installed', 'spare and retired'], as_built: ['As built', 'planned, spare and retired']};
 const SECTIONS = {ip: 'net', dmx: 'dmx', bom: 'inventory'};
 const KEEP_ON_TAB = ['sel', 'sec', 'drawer'];
 
@@ -494,7 +506,9 @@ export function mount(el, ctx) {
   const csvAll = ctx.api && ctx.api.scheduleUrl ? h('a', {id: 'sch-csv-all', class: 'sch-btn', role: 'button', title: 'Server CSV of every row in this room and state', text: 'Full CSV'}) : null;
   const labelsCsv = h('a', {id: 'sch-csv', class: 'sch-btn', role: 'button', 'aria-disabled': 'true', text: 'CSV'});
   const tagPanel = h('div', {class: 'sch-tagpanel', hidden: true, role: 'region', 'aria-label': 'Cable tag preview'});
-  const errorEl = h('p', {class: 'sch-error', role: 'alert', hidden: true});
+  const errorEl = h('div', {class: 'sch-error', hidden: true});
+  // Stands in for the table body while a server schedule loads or after it failed.
+  const stateBox = h('div', {class: 'sch-statebox', hidden: true});
   const problemsEl = h('ul', {class: 'sch-problems', 'aria-label': 'Schedule warnings'});
   const host = h('div', {class: 'sch-host'});
   const totalsEl = h('p', {class: 'sch-totals', hidden: true});
@@ -648,6 +662,110 @@ export function mount(el, ctx) {
       .filter(function (n) { return !!n; });
   }
 
+  // ------------------------------------------------------------ states
+  function roomLabel() {
+    const r = room();
+    if (r === '*') return '';
+    const rm = byId(doc().rooms)[r];
+    return rm ? rm.name : r;
+  }
+
+  function viewAction(view, label) {
+    if (ROUTED && typeof ctx.routeHref === 'function') {
+      try {
+        const href = ctx.routeHref({view: view});
+        if (href) return {label: label, href: href};
+      } catch (e) { /* fall back to navigate */ }
+    }
+    if (typeof ctx.navigate !== 'function') return null;
+    return {label: label, run: function () { ctx.navigate(view); }};
+  }
+
+  function setStateFilter(state) {
+    S.state = state;
+    stateSel.value = state;
+    S.gen++;
+    load();
+  }
+
+  function emptyFor(kind) {
+    return function (st, info) {
+      if (info && info.total > 0) {
+        return h('div', {class: 'sch-empty'}, [
+          h('p', {class: 'dt-empty-text', text: 'No rows match these filters.'}),
+          h('button', {type: 'button', class: 'dt-clear', onclick: function () {
+            if (!table) return;
+            table.setState({q: '', filters: {}});
+            const s = table.root.querySelector('.dt-search');
+            if (s) { s.value = ''; s.focus(); }
+          }}, 'Clear filters'),
+        ]);
+      }
+      const what = NOUNS[kind].many;
+      const hides = STATE_HIDES[S.state];
+      if (hides) {
+        return emptyState({
+          title: 'No ' + what + ' match the state filter.',
+          text: 'State \u201c' + hides[0] + '\u201d hides ' + hides[1] + ' items.',
+          action: {label: 'Show everything', run: function () { setStateFilter('everything'); }},
+        });
+      }
+      const e = EMPTY[kind];
+      const where = roomLabel();
+      const bulk = kind === 'cables' && !readOnly();
+      const nav = viewAction(e.view, e.label);
+      return emptyState({
+        title: e.title.replace('{in}', where ? ' in ' + where : ''),
+        text: bulk ? e.editorText : e.text,
+        action: bulk ? {label: 'Bulk add cables\u2026', run: startBulkAdd} : nav,
+        secondary: bulk ? nav : null,
+      });
+    };
+  }
+
+  function setBox(node, mode) {
+    stateBox.innerHTML = '';
+    host.classList.remove('sch-busy', 'sch-failed');
+    stateBox.hidden = !node;
+    if (!node) return;
+    stateBox.appendChild(node);
+    host.classList.add(mode === 'error' ? 'sch-failed' : 'sch-busy');
+  }
+
+  function showBusy() {
+    errorEl.hidden = true;
+    errorEl.innerHTML = '';
+    problemsEl.innerHTML = '';
+    totalsEl.hidden = true;
+    if (table) table.setLoading(true);
+    setBox(skeleton('table'), 'busy');
+  }
+
+  function showFailure(kind, err, stale) {
+    const retry = function () { return load(); };
+    if (stale) {
+      errorEl.innerHTML = '';
+      errorEl.appendChild(inlineError(err, retry, {compact: true}));
+      errorEl.hidden = false;
+      return;
+    }
+    if (table) table.setError(err);
+    const useLocal = h('button', {type: 'button', class: 'sch-btn sch-local', onclick: function () {
+      const res = localSchedule(doc(), kind, params(), vocab, store.overlay);
+      res.error = 'The server schedule could not be loaded. These rows are computed in the browser and may miss imported data.';
+      S.data[kind] = {key: paramKey(), gen: S.gen, res: res};
+      if (S.kind === kind) showData();
+    }}, 'Show local rows');
+    setBox(h('div', {class: 'sch-loadfail'}, [inlineError(err, retry), useLocal]), 'error');
+  }
+
+  function startBulkAdd() {
+    if (readOnly()) return;
+    import('./wizard.js').then(function (m) { return m.bulkAdd(ctx, {kind: 'cables', room: store.room}); }).catch(function (err) {
+      if (typeof ctx.toast === 'function') ctx.toast((err && err.message) || 'Bulk add is not available.', 'err');
+    });
+  }
+
   // A bulk-add result link filters by f.id; once the URL drops it the stored
   // filter must go too, or it would hide every other cable on the next visit.
   function scrubStaleId(scope, key) {
@@ -679,8 +797,10 @@ export function mount(el, ctx) {
   function buildTable() {
     dropPrintSheet();
     if (table) { table.destroy(); table = null; }
+    setBox(null);
     host.innerHTML = '';
     errorEl.hidden = true;
+    errorEl.innerHTML = '';
     problemsEl.innerHTML = '';
     totalsEl.hidden = true;
     S.rows = [];
@@ -708,9 +828,10 @@ export function mount(el, ctx) {
       csvName: (ctx.project || 'project') + '-' + kind + '.csv',
       highlight: S.hl,
       noun: NOUNS[kind],
-      empty: 'No rows for this room and state.',
+      empty: emptyFor(kind),
       searchPlaceholder: 'Filter rows',
     });
+    table.root.insertBefore(stateBox, table.root.querySelector('.dt-scroll'));
     const t = table.root.querySelector('.dt-table');
     t.classList.add('sch-table');
     t.setAttribute('data-kind', kind);
@@ -744,12 +865,14 @@ export function mount(el, ctx) {
     if (!table || !entry) return;
     if (editing()) { S.pending = true; return; }
     S.pending = false;
+    setBox(null);
     const res = entry.res;
     S.rows = decorate(kind, res.rows);
     S.byId = {};
     S.rows.forEach(function (r) { S.byId[r._id] = r; });
     errorEl.hidden = !res.error;
-    errorEl.textContent = res.error || '';
+    errorEl.innerHTML = '';
+    if (res.error) errorEl.appendChild(h('p', {class: 'sch-error-note', role: 'status', text: res.error}));
     problemsEl.innerHTML = '';
     list(res.problems).forEach(function (p) { problemsEl.appendChild(h('li', {class: 'sch-' + (p.level || 'warning'), text: p.message || p.code})); });
     const tot = res.totals && Object.keys(res.totals).length ? res.totals : null;
@@ -777,18 +900,17 @@ export function mount(el, ctx) {
     }
     const id = ++S.reqId;
     const gen = S.gen;
-    if (entry && entry.key === key) showData();
-    else if (table) table.setLoading(true);
-    Promise.resolve(ctx.api.schedule(ctx.project, kind, params())).then(function (res) {
+    const stale = !!entry && entry.key === key;
+    if (stale) showData();
+    else showBusy();
+    const p = params();
+    return new Promise(function (resolve) { resolve(ctx.api.schedule(ctx.project, kind, p)); }).then(function (res) {
       if (destroyed || id !== S.reqId) return;
       S.data[kind] = {key: key, gen: gen, res: res || {columns: [], rows: []}};
       if (S.kind === kind) showData();
     }, function (err) {
-      if (destroyed || id !== S.reqId) return;
-      const res = localSchedule(doc(), kind, params(), vocab, store.overlay);
-      res.error = (err && err.message) || 'Could not load the schedule; showing local rows.';
-      S.data[kind] = {key: key, gen: gen, res: res};
-      if (S.kind === kind) showData();
+      if (destroyed || id !== S.reqId || S.kind !== kind) return;
+      showFailure(kind, err, stale);
     });
   }
 
@@ -1015,7 +1137,8 @@ export function mount(el, ctx) {
       S.preview = {ops: ops, base: res ? res.base_revision : null, scope: scope, pattern: pattern};
       showPreview(out, ops, res && res.local);
     }, function (err) {
-      out.textContent = (err && err.message) || 'Tag preview failed.';
+      out.innerHTML = '';
+      out.appendChild(inlineError(err || new Error('Tag preview failed.'), function () { preview(); }, {compact: true}));
     });
   }
 
@@ -1049,18 +1172,53 @@ export function mount(el, ctx) {
     ]));
   }
 
+  // Where the cables a tag preview touches live: one room's name, or "N rooms".
+  function tagScope(ops) {
+    const d = doc();
+    const cabs = byId(d.cables);
+    const devs = byId(d.devices);
+    const seen = {};
+    ops.forEach(function (o) {
+      const c = cabs[o.id];
+      if (!c) return;
+      [c.from, c.to].forEach(function (e) {
+        const dev = devs[e && e.device];
+        if (dev) seen[dev.room || ''] = true;
+      });
+    });
+    const keys = Object.keys(seen);
+    if (keys.length === 1) return keys[0] ? roomName(byId(d.rooms), keys[0]) : 'shared inventory';
+    return keys.length ? keys.length + ' rooms' : '';
+  }
+
+  function stalePreview(pv) {
+    if (!(ctx.api && pv.base != null && store.revision != null && pv.base !== store.revision)) return false;
+    ctx.toast('The project changed since the preview. Showing a fresh preview.', 'warn');
+    preview();
+    return true;
+  }
+
   function confirmTags() {
     const pv = S.preview;
-    if (!pv || !pv.ops.length) return;
-    if (ctx.api && pv.base != null && store.revision != null && pv.base !== store.revision) {
-      ctx.toast('The project changed since the preview. Showing a fresh preview.', 'warn');
-      preview();
-      return;
-    }
-    ctx.commit(pv.ops, 'Assigned ' + pv.ops.length + ' cable tag' + (pv.ops.length === 1 ? '' : 's'));
-    S.preview = null;
-    tagPanel.hidden = true;
-    btnTags.focus();
+    if (!pv || !pv.ops.length || readOnly()) return;
+    if (stalePreview(pv)) return;
+    const cableOps = pv.ops.filter(function (o) { return !o.coll || o.coll === 'cables'; });
+    const others = pv.ops.length - cableOps.length;
+    const renumber = pv.scope === 'all';
+    const ask = pv.ops.length > 1 ? confirmScope(ctx, {
+      verb: renumber ? 'Renumber' : 'Assign tags to',
+      count: cableOps.length || pv.ops.length,
+      noun: !cableOps.length ? {one: 'bundle', many: 'bundles'} : (renumber ? {one: 'cable', many: 'cables'} : {one: 'untagged cable', many: 'untagged cables'}),
+      scope: tagScope(cableOps),
+      detail: cableOps.length && others ? 'Also tags ' + others + ' bundle' + (others === 1 ? '' : 's') + '. One undo step reverts it.' : 'One undo step reverts it.',
+    }) : Promise.resolve(true);
+    ask.then(function (ok) {
+      if (!ok || destroyed || S.preview !== pv || stalePreview(pv)) return;
+      ctx.commit(pv.ops, 'Assigned ' + pv.ops.length + ' cable tag' + (pv.ops.length === 1 ? '' : 's'));
+      S.preview = null;
+      tagPanel.hidden = true;
+      btnTags.focus();
+    });
   }
 
   // -------------------------------------------------------------- edits
@@ -1169,11 +1327,7 @@ export function mount(el, ctx) {
   if (roomSel) listen(roomSel, 'change', function () { S.room = roomSel.value; S.gen++; load(); });
   listen(stateSel, 'change', function () { S.state = stateSel.value; S.gen++; load(); });
   listen(btnTags, 'click', function () { if (tagPanel.hidden) openTags(); else tagPanel.hidden = true; });
-  listen(btnBulk, 'click', function () {
-    import('./wizard.js').then(function (m) { return m.bulkAdd(ctx, {kind: 'cables', room: store.room}); }).catch(function (err) {
-      if (typeof ctx.toast === 'function') ctx.toast((err && err.message) || 'Bulk add is not available.', 'err');
-    });
-  });
+  listen(btnBulk, 'click', startBulkAdd);
   listen(tagPanel, 'click', function (e) {
     const b = e.target.closest('[data-act]');
     if (!b) return;

@@ -5,10 +5,10 @@
 // dates, vendor, cost, status, photos, notes). A row opens the device drawer at the
 // inventory section. mount(el, ctx) (§6.4, §6.7).
 import {fits, rackUnits} from './rack-core.js';
-import {openDuplicatesDialog, openMergeDialog} from './merge-ui.js';
+import {fetchDuplicates, openDuplicatesDialog, openMergeDialog} from './merge-ui.js';
 import {h, on} from './dom.js';
 import {createTable} from './datatable.js';
-import {confirmScope, emptyState} from './feedback.js';
+import {confirmScope, emptyState, reviewBadge, skeleton} from './feedback.js';
 import {bulkAdd} from './wizard.js';
 
 const STATUSES = ['installed', 'planned', 'spare', 'retired'];
@@ -139,6 +139,7 @@ export function mount(el, ctx) {
 
   function readOnly() { return !!store.readOnly || ctx.role === 'viewer'; }
   function doc() { return store.doc; }
+  function docReady() { return !!store.doc && typeof store.doc === 'object'; }
   function route() { return ctx.route && typeof ctx.route === 'object' ? ctx.route : null; }
   function routed() { const r = route(); return !!r && r.view === 'inventory' && typeof ctx.setParams === 'function'; }
   function query() { const r = route(); return (r && r.query) || {}; }
@@ -178,6 +179,7 @@ export function mount(el, ctx) {
   const groupBox = h('span', {class: 'inv-check inv-chip'}, [groupCb, h('label', {for: 'inv-group', text: 'Group by location'})]);
   const bulkAddBtn = h('button', {id: 'inv-bulk-add', type: 'button', class: 'inv-btn inv-primary', text: 'Bulk add\u2026', title: 'Add many devices from pasted spreadsheet rows'});
   const dupsBtn = ctx.api ? h('button', {id: 'inv-dups', type: 'button', class: 'inv-btn', text: 'Duplicates', title: 'Find devices that are probably the same unit'}) : null;
+  const dupsReview = dupsBtn && ctx.api.duplicates ? h('span', {class: 'inv-review', hidden: true}) : null;
   const csvAll = h('a', {id: 'inv-csv-all', class: 'inv-menu-item', role: 'menuitem', href: '#', text: 'Export all (import format)'});
   const more = h('details', {class: 'inv-more'}, [
     h('summary', {class: 'inv-btn inv-more-btn', 'aria-label': 'More inventory actions', title: 'More'}, [h('span', {'aria-hidden': 'true', text: '\u22EF'})]),
@@ -266,12 +268,27 @@ export function mount(el, ctx) {
       ]);
     }
     const where = scopeName();
-    const quick = S.quick.length > 0;
+    if (S.quick.length > 0) {
+      return emptyState({title: 'No devices match the quick filters.', action: {label: 'Clear filters', run: clearFilters}});
+    }
+    const ro = readOnly();
     return emptyState({
-      title: quick ? 'No devices match the quick filters.' : (where ? 'No devices in ' + where + '.' : 'No devices yet.'),
-      text: quick ? '' : 'Add gear in Patch' + (readOnly() ? '.' : ' or bulk add from a spreadsheet.'),
-      action: quick ? {label: 'Clear filters', run: clearFilters} : (readOnly() ? null : {label: 'Bulk add\u2026', run: startBulkAdd}),
+      title: where ? 'No devices in ' + where + '.' : 'No devices yet.',
+      text: 'Add gear in Patch' + (ro ? '.' : ' or bulk add from a spreadsheet.'),
+      action: ro ? patchAction() : {label: 'Bulk add\u2026', run: startBulkAdd},
+      secondary: ro ? null : patchAction(),
     });
+  }
+
+  function patchAction() {
+    if (typeof ctx.routeHref === 'function') {
+      try {
+        const href = ctx.routeHref({view: 'patch'});
+        if (href) return {label: 'Open patch', href: href};
+      } catch (e) { /* fall back to navigate */ }
+    }
+    if (typeof ctx.navigate !== 'function') return null;
+    return {label: 'Open patch', run: function () { ctx.navigate('patch'); }};
   }
 
   function clearFilters() {
@@ -309,7 +326,7 @@ export function mount(el, ctx) {
       selectable: !ro,
       noun: DEVICE_NOUN,
       bulkActions: ro ? [] : [bulkStatus, bulkRoom, bulkLoc, markInstalled, mergeSel],
-      actions: [quickBar, bulkAddBtn, dupsBtn, more].filter(Boolean),
+      actions: [quickBar, bulkAddBtn, dupsBtn, dupsReview, more].filter(Boolean),
       ids: {table: 'inv-table', columns: 'inv-columns', csv: 'inv-csv', search: 'inv-filter', selectAll: 'inv-select-all', filters: FILTER_IDS},
       url: urlBinding(),
       csvName: (ctx.project || 'project') + '-inventory.csv',
@@ -350,6 +367,36 @@ export function mount(el, ctx) {
     if (typeof ctx.openDrawer === 'function') ctx.openDrawer(sel, {section: 'inventory'});
     else if (typeof ctx.openInspector === 'function') ctx.openInspector(sel);
     else ctx.select(sel);
+  }
+
+  // ------------------------------------------------------------ duplicates review
+
+  let dupsTimer = null;
+  let dupsSeq = 0;
+  function checkDuplicates() {
+    if (!dupsReview || S.destroyed) return;
+    const seq = ++dupsSeq;
+    fetchDuplicates(ctx, {limit: 100}).then(function (found) {
+      if (S.destroyed || seq !== dupsSeq) return;
+      const n = list(found).length;
+      dupsReview.innerHTML = '';
+      const badge = reviewBadge({
+        count: n, label: n === 1 ? 'duplicate to review' : 'duplicates to review',
+        title: plural(n, {one: 'possible duplicate pair', many: 'possible duplicate pairs'}) + ' in this project',
+        onClick: function () { openDuplicatesDialog(ctx); },
+      });
+      if (badge) dupsReview.appendChild(badge);
+      dupsReview.hidden = !badge;
+    }, function () {
+      if (S.destroyed || seq !== dupsSeq) return;
+      dupsReview.innerHTML = '';
+      dupsReview.hidden = true;
+    });
+  }
+  function checkDuplicatesSoon() {
+    if (!dupsReview) return;
+    if (dupsTimer) clearTimeout(dupsTimer);
+    dupsTimer = setTimeout(function () { dupsTimer = null; checkDuplicates(); }, 600);
   }
 
   // ------------------------------------------------------------ bulk
@@ -640,19 +687,35 @@ export function mount(el, ctx) {
     setQuick(next);
   }
 
-  function onDoc() { refreshRows(); }
-  function onMode() { if (readOnly() !== builtReadOnly) build(); else refreshRows(); }
+  // The table waits for the project document; until then a table-shaped skeleton holds its place.
+  let loadingNode = null;
+  function start() {
+    if (table || S.destroyed) return;
+    if (!docReady()) {
+      if (!loadingNode) { loadingNode = skeleton('table'); tableHost.appendChild(loadingNode); }
+      return;
+    }
+    if (loadingNode) { loadingNode.remove(); loadingNode = null; }
+    build();
+    checkDuplicates();
+  }
+
+  function onDoc() { if (!table) start(); else refreshRows(); }
+  function onMode() { if (!table) start(); else if (readOnly() !== builtReadOnly) build(); else refreshRows(); }
   store.addEventListener('doc', onDoc);
   store.addEventListener('room', onDoc);
   store.addEventListener('mode', onMode);
+  store.addEventListener('revision', checkDuplicatesSoon);
   offs.push(function () {
     store.removeEventListener('doc', onDoc);
     store.removeEventListener('room', onDoc);
     store.removeEventListener('mode', onMode);
+    store.removeEventListener('revision', checkDuplicatesSoon);
+    if (dupsTimer) clearTimeout(dupsTimer);
   });
 
   S.quick = parseQuick(query().quick);
-  build();
+  start();
 
   return {
     destroy: function () {
