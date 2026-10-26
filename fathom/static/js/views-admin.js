@@ -6,7 +6,7 @@
 import { h } from './dom.js';
 import { canSee } from './router-core.js';
 import { createTable } from './datatable.js';
-import { staleBadge, reviewBadge, confirmScope } from './feedback.js';
+import { skeleton, emptyState, inlineError, staleBadge, reviewBadge, confirmScope } from './feedback.js';
 import { openWizard } from './wizard.js';
 import { slug, newId, deepClone } from './model-core.js';
 import { suggestionControl, applyChoice } from './suggest-ui.js';
@@ -55,6 +55,67 @@ function findRow(t, id) {
   const trs = t.root.querySelectorAll('tr.dt-row');
   for (let i = 0; i < trs.length; i++) if (trs[i].getAttribute('data-id') === String(id)) return trs[i];
   return null;
+}
+
+// An error for inlineError that names the action ("Could not delete build x: …") but keeps the
+// status, so offline and server failures are still told apart.
+function actErr(what, e) {
+  return { message: what + ': ' + msg(e), status: e && e.status, code: e && e.code, name: e && e.name };
+}
+
+// States of a server-backed list (docs/ui-audit.md B.5): a table-shaped skeleton until the first
+// rows, then inlineError + Retry in its place, or (compact) above rows already shown when a
+// later request or a row action fails. `shown` starts true for tables filled from the document.
+function listState(t, shown) {
+  const slot = h('div', { class: 'adm-state', 'aria-live': 'polite' });
+  t.root.parentNode.insertBefore(slot, t.root);
+  shown = !!shown;
+  function show(on) { t.root.style.display = on ? '' : 'none'; }
+  return {
+    slot: slot,
+    busy: function () {
+      if (shown) return;
+      slot.innerHTML = '';
+      slot.appendChild(skeleton('table', 5));
+      show(false);
+    },
+    done: function (rows) {
+      shown = true;
+      slot.innerHTML = '';
+      show(true);
+      if (rows) t.setRows(rows);
+    },
+    fail: function (err, retry) {
+      slot.innerHTML = '';
+      slot.appendChild(inlineError(err, retry, { compact: shown }));
+      show(shown);
+    },
+    clear: function () { if (shown) slot.innerHTML = ''; },
+  };
+}
+
+// A slot beside a form button for its request failures (inlineError + Retry).
+function errSlot(cls) {
+  const el = h('div', { class: 'adm-err' + (cls ? ' ' + cls : ''), 'aria-live': 'polite' });
+  return {
+    el: el,
+    show: function (err, retry, compact) { el.innerHTML = ''; el.appendChild(inlineError(err, retry, { compact: compact !== false })); },
+    clear: function () { el.innerHTML = ''; },
+  };
+}
+
+// DataTable `empty` as a node: the emptyState when there are no rows at all, otherwise the table's
+// own "no match" line with Clear filters.
+function emptyFor(getTable, o) {
+  return function (state, info) {
+    if (info && info.total > 0) {
+      return h('div', null, [
+        h('p', { class: 'dt-empty-text' }, 'No rows match these filters.'),
+        h('button', { type: 'button', class: 'dt-clear', onclick: function () { const t = getTable(); if (t) t.setState({ q: '', filters: {} }); } }, 'Clear filters'),
+      ]);
+    }
+    return emptyState(typeof o === 'function' ? o() : o);
+  };
 }
 
 // ------------------------------------------------------------ imports
@@ -145,14 +206,21 @@ export function mountImports(el, ctx) {
     const out = h('div', { class: 'imp-out hidden', 'aria-live': 'polite' });
     const go = h('button', { type: 'button', class: 'primary small' }, imp.mode === 'oneshot' ? 'Preview' : 'Import');
     let el = null;
-    go.addEventListener('click', function () {
+    function failed(e, what) {
+      go.disabled = false;
+      out.classList.remove('hidden');
+      clearOut(out);
+      el.classList.remove('wide');
+      out.appendChild(inlineError(actErr(what, e), run));
+    }
+    function run() {
       const fs = Array.prototype.slice.call(files.files || []);
-      if (!fs.length) { ctx.toast('Choose a file first', 'warn'); return; }
+      if (!fs.length) { ctx.toast('Choose a file first', 'warn'); return null; }
       go.disabled = true;
       const params = { kind: imp.kind, device: dev.value, room: room.value };
       const flush = ctx.flush ? ctx.flush() : Promise.resolve();
       if (imp.mode === 'oneshot') {
-        flush.then(function () { return ctx.api.importPreview(ctx.project, fs, params); }).then(function (r) {
+        return flush.then(function () { return ctx.api.importPreview(ctx.project, fs, params); }).then(function (r) {
           go.disabled = false;
           out.classList.remove('hidden');
           clearOut(out);
@@ -186,10 +254,12 @@ export function mountImports(el, ctx) {
               }))));
           }
           if ((r.ops || []).length) {
-            const apply = h('button', { type: 'button', class: 'primary small adm-apply', onclick: function () {
+            const applyErr = errSlot('adm-apply-err');
+            const doApply = function () {
               apply.disabled = true;
+              applyErr.clear();
               const ops = deepClone(r.ops);
-              Promise.all(ops.map(function (op) {
+              return Promise.all(ops.map(function (op) {
                 const c = controls[op.id];
                 return c && op.coll === 'devices' && op.op === 'put' ? applyChoice(ctx, c, op.value) : Promise.resolve(null);
               })).then(function () {
@@ -200,30 +270,26 @@ export function mountImports(el, ctx) {
                 out.classList.add('hidden');
                 clearOut(out);
                 el.classList.remove('wide');
-              }, function (e) { apply.disabled = false; ctx.toast(msg(e), 'err'); });
-            } }, 'Apply ' + r.ops.length + ' changes');
+              }, function (e) { apply.disabled = false; applyErr.show(actErr('Could not apply the import', e), doApply); });
+            };
+            const apply = h('button', { type: 'button', class: 'primary small adm-apply', onclick: doApply }, 'Apply ' + r.ops.length + ' changes');
             out.appendChild(apply);
+            out.appendChild(applyErr.el);
           } else {
             out.appendChild(h('div', { class: 'muted', style: { marginTop: '6px' } }, 'Nothing to apply.'));
           }
-        }, function (e) { go.disabled = false; ctx.toast(msg(e), 'err'); });
-        return;
+        }, function (e) { failed(e, 'Could not preview ' + (fs[0].name || imp.label)); });
       }
-      flush.then(function () { return ctx.api.upload(ctx.project, 'imports', fs, params); }).then(function (r) {
+      return flush.then(function () { return ctx.api.upload(ctx.project, 'imports', fs, params); }).then(function (r) {
         go.disabled = false;
         out.classList.remove('hidden');
         clearOut(out);
         liveSummary(out, (r && r.summary) || {});
         ctx.toast('Imported ' + imp.label, 'ok');
         return ctx.reload().then(refreshOverlay).then(drawRegistered);
-      }, function (e) {
-        go.disabled = false;
-        out.classList.remove('hidden');
-        clearOut(out);
-        out.appendChild(h('div', { class: 'imp-err-head' }, msg(e)));
-        ctx.toast(msg(e), 'err');
-      });
-    });
+      }, function (e) { failed(e, 'Could not import ' + (fs[0].name || imp.label)); });
+    }
+    go.addEventListener('click', run);
     el = h('div', { class: 'adm-card' + ((imp.templates || []).length ? ' has-tpl' : ''), 'data-importer': imp.kind }, head.concat([
       files,
       h('div', { class: 'row adm-card-opts', style: { marginTop: '6px' } }, [imp.mode === 'oneshot' ? null : dev, room]),
@@ -239,7 +305,7 @@ export function mountImports(el, ctx) {
   const regTable = createTable(regHost, {
     key: 'imports.registered', scope: ctx.project, caption: 'Registered imports', noun: { one: 'import', many: 'imports' },
     url: urlBinding(ctx), highlight: hlOf(ctx), csvName: 'imports.csv',
-    empty: 'No registered imports. Import a console, Dante or CSV export above to add one.',
+    empty: write ? 'No registered imports. Import a console, Dante or CSV export above to add one.' : 'No registered imports. Editors add them from console, Dante or CSV exports.',
     columns: [
       { key: 'kind', header: 'Kind', filterable: true, sticky: true },
       { key: 'path', header: 'Path', cell: function (im) { return mono(im.path); } },
@@ -247,23 +313,30 @@ export function mountImports(el, ctx) {
       { key: 'room', header: 'Room', value: function (im) { return im.room || ''; }, filterable: true, hideOnMobile: true },
       actions(function (im) {
         return [
-          h('button', { type: 'button', class: 'small', onclick: function () {
-            ctx.api.inspectImport(ctx.project, im.id).then(function (r) {
-              inspectBox.classList.remove('hidden');
-              inspectBox.textContent = im.path + '\n' + JSON.stringify(r.summary || r, null, 2);
-            }, function (e) { ctx.toast(msg(e), 'err'); });
-          } }, 'Inspect'),
+          h('button', { type: 'button', class: 'small', onclick: function () { inspect(im); } }, 'Inspect'),
           write ? h('button', { type: 'button', class: 'small danger', onclick: function () {
-            ctx.confirm('Remove import ' + im.path + '? Also delete its files?', { danger: true, ok: 'Remove + delete files', cancel: 'Cancel' }).then(function (y) {
-              if (!y) return;
-              ctx.api.deleteImport(ctx.project, im.id, true).then(function () { return ctx.reload(); }).then(refreshOverlay).then(drawRegistered, function (e) { ctx.toast(msg(e), 'err'); });
-            });
+            confirmScope(ctx, { verb: 'Remove', noun: 'import ' + im.path, danger: true, ok: 'Remove + delete files',
+              detail: 'Its files are deleted from the server and the overlay is rebuilt without it. Nothing you typed changes.' }).then(function (y) { if (y) removeImport(im); });
           } }, 'Remove') : null,
         ];
       }),
     ],
   });
+  const regState = listState(regTable, true);
   function drawRegistered() { regTable.setRows(store.doc.imports || []); }
+  function inspect(im) {
+    return ctx.api.inspectImport(ctx.project, im.id).then(function (r) {
+      regState.clear();
+      inspectBox.classList.remove('hidden');
+      inspectBox.textContent = im.path + '\n' + JSON.stringify(r.summary || r, null, 2);
+    }, function (e) { regState.fail(actErr('Could not inspect ' + im.path, e), function () { return inspect(im); }); });
+  }
+  function removeImport(im) {
+    return ctx.api.deleteImport(ctx.project, im.id, true).then(function () {
+      regState.clear();
+      return ctx.reload().then(refreshOverlay).then(drawRegistered);
+    }, function (e) { regState.fail(actErr('Could not remove ' + im.path, e), function () { return removeImport(im); }); });
+  }
 
   // overlay
   const ovlChips = h('div', { class: 'row adm-ovl-chips' });
@@ -274,30 +347,45 @@ export function mountImports(el, ctx) {
     fetchedAt: function () { return ctx.overlayInfo ? ctx.overlayInfo().fetchedAt : null; },
     fetchedRev: function () { return ctx.overlayInfo ? ctx.overlayInfo().revision : null; },
     currentRev: function () { return store.revision; },
-    onRefresh: function () { return Promise.resolve(ctx.refreshOverlay ? ctx.refreshOverlay() : refreshOverlay()); },
+    onRefresh: function () { return loadOverlay(); },
   });
+  let destroyed = false;
+  function fetchOverlay() {
+    return ctx.api.overlay(ctx.project).then(function (o) { if (!destroyed) store.setOverlay(o); return o; });
+  }
+  // The shell fetches the overlay once per project load and swallows failures; this view shows the
+  // skeleton until it lands and its own failure (with Retry) when it does not.
+  function loadOverlay() {
+    if (!store.overlay) ovlState.busy();
+    return fetchOverlay().then(function () { if (!destroyed) ovlState.clear(); }, function (e) {
+      if (!destroyed) ovlState.fail(actErr(store.overlay ? 'Could not refresh the overlay' : 'Could not load the overlay', e), loadOverlay);
+    });
+  }
   let ovlCache = {};
   let ovlSugg = {};
   function ovlEntry(d) {
     if (ovlCache[d.id]) return ovlCache[d.id];
     const sub = [d.manufacturer, d.model].filter(Boolean).join(' ') || d.sub || '';
     const control = suggestionControl(ovlSugg[d.id] || [], { label: d.name || d.id, readOnly: !write, pickTemplate: ctx.pickTemplate ? function () { return ctx.pickTemplate({}); } : null });
-    const promote = write ? h('button', { type: 'button', class: 'small primary', onclick: function () {
+    const perr = errSlot('adm-row-err');
+    function doPromote() {
       const dev = deepClone(d);
       delete dev.auto;
       delete dev.source;
       (dev.ports || []).forEach(function (p) { delete p.auto; });
-      if ((store.doc.devices || []).some(function (x) { return x.id === dev.id; })) { ctx.toast(dev.id + ' already exists', 'warn'); return; }
+      if ((store.doc.devices || []).some(function (x) { return x.id === dev.id; })) { ctx.toast(dev.id + ' already exists', 'warn'); return null; }
       promote.disabled = true;
-      applyChoice(ctx, control, dev).then(function () {
+      perr.clear();
+      return applyChoice(ctx, control, dev).then(function () {
         promote.disabled = false;
         ctx.commit([{ op: 'put', coll: 'devices', id: dev.id, value: dev }], 'Promote ' + (d.name || d.id));
         ctx.toast('Promoted ' + (d.name || d.id) + (dev.template ? ' as ' + ((dev.manufacturer ? dev.manufacturer + ' ' : '') + (dev.model || dev.template)) : ' into the model'), 'ok');
-      }, function (e) { promote.disabled = false; ctx.toast(msg(e), 'err'); });
-    } }, 'Promote') : null;
+      }, function (e) { promote.disabled = false; perr.show(actErr('Could not promote ' + (d.name || d.id), e), doPromote); });
+    }
+    const promote = write ? h('button', { type: 'button', class: 'small primary', onclick: doPromote }, 'Promote') : null;
     const e = {
       cell: h('div', { class: 'adm-ovl-dev' }, [h('div', { class: 'disc-name' }, d.name || d.id), sub ? h('div', { class: 'muted' }, sub) : null, control.el]),
-      act: h('span', { class: 'disc-actions' }, promote),
+      act: h('span', { class: 'disc-actions' }, [promote, write ? perr.el : null]),
     };
     ovlCache[d.id] = e;
     return e;
@@ -316,6 +404,7 @@ export function mountImports(el, ctx) {
       { key: 'actions', header: 'Actions', value: function () { return ''; }, cell: function (d) { return ovlEntry(d).act; }, sortable: false, searchable: false, csv: false },
     ],
   });
+  const ovlState = listState(ovlTable);
   function firstSuggestion() {
     const autos = ((store.overlay && store.overlay.devices) || []).filter(function (d) { return d.auto && (ovlSugg[d.id] || []).length; });
     return autos[0] || null;
@@ -327,8 +416,7 @@ export function mountImports(el, ctx) {
     ovlReview.innerHTML = '';
     ovlCache = {};
     if (!o) {
-      ovlChips.appendChild(h('span', { class: 'muted' }, 'Overlay not loaded yet.'));
-      ovlTable.setLoading(true);
+      ovlState.busy();
       stale.refresh();
       return;
     }
@@ -338,7 +426,7 @@ export function mountImports(el, ctx) {
       ovlChips.appendChild(h('span', { class: 'chip' }, t));
     });
     const autos = (o.devices || []).filter(function (d) { return d.auto; });
-    ovlTable.setRows(autos);
+    ovlState.done(autos);
     const nSugg = autos.filter(function (d) { return (ovlSugg[d.id] || []).length; }).length;
     const badge = reviewBadge({ count: nSugg, label: nSugg === 1 ? 'model suggestion' : 'model suggestions', title: 'Jump to the first suggested model', onClick: function () {
       const d = firstSuggestion();
@@ -375,6 +463,7 @@ export function mountImports(el, ctx) {
   root.appendChild(ovlNotes);
   drawRegistered();
   drawOverlay();
+  if (!store.overlay) loadOverlay();
   function onDoc(e) { if ((e.detail.touched || []).some(function (r) { return r.indexOf('imports/') === 0; }) || e.detail.source === 'load') drawRegistered(); }
   function onRev() { stale.refresh(); }
   store.addEventListener('doc', onDoc);
@@ -386,6 +475,7 @@ export function mountImports(el, ctx) {
       regTable.setHighlight((r && r.query && r.query.hl) || null);
     },
     destroy: function () {
+      destroyed = true;
       store.removeEventListener('doc', onDoc);
       store.removeEventListener('overlay', drawOverlay);
       store.removeEventListener('revision', onRev);
@@ -423,7 +513,7 @@ export function mountHistory(el, ctx) {
     key: 'history', scope: ctx.project, caption: 'Revisions', noun: { one: 'revision', many: 'revisions' },
     url: urlBinding(ctx), highlight: current || hlOf(ctx), csvName: 'history.csv', actions: [more],
     rowId: function (r) { return String(r.revision); },
-    empty: 'No revisions yet. Every save creates one.',
+    empty: emptyFor(function () { return table; }, { title: 'No revisions yet', text: 'Every save creates one.' }),
     onRow: function (r) { pick(r.revision); },
     columns: [
       { key: 'revision', header: 'Rev', value: function (r) { return r.revision; }, cell: function (r) { return mono('r' + r.revision); }, sticky: true },
@@ -437,7 +527,7 @@ export function mountHistory(el, ctx) {
         return [
           h('button', { type: 'button', class: 'small', onclick: function () { if (ctx.timeTravel) ctx.timeTravel(r.revision); } }, 'View'),
           h('button', { type: 'button', class: 'small', onclick: function () { pick(r.revision); } }, 'Diff'),
-          canRestore() ? h('button', { type: 'button', class: 'small', onclick: function () { if (ctx.restoreRevision) ctx.restoreRevision(r.revision); } }, 'Restore') : null,
+          canRestore() ? h('button', { type: 'button', class: 'small', onclick: function () { restore(r.revision); } }, 'Restore') : null,
         ];
       }),
     ],
@@ -448,15 +538,37 @@ export function mountHistory(el, ctx) {
     if (!hash) apply(String(rev));
   }
   function showDiff(rev) {
-    if (!rev) { diffBox.classList.add('hidden'); return; }
+    if (!rev) { diffBox.classList.add('hidden'); return null; }
     const n = Number(rev);
     diffBox.classList.remove('hidden');
-    if (n === store.revision) { diffBox.textContent = 'r' + n + ' is the current revision.'; return; }
+    if (n === store.revision) { diffBox.textContent = 'r' + n + ' is the current revision.'; return null; }
     diffBox.textContent = 'Comparing r' + n + ' with r' + store.revision + '\u2026';
-    ctx.api.historyDiff(ctx.project, n, store.revision).then(function (d) {
+    return ctx.api.historyDiff(ctx.project, n, store.revision).then(function (d) {
       if (destroyed || current !== rev) return;
       diffBox.textContent = 'r' + n + ' vs r' + store.revision + '\nadded: ' + (d.added || []).join(', ') + '\nremoved: ' + (d.removed || []).join(', ') + '\nchanged: ' + (d.changed || []).join(', ');
-    }, function (e) { if (current === rev) diffBox.textContent = 'r' + n + ': ' + msg(e); });
+    }, function (e) {
+      if (destroyed || current !== rev) return;
+      diffBox.textContent = '';
+      diffBox.appendChild(inlineError(actErr('Could not compare r' + n + ' with r' + store.revision, e), function () { return showDiff(rev); }, { compact: true }));
+    });
+  }
+  // Restore runs here rather than through the shell's restoreRevision so the question carries the
+  // revision it creates (B.5) and a failure stays beside the list with Retry.
+  function restore(rev) {
+    const flush = ctx.flush ? ctx.flush() : Promise.resolve();
+    return flush.then(function () {
+      const latest = Math.max(Number(store.revision) || 0, revs.length ? Number(revs[0].revision) || 0 : 0);
+      return confirmScope(ctx, { verb: 'Restore', noun: 'revision ' + rev, ok: 'Restore',
+        detail: 'This creates revision ' + (latest + 1) + '. Nothing is lost: the current state stays in history.' });
+    }).then(function (yes) { if (yes) return doRestore(rev); });
+  }
+  function doRestore(rev) {
+    if (ctx.isTimeTravel && ctx.isTimeTravel() && ctx.endTimeTravel) ctx.endTimeTravel();
+    return ctx.api.restore(ctx.project, rev, store.revision).then(function (r) {
+      list.clear();
+      ctx.toast('Restored as revision ' + r.revision, 'ok');
+      return ctx.reload ? ctx.reload() : null;
+    }, function (e) { if (!destroyed) list.fail(actErr('Could not restore revision ' + rev, e), function () { return doRestore(rev); }); });
   }
   function ensureLoaded(n) {
     if (!n || revs.some(function (r) { return r.revision === n; }) || !hasMore || oldest === null || oldest <= n) return Promise.resolve();
@@ -468,8 +580,9 @@ export function mountHistory(el, ctx) {
     if (!current) { diffBox.classList.add('hidden'); return; }
     ensureLoaded(Number(current)).then(function () { showDiff(current); });
   }
+  const list = listState(table);
   function load(before) {
-    if (!before) table.setLoading(!revs.length);
+    if (!before) list.busy();
     return ctx.api.history(ctx.project, { limit: PAGE, before: before }).then(function (r) {
       if (destroyed) return;
       const got = (r && r.revisions) || [];
@@ -477,8 +590,10 @@ export function mountHistory(el, ctx) {
       if (got.length) oldest = got[got.length - 1].revision;
       hasMore = got.length >= PAGE && oldest > 1;
       more.hidden = !hasMore;
-      table.setRows(revs);
-    }, function (e) { if (!destroyed) table.setError(e, function () { load(before); }); });
+      list.done(revs);
+    }, function (e) {
+      if (!destroyed) list.fail(before ? actErr('Could not load older revisions', e) : e, function () { return load(before); });
+    });
   }
   more.addEventListener('click', function () { load(oldest); });
   function onRev() { load(); }
@@ -515,6 +630,7 @@ export function mountBuilds(el, ctx) {
   el.appendChild(root);
   const caps = (ctx.meta && ctx.meta.capabilities) || {};
   let destroyed = false;
+  let go = null;
   root.appendChild(h('h2', null, 'Builds'));
   root.appendChild(h('p', { class: 'muted' }, 'A build is a folder you can hand over: per-room maps, device pages, patch tables, cable and IP schedules, rack and floor-plan SVGs, labels, BOM and a zip of it all.'));
   if (write) {
@@ -528,23 +644,27 @@ export function mountBuilds(el, ctx) {
       b.checked = true;
       return h('label', { class: 'row', for: b.id }, [b, r.name || r.id]);
     }));
-    const go = h('button', { type: 'button', class: 'primary', id: 'bld-go' }, 'Build package');
-    go.addEventListener('click', function () {
+    go = h('button', { type: 'button', class: 'primary', id: 'bld-go' }, 'Build package');
+    const buildErr = errSlot('adm-build-err');
+    const runBuild = function () {
       const sel = Array.prototype.filter.call(rooms.querySelectorAll('input[data-room]'), function (b) { return b.checked; }).map(function (b) { return b.getAttribute('data-room'); });
       go.disabled = true;
       go.textContent = 'Building\u2026';
+      buildErr.clear();
       const flush = ctx.flush ? ctx.flush() : Promise.resolve();
-      flush.then(function () { return ctx.api.build(ctx.project, { state: state.value, pdf: pdf.checked, png: png.checked, discovery: disc.checked, rooms: sel.length === (store.doc.rooms || []).length ? null : sel }); }).then(function (r) {
+      return flush.then(function () { return ctx.api.build(ctx.project, { state: state.value, pdf: pdf.checked, png: png.checked, discovery: disc.checked, rooms: sel.length === (store.doc.rooms || []).length ? null : sel }); }).then(function (r) {
         ctx.toast('Built ' + r.build + ' (' + (r.files || []).length + ' files)', 'ok');
         return load().then(function () { table.setHighlight(r.build); });
-      }, function (e) { ctx.toast(msg(e), 'err'); }).then(function () { go.disabled = false; go.textContent = 'Build package'; });
-    });
+      }, function (e) { if (!destroyed) buildErr.show(actErr('Build failed', e), runBuild, false); }).then(function () { go.disabled = false; go.textContent = 'Build package'; });
+    };
+    go.addEventListener('click', runBuild);
     root.appendChild(h('div', { class: 'adm-card adm-build-form' }, [
       fld('State', state),
       h('div', { class: 'field' }, [h('label', null, 'Rooms'), rooms]),
       h('div', { class: 'row' }, [h('label', { class: 'row', for: 'bld-pdf' }, [pdf, 'PDF']), h('label', { class: 'row', for: 'bld-png' }, [png, 'PNG']), caps.chrome ? null : h('span', { class: 'muted' }, 'PDF/PNG need Chrome on the server.')]),
       h('div', { class: 'field' }, [h('label', null, 'Report sections'), h('label', { class: 'row', for: 'bld-disc' }, [disc, 'Discovered connections (latest completed discovery run and promoted discovered cables)'])]),
       h('div', { class: 'row', style: { marginTop: '8px' } }, go),
+      buildErr.el,
     ]));
   }
   root.appendChild(h('h3', null, 'Previous builds'));
@@ -555,7 +675,11 @@ export function mountBuilds(el, ctx) {
     key: 'builds', scope: ctx.project, caption: 'Builds', noun: { one: 'build', many: 'builds' },
     url: urlBinding(ctx), highlight: hlOf(ctx), csvName: 'builds.csv',
     rowId: function (b) { return b.name; },
-    empty: write ? 'No builds yet. Build package creates the PDF/HTML pack.' : 'No builds yet.',
+    empty: emptyFor(function () { return table; }, function () {
+      return write
+        ? { title: 'No builds yet', text: 'Build creates the PDF/HTML pack: maps, patch tables, schedules, labels and a zip of it all.', action: { label: 'Build package', run: function () { if (go && !go.disabled) go.click(); } } }
+        : { title: 'No builds yet', text: 'Editors build the PDF/HTML pack here; finished builds show up in this list.' };
+    }),
     columns: [
       { key: 'name', header: 'Run', cell: function (b) { return mono(b.name); }, sticky: true },
       timeCol('created', 'Time', function (b) { return b.created; }),
@@ -572,18 +696,24 @@ export function mountBuilds(el, ctx) {
       write ? actions(function (b) {
         return h('button', { type: 'button', class: 'small danger', onclick: function () {
           confirmScope(ctx, { verb: 'Delete', noun: 'build ' + b.name, danger: true, detail: 'Its ' + (b.files || []).length + ' files are removed from the server.' }).then(function (y) {
-            if (y) ctx.api.deleteBuild(ctx.project, b.name).then(load, function (e) { ctx.toast(msg(e), 'err'); });
+            if (y) remove(b);
           });
         } }, 'Delete');
       }) : null,
     ].filter(Boolean),
   });
-  function load() {
-    return ctx.api.builds(ctx.project).then(function (r) {
-      if (!destroyed) table.setRows(((r && r.builds) || []).map(function (b) { return Object.assign({ id: b.name }, b); }));
-    }, function (e) { if (!destroyed) table.setError(e, load); });
+  const list = listState(table);
+  function remove(b) {
+    return ctx.api.deleteBuild(ctx.project, b.name).then(function () { list.clear(); return load(); }, function (e) {
+      if (!destroyed) list.fail(actErr('Could not delete build ' + b.name, e), function () { return remove(b); });
+    });
   }
-  table.setLoading(true);
+  function load() {
+    list.busy();
+    return ctx.api.builds(ctx.project).then(function (r) {
+      if (!destroyed) list.done(((r && r.builds) || []).map(function (b) { return Object.assign({ id: b.name }, b); }));
+    }, function (e) { if (!destroyed) list.fail(e, load); });
+  }
   load();
   return {
     route: function (r) { table.readUrl(); table.setHighlight((r && r.query && r.query.hl) || null); },
@@ -654,7 +784,7 @@ function crudTable(ctx, coll, cols, opts) {
       return h('button', { type: 'button', class: 'small danger', 'aria-label': 'Delete ' + (ent.name || ent.id), onclick: function () {
         const blockers = opts.blockers ? opts.blockers(ent) : '';
         if (blockers) { ctx.toast(blockers, 'warn'); return; }
-        ctx.confirm('Delete ' + (ent.name || ent.id) + '?', { danger: true }).then(function (y) { if (y) ctx.commit([{ op: 'del', coll: coll, id: ent.id }], 'Delete ' + (ent.name || ent.id)); });
+        confirmScope(ctx, { verb: 'Delete', noun: noun + ' ' + (ent.name || ent.id), danger: true }).then(function (y) { if (y) ctx.commit([{ op: 'del', coll: coll, id: ent.id }], 'Delete ' + (ent.name || ent.id)); });
       } }, '\u00d7');
     }));
   }
@@ -879,14 +1009,24 @@ export function mountSettings(el, ctx) {
       ]),
     ];
     if (role === 'admin' && ctx.api) {
+      // Typing the name stays: it is a stronger guard than confirmScope for the one delete that
+      // takes a whole project and its history.
+      const delErr = errSlot();
+      const deleteProject = function () {
+        delErr.clear();
+        return ctx.api.deleteProject(ctx.project).then(function () { location.hash = ''; location.reload(); }, function (e) {
+          if (!destroyed) delErr.show(actErr('Could not delete ' + ctx.project, e), deleteProject);
+        });
+      };
       cards.push(h('section', { class: 'adm-card', 'data-card': 'danger' }, [h('h3', null, 'Danger zone'),
         h('p', { class: 'muted' }, 'Deleting a project removes it and all its history from this server.'),
         h('div', null, h('button', { type: 'button', class: 'danger', onclick: function () {
           ctx.prompt('Type the project name (' + ctx.project + ') to delete it and all its history.', '', { title: 'Delete project', ok: 'Delete' }).then(function (v) {
             if (v !== ctx.project) { if (v !== null) ctx.toast('Name did not match', 'warn'); return; }
-            ctx.api.deleteProject(ctx.project).then(function () { location.hash = ''; location.reload(); }, function (e) { ctx.toast(msg(e), 'err'); });
+            deleteProject();
           });
         } }, 'Delete project')),
+        delErr.el,
       ]));
     }
     return { nodes: [h('div', { class: 'adm-grid' }, cards)], tables: [], rebuild: true };
@@ -963,7 +1103,9 @@ export function mountSettings(el, ctx) {
         { key: 'ports', header: 'Ports', align: 'right', hideOnMobile: true, value: function (t) { return (t.ports || []).length; }, cell: function (t) { return String((t.ports || []).length) + ' groups'; } },
         write ? actions(function (t) {
           return h('button', { type: 'button', class: 'small danger', 'aria-label': 'Delete template ' + t.id, onclick: function () {
-            ctx.commit([{ op: 'del', coll: 'templates', id: t.id }], 'Delete template ' + t.id);
+            confirmScope(ctx, { verb: 'Delete', noun: 'template ' + t.id, danger: true, detail: 'Existing devices keep their ports; Undo brings the template back.' }).then(function (y) {
+              if (y) ctx.commit([{ op: 'del', coll: 'templates', id: t.id }], 'Delete template ' + t.id);
+            });
           } }, '\u00d7');
         }) : null,
       ].filter(Boolean),
@@ -984,18 +1126,18 @@ export function mountSettings(el, ctx) {
     const dt = createTable(host, {
       key: 'settings.users', scope: '', caption: 'Users', noun: { one: 'user', many: 'users' },
       url: urlBinding(ctx), highlight: hlOf(ctx), csvName: 'users.csv', rowId: function (u) { return u.username; },
-      empty: 'No user accounts yet.',
+      empty: 'No user accounts yet. Add a user below to turn sign-in on.',
       columns: [
         { key: 'username', header: 'User', sticky: true },
         { key: 'role', header: 'Role', filterable: true, value: function (u) { return u.role || ''; }, cell: function (u) {
           const sel = h('select', { 'aria-label': 'Role for ' + u.username }, ['viewer', 'editor', 'admin'].map(function (x) { return h('option', { value: x, selected: u.role === x ? true : null }, x); }));
-          sel.addEventListener('change', function () { ctx.api.updateUser(u.username, { role: sel.value }).then(function () { ctx.toast('Role updated', 'ok'); load(); }, function (e) { ctx.toast(msg(e), 'err'); load(); }); });
+          sel.addEventListener('change', function () { update(u, { role: sel.value }, 'Could not change the role of ' + u.username, 'Role updated'); });
           return sel;
         } },
         { key: 'disabled', header: 'Disabled', filterable: true, value: function (u) { return u.disabled ? 'yes' : ''; }, cell: function (u) {
           const dis = h('input', { type: 'checkbox', 'aria-label': 'Disable ' + u.username });
           dis.checked = !!u.disabled;
-          dis.addEventListener('change', function () { ctx.api.updateUser(u.username, { disabled: dis.checked }).then(load, function (e) { ctx.toast(msg(e), 'err'); load(); }); });
+          dis.addEventListener('change', function () { update(u, { disabled: dis.checked }, 'Could not ' + (dis.checked ? 'disable ' : 'enable ') + u.username); });
           return h('label', { class: 'chk' }, dis);
         } },
         timeCol('created', 'Created', function (u) { return u.created; }),
@@ -1003,29 +1145,56 @@ export function mountSettings(el, ctx) {
           return [
             h('button', { type: 'button', class: 'small', onclick: function () {
               ctx.prompt('New password for ' + u.username + ' (8+ characters)', '', { type: 'password', title: 'Reset password', ok: 'Set password' }).then(function (pw) {
-                if (!pw) return;
-                ctx.api.updateUser(u.username, { password: pw }).then(function () { ctx.toast('Password reset', 'ok'); }, function (e) { ctx.toast(msg(e), 'err'); });
+                if (pw) update(u, { password: pw }, 'Could not reset the password of ' + u.username, 'Password reset', true);
               });
             } }, 'Reset password'),
             h('button', { type: 'button', class: 'small danger', onclick: function () {
-              ctx.confirm('Remove user ' + u.username + '?', { danger: true }).then(function (y) { if (y) ctx.api.deleteUser(u.username).then(load, function (e) { ctx.toast(msg(e), 'err'); }); });
+              confirmScope(ctx, { verb: 'Remove', noun: 'user ' + u.username, danger: true, ok: 'Remove user',
+                detail: 'They can no longer sign in. Revisions they saved stay in history.' }).then(function (y) { if (y) removeUser(u); });
             } }, 'Remove'),
           ];
         }),
       ],
     });
+    const list = listState(dt);
     function load() {
-      return ctx.api.users().then(function (r) { if (!destroyed) dt.setRows((r && r.users) || []); }, function (e) { if (!destroyed) dt.setError(e, load); });
+      list.busy();
+      return ctx.api.users().then(function (r) { if (!destroyed) list.done((r && r.users) || []); }, function (e) { if (!destroyed) list.fail(e, load); });
+    }
+    function update(u, patch, what, ok, noReload) {
+      return ctx.api.updateUser(u.username, patch).then(function () {
+        list.clear();
+        if (ok) ctx.toast(ok, 'ok');
+        return noReload ? null : load();
+      }, function (e) {
+        // reload first so the control shows the server value again, then the failure above it
+        const show = function () { if (!destroyed) list.fail(actErr(what, e), function () { return update(u, patch, what, ok, noReload); }); };
+        if (destroyed) return null;
+        return noReload ? show() : load().then(show);
+      });
+    }
+    function removeUser(u) {
+      return ctx.api.deleteUser(u.username).then(function () { list.clear(); return load(); }, function (e) {
+        if (!destroyed) list.fail(actErr('Could not remove user ' + u.username, e), function () { return removeUser(u); });
+      });
     }
     const un = h('input', { placeholder: 'username', autocapitalize: 'none', autocomplete: 'off', 'aria-label': 'New username' });
     const pw = h('input', { type: 'password', placeholder: 'password (8+)', autocomplete: 'new-password', 'aria-label': 'New password' });
     const rl = h('select', { 'aria-label': 'New user role' }, ['viewer', 'editor', 'admin'].map(function (x) { return h('option', { value: x, selected: x === 'editor' ? true : null }, x); }));
-    const add = h('button', { type: 'button', class: 'small primary', onclick: function () {
-      ctx.api.createUser({ username: un.value.trim(), password: pw.value, role: rl.value }).then(function () { const n = un.value.trim(); un.value = ''; pw.value = ''; ctx.toast('User added', 'ok'); load().then(function () { dt.setHighlight(n); }); }, function (e) { ctx.toast(msg(e), 'err'); });
-    } }, 'Add user');
-    dt.setLoading(true);
+    const addErr = errSlot();
+    const addUser = function () {
+      addErr.clear();
+      return ctx.api.createUser({ username: un.value.trim(), password: pw.value, role: rl.value }).then(function () {
+        const n = un.value.trim();
+        un.value = '';
+        pw.value = '';
+        ctx.toast('User added', 'ok');
+        return load().then(function () { dt.setHighlight(n); });
+      }, function (e) { if (!destroyed) addErr.show(actErr('Could not add ' + (un.value.trim() || 'the user'), e), addUser); });
+    };
+    const add = h('button', { type: 'button', class: 'small primary', onclick: addUser }, 'Add user');
     load();
-    nodes.push(host, h('div', { class: 'row adm-addrow' }, [un, pw, rl, add]));
+    nodes.push(host, h('div', { class: 'row adm-addrow' }, [un, pw, rl, add]), addErr.el);
     return { nodes: nodes, tables: [dt], primary: dt };
   }
 
@@ -1039,20 +1208,31 @@ export function mountSettings(el, ctx) {
       a.click();
       a.remove();
     }
-    function restore(b) {
-      const what = (b.projects || []).length + ' project' + ((b.projects || []).length === 1 ? '' : 's') + (b.created ? ' from ' + fmtTime(b.created) : '');
-      return ctx.prompt('This replaces every project, user account and custom template on this server with the backup (' + what + '). '
-        + 'A "pre-restore" backup of the current data is taken first, so you can undo this. You may need to sign in again afterwards. Type RESTORE to continue.',
-      '', { title: 'Restore ' + b.name, ok: 'Restore' }).then(function (v) {
-        if (v === null) return false;
-        if (String(v).trim().toUpperCase() !== 'RESTORE') { ctx.toast('Not restored: type RESTORE to confirm', 'warn'); return false; }
-        ctx.toast('Restoring ' + b.name + '\u2026', 'ok');
-        const flush = ctx.flush ? ctx.flush() : Promise.resolve();
-        return flush.then(function () { return ctx.api.restoreBackup(b.name); }).then(function (r) {
-          ctx.toast('Restored ' + b.name + (r.pre_restore_backup ? '. Previous data saved as ' + r.pre_restore_backup : '') + '. Reloading\u2026', 'ok');
-          setTimeout(function () { location.reload(); }, 1500);
-          return true;
-        }, function (e) { ctx.toast(msg(e), 'err'); load(); return false; });
+    // `where` shows a failure (err, retry) beside the control that started the restore.
+    function restore(b, where) {
+      const n = (b.projects || []).length;
+      return confirmScope(ctx, { verb: 'Restore', noun: 'backup ' + b.name, danger: true, ok: 'Replace everything',
+        detail: 'Every project, user account and custom template on this server is replaced with the backup\u2019s ' + n + ' project' + (n === 1 ? '' : 's')
+          + (b.created ? ' from ' + fmtTime(b.created) : '') + '. A "pre-restore" backup of the current data is taken first, so you can undo this. You may need to sign in again afterwards.' })
+        .then(function (y) { return y ? doRestore(b, where) : false; });
+    }
+    function doRestore(b, where) {
+      ctx.toast('Restoring ' + b.name + '\u2026', 'ok');
+      const flush = ctx.flush ? ctx.flush() : Promise.resolve();
+      return flush.then(function () { return ctx.api.restoreBackup(b.name); }).then(function (r) {
+        ctx.toast('Restored ' + b.name + (r.pre_restore_backup ? '. Previous data saved as ' + r.pre_restore_backup : '') + '. Reloading\u2026', 'ok');
+        setTimeout(function () { location.reload(); }, 1500);
+        return true;
+      }, function (e) {
+        if (destroyed) return false;
+        (where || failList)(actErr('Could not restore ' + b.name, e), function () { return doRestore(b, where); });
+        return false;
+      });
+    }
+    function failList(err, retry) { list.fail(err, retry); }
+    function removeBackup(b) {
+      return ctx.api.deleteBackup(b.name).then(function () { list.clear(); return load(); }, function (e) {
+        if (!destroyed) list.fail(actErr('Could not delete ' + b.name, e), function () { return removeBackup(b); });
       });
     }
     function kindOf(b) { return b.error ? 'unreadable' : (b.kind === 'pre-restore' ? 'before a restore' : (/-uploaded(-\d+)?\.zip$/.test(b.name) ? 'uploaded' : (b.kind || ''))); }
@@ -1060,7 +1240,7 @@ export function mountSettings(el, ctx) {
       key: 'settings.backups', scope: '', caption: 'Backups on this server', noun: { one: 'backup', many: 'backups' },
       url: urlBinding(ctx), highlight: hlOf(ctx), csvName: 'backups.csv', rowId: function (b) { return b.name; },
       rowAttrs: function (b) { return { 'data-backup': b.name }; },
-      empty: 'No backups on this server yet.',
+      empty: 'No backups on this server yet. Back up now creates one; uploaded backups show up here too.',
       columns: [
         { key: 'name', header: 'Backup', cell: function (b) { return mono(b.name); }, sticky: true },
         timeCol('created', 'Created', function (b) { return b.created || b.modified; }),
@@ -1073,50 +1253,57 @@ export function mountSettings(el, ctx) {
             h('a', { class: 'chip', href: ctx.api.backupUrl(b.name), download: b.name }, 'Download'),
             b.error ? null : h('button', { type: 'button', class: 'small danger', onclick: function () { restore(b); } }, 'Restore'),
             h('button', { type: 'button', class: 'small danger', 'aria-label': 'Delete ' + b.name, onclick: function () {
-              ctx.confirm('Delete backup ' + b.name + ' from the server? Downloaded copies are not affected.', { danger: true, ok: 'Delete' }).then(function (y) {
-                if (y) ctx.api.deleteBackup(b.name).then(load, function (e) { ctx.toast(msg(e), 'err'); });
+              confirmScope(ctx, { verb: 'Delete', noun: 'backup ' + b.name, danger: true, detail: 'It is removed from this server; downloaded copies are not affected.' }).then(function (y) {
+                if (y) removeBackup(b);
               });
             } }, 'Delete'),
           ];
         }),
       ],
     });
+    const list = listState(dt);
     function load() {
-      return ctx.api.backups().then(function (r) { if (!destroyed) dt.setRows((r && r.backups) || []); }, function (e) { if (!destroyed) dt.setError(e, load); });
+      list.busy();
+      return ctx.api.backups().then(function (r) { if (!destroyed) list.done((r && r.backups) || []); }, function (e) { if (!destroyed) list.fail(e, load); });
     }
 
     const label = h('input', { placeholder: 'note (optional), e.g. before Easter changes', 'aria-label': 'Backup note' });
     const builds = h('input', { type: 'checkbox', id: 'bk-builds' });
     const create = h('button', { type: 'button', class: 'primary' }, 'Back up now');
-    create.addEventListener('click', function () {
+    const createErr = errSlot();
+    const backUp = function () {
       create.disabled = true;
       create.textContent = 'Backing up\u2026';
+      createErr.clear();
       const flush = ctx.flush ? ctx.flush() : Promise.resolve();
-      flush.then(function () { return ctx.api.createBackup({ label: label.value.trim(), include_builds: builds.checked }); }).then(function (r) {
+      return flush.then(function () { return ctx.api.createBackup({ label: label.value.trim(), include_builds: builds.checked }); }).then(function (r) {
         const b = r.backup || {};
         ctx.toast('Backup ' + b.name + ' created (' + fmtSize(b.size) + '); downloading a copy', 'ok');
         label.value = '';
         download(b.name);
         load().then(function () { dt.setHighlight(b.name); });
-      }, function (e) { ctx.toast(msg(e), 'err'); }).then(function () { create.disabled = false; create.textContent = 'Back up now'; });
-    });
+      }, function (e) { if (!destroyed) createErr.show(actErr('Backup failed', e), backUp); }).then(function () { create.disabled = false; create.textContent = 'Back up now'; });
+    };
+    create.addEventListener('click', backUp);
 
     const file = h('input', { type: 'file', accept: '.zip,application/zip', 'aria-label': 'Backup file' });
     const upload = h('button', { type: 'button', class: 'danger' }, 'Upload and restore\u2026');
-    upload.addEventListener('click', function () {
+    const uploadErr = errSlot();
+    const uploadRestore = function () {
       const f = file.files && file.files[0];
-      if (!f) { ctx.toast('Choose a backup .zip first', 'warn'); return; }
-      if (maxMb && f.size > maxMb * 1024 * 1024) { ctx.toast('That file is larger than the ' + maxMb + ' MB limit (FATHOM_MAX_BACKUP_MB)', 'err'); return; }
+      if (!f) { ctx.toast('Choose a backup .zip first', 'warn'); return null; }
+      if (maxMb && f.size > maxMb * 1024 * 1024) { uploadErr.show(new Error('That file is larger than the ' + maxMb + ' MB limit (FATHOM_MAX_BACKUP_MB)'), null); return null; }
       upload.disabled = true;
       upload.textContent = 'Uploading\u2026';
-      ctx.api.uploadBackup(f).then(function (r) {
+      uploadErr.clear();
+      return ctx.api.uploadBackup(f).then(function (r) {
         file.value = '';
         load();
-        return restore(r.backup || {});
-      }, function (e) { ctx.toast(msg(e), 'err'); }).then(function () { upload.disabled = false; upload.textContent = 'Upload and restore\u2026'; });
-    });
+        return restore(r.backup || {}, uploadErr.show);
+      }, function (e) { if (!destroyed) uploadErr.show(actErr('Could not upload ' + f.name, e), uploadRestore); }).then(function () { upload.disabled = false; upload.textContent = 'Upload and restore\u2026'; });
+    };
+    upload.addEventListener('click', uploadRestore);
 
-    dt.setLoading(true);
     load();
     return {
       nodes: [
@@ -1127,11 +1314,13 @@ export function mountSettings(el, ctx) {
               + 'A copy stays on this server and one downloads to this device. Keep the downloaded copy somewhere else: the server copy is lost with the server. '
               + 'The file contains password hashes, so store it like a password.'),
             h('div', { class: 'row' }, [label, h('label', { class: 'row', for: 'bk-builds' }, [builds, 'Include builds']), create]),
+            createErr.el,
           ]),
           h('section', { class: 'adm-card', 'data-card': 'restore' }, [
             h('h3', null, 'Restore from a file'),
             h('p', { class: 'muted' }, 'Upload a backup .zip saved earlier (from this server or another one). You confirm before anything is replaced.'),
             h('div', { class: 'row' }, [file, upload]),
+            uploadErr.el,
           ]),
         ]),
         h('h3', null, 'Backups on this server'),
@@ -1157,12 +1346,22 @@ export function mountSettings(el, ctx) {
         timeCol('created', 'Created', function (s) { return s.created; }),
         { key: 'expires', header: 'Expires', hideOnMobile: true, value: function (s) { return s.expires || ''; }, cell: function (s) { return s.expires ? fmtTime(s.expires) : 'never'; } },
         write ? actions(function (s) {
-          return h('button', { type: 'button', class: 'small danger', onclick: function () { ctx.api.deleteShare(ctx.project, s.token).then(load, function (e) { ctx.toast(msg(e), 'err'); }); } }, 'Revoke');
+          return h('button', { type: 'button', class: 'small danger', onclick: function () {
+            confirmScope(ctx, { verb: 'Revoke', noun: 'share link ' + (s.label ? '\u201c' + s.label + '\u201d' : 's/' + String(s.token).slice(0, 8) + '\u2026'), danger: true, ok: 'Revoke',
+              detail: 'Anyone using it loses access at once. QR labels printed with it stop working.' }).then(function (y) { if (y) revoke(s); });
+          } }, 'Revoke');
         }) : null,
       ].filter(Boolean),
     });
+    const list = listState(dt);
     function load() {
-      return ctx.api.shares(ctx.project).then(function (r) { if (!destroyed) dt.setRows((r && r.shares) || []); }, function (e) { if (!destroyed) dt.setError(new Error('Share links are not available: ' + msg(e)), load); });
+      list.busy();
+      return ctx.api.shares(ctx.project).then(function (r) { if (!destroyed) list.done((r && r.shares) || []); }, function (e) { if (!destroyed) list.fail(actErr('Share links are not available', e), load); });
+    }
+    function revoke(s) {
+      return ctx.api.deleteShare(ctx.project, s.token).then(function () { list.clear(); return load(); }, function (e) {
+        if (!destroyed) list.fail(actErr('Could not revoke ' + (s.label || 'the link'), e), function () { return revoke(s); });
+      });
     }
     const create = write ? h('button', { type: 'button', class: 'primary adm-new-share', onclick: function () {
       shareWizard(ctx, function (r) {
@@ -1170,7 +1369,6 @@ export function mountSettings(el, ctx) {
         load().then(function () { if (r && r.share) dt.setHighlight(r.share.token); });
       });
     } }, 'New share link') : null;
-    dt.setLoading(true);
     load();
     return {
       nodes: [h('h3', null, 'Read-only share links'), h('p', { class: 'muted' }, 'Anyone with the link can view maps, patch tables and device pages (or only procedures). Revoke it any time.'), create ? h('div', { class: 'row adm-addrow' }, create) : null, host],

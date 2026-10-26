@@ -60,6 +60,18 @@ function detailsBlock(obj) {
   return [btn, pre];
 }
 function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+// An error for inlineError naming the action, keeping the status (offline vs server).
+function actErr(what, e) {
+  return { message: what + ': ' + msg(e), status: e && e.status, code: e && e.code, name: e && e.name };
+}
+function errSlot(cls) {
+  const el = h('div', { class: 'disc-err' + (cls ? ' ' + cls : ''), 'aria-live': 'polite' });
+  return {
+    el: el,
+    show: function (err, retry) { el.innerHTML = ''; el.appendChild(inlineError(err, retry, { compact: true })); },
+    clear: function () { el.innerHTML = ''; },
+  };
+}
 
 // Effective "enabled" of a source card: active probes only when explicitly switched on.
 export function sourceEnabled(src) {
@@ -140,12 +152,14 @@ export function mount(el, ctx) {
   const logSum = h('summary', null, 'Run log');
   const logWrap = h('details', { class: 'disc-log-wrap hidden' }, [logSum, log]);
   const runsWrap = h('div', { class: 'disc-runs' });
-  runBtn.addEventListener('click', function () {
-    if (ro()) return;
+  const runErr = errSlot('disc-run-err');
+  function startRun() {
+    if (ro()) return null;
     runBtn.disabled = true;
+    runErr.clear();
     const w = Math.max(S.limits.min_window, Math.min(S.limits.max_window, parseInt(windowInp.value, 10) || 60));
     windowInp.value = w;
-    ctx.api.startDiscovery(ctx.project, { window: w }).then(function (r) {
+    return ctx.api.startDiscovery(ctx.project, { window: w }).then(function (r) {
       S.run = r.run;
       S.runId = r.run.id;
       S.active = r.run.id;
@@ -159,26 +173,35 @@ export function mount(el, ctx) {
       drawFindings();
       poll();
     }, function (e) {
+      if (S.destroyed) return;
       runBtn.disabled = false;
       if (e && e.status === 409) {
         const rid = e.details && e.details.run;
         ctx.toast('A discovery run is already in progress' + (rid ? ' (' + rid + ')' : ''), 'warn');
         if (rid) { S.active = rid; S.runId = rid; if (ctx.setParams) ctx.setParams({ run: rid }); poll(); }
-      } else ctx.toast(msg(e), 'err');
+      } else runErr.show(actErr('Could not start the run', e), startRun);
     });
-  });
-  cancelBtn.addEventListener('click', function () {
-    if (!S.runId) return;
+  }
+  runBtn.addEventListener('click', startRun);
+  function cancelRun() {
+    if (!S.runId) return null;
+    const rid = S.runId;
     cancelBtn.disabled = true;
-    ctx.api.cancelDiscovery(ctx.project, S.runId).then(function (r) { S.run = r.run; cancelBtn.disabled = false; drawRun(); poll(); }, function (e) { cancelBtn.disabled = false; ctx.toast(msg(e), 'err'); });
-  });
+    runErr.clear();
+    return ctx.api.cancelDiscovery(ctx.project, rid).then(function (r) { S.run = r.run; cancelBtn.disabled = false; drawRun(); poll(); }, function (e) {
+      if (S.destroyed) return;
+      cancelBtn.disabled = false;
+      runErr.show(actErr('Could not stop the run', e), cancelRun);
+    });
+  }
+  cancelBtn.addEventListener('click', cancelRun);
   const runNote = 'One run per project at a time. The enabled sources collect for the window (mDNS and LLDP listen for the whole window; UniFi, ARP and the active sources are read once, one host at a time), then results are correlated against this project. Nothing keeps running afterwards.';
   root.appendChild(h('div', { class: 'adm-card disc-run' }, [
     ro() ? null : h('div', { class: 'row disc-run-row' }, [
       h('label', { class: 'disc-window' }, ['Listen window', windowInp, h('span', { class: 'muted' }, 's')]),
       runBtn, cancelBtn,
     ]),
-    status, bar, logWrap, runsWrap,
+    runErr.el, status, bar, logWrap, runsWrap,
   ]));
 
   function drawRun() {
@@ -238,9 +261,10 @@ export function mount(el, ctx) {
     stopPoll();
     if (S.destroyed || !S.runId) return;
     const rid = S.runId;
-    ctx.api.discoveryRun(ctx.project, rid).then(function (r) {
+    return ctx.api.discoveryRun(ctx.project, rid).then(function (r) {
       if (S.destroyed || rid !== S.runId) return;
       S.run = r.run;
+      runErr.clear();
       drawRun();
       if (r.run.active) { S.timer = setTimeout(poll, 1000); return; }
       S.active = '';
@@ -253,7 +277,11 @@ export function mount(el, ctx) {
         drawSources();
         return loadFindings().then(function () { return ctx.reload(); });
       });
-    }).catch(function (e) { if (!S.destroyed) { status.textContent = msg(e); runBtn.disabled = ro(); } });
+    }).catch(function (e) {
+      if (S.destroyed) return;
+      runBtn.disabled = ro();
+      runErr.show(actErr('Could not check run ' + rid, e), poll);
+    });
   }
 
   function showRun(rid) {
@@ -365,30 +393,42 @@ export function mount(el, ctx) {
       });
       return probe;
     }
-    const save = h('button', { type: 'button', class: 'small primary', onclick: function () {
+    function saveSource() {
       save.disabled = true;
+      out.innerHTML = '';
       const probes = {};
       probes[src.id] = collect();
-      ctx.api.saveDiscoverySettings(ctx.project, { probes: probes }).then(function (r) {
+      return ctx.api.saveDiscoverySettings(ctx.project, { probes: probes }).then(function (r) {
         save.disabled = false;
         ctx.toast('Saved ' + src.label + ' settings', 'ok');
         S.settings = r.settings;
         return ctx.reload().then(loadAll);
-      }, function (e) { save.disabled = false; ctx.toast(msg(e), 'err'); });
-    } }, 'Save');
-    const test = h('button', { type: 'button', class: 'small', onclick: function () {
+      }, function (e) {
+        save.disabled = false;
+        out.innerHTML = '';
+        out.appendChild(inlineError(actErr('Could not save ' + src.label + ' settings', e), saveSource, { compact: true }));
+      });
+    }
+    // A probe that answers "not ok" is a result (imp-warn); a request that fails is an error with Retry.
+    function testSource() {
       test.disabled = true;
       out.innerHTML = '';
       out.appendChild(h('span', { class: 'muted' }, 'Testing\u2026'));
       const probe = collect();
       delete probe.enabled;
-      ctx.api.discoveryTest(ctx.project, src.id, probe).then(function (r) {
+      return ctx.api.discoveryTest(ctx.project, src.id, probe).then(function (r) {
         test.disabled = false;
         out.innerHTML = '';
         const res = r.result || {};
         out.appendChild(h('div', { class: res.ok ? 'disc-ok' : 'imp-warn' }, (res.ok ? '\u2713 ' : '\u26a0 ') + (res.message || (res.ok ? 'OK' : 'Failed'))));
-      }, function (e) { test.disabled = false; out.innerHTML = ''; out.appendChild(h('div', { class: 'imp-warn' }, msg(e))); });
-    } }, 'Test');
+      }, function (e) {
+        test.disabled = false;
+        out.innerHTML = '';
+        out.appendChild(inlineError(actErr('Could not test ' + src.label, e), testSource, { compact: true }));
+      });
+    }
+    const save = h('button', { type: 'button', class: 'small primary', onclick: saveSource }, 'Save');
+    const test = h('button', { type: 'button', class: 'small', onclick: testSource }, 'Test');
     const active = src.mode === 'active';
     const maturityTitle = { experimental: 'Experimental: parser and protocol handling are new; expect gaps', tested: 'Tested: verified against recorded device captures and in use',
       mature: 'Mature: stable protocol, long in use' }[src.maturity || 'experimental'];
@@ -435,6 +475,8 @@ export function mount(el, ctx) {
 
   // ------------------------------------------------------------ findings
   root.appendChild(h('h3', null, 'Findings'));
+  const promoteErr = errSlot('disc-act-err');
+  root.appendChild(promoteErr.el);
   const findWrap = h('div', { class: 'disc-findings' });
   root.appendChild(findWrap);
 
@@ -507,6 +549,7 @@ export function mount(el, ctx) {
       if (t) body.templates = t;
     }
     const flush = ctx.flush ? ctx.flush() : Promise.resolve();
+    promoteErr.clear();
     return flush.then(function () { return ctx.api.discoveryPromote(ctx.project, S.runId, body); }).then(function (r) {
       const s = r.summary || {};
       const bits = [];
@@ -517,7 +560,10 @@ export function mount(el, ctx) {
       if (s.ignored) bits.push(s.ignored + ' ignored');
       ctx.toast((label || 'Done') + (bits.length ? ': ' + bits.join(', ') : ''), 'ok');
       return ctx.reload().then(function () { return ctx.api.overlay(ctx.project).then(function (o) { store.setOverlay(o); }, function () {}); }).then(loadFindings);
-    }, function (e) { ctx.toast(msg(e), 'err'); });
+    }, function (e) {
+      if (S.destroyed) return;
+      promoteErr.show(actErr('Could not apply the change', e), function () { return promote(body, label); });
+    });
   }
   // More than one finding at once asks first (B.5 confirmScope).
   function promoteMany(n, verb, noun, body, label) {
@@ -582,11 +628,15 @@ export function mount(el, ctx) {
     if (o.url) S.primary = t;
     return t;
   }
-  function empty(text) { return emptyState({ text: text }); }
+  // Empty findings say why the tab is empty and what fills it; editors get the run action.
+  function empty(title, text) { return emptyState({ title: title, text: text }); }
+  function again() { return ro() ? 'Pick another run above.' : 'Start a run or pick another one above.'; }
+  function viaSources(what) { return what + (ro() ? '.' : ': turn the source on under Sources, then start a run.'); }
+  function runAction() { return ro() ? null : { label: 'Run discovery', run: function () { if (!runBtn.disabled) startRun(); } }; }
 
   function newDevicesTab(host, f) {
     const list = f.entities.filter(function (e) { return e.status === 'new'; });
-    if (!list.length) { host.appendChild(empty('No new devices: every host seen matches a device already in the project (or was ignored).')); return; }
+    if (!list.length) { host.appendChild(empty('No new devices in this run', 'Every host seen matches a device already in the project, or you ignored it. ' + again())); return; }
     const room = ro() ? null : roomSelect();
     const ids = function (rows) { return rows.map(function (e) { return e.id; }); };
     table(host, 'new', {
@@ -624,7 +674,7 @@ export function mount(el, ctx) {
 
   function matchesTab(host, f) {
     const list = f.entities.filter(function (e) { return e.status === 'match' || e.status === 'possible'; });
-    if (!list.length) { host.appendChild(empty('No host matched a device already in the project.')); return; }
+    if (!list.length) { host.appendChild(empty('No matches in this run', 'No host seen matched a device already in the project; unknown hosts are under New devices. ' + again())); return; }
     const matchCol = { key: 'match', header: 'Matches', filterable: true,
       value: function (e) { return e.status === 'match' ? 'Match' : 'Possible'; },
       cell: function (e) {
@@ -661,7 +711,7 @@ export function mount(el, ctx) {
   const FLAG_TITLE = { uplink: 'Switch-to-switch link', unmanaged: 'Several hosts share this port: an unmanaged switch, hub or AP hangs off it', via: 'Reached through an uplink; no direct cable', host: 'The port this Fathom server is plugged into' };
   function connectionsTab(host, f) {
     const rows = f.rows || [];
-    if (!rows.length) { host.appendChild(empty('No switch-port connections were reported. LLDP on the switches and a UniFi controller give the best results.')); return; }
+    if (!rows.length) { host.appendChild(empty('No connections in this run', viaSources('Switch-port links come from LLDP on the switches or a UniFi controller'))); return; }
     const byId = {};
     (f.connections || []).forEach(function (c) { byId[c.id] = c; });
     const canAdd = function (r) { return !!r.proposed && r.status === 'new'; };
@@ -714,7 +764,7 @@ export function mount(el, ctx) {
 
   function networksTab(host, f) {
     const nets = f.networks || [];
-    if (!nets.length) { host.appendChild(empty('No VLANs or subnets were reported (a UniFi controller provides them).')); return; }
+    if (!nets.length) { host.appendChild(empty('No networks in this run', viaSources('VLANs and subnets come from a UniFi controller'))); return; }
     const mono = function (k) { return { key: k, header: { subnet: 'Subnet', gateway: 'Gateway', dhcp_range: 'DHCP' }[k], value: function (n) { return n[k] || ''; }, cell: function (n) { return h('span', { class: 'mono' }, n[k] || ''); } }; };
     table(host, 'networks', {
       primary: true, caption: 'Networks / VLANs', rows: nets, noun: { one: 'network', many: 'networks' },
@@ -748,7 +798,7 @@ export function mount(el, ctx) {
 
   function unresolvedTab(host, f) {
     const list = f.entities.filter(function (e) { return e.status === 'unresolved' || e.status === 'ignored'; });
-    if (!list.length) { host.appendChild(empty('Nothing unresolved or ignored.')); return; }
+    if (!list.length) { host.appendChild(empty('Nothing unresolved in this run', 'Hosts without a MAC address or a name, and hosts you ignore, are listed here.')); return; }
     const why = { key: 'why', header: 'Why', filterable: true, value: function (e) { return e.status === 'ignored' ? 'Ignored by you' : 'No MAC address and no name'; },
       cell: function (e) { return h('span', { class: 'muted' }, e.status === 'ignored' ? 'Ignored by you' : 'No MAC address and no name: cannot be told apart between runs'); } };
     table(host, 'unresolved', {
@@ -879,7 +929,7 @@ export function mount(el, ctx) {
     ]));
     if (r.error) { wrap.appendChild(inlineError(r.error, function () { return loadDiff(S.diffAgainst); })); return; }
     if (!r.against) {
-      wrap.appendChild(empty('This is the first completed run of the project; start another run later and it will be compared with this one here.'));
+      wrap.appendChild(empty('Nothing to compare yet', 'This is the first completed run of the project. ' + (ro() ? 'The next run is compared with it here.' : 'Start another run later and it is compared with this one here.')));
       return;
     }
     const d = r.diff || {};
@@ -894,7 +944,7 @@ export function mount(el, ctx) {
       h('span', { class: 'muted' }, (c.paired || 0) + ' devices seen in both runs, ' + (c.unchanged || 0) + ' unchanged'),
     ]));
     if (!c.changes) {
-      wrap.appendChild(empty('No changes since ' + runLabel(r.against) + '.'));
+      wrap.appendChild(empty('No changes', 'Nothing changed since ' + runLabel(r.against) + '.'));
       return;
     }
     const section = function (title, n, hint, fill) {
@@ -915,7 +965,7 @@ export function mount(el, ctx) {
 
   // ------------------------------------------------------------ runs tab
   function runsTab(host) {
-    if (!S.runs.length) { host.appendChild(empty(S.loaded ? (ro() ? 'Discovery has not been run for this project.' : 'No runs yet. Run discovery to see what is on the network.') : 'Loading runs\u2026')); return; }
+    if (!S.runs.length) { host.appendChild(emptyState({ title: 'No runs yet', text: ro() ? 'Discovery has not been run for this project.' : 'Run discovery to see what is on the network.', action: runAction() })); return; }
     const t = table(host, 'runs', {
       // Not `highlight`: that scrolls the row into view after render and moves the tab strip away on sm.
       primary: true, caption: 'Discovery runs', rows: S.runs, noun: { one: 'run', many: 'runs' },
@@ -987,7 +1037,7 @@ export function mount(el, ctx) {
     drawBadges();
     if (!S.loaded) { findWrap.appendChild(skeleton('table')); return; }
     if (!S.runs.length && !S.run) {
-      findWrap.appendChild(emptyState({ title: 'No runs yet', text: ro() ? 'Discovery has not been run for this project.' : 'Run discovery to see what is on the network.' }));
+      findWrap.appendChild(emptyState({ title: 'No runs yet', text: ro() ? 'Discovery has not been run for this project.' : 'Run discovery to see what is on the network. Nothing runs until you press it.', action: runAction() }));
       return;
     }
     const f = S.findings && S.findings.run === S.runId ? S.findings : null;

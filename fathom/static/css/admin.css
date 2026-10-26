@@ -43,6 +43,15 @@
 .adm-ovl-dev{min-width:0}
 .adm-ovl .disc-actions{display:inline-flex;gap:4px}
 
+/* ---- states (B.5): skeleton / inline error above a list, error slots beside form buttons */
+.adm-state:empty,.adm-err:empty{display:none}
+.adm-state>.fb-skeleton{padding:4px 0}
+.adm-state>.fb-error{margin:0 0 8px;max-width:none}
+.adm-err>.fb-error{margin:8px 0 0;max-width:none}
+.adm-ovl .disc-actions{flex-wrap:wrap}
+.adm-row-err>.fb-error{margin:4px 0 0}
+.adm-diff>.fb-error{margin:0;max-width:none;white-space:normal}
+
 /* ---- share wizard */
 .adm-fieldset{border:0;padding:0;margin:12px 0 0;min-width:0}
 .adm-fieldset legend{padding:0;margin-bottom:6px;color:var(--muted);font-size:12px}
