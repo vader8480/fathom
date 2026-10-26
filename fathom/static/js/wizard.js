@@ -659,10 +659,14 @@ export function bulkAdd(ctx, opts) {
         const f = fields.filter(function (x) { return x.key === key; })[0];
         return f ? f.label : key;
       }
+      function say(k, msg) {
+        const l = label(k);
+        return String(msg).toLowerCase().indexOf(l.toLowerCase()) === 0 ? msg : l + ': ' + msg;
+      }
       function problems(r) {
         const parts = [];
-        Object.keys(r.errors).forEach(function (k) { parts.push(label(k) + ': ' + r.errors[k]); });
-        Object.keys(r.warnings || {}).forEach(function (k) { if (r.warnings[k] && !r.errors[k]) parts.push(label(k) + ': ' + r.warnings[k]); });
+        Object.keys(r.errors).forEach(function (k) { parts.push(say(k, r.errors[k])); });
+        Object.keys(r.warnings || {}).forEach(function (k) { if (r.warnings[k] && !r.errors[k]) parts.push(say(k, r.warnings[k])); });
         return parts.join('; ');
       }
       let table = null;
