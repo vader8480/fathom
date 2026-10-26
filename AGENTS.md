@@ -19,6 +19,39 @@ Python WSGI server (`fathom/server.py`) plus a no-build ES-module frontend in
 - All data lives under `FATHOM_DATA` (default `~/.fathom`; `/data` in Docker).
   Writes are atomic and per-project locked (`project.project_lock`).
 
+## Frontend conventions
+
+The contract is `docs/SPEC.md` §6.4 (shell, router, ctx), §6.13 (shared
+components) and §6.14 (storage keys).
+
+- **Shared components** live in `fathom/static/js/`, each a DOM module plus a
+  pure `*-core.js` that imports in Node: `router-core.js`, `explorer.js`,
+  `entity-header.js` (+ `entity-core.js`), `datatable.js`, `drawer.js`,
+  `search.js`, `home.js`, `feedback.js`, `wizard.js`; CSS in
+  `fathom/static/css/<name>.css` with its prefix (`ex-`, `eh-`, `dt-`, `dr-`,
+  `sr-`, `hm-`, `fb-`, `wz-`); a harness in `fathom/static/dev/<name>.html`.
+  Build views from them; do not re-implement a list, drawer or state.
+- **DOM helpers:** `h(tag, attrs, children)`, `esc(s)` and `on(target, type,
+  fn)` → `off()` from `dom.js`.
+- **Routes:** `#/<project>/<room>/<view>[/<seg4>[/<seg5>[/<seg6>]]][?<query>]`,
+  segments named per view by `router-core.VIEW_SHAPES` (e.g.
+  `devices/<id>/<tab>/<sub>`); view, id or tab changes push, selection and
+  table state replace; write with `ctx.navigateRoute` / `ctx.setParams`.
+- **Storage keys** start with `fathom.ui.` (table in SPEC §6.14).
+- **Breakpoints:** `layoutFor(width)` → sm < 700, md 700–1099, lg ≥ 1100;
+  44 px targets under `(pointer: coarse)`.
+- **Every list uses `datatable.js`** (`createTable`, `openTableDialog`).
+  Exempt (D9): patch-table blocks, the label sheet, SOP Markdown tables,
+  inspector editor grids, picker dialogs, the search list, explorer lists,
+  the drag lists `#rk-unracked` / `#fp-unplaced`, the JSON view and viewer
+  pages.
+- **UI tests** (`tests/test_ui_*.py`) drive headless Chrome through
+  `tests/_ui.py` (`UiCase`, `open(path, size)` with sizes `d`/`t`/`m`,
+  `click`, `press`, `wait_for`, `intercept`, `shot`); they skip without
+  Chrome. Set `FATHOM_UI_SHOTS=<dir>` to save screenshots. To hold a request
+  open (loading states), copy the `Hold` helper from
+  `tests/test_ui_states_shell.py`.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on every pull request and on pushes to
@@ -74,13 +107,17 @@ with `pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
  changes need only a reload. The editor UI is at `/` (there is no `/ui`).
 - **Backend tests:**
   `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -q`
-  (283 tests, about 30 s, all pass with one skip). Without `FATHOM_CHROME`
+  (788 tests, about 14 min, all pass with one skip; most of the time is the
+  `test_ui_*.py` Chrome suites). Without `FATHOM_CHROME`
   the headless-Chrome smoke suite picks up `/usr/local/bin/google-chrome`, a
   desktop wrapper that pins `--remote-debugging-port=9222`; its parallel runs
-  then time out (~57 failures, 15 min). Single suite:
-  `.venv/bin/python -m unittest tests.test_backup -v`.
-- **Frontend tests:** `node --test tests/js/*.test.mjs` (pass the files; the
-  bare directory form fails on recent Node).
+  then time out (~57 failures, 15 min). Without Chrome work:
+  `-p 'test_[!u]*.py'` plus `-p 'test_u[!i]*.py'`. Single suite:
+  `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -p test_backup.py -v`
+  (not `python -m unittest tests.test_backup`: the `discovery` extra installs
+  `x690`, whose stray top-level `tests` package shadows ours).
+- **Frontend tests:** `node --test tests/js/*.test.mjs` (567 tests; pass the
+  files, the bare directory form fails on recent Node).
 - **End-to-end check:** `.venv/bin/fathom selftest`.
 - **Calling the API with curl:** mutating requests need `X-Fathom: 1`
   (CSRF guard), e.g.
