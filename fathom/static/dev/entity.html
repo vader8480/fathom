@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en" data-harness="entity">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fathom harness · Entity header</title>
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/entity-header.css">
+<style>
+html,body{height:100%}
+body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
+.h-top{flex:none;display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;padding:calc(6px + var(--sat)) 12px 6px;background:var(--panel-2);border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)}
+.h-top b{color:var(--accent);letter-spacing:1.2px;text-transform:uppercase;font-size:11px}
+.h-top nav{display:flex;gap:6px;flex-wrap:wrap}
+.h-top a{display:inline-flex;align-items:center;min-height:32px}
+#h-scroll{flex:1 1 auto;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch}
+#h-panel{padding:16px}
+.h-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.h-card{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-height:80px;padding:10px 12px;text-align:left;background:var(--panel);border-radius:var(--radius)}
+.h-card strong{font-size:22px;line-height:1.1}
+.h-card span{color:var(--muted);font-size:12px}
+.h-rows{list-style:none;margin:0;padding:0}
+.h-rows li{padding:10px 4px;border-bottom:1px solid var(--border)}
+.h-error{padding:16px;margin:16px;border:1px solid var(--err);border-radius:var(--radius);background:var(--panel)}
+.h-error h2{margin:0 0 6px;font-size:14px;color:var(--err)}
+.h-landing{padding:16px}
+.h-landing h2{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
+.h-landing a{display:inline-flex;align-items:center;min-height:40px;margin-right:12px}
+#h-log{flex:none;max-height:72px;overflow:auto;margin:0;padding:4px 12px calc(4px + var(--sab));list-style:none;border-top:1px solid var(--border);background:var(--panel-2);font:11px var(--mono);color:var(--muted)}
+@media (max-width:699px){#h-log{max-height:40px}.h-top nav{display:none}}
+</style>
+</head>
+<body>
+<header class="h-top"><b>Fathom</b><strong>Entity header harness</strong>
+  <nav aria-label="Harness entities"><a href="#/">all</a><a href="#/device/atem-mini">atem-mini</a><a href="#/device/shure-wireless/ports">shure-wireless</a><a href="#/room/main">room main</a><a href="#/rack/rk-foh">rack rk-foh</a><a href="#/device/nope">unknown id</a></nav>
+</header>
+<div id="h-scroll"><div id="h-page"><div id="h-panel"></div></div></div>
+<ul id="h-log" aria-label="Harness log"></ul>
+<div id="fathom-live" class="sr-only" aria-live="polite"></div>
+<script type="module" src="entity-harness.js"></script>
+</body>
+</html>

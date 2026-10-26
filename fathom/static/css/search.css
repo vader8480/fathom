@@ -1,0 +1,45 @@
+/* Global search palette (docs/ui-audit.md B.2 SEARCH). search.js sets
+   data-layout from router-core layoutFor: md/lg is a dropdown positioned
+   under #app-search (inline top/left/width), sm is full screen. */
+.sr-root{position:fixed;z-index:75;display:flex;flex-direction:column;background:var(--panel);color:var(--text);border:1px solid var(--border-2);border-radius:12px;box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden;animation:sr-in .12s ease-out}
+.sr-root[data-layout=sm]{inset:0;border:0;border-radius:0;box-shadow:none;padding:var(--sat,env(safe-area-inset-top,0px)) var(--sar,0px) var(--sab,env(safe-area-inset-bottom,0px)) var(--sal,0px);animation:none}
+
+.sr-bar{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--border);flex:none}
+.sr-bar:focus-within{box-shadow:inset 0 -2px 0 var(--accent)}
+.sr-icon{flex:none;color:var(--muted);font-size:16px;padding-left:6px}
+.sr-back{display:none;flex:none;align-items:center;justify-content:center;min-width:40px;min-height:40px;padding:0;background:transparent;border:0;font-size:24px;line-height:1}
+.sr-root[data-layout=sm] .sr-back{display:inline-flex}
+.sr-root[data-layout=sm] .sr-icon{display:none}
+.sr-input{flex:1 1 auto;min-width:0;min-height:40px;border:0;border-radius:0;background:transparent;padding:8px 6px}
+.sr-input:focus,.sr-input:focus-visible{outline:none}
+.sr-input::-webkit-search-cancel-button{display:none}
+.sr-cat{flex:0 1 auto;min-width:0;max-width:42%;min-height:40px}
+
+.sr-list{list-style:none;margin:0;padding:4px 0;flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
+.sr-list:empty{display:none}
+.sr-group{padding:10px 16px 4px;color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;cursor:default}
+.sr-hit{display:flex;align-items:center;gap:10px;min-height:40px;padding:6px 16px;cursor:pointer}
+.sr-hit[aria-selected=true]{background:rgba(142,162,255,.16)}
+.sr-glyph{flex:none;width:20px;text-align:center;color:var(--muted)}
+.sr-text{flex:1 1 auto;min-width:0;display:flex;align-items:baseline;gap:10px}
+.sr-title,.sr-sub{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sr-title{flex:0 1 auto}
+.sr-sub{flex:0 1 auto;margin-left:auto;color:var(--muted);font-size:12px}
+.sr-root[data-layout=sm] .sr-text{flex-direction:column;align-items:stretch;gap:0}
+.sr-root[data-layout=sm] .sr-sub{margin-left:0}
+.sr-status{flex:none;padding:0 7px;border:1px solid var(--border);border-radius:999px;color:var(--muted);font-size:11px;line-height:18px}
+.sr-status:empty,.sr-status[data-status=installed],.sr-status[data-status=published]{display:none}
+.sr-status[data-status=draft],.sr-status[data-status=retired]{color:var(--warn);border-color:currentColor}
+
+.sr-empty{padding:14px 16px;color:var(--muted);flex:none}
+.sr-empty p{margin:0 0 8px}
+.sr-all{min-height:40px}
+.sr-foot{flex:none;padding:6px 16px;border-top:1px solid var(--border);color:var(--muted);font-size:11px}
+.sr-root[data-layout=sm] .sr-foot[data-offline="0"]{display:none}
+
+@media (pointer:coarse){
+  .sr-hit,.sr-input,.sr-cat,.sr-back,.sr-all{min-height:44px}
+  .sr-back{min-width:44px}
+}
+@media (prefers-reduced-motion:reduce){.sr-root{animation:none}}
+@keyframes sr-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
