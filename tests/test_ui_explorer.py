@@ -240,5 +240,100 @@ class ExplorerUi(UiCase):
                     self.assertEqual(pg.offscreen(".ex-foot"), 0, "drawer footer on screen %r %r" % (pg.rect(".ex-foot"), pg.rect(".ex-side")))
 
 
+RENDER_ITEM = """function (item, base) {
+  var w = document.createElement('div'); w.className = 'x-row'; w.appendChild(base);
+  var b = document.createElement('button'); b.type = 'button'; b.className = 'x-btn'; b.setAttribute('data-ex-ignore', '');
+  b.textContent = '+'; b.addEventListener('click', function () { window.__xClicks = (window.__xClicks || 0) + 1; });
+  w.appendChild(b); return w;
+}"""
+
+
+class ExplorerPrimFixUi(UiCase):
+    """Handle extras and options added for the wave-2 view migrations (PRIM-FIX)."""
+
+    def _ready(self, pg):
+        self.assertEqual(pg.smoke["errors"], [])
+        pg.wait_for("window.__ex && document.querySelectorAll('.ex-item').length > 0")
+
+    def test_set_rail_groups_and_set_chips(self) -> None:
+        with self.open(HARNESS, "d") as pg:
+            self._ready(pg)
+            pg.js("__ex.handle.setCollapsed(true); __ex.handle.setRail([{items: [{key: 'a', label: 'Alpha', glyph: 'A', href: '#a'}]},"
+                  " {items: [{key: 'b', label: 'Beta', glyph: 'B', href: '#b', active: true}, {key: 'c', label: 'Gamma'}]}, {items: []}]); 1")
+            rail = pg.js("Array.prototype.map.call(document.querySelectorAll('.ex-rail > *'), function (e) {"
+                         " return e.classList.contains('ex-rail-sep') ? '|' : e.getAttribute('data-key') || 'glyph'; })")
+            self.assertEqual(rail, ["glyph", "a", "|", "b", "c"], "one separator between non-empty groups")
+            self.assertEqual(pg.js("document.querySelector('.ex-rail-item[aria-current=page]').getAttribute('data-key')"), "b")
+            self.assertGreater(pg.rect(".ex-rail-sep")["width"], 0)
+            self.assertEqual(pg.offscreen(".ex-rail-item"), 0)
+            pg.shot("prim-explorer-rail")
+            pg.js("__ex.handle.setRail([{key: 'z', label: 'Zed'}]); 1")
+            self.assertEqual(pg.js("document.querySelectorAll('.ex-rail-item').length"), 1, "flat lists still work")
+            pg.js("__ex.handle.setCollapsed(false); 1")
+
+            total = pg.js("document.querySelectorAll('.ex-item').length")
+            pg.click(".ex-chip[data-chip=audio]")
+            pg.wait_for("document.querySelector('.ex-chip[data-chip=audio]').getAttribute('aria-pressed') === 'true'")
+            pg.js("__ex.handle.setChips([{key: 'audio', label: 'Audio', test: function (it) { return it.disc === 'audio'; }},"
+                  " {key: 'mine', label: 'Starts with s', test: function (it) { return String(it.id).charAt(0) === 's'; }}]); 1")
+            self.assertEqual(pg.js("Array.prototype.map.call(document.querySelectorAll('.ex-chip'), function (b) { return b.getAttribute('data-chip'); })"),
+                             ["audio", "mine"])
+            self.assertEqual(pg.js("document.querySelector('.ex-chip[data-chip=audio]').getAttribute('aria-pressed')"), "true",
+                             "a pressed chip that still exists stays pressed")
+            ids = pg.js("Array.prototype.map.call(document.querySelectorAll('.ex-item'), function (li) { return li.getAttribute('data-id'); })")
+            discs = pg.js("(function (ids) { var by = {}; __ex.items.forEach(function (it) { by[it.id] = it.disc; });"
+                          " return ids.map(function (id) { return by[id]; }); })(%s)" % json.dumps(ids))
+            self.assertTrue(ids and set(discs) == {"audio"})
+            pg.js("__ex.handle.setChips([{key: 'mine', label: 'Starts with s', test: function (it) { return String(it.id).charAt(0) === 's'; }}]); 1")
+            self.assertEqual(pg.js("document.querySelectorAll('.ex-item').length"), total, "a removed chip no longer filters")
+            self.assertEqual(pg.js("document.querySelector('.ex-chip[data-chip=mine] .ex-chip-n').textContent"),
+                             str(pg.js("__ex.items.filter(function (it) { return String(it.id).charAt(0) === 's'; }).length")))
+
+    def test_update_render_item_item_attrs_head_slot_and_empty_text(self) -> None:
+        with self.open(HARNESS, "d") as pg:
+            self._ready(pg)
+            pg.js("var hint = document.createElement('p'); hint.className = 'x-hint'; hint.textContent = 'Drag a device onto a U';"
+                  " __ex.handle.update({renderItem: " + RENDER_ITEM + ", headSlot: hint,"
+                  " itemAttrs: function (it) { return {class: 'x-item', 'data-disc': it.disc, role: 'button', 'aria-selected': 'nope'}; }}); 1")
+            first = pg.js("document.querySelector('.ex-item').getAttribute('data-id')")
+            li = "document.querySelector('.ex-item[data-id=%s]')" % json.dumps(first)
+            self.assertTrue(pg.js(li + ".querySelector(':scope > .x-row > a .ex-item-label') && !!" + li + ".querySelector('.x-btn')"))
+            self.assertTrue(pg.js(li + ".classList.contains('x-item') && " + li + ".classList.contains('ex-item')"))
+            self.assertEqual(pg.js(li + ".getAttribute('data-disc')"), pg.js("__ex.items[0].disc"))
+            self.assertEqual(pg.js(li + ".getAttribute('role')"), "option", "role stays the explorer's")
+            self.assertEqual(pg.js(li + ".getAttribute('aria-selected')"), "false")
+
+            sel = ".ex-item[data-id=%s]" % json.dumps(first)
+            pg.click(sel + " .x-btn")
+            pg.wait_for("window.__xClicks === 1")
+            self.assertEqual(pg.js("location.hash"), "", "a [data-ex-ignore] control does not pick the item")
+            pg.click(sel + " .ex-item-label")
+            pg.wait_for("location.hash === '#device=' + %s" % json.dumps(first))
+
+            slot = pg.rect(".ex-slot")
+            self.assertGreater(slot["height"], 0)
+            self.assertGreaterEqual(slot["top"], pg.rect(".ex-head")["bottom"] - 1)
+            self.assertLessEqual(slot["bottom"], pg.rect(".ex-list")["top"] + 1)
+            pg.shot("prim-explorer-slot")
+            pg.js("__ex.handle.setCollapsed(true); 1")
+            self.assertEqual(pg.js("document.querySelector('.ex-slot').getClientRects().length"), 0, "hidden in the rail")
+            pg.js("__ex.handle.setCollapsed(false); __ex.handle.setHeadSlot(null); 1")
+            self.assertTrue(pg.js("document.querySelector('.ex-slot').hidden"))
+
+            pg.js("__ex.handle.update({emptyText: function (q, total) { return q ? 'No device named ' + q : 'Room is empty (' + total + ')'; }}); 1")
+            pg.click(".ex-search")
+            for ch in "zzq":
+                pg.press(ch)
+            pg.wait_for("!document.querySelector('.ex-empty').hidden")
+            self.assertEqual(pg.js("document.querySelector('.ex-empty').textContent"), "No device named zzq")
+            pg.js("__ex.handle.update({items: [], emptyText: 'No devices in this room'}); 1")
+            self.assertEqual(pg.js("document.querySelector('.ex-empty').textContent"), "No devices in this room")
+            pg.press("Escape")
+            pg.wait_for("document.querySelector('.ex-search').value === ''")
+            pg.js("__ex.handle.update({items: __ex.items, selected: __ex.items[1].id, footer: function (s, t) { return 'F ' + s + '/' + t; }}); 1")
+            self.assertEqual(pg.js("document.querySelector('.ex-item[aria-selected=true]').getAttribute('data-id')"), pg.js("__ex.items[1].id"))
+            self.assertTrue(pg.js("document.querySelector('.ex-count').textContent.indexOf('F ') === 0"))
+
+
 if __name__ == "__main__":
     unittest.main()

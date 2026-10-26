@@ -271,3 +271,32 @@ class DrawerHarnessUi(UiCase):
             reduce_motion(pg)
             pg.click(ROW)
             self.assertEqual(self.wait_open(pg)["anim"], "none")
+
+    def test_generic_modal_dialog_sits_above_the_drawer(self):
+        # Wizard/admin dialogs: [role=dialog][aria-modal=true] without .app-dialog-backdrop or a capture Esc handler.
+        with self.open(H, "t") as pg:
+            reduce_motion(pg)
+            pg.click(ROW)
+            self.wait_open(pg)
+            layers = "import('/static/js/drawer.js').then(function (m) { return m.domLayers(document, document.getElementById('app-inspector')).dialog; })"
+            self.assertTrue(pg.js("document.getElementById('app-inspector').getAttribute('aria-modal') === 'true'"))
+            self.assertFalse(pg.js(layers), "the drawer host itself is not a dialog above it")
+            pg.js("""(function () {
+              var d = document.createElement('div');
+              d.id = 'x-wiz'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true');
+              d.style.cssText = 'position:fixed;left:20px;top:20px;width:300px;height:200px;background:#222;z-index:100';
+              d.innerHTML = '<input id="x-wiz-a" aria-label="a"><input id="x-wiz-b" aria-label="b">';
+              document.body.appendChild(d);
+              document.getElementById('x-wiz-b').focus();
+            })()""")
+            self.assertTrue(pg.js(layers))
+            pg.press("Tab")
+            self.assertFalse(self.st(pg)["inside"], "the drawer's focus trap does not pull focus out of the dialog")
+            pg.js("document.getElementById('x-wiz-a').focus(); 1")
+            pg.press("Escape")
+            self.assertTrue(self.st(pg)["open"], "Esc belongs to the dialog above the drawer")
+            pg.js("document.getElementById('x-wiz').style.display = 'none'; 1")
+            self.assertFalse(pg.js(layers), "a dialog that is not rendered does not count")
+            pg.js("document.getElementById('x-wiz').remove(); document.getElementById('app-inspector').focus(); 1")
+            pg.press("Escape")
+            self.wait_open(pg, False)

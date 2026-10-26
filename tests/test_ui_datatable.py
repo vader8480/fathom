@@ -508,6 +508,32 @@ class DataTablePrimFixUi(UiCase):
             self.assertTrue(pg.js("document.querySelector(%s) === __inp['c-00001']" % _q(inp)), "same node after re-renders")
             self.assertEqual(pg.js("document.querySelector(%s).value" % _q(inp)), "ok")
 
+    def test_dev_index_links_every_harness_and_their_stylesheets_load(self) -> None:
+        import os
+        dev = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fathom", "static", "dev")
+        pages = sorted(f for f in os.listdir(dev) if f.endswith(".html") and f != "index.html")
+        with self.open("/static/dev/index.html", "d", ready=False) as pg:
+            pg.wait_for("document.readyState === 'complete'")
+            linked = pg.js("Array.prototype.map.call(document.querySelectorAll('a[href]'), function (a) { return a.getAttribute('href').split('?')[0]; })")
+            self.assertEqual([p for p in pages if p not in linked], [], "dev/index.html links every harness")
+            sheets = pg.js("""Promise.all(%s.map(function (p) {
+              var base = new URL(p, location.href);
+              return fetch(base).then(function (r) { return r.text(); }).then(function (t) {
+                var links = new DOMParser().parseFromString(t, 'text/html').querySelectorAll('link[rel=stylesheet]');
+                return Promise.all(Array.prototype.map.call(links, function (l) {
+                  var u = new URL(l.getAttribute('href'), base);
+                  return fetch(u).then(function (r) { return [p, u.pathname.split('/').pop(), r.status]; });
+                }));
+              });
+            })).then(function (all) { return [].concat.apply([], all); })""" % json.dumps(pages))
+            self.assertEqual([s for s in sheets if s[2] != 200], [], "every harness stylesheet resolves")
+            by = {}
+            for page, css, _ in sheets:
+                by.setdefault(page, []).append(css)
+            self.assertTrue({"datatable.css", "patchtable.css"} <= set(by.get("patchtable.html", [])))
+            self.assertIn("explorer.css", by.get("floorplan.html", []))
+            self.assertTrue({"datatable.css", "schedules.css"} <= set(by.get("schedules.html", [])))
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

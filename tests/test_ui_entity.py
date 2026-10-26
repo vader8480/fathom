@@ -239,6 +239,69 @@ class EntityHeaderUi(UiCase):
                 pg.shot("entity-rack-" + size)
 
 
+TAB_LIST = """Array.prototype.map.call(document.querySelectorAll('header.eh .eh-tab'), function (a) {
+  var c = a.querySelector('.eh-count');
+  return {key: a.getAttribute('data-tab'), label: a.querySelector('.eh-tab-label').textContent, count: c ? c.textContent : null,
+          href: a.getAttribute('href'), selected: a.getAttribute('aria-selected')};
+})"""
+
+
+class EntityHeaderPrimFixUi(UiCase):
+    """Live tab updates and link-action styling added for the wave-2 view migrations (PRIM-FIX)."""
+
+    harness = EntityHeaderUi.harness
+    ready = EntityHeaderUi.ready
+
+    def test_set_tabs_updates_in_place_and_keeps_focus(self):
+        with self.harness("/device/atem-mini/ports") as pg:
+            self.ready(pg, "ports")
+            before = pg.js(TAB_LIST)
+            keys = [t["key"] for t in before]
+            self.assertIn("cables", keys)
+            pg.js("window.__bar = document.querySelector('header.eh .eh-bar'); window.__cab = document.querySelector('.eh-tab[data-tab=cables]');"
+                  " __cab.focus(); 1")
+            pg.js("__eh.handle.setTabs(%s.map(function (t) { return t.key === 'cables' ? {key: t.key, label: 'Wires', count: 99, href: '#/device/atem-mini/cables?x=1'}"
+                  " : {key: t.key, label: t.label, count: null, href: t.href}; })); 1" % TAB_LIST)
+            after = pg.js(TAB_LIST)
+            cab = [t for t in after if t["key"] == "cables"][0]
+            self.assertEqual((cab["label"], cab["count"], cab["href"]), ("Wires", "99", "#/device/atem-mini/cables?x=1"))
+            self.assertTrue(all(t["count"] is None for t in after if t["key"] != "cables"), "a null count removes the badge")
+            self.assertEqual([t["selected"] for t in after], [t["selected"] for t in before], "the active tab is kept")
+            self.assertTrue(pg.js("document.querySelector('.eh-tab[data-tab=cables]') === __cab && document.activeElement === __cab"),
+                            "same tab element, focus untouched")
+            self.assertTrue(pg.js("document.querySelector('header.eh .eh-bar') === __bar"), "the header was not rebuilt")
+
+            pg.js("__eh.handle.update({tabs: %s.filter(function (t) { return t.key !== 'files'; }), activeTab: 'cables'}); 1" % TAB_LIST)
+            after = pg.js(TAB_LIST)
+            self.assertNotIn("files", [t["key"] for t in after])
+            self.assertEqual([t["key"] for t in after if t["selected"] == "true"], ["cables"])
+            self.assertTrue(pg.js("document.activeElement.getAttribute('data-tab') === 'cables' && document.activeElement !== __cab"),
+                            "a new tab strip puts focus back on the same tab")
+            self.assertTrue(pg.js("document.querySelector('header.eh .eh-bar') === __bar"), "only the tab strip was replaced")
+
+            pg.js("__eh.handle.update({activeTab: 'ports'}); 1")
+            self.assertEqual(pg.js("document.querySelector('.eh-tab[aria-selected=true]').getAttribute('data-tab')"), "ports")
+
+            pg.js("document.querySelector('header.eh .eh-action[data-action=patch]').focus(); __eh.handle.update({title: 'Renamed ATEM'}); 1")
+            self.assertEqual(pg.js("document.querySelector('header.eh .eh-title').textContent"), "Renamed ATEM")
+            self.assertTrue(pg.js("document.querySelector('header.eh .eh-bar') !== __bar"), "other keys re-render")
+            self.assertEqual(pg.js("document.activeElement.getAttribute('data-action')"), "patch", "focus returns to the same action")
+            self.assertEqual(pg.smoke["errors"], [])
+            pg.shot("prim-entity-tabs")
+
+    def test_link_actions_look_like_button_actions(self):
+        with self.harness("/device/atem-mini") as pg:
+            self.ready(pg, "overview")
+            pg.js("__eh.handle.update({actions: [{key: 'edit', label: 'Edit', primary: true, href: '#edit'},"
+                  " {key: 'save', label: 'Save', primary: true, run: function () {}},"
+                  " {key: 'drop', label: 'Remove', danger: true, href: '#drop'}, {key: 'kill', label: 'Delete', danger: true, run: function () {}}]}); 1")
+            look = ("(function (sel) { var s = getComputedStyle(document.querySelector('header.eh ' + sel));"
+                    " return [s.backgroundColor, s.borderTopColor, s.color]; })(%s)")
+            self.assertEqual(pg.js(look % json.dumps("a.eh-action.eh-primary")), pg.js(look % json.dumps("button.eh-action.eh-primary")))
+            self.assertEqual(pg.js(look % json.dumps("a.eh-action.danger"))[2], pg.js(look % json.dumps("button.eh-action.danger"))[2])
+            pg.shot("prim-entity-link-actions")
+
+
 if __name__ == "__main__":  # pragma: no cover
     import unittest
     unittest.main()
