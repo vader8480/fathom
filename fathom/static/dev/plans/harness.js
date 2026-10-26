@@ -353,7 +353,7 @@ async function walkSchedules(root, handles, store, ui) {
   const inv = root.querySelector('.inv-root');
   const undo0 = store._undo ? store._undo.length : 0;
   ['wireless-mics', 'stage-box-1', 'restream'].forEach(function (id) {
-    const cb = inv.querySelector('[data-select="' + id + '"]');
+    const cb = inv.querySelector('tr[data-device="' + id + '"] .dt-row-check') || inv.querySelector('[data-select="' + id + '"]');
     cb.checked = true;
     cb.dispatchEvent(new Event('change', {bubbles: true}));
   });
@@ -387,9 +387,11 @@ async function walkSchedules(root, handles, store, ui) {
   f.querySelector('button[type=submit]').click();
   const atem = store.doc.devices.filter(function (d) { return d.id === 'atem-mini'; })[0];
   out.formEdit = {serial: atem.inventory && atem.inventory.serial, warranty: atem.inventory && atem.inventory.warranty_until, ip: atem.interfaces[0].ip};
-  out.ok = out.cablesRows === 15 && out.previewOk && out.tagsAssigned === 15 && out.lengthM === 15.24 && tabRows.ip === 3 && tabRows.racks === 1
-    && /6498\.00 USD/.test(out.bomTotal) && out.bulkUndoSteps === 1 && out.bulkUndone && out.bulkSpare.length === 4 && out.warrantyRows === 0
+  out.schedulesOk = out.cablesRows === 15 && out.previewOk && out.tagsAssigned === 15 && out.lengthM === 15.24 && tabRows.ip === 3 && tabRows.racks === 1
+    && /6498\.00 USD/.test(out.bomTotal);
+  out.inventoryOk = out.bulkUndoSteps === 1 && out.bulkUndone && out.bulkSpare.length === 4 && out.warrantyRows === 0
     && !out.missingSerialHasSoundBoard && out.mainVideoRows === 4 && out.formEdit.serial === 'ATEM-123' && out.formEdit.ip === '10.20.0.41';
+  out.ok = out.schedulesOk && out.inventoryOk;
   return out;
 }
 
