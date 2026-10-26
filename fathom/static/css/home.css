@@ -47,6 +47,12 @@ a.hm-recent:hover{border-color:var(--accent)}
 .hm-project-title{font-weight:600;overflow-wrap:anywhere}
 .hm-project-sub{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
 
+/* states: empty project, project list loading or failed */
+.hm-start{padding:4px 0;border:1px dashed var(--border-2);border-radius:var(--radius)}
+.hm-start .fb-empty{margin:20px auto}
+.hm-projects .fb-skeleton{padding:0}
+.hm-projects .fb-error{margin:0}
+
 
 @media (max-width:699px){
   .hm-root{padding:14px calc(12px + var(--sar)) 24px calc(12px + var(--sal))}
@@ -62,7 +68,7 @@ a.hm-recent:hover{border-color:var(--accent)}
   .hm-root{padding:18px calc(16px + var(--sar)) 28px calc(16px + var(--sal))}
 }
 @media (pointer:coarse){
-  .hm-card,.hm-link,a.hm-recent,.hm-project{min-height:44px}
+  .hm-card,.hm-link,a.hm-recent,.hm-project,.hm-start .fb-btn{min-height:44px}
 }
 @media (prefers-reduced-motion:reduce){
   .hm-card,.hm-link,a.hm-recent,.hm-project{transition:none}
