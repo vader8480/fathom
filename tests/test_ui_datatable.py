@@ -336,5 +336,178 @@ class DataTableUi(UiCase):
             self.assertLessEqual(pg.page_hscroll(), 0)
 
 
+# A second table mounted into the harness page: `opts` is a JS expression (it can use `m`, the module, and
+# `__dt`) for createTable's options; the handle lands on window.__x[name].
+MOUNT = """import('/static/js/datatable.js').then(function (m) {
+  var host = document.createElement('div'); host.id = 'x-' + %(name)s; document.body.appendChild(host);
+  window.__x = window.__x || {};
+  window.__x[%(name)s] = m.createTable(host, %(opts)s);
+  return 1;
+})"""
+
+MEM_STORAGE = "{ d: {}, getItem: function (k) { return k in this.d ? this.d[k] : null; }, setItem: function (k, v) { this.d[k] = String(v); }, removeItem: function (k) { delete this.d[k]; } }"
+
+
+class DataTablePrimFixUi(UiCase):
+    """Opt-in options and handle extras added for the wave-2 view migrations (PRIM-FIX)."""
+
+    _open = DataTableUi._open
+    _ready = DataTableUi._ready
+
+    def _mount(self, pg, name: str, opts: str) -> None:
+        pg.js(MOUNT % {"name": _q(name), "opts": opts})
+        pg.wait_for("!!(window.__x && __x[%s])" % _q(name))
+
+    def _resize(self, pg, size: str) -> None:
+        w, hgt, touch = {"d": (1280, 900, False), "m": (390, 844, True)}[size]
+        pg.command("Emulation.setDeviceMetricsOverride", {"width": w, "height": hgt, "deviceScaleFactor": 2 if touch else 1, "mobile": touch})
+        pg.wait_for("window.innerWidth === %d" % w)
+
+    def test_dialog_passes_noun_table_class_and_row_attrs(self) -> None:
+        with self._open("d") as pg:
+            self._ready(pg)
+            pg.js("import('/static/js/datatable.js').then(function (m) { m.openTableDialog({}, {title: 'Patches', key: 'x.dlg',"
+                  " columns: [{key: 'id', header: 'Id'}], rows: [{id: 'a'}, {id: 'b'}, {id: 'c'}],"
+                  " noun: {one: 'patch', many: 'patches'}, tableClass: 'x-dlg-table',"
+                  " rowAttrs: function (r) { return {'data-kind': 'k-' + r.id}; }}); return 1; })")
+            pg.wait_for("!!document.querySelector('.dt-dialog tbody tr.dt-row')")
+            self.assertEqual(pg.js("document.querySelector('.dt-dialog .dt-count').textContent"), "3 patches")
+            self.assertTrue(pg.js("document.querySelector('.dt-dialog table').classList.contains('x-dlg-table')"))
+            self.assertTrue(pg.js("document.querySelector('.dt-dialog table').classList.contains('dt-table')"))
+            self.assertEqual(pg.js("document.querySelector('.dt-dialog tr.dt-row[data-id=b]').getAttribute('data-kind')"), "k-b")
+            pg.shot("prim-dialog-noun")
+
+    def test_filter_buttons_follow_visible_columns_and_relayout(self) -> None:
+        with self._open("m") as pg:
+            self._ready(pg)
+            btn = "document.querySelector('#h-main .dt-filter[data-col=%s]').hidden"
+            self.assertFalse(pg.js(btn % "state"))
+            self.assertTrue(pg.js(btn % "medium"), "hideOnMobile column: no filter button at sm")
+            self.assertTrue(pg.js(btn % "room"))
+            self.assertEqual(pg.offscreen("#h-main .dt-filter", "x"), 0)
+            pg.shot("prim-filters-m")
+            self._resize(pg, "d")
+            pg.wait_for("!(%s)" % (btn % "medium"))
+            self.assertFalse(pg.js(btn % "room"), "re-evaluated on relayout")
+            pg.js("__dt.main.setState({hidden: ['room']}); 1")
+            self.assertTrue(pg.js(btn % "room"), "a hidden column has no filter button")
+            self._resize(pg, "m")
+            pg.wait_for(btn % "medium")
+            pg.js("__dt.main.setState({filters: {medium: ['dante']}}); 1")
+            self.assertFalse(pg.js(btn % "medium"), "an active filter keeps its button so it can be cleared")
+            pg.js("__dt.main.setState({filters: {}}); 1")
+            self.assertTrue(pg.js(btn % "medium"))
+
+    def test_bulk_noun_and_read_only(self) -> None:
+        with self._open("d") as pg:
+            self._ready(pg)
+            self._mount(pg, "bulk", "{key: 'x.bulk', storage: " + MEM_STORAGE + ", columns: [{key: 'tag', header: 'Tag'}],"
+                        " rows: __dt.rows().slice(0, 5), selectable: true, bulkActions: [{label: 'Go', run: function () {}}],"
+                        " noun: {one: 'row', many: 'rows'}, bulkNoun: {one: 'patch', many: 'patches'}}")
+            self.assertEqual(pg.js("document.querySelector('#x-bulk .dt-count').textContent"), "5 rows")
+            pg.click("#x-bulk tbody tr.dt-row .dt-row-check")
+            pg.wait_for("!document.querySelector('#x-bulk .dt-bulk').hidden")
+            self.assertEqual(pg.js("document.querySelector('#x-bulk .dt-bulk-count').textContent"), "1 patch selected")
+
+            self._mount(pg, "ro", "{key: 'x.ro', storage: " + MEM_STORAGE + ", columns: [{key: 'tag', header: 'Tag'}],"
+                        " rows: __dt.rows().slice(0, 5), selectable: true, readOnly: true, bulkActions: [{label: 'Go', run: function () {}}]}")
+            self.assertEqual(pg.js("document.querySelectorAll('#x-ro .dt-check, #x-ro .dt-select-all').length"), 0)
+            self.assertTrue(pg.js("document.querySelector('#x-ro .dt-root').classList.contains('dt-readonly')"))
+
+            pg.js("window.__ro = false; 1")
+            self._mount(pg, "rofn", "{key: 'x.rofn', storage: " + MEM_STORAGE + ", columns: [{key: 'tag', header: 'Tag'}],"
+                        " rows: __dt.rows().slice(0, 5), selectable: true, readOnly: function () { return window.__ro; },"
+                        " bulkActions: [{label: 'Go', run: function () {}}]}")
+            self.assertEqual(pg.js("document.querySelectorAll('#x-rofn tbody .dt-check').length"), 5)
+            pg.click("#x-rofn tbody tr.dt-row .dt-row-check")
+            pg.wait_for("__x.rofn.getSelection().length === 1")
+            pg.js("window.__ro = true; __x.rofn.refresh(); 1")
+            self.assertEqual(pg.js("document.querySelectorAll('#x-rofn .dt-check').length"), 0)
+            self.assertTrue(pg.js("document.querySelector('#x-rofn .dt-bulk').hidden"))
+            self.assertEqual(pg.js("__x.rofn.getSelection().length"), 0, "turning read-only drops the selection")
+            pg.js("window.__ro = false; __x.rofn.refresh(); 1")
+            self.assertEqual(pg.js("document.querySelectorAll('#x-rofn tbody .dt-check').length"), 5)
+
+    def test_set_highlight_keeps_focus_and_can_skip_the_scroll(self) -> None:
+        with self._open("d") as pg:
+            self._ready(pg)
+            pg.js("__dt.main.setState({pageSize: 200}); 1")
+            pg.js("document.querySelector('#h-main tbody tr.dt-row[data-id=c-00002]').focus(); 1")
+            pg.js("__dt.main.setHighlight('c-00003'); 1")
+            pg.wait_for("!!document.querySelector('#h-main tr.dt-hl[data-id=c-00003]')")
+            self.assertEqual(pg.js("document.activeElement.getAttribute('data-id')"), "c-00002", "focus stays on the row")
+            pg.js("document.querySelector('#h-main tr.dt-row[data-id=c-00004] .dt-row-check').focus(); 1")
+            pg.js("__dt.main.setHighlight('c-00005'); 1")
+            self.assertTrue(pg.js("document.activeElement.classList.contains('dt-row-check')"
+                                  " && document.activeElement.closest('tr').getAttribute('data-id') === 'c-00004'"),
+                            "focus stays on the same control in the same row")
+            pg.js("document.activeElement.blur(); window.scrollTo(0, 0); 1")
+            top = "document.querySelector('#h-main tr[data-id=c-00150]').getBoundingClientRect().top"
+            before = pg.js(top)
+            pg.js("__dt.main.setHighlight('c-00150', {scroll: false}); new Promise(function (r) { setTimeout(r, 200); })")
+            self.assertTrue(pg.js("!!document.querySelector('#h-main tr.dt-hl[data-id=c-00150]')"))
+            self.assertAlmostEqual(pg.js(top), before, delta=1, msg="{scroll: false} leaves the scroll position alone")
+            pg.js("__dt.main.setHighlight('c-00151'); 1")
+            pg.wait_for("(function (r) { return r.top >= 0 && r.bottom <= innerHeight; })("
+                        "document.querySelector('#h-main tr[data-id=c-00151]').getBoundingClientRect())")
+
+    def test_set_csv_name(self) -> None:
+        with self._open("d") as pg:
+            self._ready(pg)
+            self.assertEqual(pg.js("document.getElementById('h-csv').getAttribute('download')"), "synthetic-cables.csv")
+            pg.js("__dt.main.setCsvName('chapel-cables.csv'); 1")
+            self.assertEqual(pg.js("document.getElementById('h-csv').getAttribute('download')"), "chapel-cables.csv")
+            pg.js("__dt.main.setCsvName(''); 1")
+            self.assertEqual(pg.js("document.getElementById('h-csv').getAttribute('download')"), "export.csv")
+
+    def test_closed_columns_panel_is_not_laid_out(self) -> None:
+        with self._open("m") as pg:
+            self._ready(pg)
+            panel = "#h-main .dt-cols-panel"
+            self.assertEqual(pg.js("document.querySelector(%s).getClientRects().length" % _q(panel)), 0)
+            self.assertEqual(pg.offscreen(panel), 0)
+            pg.click("#h-columns summary")
+            pg.wait_for("document.querySelector(%s).getClientRects().length > 0" % _q(panel))
+            pg.shot("prim-cols-open-m")
+            pg.click("#h-columns summary")
+            pg.wait_for("document.querySelector(%s).getClientRects().length === 0" % _q(panel))
+
+    def test_url_filters_authoritative(self) -> None:
+        with self._open("d") as pg:
+            self._ready(pg)
+            pg.js("window.__mem = " + MEM_STORAGE + "; window.__q = {};"
+                  " window.__url = {get: function () { return window.__q; }, set: function (p) {"
+                  " Object.keys(p).forEach(function (k) { if (p[k] === null || p[k] === undefined || p[k] === '') delete __q[k]; else __q[k] = p[k]; }); }}; 1")
+            cols = "[{key: 'tag', header: 'Tag'}, {key: 'state', header: 'State', filterable: true}]"
+            common = "key: 'x.url', storage: window.__mem, url: window.__url, columns: " + cols + ", rows: __dt.rows().slice(0, 30)"
+            self._mount(pg, "seed", "{" + common + "}")
+            pg.js("__x.seed.setState({filters: {state: ['spare']}}); __x.seed.destroy(); window.__q = {}; 1")
+            self._mount(pg, "plain", "{" + common + "}")
+            self.assertEqual(pg.js("__x.plain.getState().filters"), {"state": ["spare"]}, "default: stored filters apply without f.*")
+            pg.js("__x.plain.destroy(); window.__q = {}; 1")
+            self._mount(pg, "auth", "{" + common + ", urlFilters: 'authoritative'}")
+            self.assertEqual(pg.js("__x.auth.getState().filters"), {}, "authoritative: no f.* means no filters")
+            pg.js("__x.auth.setState({filters: {state: ['planned']}}); 1")
+            self.assertTrue(any(k.startswith("f.") for k in pg.js("Object.keys(__q)")), "filters still write the URL")
+            pg.js("window.__q = {}; __x.auth.readUrl(); 1")
+            self.assertEqual(pg.js("__x.auth.getState().filters"), {}, "readUrl drops filters the URL no longer has")
+
+    def test_table_class_and_cached_cell_nodes_survive_rerender(self) -> None:
+        with self._open("d") as pg:
+            self._ready(pg)
+            pg.js("window.__inp = {}; 1")
+            self._mount(pg, "cells", "{key: 'x.cells', storage: " + MEM_STORAGE + ", tableClass: 'x-cells-table', rows: __dt.rows().slice(0, 20),"
+                        " columns: [{key: 'tag', header: 'Tag'}, {key: 'note', header: 'Note', sortable: false, cell: function (r) {"
+                        " return __inp[r.id] || (__inp[r.id] = Object.assign(document.createElement('input'), {className: 'x-note'})); }}]}")
+            self.assertTrue(pg.js("document.querySelector('#x-cells table').classList.contains('x-cells-table')"))
+            inp = "#x-cells tr.dt-row[data-id=c-00001] input.x-note"
+            pg.click(inp)
+            for ch in "ok":
+                pg.press(ch)
+            pg.js("__x.cells.setState({sort: {col: 'tag', dir: -1}}); __x.cells.setState({q: 'A-1'}); __x.cells.setState({sort: {col: 'tag', dir: 1}, q: ''}); 1")
+            self.assertTrue(pg.js("document.querySelector(%s) === __inp['c-00001']" % _q(inp)), "same node after re-renders")
+            self.assertEqual(pg.js("document.querySelector(%s).value" % _q(inp)), "ok")
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
