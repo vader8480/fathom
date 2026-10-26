@@ -12,9 +12,11 @@ import { h } from './dom.js';
 import { mountExplorer } from './explorer.js';
 import { mountEntityHeader } from './entity-header.js';
 import { createTable, openTableDialog } from './datatable.js';
-import { inlineError } from './feedback.js';
+import { inlineError, skeleton, emptyState } from './feedback.js';
 import { roomFacts, roomTabs, resolveTab, summaryCards, tabLabel, statusPill, primaryAddress, rackPosition, rackFacts } from './entity-core.js';
-import { indexDoc, devicePorts, portLabel, portRef, deviceTitle, formatLength, mediumInfo } from './model-core.js';
+import { indexDoc, devicePorts, portLabel, portRef, deviceTitle, formatLength, mediumInfo, addDeviceFromTemplateOps } from './model-core.js';
+import { newRackOps } from './rack-core.js';
+import { bulkAdd } from './wizard.js';
 
 const GLYPH = '\u25A3';
 const DOT = ' \u00b7 ';
@@ -84,6 +86,8 @@ export function mount(el, ctx) {
     timer: 0,
     redirect: 0,
     destroyed: false,
+    skel: null,
+    boot: 0,
   };
 
   function doc() {
@@ -256,14 +260,96 @@ export function mount(el, ctx) {
     return null;
   }
 
-  function emptyFor(kind, name) {
-    return {
-      device: 'No devices in ' + name + ' yet. Add gear in Patch.',
-      cable: 'No cables connected to devices in ' + name + ' yet.',
-      rack: 'No racks in ' + name + '. Add one in Racks.',
-      floorplan: 'No floor plan for ' + name + '. Upload one in Plan.',
-      page: 'No procedures apply to ' + name + ' yet.',
-    }[kind] || 'Nothing here yet.';
+  // DataTable `empty` callback: our copy when there are no rows at all, the table's own
+  // "No rows match" + Clear filters when filters hide every row.
+  function emptyTable(build) {
+    return function (state, info) {
+      if (info && info.total) {
+        return h('div', { class: 'pr-filtered' }, [
+          h('p', { class: 'dt-empty-text' }, 'No rows match these filters.'),
+          h('button', { type: 'button', class: 'dt-clear', onclick: function () { if (S.table) S.table.setState({ q: '', filters: {} }); } }, 'Clear filters'),
+        ]);
+      }
+      const node = build();
+      node.classList.add('pr-empty');
+      return node;
+    };
+  }
+
+  function commit(ops, label) {
+    return typeof ctx.commit === 'function' ? ctx.commit(ops, label) : null;
+  }
+
+  function toast(msg, level) {
+    if (typeof ctx.toast === 'function') ctx.toast(msg, level);
+  }
+
+  function addDevice(roomId) {
+    if (typeof ctx.pickTemplate !== 'function') return;
+    Promise.resolve(ctx.pickTemplate({})).then(function (t) {
+      if (!t || S.destroyed) return;
+      const res = addDeviceFromTemplateOps(doc(), t, { room: roomId, vocab: vocab() });
+      if (!commit(res.ops, 'Add ' + (t.name || t.model || t.id))) return;
+      if (res.id) inspect({ type: 'device', id: res.id, device: res.id });
+    }).catch(function (e) { toast((e && e.message) || 'Could not add the device', 'err'); });
+  }
+
+  function addRack(roomId) {
+    if (typeof ctx.prompt !== 'function') return;
+    Promise.resolve(ctx.prompt('Rack name', 'Rack', { title: 'Add rack', ok: 'Add rack' })).then(function (name) {
+      const n = str(name).trim();
+      if (!n || S.destroyed) return;
+      const res = newRackOps(doc(), { name: n, units: 12, room: roomId });
+      if (!commit(res.ops, 'Created rack ' + n)) return;
+      go({ view: 'racks', id: res.id, tab: '', room: roomId, query: {} });
+    });
+  }
+
+  // Write actions are for editors only (D7); links to other views are for everyone.
+  function emptyFor(kind, room) {
+    const name = room.name || room.id;
+    const editor = !readOnly();
+    const patch = href({ view: 'patch', id: '', tab: '', room: room.id, query: {} });
+    const o = {
+      device: {
+        title: 'No devices in ' + name + ' yet.',
+        editor: 'Add one from a template, or bulk add them from a spreadsheet.',
+        viewer: 'Devices appear here once an editor documents them.',
+        write: { label: 'Add device', run: function () { addDevice(room.id); } },
+        write2: { label: 'Bulk add', run: function () { bulkAdd(ctx, { kind: 'devices', room: room.id }); } },
+      },
+      cable: {
+        title: 'No cables in ' + name + ' yet.',
+        editor: 'Patch device ports in the patch view; each connection becomes a cable.',
+        viewer: 'Nothing is patched in this room yet.',
+        nav: { label: 'Open patch view', href: patch },
+      },
+      rack: {
+        title: 'No racks in ' + name + '.',
+        editor: 'Add one to lay out its elevation and rack the devices.',
+        viewer: 'Racks and their elevations appear here once added.',
+        write: { label: 'Add rack', run: function () { addRack(room.id); } },
+      },
+      floorplan: {
+        title: 'No floor plan for ' + name + '.',
+        editor: 'Upload a PDF, SVG or image in the plan view.',
+        viewer: 'Floor plans appear here once uploaded.',
+        write: { label: 'Upload a plan', href: href({ view: 'plan', id: '', tab: '', room: room.id, query: {} }) },
+      },
+      page: {
+        title: 'No procedures apply to ' + name + ' yet.',
+        editor: 'Write an SOP page and add this room to it.',
+        viewer: 'Procedures that list this room appear here.',
+        write: { label: 'New procedure', href: href({ view: 'sop', id: '', tab: '', room: room.id, query: { 'new': '1' } }) },
+      },
+    }[kind];
+    if (!o) return emptyState({ title: 'Nothing here yet.' });
+    return emptyState({
+      title: o.title,
+      text: editor ? o.editor : o.viewer,
+      action: (editor && o.write) || o.nav || null,
+      secondary: editor ? o.write2 || (o.write ? o.nav : null) || null : null,
+    });
   }
 
   function openDrill(card) {
@@ -346,7 +432,15 @@ export function mount(el, ctx) {
       url: tableUrl(),
       highlight: (S.route.query || {}).hl || null,
       csvName: (ctx.project ? ctx.project + '-' : '') + 'rooms.csv',
-      empty: 'No rooms yet. Add a room in Settings \u25B8 Rooms, or import a spreadsheet in Data \u25B8 Imports.',
+      empty: emptyTable(function () {
+        const editor = !readOnly();
+        return emptyState({
+          title: 'No rooms yet.',
+          text: editor ? 'Add a room in Settings \u25B8 Rooms, or import a spreadsheet in Data \u25B8 Imports.' : 'Rooms appear here once an editor adds them.',
+          action: editor ? { label: 'Add a room', href: href({ view: 'settings', id: '', tab: 'rooms', query: {} }) } : null,
+          secondary: editor ? { label: 'Import a spreadsheet', href: href({ view: 'imports', id: '', tab: '', query: {} }) } : null,
+        });
+      }),
     });
     setTitle('Rooms');
   }
@@ -446,7 +540,7 @@ export function mount(el, ctx) {
 
   function notFound(id) {
     const box = h('div', { class: 'pr-notfound' }, [
-      inlineError({ status: 404, message: 'Room \u201c' + id + '\u201d not found' }, null),
+      inlineError({ status: 404, message: 'Room \u201c' + id + '\u201d not found' }, null, { compact: true }),
       h('p', null, h('a', { class: 'pr-back', href: href({ view: 'rooms', id: '', tab: '', query: {} }) }, '\u2190 All rooms')),
     ]);
     S.ex.content.appendChild(box);
@@ -540,7 +634,7 @@ export function mount(el, ctx) {
       highlight: (S.route.query || {}).hl || null,
       sticky: false,
       csvName: (ctx.project ? ctx.project + '-' : '') + room.id + '-' + tab + '.csv',
-      empty: emptyFor(kind, room.name || room.id),
+      empty: emptyTable(function () { return emptyFor(kind, S.room || room); }),
     });
   }
 
@@ -562,6 +656,7 @@ export function mount(el, ctx) {
   function refresh() {
     S.timer = 0;
     if (S.destroyed) return;
+    if (S.skel) { boot(); return; }
     if (S.mode === 'landing') {
       if (S.table) S.table.setRows(landingRows());
       return;
@@ -593,8 +688,18 @@ export function mount(el, ctx) {
     if (S.route.id) renderPage(); else renderLanding();
   }
 
+  // First render: a page-shaped skeleton until the doc is ready, replaced by the content on a later
+  // task so mount() returns (and the shell paints its frame) before the tables are built.
+  function boot() {
+    if (S.boot) { clearTimeout(S.boot); S.boot = 0; }
+    if (S.destroyed || !S.skel || !(store && store.doc)) return;
+    S.skel = null;
+    render();
+  }
+
   function route(r) {
     if (S.destroyed || !r) return;
+    if (S.skel) { S.route = r; return; }
     const prev = S.route;
     S.route = r;
     if (!r.id) {
@@ -615,13 +720,17 @@ export function mount(el, ctx) {
     if (res.redirect) scheduleRedirect(res.tab);
   }
 
-  render();
+  S.skel = skeleton(S.route.id ? 'page' : 'table');
+  S.skel.classList.add('pr-skeleton');
+  root.appendChild(S.skel);
+  S.boot = setTimeout(boot, 0);
   if (store && typeof store.addEventListener === 'function') store.addEventListener('doc', onDoc);
 
   return {
     route: route,
     destroy: function () {
       if (S.destroyed) return;
+      if (S.boot) clearTimeout(S.boot);
       if (S.timer) clearTimeout(S.timer);
       if (store && typeof store.removeEventListener === 'function') store.removeEventListener('doc', onDoc);
       clear();
