@@ -4,7 +4,7 @@
 import * as core from './patchview-core.js';
 import {
   canConnect, connectOps, disconnectOps, repatchOps, deleteDeviceOps, duplicateDeviceOps, renameOps,
-  addDeviceFromTemplateOps, setPortsOps,
+  addDeviceFromTemplateOps, setPortsOps, applyOps,
 } from './model-core.js';
 import { esc, on } from './dom.js';
 import { layoutFor } from './router-core.js';
@@ -607,7 +607,7 @@ export function mount(el, ctx) {
         fetchedRev: function () { return ctx.overlayInfo().revision; },
         currentRev: function () { return store.revision; },
         onRefresh: typeof ctx.refreshOverlay === 'function' ? function () {
-          return Promise.resolve(ctx.refreshOverlay()).catch(function (err) {
+          return Promise.resolve(ctx.refreshOverlay()).then(function () { if (stale) stale.refresh(); }, function (err) {
             toast('Could not refresh the import overlay: ' + ((err && err.message) || 'error'), 'err');
           });
         } : null,
@@ -850,13 +850,16 @@ export function mount(el, ctx) {
       let doc = store.doc;
       const ops = [];
       const seen = {};
+      // Each device's ops see the previous deletions, so marker and extra-card merges stack.
       ids.forEach(function (id) {
-        deleteDeviceOps(doc, id).forEach(function (op) {
+        const devOps = deleteDeviceOps(doc, id);
+        devOps.forEach(function (op) {
           const key = op.op + op.coll + op.id;
           if (op.op === 'del' && seen[key]) return;
           seen[key] = true;
           ops.push(op);
         });
+        doc = applyOps(doc, devOps).doc;
       });
       commit(ops, 'Deleted ' + (ids.length === 1 ? names[0] : ids.length + ' devices'));
       clearSelection();
