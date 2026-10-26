@@ -11,10 +11,10 @@ import unittest
 
 try:
     from _ui import UiCase
+    from test_frontend_smoke import VIEWS
 except ImportError:  # pragma: no cover
     from tests._ui import UiCase
-
-from tests.test_frontend_smoke import VIEWS
+    from tests.test_frontend_smoke import VIEWS
 
 CAMPUS = "#/campus-demo/main/"
 SUNDAY = "#/sunday-demo/main/"
@@ -148,12 +148,7 @@ class ShellUi(UiCase):
     def test_canvas_selection_below_lg_keeps_drawer_closed(self):
         with self.open(SUNDAY + "patch", "t") as pg:
             pg.wait_for("!!document.querySelector('.pv-card[data-device=atem-mini]')")
-            pg.js("""(function () {
-              var c = document.querySelector('.pv-card[data-device=atem-mini]');
-              var t = c.querySelector('.pv-card-head, header, .pv-title') || c;
-              t.dispatchEvent(new MouseEvent('click', {bubbles: true}));
-              return 1;
-            })()""")
+            pg.click(".pv-card[data-device=atem-mini] .pv-title")
             sel = pg.wait_for("(location.hash.match(/sel=([^&]*)/) || [])[1]")
             self.assertTrue(sel.startswith("device:atem-mini") or sel.startswith("port:atem-mini"), sel)
             self.assertIn("drawer=0", pg.js("location.hash"))
@@ -163,9 +158,9 @@ class ShellUi(UiCase):
     def test_no_page_hscroll_on_any_view(self):
         for size in ("m", "t"):
             with self.subTest(size=size), self.open(CAMPUS + "home", size) as pg:
-                for v in VIEWS:
+                for i, v in enumerate(VIEWS):
                     with self.subTest(view=v):
-                        if v != "home":
+                        if i or v != "home":
                             pg.goto(CAMPUS + v)
                         view_ready(pg, v)
                         self.assertLessEqual(pg.page_hscroll(), 0, "%s at %s scrolls horizontally" % (v, size))

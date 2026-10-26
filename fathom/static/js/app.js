@@ -1983,8 +1983,13 @@ export function boot(root, opts) {
   installErrorCapture();
   A.api = opts.api || createApi({ base: appRoot() });
   // legacy /?p=<project>
-  const legacy = new URLSearchParams(location.search).get('p');
-  if (legacy && !location.hash) history.replaceState(null, '', location.pathname + buildHash(legacy, '', DEFAULT_VIEW));
+  const search = new URLSearchParams(location.search);
+  const legacy = search.get('p');
+  if (legacy && !location.hash) {
+    search.delete('p');
+    const rest = search.toString();
+    history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + buildHash(legacy, '', DEFAULT_VIEW));
+  }
   A.layout = layoutFor(window.innerWidth);
   A.nav = navMemory(storageOf('sessionStorage'));
   resetSubs();
