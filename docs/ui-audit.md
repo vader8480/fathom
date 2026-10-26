@@ -279,8 +279,18 @@ The "breaks at 390" column uses the measurements in A.1. Screenshots are in `/op
   does). Query values are written with `encodeURIComponent`, then `%3A`→`:`, `%2C`→`,`, `%7C`→`|` and
   `%2F`→`/`. Trailing empty segments and empty, null or undefined query values are dropped. Key order
   follows insertion order.
-- `buildRoute(parseRoute(h))` must equal `h` for every hash `buildHash` can produce. A test vector table
-  is in B.2 ROUTER.
+- Round trips: `buildRoute(parseRoute(h)) === h` byte-for-byte for every hash `buildRoute` itself
+  produces. For hashes written by the legacy `buildHash` (which escapes `,`, `|` and `/` in query
+  values as `%2C`, `%7C`, `%2F`) the round trip is semantic: `parseRoute` yields the same route object,
+  and `sameRoute(parseRoute(h), parseRoute(buildRoute(parseRoute(h))))` is true. A test vector table is
+  in B.2 ROUTER. (Settled by the coordinator after T-ROUTER/ROUTER flagged the contradiction; the
+  implementation's behaviour is normative.)
+- Settled by ROUTER (normative): `legacyHash` maps an empty view to `home`; `mergeRoute(route, patch)`
+  replaces `query` wholesale when `patch.query` is given (use `withQuery` for key-wise changes) and
+  resets `id/tab/sub/extra` when the view changes; `sectionRoot(key, route, role)` returns `null` for an
+  unknown or not-permitted section; `navMemory.target(project, key, route, role)` returns `''` only in
+  that case, and otherwise returns the remembered hash when it is still permitted for `role`, else the
+  section root.
 - `parseHash` and `buildHash` stay exported from `app.js` as thin wrappers; `views-sop.js` imports them.
   `selToString` and `selFromString` move to `router-core.js` and `app.js` re-exports them unchanged.
 
