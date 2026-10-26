@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en" data-harness="explorer">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fathom · Explorer harness</title>
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/explorer.css">
+<style>
+  html, body { height: 100%; }
+  body { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+  .h-bar { flex: none; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 6px 12px; padding-top: max(6px, env(safe-area-inset-top));
+    border-bottom: 1px solid var(--border); background: var(--panel); font-size: 12px; color: var(--muted); }
+  .h-bar strong { color: var(--text); }
+  .h-bar a { color: var(--accent); text-decoration: none; }
+  #ex-host { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+  .h-page { padding: 12px 16px 24px; }
+  .h-page h1 { margin: 0 0 4px; font-size: 18px; }
+  .h-page dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 12px 0; }
+  .h-page dt { color: var(--muted); }
+  .h-page dd { margin: 0; overflow-wrap: anywhere; }
+  #ex-harness-log { list-style: none; margin: 12px 0 0; padding: 0; font-size: 11.5px; color: var(--muted); }
+  #ex-harness-log li { padding: 3px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+  <div class="h-bar">
+    <strong>Explorer harness</strong>
+    <span>Fixture: <a href="?">sunday-demo</a> · <a href="?many=200">+200 items</a> · <a href="?empty=1">empty</a> · <a href="?key=other">other key</a></span>
+  </div>
+  <div id="ex-host"></div>
+  <script type="module" src="explorer-harness.js"></script>
+</body>
+</html>
