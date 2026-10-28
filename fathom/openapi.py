@@ -121,6 +121,8 @@ def _components() -> Dict[str, Any]:
                                                                      "copy_from": {"type": "string", "description": "scene id (or base) whose data seeds the new scene; default = current state"},
                                                                      "activate": {"type": "boolean", "default": False}}},
         "ScenePatch": {"type": "object", "properties": {"name": {"type": "string", "maxLength": 80}, "note": {"type": "string"}}},
+        "Starter": {"type": "object", "required": ["starter"], "properties": {"starter": {"type": "string", "description": "starter id from GET /api/v2/starters"},
+                                                                          "name": {"type": "string", "description": "room name; defaults to the starter's room name"}}},
         "Invite": {"type": "object", "properties": {"role": {"type": "string", "enum": ["viewer", "editor", "admin"], "default": "editor"},
                                                   "projects": {"type": "object", "additionalProperties": {"type": "string", "enum": ["viewer", "editor"]}, "description": "per-project role overrides"},
                                                   "ttl_hours": {"type": "integer", "minimum": 1, "maximum": 720, "default": 72}, "note": {"type": "string"}}},
