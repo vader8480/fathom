@@ -1,0 +1,80 @@
+/* Rack export dialog (rack-export.js, prefix rx-). Reuses app.css variables
+   and the wizard dialog look; full screen below 700px. The backdrop also
+   carries .app-dialog-backdrop so the shell's Esc and focus layering treat it
+   as a dialog; it sits under #app-dialog (70) so toasts and confirmations stack
+   on top. The preview is the exported document itself, so it stays light. */
+.rx-open body{overflow:hidden}
+.app-dialog-backdrop.rx-backdrop{position:fixed;inset:0;z-index:65;background:rgba(3,6,14,.62);display:flex;align-items:center;justify-content:center;padding:calc(12px + var(--sat,0px)) 12px calc(12px + var(--sab,0px))}
+.rx{background:var(--panel);color:var(--text);border:1px solid var(--border-2);border-radius:12px;width:min(1040px,100%);height:min(720px,100%);max-height:100%;min-width:0;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.rx [hidden]{display:none!important}
+.rx-head{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 14px;border-bottom:1px solid var(--border)}
+.rx-title{margin:0;font-size:15px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rx .rx-close{min-width:40px;min-height:40px}
+
+.rx-body{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:300px minmax(0,1fr);overflow:hidden}
+.rx-form{margin:0;padding:12px 14px;overflow:auto;border-right:1px solid var(--border);-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;gap:14px}
+.rx-group{border:0;margin:0;padding:0;min-width:0}
+.rx-label{display:block;font-weight:600;font-size:12.5px;margin:0 0 6px;padding:0}
+.rx-racks-head{display:flex;align-items:center;gap:8px;margin:0 0 6px}
+.rx-racks-head .rx-label{flex:1;margin:0}
+.rx-racks-tools{display:flex;gap:4px}
+.rx-rack-list{display:flex;flex-direction:column;max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius,8px);background:var(--bg)}
+.rx-rack-opt{display:flex;align-items:center;gap:8px;min-height:36px;padding:4px 10px;cursor:pointer;border-bottom:1px solid var(--border)}
+.rx-rack-opt:last-child{border-bottom:0}
+.rx-rack-opt:hover{background:rgba(142,162,255,.06)}
+.rx-rack-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rx-rack-meta{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.rx-empty{color:var(--muted);margin:0}
+.rx input[type=checkbox]{width:18px;height:18px;margin:0;flex:none}
+
+.rx-seg-row{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--border-2);border-radius:var(--radius,8px);overflow:hidden}
+.rx-seg-opt{flex:1 1 auto;position:relative;display:flex;min-height:36px;cursor:pointer;font-size:12.5px;color:var(--muted);text-align:center;border-right:1px solid var(--border)}
+.rx-seg-opt:last-child{border-right:0}
+.rx-seg-opt input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer;width:100%;height:100%}
+.rx-seg-opt span{flex:1;display:flex;align-items:center;justify-content:center;padding:4px 10px;white-space:nowrap}
+.rx-seg-opt input:checked+span{background:rgba(142,162,255,.16);color:var(--text);font-weight:600}
+.rx-seg-opt:focus-within{outline:2px solid var(--accent);outline-offset:-2px}
+
+.rx-more{display:flex;flex-direction:column;gap:12px}
+.rx-check{display:inline-flex;align-items:center;gap:8px;min-height:36px;cursor:pointer}
+.rx-field select{width:100%;min-height:36px}
+
+.rx-preview{min-width:0;min-height:0;display:flex;flex-direction:column;padding:12px 14px;gap:6px;background:var(--bg)}
+.rx-preview-frame{flex:1 1 auto;min-height:0;display:flex;align-items:flex-start;justify-content:center;overflow:auto;border:1px solid var(--border);border-radius:var(--radius,8px);background:#e9ecf2;padding:10px}
+.rx-preview-img{display:block;margin:auto;max-width:100%;height:auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.rx-preview-meta{margin:0;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;min-height:1.45em}
+
+.rx-foot{display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap}
+.rx-msg{flex:1 1 auto;min-width:0;color:var(--muted);font-size:12px}
+.rx-foot button{min-height:40px;min-width:96px}
+
+.rx-print-frame{position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none}
+
+@media (pointer:coarse){
+  .rx button,.rx select,.rx-rack-opt,.rx-seg-opt,.rx-check{min-height:44px}
+  .rx .rx-close{min-width:44px;min-height:44px}
+  .rx-racks-tools button{min-width:44px}
+  .rx input[type=checkbox]{width:22px;height:22px}
+}
+@media (max-width:1099px){
+  .rx-body{grid-template-columns:260px minmax(0,1fr)}
+}
+@media (max-width:699px){
+  .app-dialog-backdrop.rx-backdrop{padding:0;align-items:stretch}
+  .rx{width:100%;height:100%;max-height:none;border:0;border-radius:0;padding-top:var(--sat,0px);padding-bottom:var(--sab,0px)}
+  .rx-body{display:flex;flex-direction:column;overflow:auto;-webkit-overflow-scrolling:touch}
+  .rx-form{overflow:visible;border-right:0;border-bottom:1px solid var(--border);flex:none}
+  .rx-rack-list{max-height:200px}
+  .rx-preview{flex:none}
+  .rx-preview-frame{max-height:56vh;max-height:56dvh}
+  .rx-msg{flex-basis:100%}
+  .rx-msg:empty{display:none}
+  .rx-foot button{flex:1 1 0}
+}
+@media (prefers-reduced-motion:no-preference){
+  .rx{animation:rx-in .16s ease-out}
+}
+@keyframes rx-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){
+  .rx,.rx *{transition:none!important;animation:none!important}
+}
