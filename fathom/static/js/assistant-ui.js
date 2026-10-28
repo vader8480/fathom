@@ -6,7 +6,6 @@
 // manual text for the next question, and voice input (speech.js).
 
 import { searchLocal, devicePorts, portLabel, invertOps } from './model-core.js';
-import * as speech from './speech.js';
 
 const MANUAL_MAX = 20 * 1024;
 const TOOL_LABELS = { search: 'search', trace: 'trace', manual: 'manual', attachments: 'attachments', web: 'web lookup' };
@@ -100,8 +99,11 @@ export function mountAssistant(el, ctx) {
   const logEl = h('div', { class: 'ast-log', role: 'log', 'aria-live': 'polite', 'aria-label': 'Assistant conversation' });
   const input = h('input', { type: 'text', placeholder: 'Ask about your system\u2026', 'aria-label': 'Ask the assistant', enterkeyhint: 'send', autocomplete: 'off' });
   const send = h('button', { type: 'submit', class: 'primary', 'aria-label': 'Send' }, '\u2191');
-  const mic = speech.available() ? h('button', { type: 'button', class: 'ast-mic', 'aria-label': 'Ask by voice', 'aria-pressed': 'false', title: 'Ask by voice' }, '\uD83C\uDFA4') : null;
-  const form = h('form', { class: 'ast-form ast-form-with-status' }, [input, mic, send]);
+  // speech.js is loaded on demand (it is not in the offline shell cache): the mic button appears once
+  // the module is in and the browser has a recogniser; data-voice on the form tells tests which.
+  let speech = null;
+  let mic = null;
+  const form = h('form', { class: 'ast-form ast-form-with-status' }, [input, send]);
   const chips = h('div', { class: 'ast-chips', 'aria-label': 'Example questions' });
   // context for the next question: attachment ids and pasted manual text, shown as chips
   const pending = { attachments: [], manual: '' };
@@ -244,11 +246,12 @@ export function mountAssistant(el, ctx) {
     else input.placeholder = 'Ask about your system\u2026';
   }
   function stopVoice() {
-    speech.stop();
+    if (speech) speech.stop();
     voice = null;
     setVoice(false);
   }
   function startVoice() {
+    if (!speech) return;
     voiceHint.textContent = '';
     voiceBase = input.value.trim();
     voice = speech.start({
@@ -277,7 +280,14 @@ export function mountAssistant(el, ctx) {
     });
     setVoice(!!voice);
   }
-  if (mic) mic.addEventListener('click', function () { if (voice) stopVoice(); else startVoice(); });
+  import('./speech.js').then(function (m) {
+    speech = m;
+    if (!m.available()) { form.setAttribute('data-voice', 'none'); return; }
+    mic = h('button', { type: 'button', class: 'ast-mic', 'aria-label': 'Ask by voice', 'aria-pressed': 'false', title: 'Ask by voice' }, '\uD83C\uDFA4');
+    mic.addEventListener('click', function () { if (voice) stopVoice(); else startVoice(); });
+    form.insertBefore(mic, send);
+    form.setAttribute('data-voice', 'ready');
+  }, function () { form.setAttribute('data-voice', 'none'); });
 
   function fillChips() {
     chips.innerHTML = '';

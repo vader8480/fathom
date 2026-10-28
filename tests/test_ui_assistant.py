@@ -66,6 +66,7 @@ class AssistantUi(UiCase):
         pg.wait_for("document.getElementById('app-assistant').classList.contains('open') && !!document.querySelector('#app-assistant .ast-form input')")
         # the panel slides in (transform transition); clicks wait for it to settle
         pg.wait_for("getComputedStyle(document.getElementById('app-assistant')).transform === 'none'")
+        pg.wait_for("!!document.querySelector('#app-assistant .ast-form[data-voice]')")
         return pg
 
     def ask(self, pg, text: str) -> None:
@@ -230,6 +231,7 @@ class AssistantUi(UiCase):
     def test_mic_hidden_without_speech_recognition(self):
         pg = self.panel("d", PLAIN, scripts=[NO_SR])
         self.assertFalse(pg.js("!!(window.SpeechRecognition || window.webkitSpeechRecognition)"), "no SpeechRecognition constructor")
+        self.assertEqual(pg.js("document.querySelector('.ast-form').getAttribute('data-voice')"), "none")
         self.assertFalse(pg.js("!!document.querySelector('.ast-mic')"))
         self.assertTrue(pg.js("!!document.querySelector('.ast-form button[type=submit]')"))
 
