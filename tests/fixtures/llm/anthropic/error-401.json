@@ -1,0 +1,14 @@
+{
+  "request": {
+    "model": "claude-sonnet-4-5"
+  },
+  "status": 401,
+  "response": {
+    "type": "error",
+    "error": {
+      "type": "authentication_error",
+      "message": "invalid x-api-key sk-test-SECRET-KEY-91c2"
+    },
+    "request_id": "req_p4a"
+  }
+}
