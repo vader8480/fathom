@@ -466,7 +466,8 @@ class ScenesUi(UiCase):
         self.assertEqual(pg.js("window.__fathomErrors"), [])
 
     def test_server_without_scenes_hides_bar(self) -> None:
-        with self.open("#/campus-demo/main/patch", "d") as pg:  # the real server: GET …/scenes is 404
+        # an older server without scene routes: GET …/scenes answers 404 (the real server on this branch has them)
+        with self.open("#/campus-demo/main/patch", "d", intercepts=[("/api/v2/projects/campus-demo/scenes", 404, {"error": "not_found"}, "GET")]) as pg:
             view_ready(pg, "patch")
             pg.wait_for("!!document.getElementById('app-scenes')")
             pg.js("new Promise(function (r) { setTimeout(r, 700); })")
