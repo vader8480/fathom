@@ -1226,7 +1226,7 @@ def render_rack_report_section(doc: Dict[str, Any], files: Dict[str, Dict[str, s
                     f'<td>{esc(units)}</td><td>{esc(used)}</td><td>{esc(free)}</td><td>{esc(ndev)}</td><td class="rr-files no-print">{flinks}</td></tr>')
         shots = [(f["svg"], "front and rear")] if f.get("svg") else [(f[face], face) for face in ("front", "rear") if f.get(face)]
         for src, cap in shots:
-            figs.append(f'<figure><img src="{esc(src)}" alt="{esc(name)} {esc(cap)}" loading="lazy"><figcaption>{esc(name)} · {esc(cap)}</figcaption></figure>')
+            figs.append(f'<figure><img src="{esc(src)}" alt="{esc(name)} {esc(cap)}"><figcaption>{esc(name)} · {esc(cap)}</figcaption></figure>')
     head = "".join(f'<th scope="col">{h}</th>' for h in ("Rack", "Room", "Units", "Used U", "Free U", "Devices"))
     return (f'<div class="scroll"><table class="t rr-table"><thead><tr>{head}<th scope="col" class="no-print">Files</th></tr></thead>'
             f'<tbody>{"".join(rows)}</tbody></table></div>' + (f'<div class="rr-figs">{"".join(figs)}</div>' if figs else ""))
