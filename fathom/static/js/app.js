@@ -7,7 +7,7 @@
 
 import {
   createStore, canConnect, devicePorts, portLabel, deviceTitle, disciplineOf, mediumInfo,
-  filterDevices, parsePortRef, slug, deepClone, isLocked,
+  filterDevices, parsePortRef, slug, deepClone, isLocked, sceneById,
 } from './model-core.js';
 import { createApi, ChangeQueue, ApiError, isLockedError } from './api.js';
 import { h, esc } from './dom.js';
@@ -111,7 +111,10 @@ export const VIEWS = {
   sop: { label: 'SOPs', module: './views-sop.js', export: 'mount', css: ['sop.css'] },
   json: { label: 'JSON', module: null, internal: true },
 };
-const BOOT_CSS = ['drawer.css', 'inspector.css', 'search.css', 'feedback.css'];
+const BOOT_CSS = ['drawer.css', 'inspector.css', 'search.css', 'feedback.css', 'scenes.css'];
+// Views that carry the scene bar (#app-scenes, scenes.js §6.15) and may preview a scene.
+const SCENE_VIEWS = { patch: true, table: true, map: true, plan: true, racks: true, rooms: true };
+const SCENES_UNSUPPORTED = 'Scenes need a server with scene support';
 // Loading skeleton per view (feedback.js kinds). Canvas views (patch, plan, map) have no canvas
 // kind; patch and plan draw cards on a canvas, so 'cards' is the closest shape.
 const SKELETON_KIND = {
@@ -713,6 +716,11 @@ export function makeCtx(store, extras) {
     closeInspector: function () {},
     reload: function () { return Promise.resolve(null); },
     timeTravel: null,
+    // Scenes (§6.15): the shell replaces these; in a harness there is no preview mode.
+    preview: null,
+    sceneEditor: !(store && store.readOnly),
+    previewScene: function () { ctx.toast(SCENES_UNSUPPORTED, 'warn'); return Promise.resolve(null); },
+    exitPreview: function () {},
     // B.2 SHELL item 4: every member below is optional for views; these are the harness-safe defaults.
     navigateRoute: function () { return ''; },
     routeHref: function () { return '#'; },
@@ -775,6 +783,9 @@ const A = {
   applyingRoute: false, subs: {}, recent: null, notices: null, bell: null, overlayInfo: { fetchedAt: null, revision: null },
   saveTrack: { last: '', offlineMax: 0 }, noteSig: '', focusing: false, projectsError: null, projectsLoading: false,
   locked: false, tour: null, tourChecked: false,
+  // Scenes (§6.15): preview = {scene, name, doc, revision} while a scene is previewed read-only;
+  // sceneBar = {ctx, handle} while #app-scenes is mounted for the current project.
+  preview: null, sceneBar: null,
 };
 
 function focusView(sel) {
@@ -1010,6 +1021,7 @@ function saveLabel(d) {
   const n = (d && d.pending) || (A.queue ? A.queue.pending : 0);
   const st = d ? d.state : 'saved';
   if (A.travel) return 'Viewing r' + A.travel.rev;
+  if (A.preview) return 'Preview \u00b7 r' + rev;
   if (A.store && A.locked && !baseReadOnly() && !n) return 'Locked \u00b7 r' + rev;
   if (A.store && A.store.readOnly && !n) return (A.offline ? 'Offline \u00b7 ' : 'Read-only \u00b7 ') + 'r' + rev;
   if (st === 'saving') return 'Saving\u2026';
@@ -1113,7 +1125,7 @@ function applyLock(initial) {
   const li = lockInfo();
   const was = A.locked;
   A.locked = li.locked;
-  const want = baseReadOnly() || li.locked;
+  const want = baseReadOnly() || li.locked || !!A.preview;
   if (!A.travel && store.readOnly !== want) store.setReadOnly(want);
   renderLock(li);
   if (initial || was === li.locked) return;
@@ -1146,6 +1158,175 @@ function setLocked(on) {
     toast(errMsg(e), 'err');
   }
   applyLock(false);
+}
+
+// ---- scenes (FR-SCN, §6.15): the bar under the sub-nav on SCENE_VIEWS and the read-only preview.
+// Preview swaps the store's doc for GET …/scenes/<sid>/doc; views get ctx.role 'viewer' (the lock
+// mechanism); a remote doc load or a route out of SCENE_VIEWS ends it; ?scene=<sid> deep-links it.
+
+// app.html predates the bar: #app-preview goes after #app-lock, #app-scenes after #app-subnav.
+function ensureShellRows() {
+  const app = $('app');
+  if (!app) return;
+  if (!$('app-preview')) {
+    const el = h('div', { id: 'app-preview', class: 'app-preview', role: 'status', hidden: true });
+    const lock = $('app-lock');
+    if (lock && lock.parentNode === app) app.insertBefore(el, lock.nextSibling);
+    else app.insertBefore(el, $('app-views') || app.firstChild);
+  }
+  if (!$('app-scenes')) {
+    const el = h('div', { id: 'app-scenes', class: 'app-scenes', hidden: true });
+    const sub = $('app-subnav');
+    if (sub && sub.parentNode === app) app.insertBefore(el, sub.nextSibling);
+    else app.insertBefore(el, $('app-body'));
+  }
+}
+
+function sceneEditor() {
+  return !!A.store && !baseReadOnly() && !A.travel;
+}
+
+function previewInfo() {
+  return A.preview ? { scene: A.preview.scene, name: A.preview.name } : null;
+}
+
+function renderPreview() {
+  const el = $('app-preview');
+  if (!el) return;
+  const p = A.preview;
+  if (!p) { el.hidden = true; el.innerHTML = ''; return; }
+  el.innerHTML = '';
+  el.appendChild(h('span', { class: 'app-preview-text' }, [h('b', null, 'Previewing scene ' + p.name), ' \u2014 read-only']));
+  if (sceneEditor()) el.appendChild(h('button', { type: 'button', class: 'small primary', id: 'app-preview-switch', onclick: switchToPreviewed }, 'Switch to this scene'));
+  el.appendChild(h('button', { type: 'button', class: 'small', id: 'app-preview-exit', onclick: function () { endPreview(true); } }, 'Exit preview'));
+  el.hidden = false;
+}
+
+// Views read ctx.role when they mount, so entering or leaving preview re-mounts the current view.
+function remountForPreview() {
+  const store = A.store;
+  const v = A.view;
+  if (!store || !v || !A.viewHandle || v === 'settings') return;
+  setTimeout(function () { if (A.store === store && A.view === v) mountView(v); }, 0);
+}
+
+function sceneLabel(sid, doc) {
+  if (!sid || sid === 'base') return 'Base';
+  const s = sceneById(doc, sid);
+  return (s && s.name) || sid;
+}
+
+function startPreview(sid, name) {
+  const store = A.store;
+  if (!A.api || !store) return Promise.resolve(null);
+  sid = sid || 'base';
+  if (A.travel) endTimeTravel();
+  return A.api.sceneDoc(A.project, sid).then(function (r) {
+    if (A.store !== store || !r || !r.doc) return null;
+    const live = A.preview ? A.preview.doc : store.doc;
+    const label = name || sceneLabel(sid, live);
+    if (!A.preview) A.preview = { scene: sid, name: label, doc: store.doc, revision: store.revision };
+    else { A.preview.scene = sid; A.preview.name = label; }
+    if (!store.readOnly) store.setReadOnly(true);
+    store.replaceDoc(r.doc, A.preview.revision, 'preview');
+    renderPreview();
+    refreshBanner();
+    updateSave(null);
+    if (SCENE_VIEWS[A.view] && A.route.query.scene !== sid) syncRoute(withQuery(A.route, { scene: sid }), true);
+    remountForPreview();
+    announce('Previewing scene ' + label + ' (read-only)');
+    return r;
+  }, function (e) {
+    if (A.store === store && A.route.query.scene) syncRoute(withQuery(A.route, { scene: null }), true);
+    toast(e && e.status === 404 ? SCENES_UNSUPPORTED : 'Could not preview the scene: ' + errMsg(e), 'warn');
+    throw e;
+  });
+}
+
+// `restore` puts the live doc back; false when a fresh doc just arrived from the server ('load').
+function endPreview(restore) {
+  const p = A.preview;
+  if (!p) return;
+  A.preview = null;
+  const store = A.store;
+  if (store && restore) store.replaceDoc(p.doc, p.revision, 'load');
+  if (store) applyLock(true);
+  renderPreview();
+  refreshBanner();
+  updateSave(null);
+  if (A.route.query.scene) syncRoute(withQuery(A.route, { scene: null }), true);
+  remountForPreview();
+  announce('Preview ended');
+}
+
+function switchToPreviewed() {
+  const p = A.preview;
+  if (!p || !A.api || !A.queue) return;
+  const name = p.name;
+  A.api.activateScene(A.project, p.scene).then(function () {
+    toast('Switched to ' + name, 'ok');
+    // The resync loads the live doc ('load'), which ends the preview.
+    return A.queue.resync().then(afterResync);
+  }).catch(function (e) {
+    if (isLockedError(e)) { toast('Editing is locked \u2014 this change was not made', 'warn'); return; }
+    toast(e && e.status === 404 ? SCENES_UNSUPPORTED : errMsg(e), 'err');
+  });
+}
+
+// Route → preview: ?scene= enters (or switches) the preview; navigating between SCENE_VIEWS keeps it
+// (the query is re-added); any other view ends it.
+function applySceneRoute(r) {
+  if (!A.store) return;
+  if (!SCENE_VIEWS[r.view]) { if (A.preview) endPreview(true); return; }
+  const want = r.query.scene || '';
+  if (want) {
+    if (!A.preview || A.preview.scene !== want) startPreview(want, '').catch(function () {});
+  } else if (A.preview) {
+    syncRoute(withQuery(A.route, { scene: A.preview.scene }), true);
+  }
+}
+
+function destroySceneBar() {
+  const rec = A.sceneBar;
+  A.sceneBar = null;
+  if (rec && rec.handle) { try { rec.handle.destroy(); } catch (e) { console.warn(e); } }
+  const el = $('app-scenes');
+  if (el) { el.hidden = true; el.innerHTML = ''; }
+}
+
+// Mounts scenes.js into #app-scenes on SCENE_VIEWS (once per project), unmounts it elsewhere.
+function syncSceneBar() {
+  const el = $('app-scenes');
+  if (!el) return;
+  const want = !!(A.ctx && A.store && A.api && SCENE_VIEWS[A.view]);
+  if (!want) { destroySceneBar(); return; }
+  if (A.sceneBar && A.sceneBar.ctx === A.ctx) { if (A.sceneBar.handle) A.sceneBar.handle.render(); return; }
+  destroySceneBar();
+  const rec = { ctx: A.ctx, handle: null };
+  A.sceneBar = rec;
+  importModule('./scenes.js').then(function (m) {
+    if (A.sceneBar !== rec) return;
+    rec.handle = m.mountSceneBar(el, rec.ctx);
+  }, function (e) {
+    if (A.sceneBar === rec) A.sceneBar = null;
+    console.warn('scene bar: ' + errMsg(e));
+  });
+}
+
+// User menu "Scenes…": the bar's actions menu (on a SCENE_VIEW; otherwise after going to Patch).
+function openScenesMenu() {
+  if (!A.store) return;
+  if (!SCENE_VIEWS[A.view]) navigate('patch', { keepSel: false });
+  let tries = 0;
+  (function attempt() {
+    const b = A.sceneBar && A.sceneBar.handle;
+    const st = b ? b.state() : null;
+    if (b && st && st.scenes && !st.hidden) { b.openMenu(); return; }
+    if (b && st && !st.supported) { toast(SCENES_UNSUPPORTED, 'warn'); return; }
+    if (b && st && st.scenes && st.hidden) { toast('This project has no scenes yet', 'info'); return; }
+    if (++tries > 40) { toast(SCENES_UNSUPPORTED, 'warn'); return; }
+    setTimeout(attempt, 100);
+  })();
 }
 
 function afterResync() {
@@ -1436,6 +1617,7 @@ function mountView(key) {
   A.viewHandle = null;
   A.view = key;
   renderNav();
+  syncSceneBar();
   const host = $('app-main');
   host.innerHTML = '';
   const el = h('div', { class: 'app-view', 'data-view': key });
@@ -1681,6 +1863,7 @@ function userMenu() {
   items.push({ label: 'Keyboard shortcuts', action: shortcutsDialog });
   // The menu is gone by the time these open; focus the button first so Esc returns there.
   items.push({ label: 'Take the tour', id: 'app-menu-tour', disabled: !A.store, action: function () { $('app-user').focus(); runTour(); } });
+  items.push({ label: 'Scenes\u2026', id: 'app-menu-scenes', disabled: !A.store, action: openScenesMenu });
   if (A.store && !baseReadOnly() && !A.travel && !A.locked) items.push({ label: 'Lock editing', id: 'app-menu-lock', action: function () { setLocked(true); } });
   items.push({ label: 'Suggest an improvement\u2026', id: 'app-menu-suggest', disabled: !A.ctx, action: function () { $('app-user').focus(); suggestImprovement(); } });
   if (s.auth_enabled && u) {
@@ -1827,6 +2010,7 @@ function toggleAssistant(force) {
 
 function startTimeTravel(rev) {
   if (!A.api) return Promise.resolve();
+  if (A.preview) endPreview(true);
   return A.api.historyDoc(A.project, rev).then(function (r) {
     if (!A.travel) A.travel = { rev: rev, doc: A.store.doc, revision: A.store.revision, readOnly: A.store.readOnly };
     A.travel.rev = rev;
@@ -1906,6 +2090,9 @@ function teardown() {
   if ($('app')) $('app').classList.remove('ast-open');
   A.viewStates = {};
   A.travel = null;
+  destroySceneBar();
+  A.preview = null;
+  renderPreview();
   A.ctx = null;
   A.store = null;
   A.locked = false;
@@ -2101,8 +2288,13 @@ function loadProject(name, route) {
     const recent = A.recent;
     const ctx = makeCtx(store, {
       api: noticeApi(A.api, name), project: name, meta: A.meta, session: A.session,
-      // Locked project: every view is a viewer except Settings, which holds the lock toggle.
-      get role() { return A.locked && A.view !== 'settings' ? 'viewer' : A.role; },
+      // Locked project or scene preview: every view is a viewer except Settings, which holds the lock toggle.
+      get role() { return (A.locked || A.preview) && A.view !== 'settings' ? 'viewer' : A.role; },
+      // Scenes (§6.15): the bar reads the real editing right (the lock answers 423 by itself).
+      get sceneEditor() { return sceneEditor(); },
+      get preview() { return previewInfo(); },
+      previewScene: startPreview,
+      exitPreview: function () { endPreview(true); },
       navigate: navigate,
       openInspector: openDrawer,
       closeInspector: closeDrawer,
@@ -2140,6 +2332,8 @@ function loadProject(name, route) {
     } catch (e) { console.warn('notifications: ' + errMsg(e)); }
     on(store, 'doc', function (e) {
       const d = e.detail;
+      // A doc from the server replaces whatever was previewed: the preview ends without restoring.
+      if (A.preview && (d.source === 'load' || d.source === 'remote' || d.source === 'pending')) endPreview(false);
       if (d.source === 'local' || d.source === 'undo' || d.source === 'redo') {
         if (A.travel) return;
         queue.enqueue(d.ops, d.label || d.source);
@@ -2295,6 +2489,8 @@ function applyRoute(input) {
   const prev = A.route;
   A.route = r;
   if (canon) historyWrite(buildRoute(r), true);
+  // Before the view mounts, so a view outside SCENE_VIEWS mounts on the live doc.
+  applySceneRoute(r);
   let mounted = null;
   const same = r.view === A.view && !!A.viewHandle;
   applySelection(r, false);
@@ -2380,6 +2576,7 @@ export function boot(root, opts) {
   A.nav = navMemory(storageOf('sessionStorage'));
   resetSubs();
   ensureCss(BOOT_CSS);
+  ensureShellRows();
   ensureDrawer();
   const env = detectEnv();
   const kbd = document.querySelector('#app-search .app-search-kbd');

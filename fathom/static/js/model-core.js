@@ -625,6 +625,56 @@ export function isLocked(doc) {
   return !!(doc && isObject(doc.settings) && doc.settings.locked === true);
 }
 
+// ------------------------------------------------------------ scenes (FR-SCN, P3B)
+// A scene is a named variant of the patch and the gear placement (scenes[] entries, §4.3.18);
+// settings.scene holds the active one, absent/"" = the implicit Base.
+
+const SCENE_PARTS = [
+  ['cables_added', '+', ' cable', ''], ['cables_removed', '\u2212', ' cable', ''],
+  ['cables_changed', '', ' cable', ' changed'], ['devices_moved', '', ' device', ' moved'],
+  ['markers_changed', '', ' marker', ' changed'],
+];
+
+function sceneList(doc) {
+  return doc && Array.isArray(doc.scenes) ? doc.scenes.filter(isObject) : [];
+}
+
+// The id in settings.scene, or 'base' when Base is active (also for a stale id: the shell treats it as Base).
+export function activeSceneId(doc) {
+  const s = doc && isObject(doc.settings) ? doc.settings.scene : '';
+  return typeof s === 'string' && s ? s : 'base';
+}
+
+// scenes[] entry by id; 'base' / '' map to the entry flagged `base: true` (null when none exists yet).
+export function sceneById(doc, id) {
+  const list = sceneList(doc);
+  if (!id || id === 'base') return list.filter(function (s) { return s.base === true; })[0] || null;
+  return list.filter(function (s) { return s.id === id; })[0] || null;
+}
+
+// The active non-base scene entry, or null while Base is active (or settings.scene is dangling).
+export function activeScene(doc) {
+  const id = activeSceneId(doc);
+  if (id === 'base') return null;
+  const s = sceneById(doc, id);
+  return s && s.base !== true ? s : null;
+}
+
+// Diff summary -> "+3 cables · −1 cable · 2 devices moved" (zero parts omitted; "No differences" when empty).
+// Accepts the summary itself or an object holding it under `summary` / `diff`.
+export function sceneDiffText(summary) {
+  let s = summary || {};
+  if (isObject(s.summary)) s = s.summary;
+  else if (isObject(s.diff)) s = s.diff;
+  const parts = [];
+  SCENE_PARTS.forEach(function (p) {
+    const n = Number(s[p[0]]) || 0;
+    if (n <= 0) return;
+    parts.push(p[1] + n + p[2] + (n === 1 ? '' : 's') + p[3]);
+  });
+  return parts.length ? parts.join(' \u00b7 ') : 'No differences';
+}
+
 export function stateIncludes(status, state) {
   const s = status || 'installed';
   const st = state || 'all';
