@@ -32,7 +32,7 @@ function asOps(x) {
 
 T('COLLECTIONS and ROOTS constants', () => {
   assert.deepEqual(need(mc, 'COLLECTIONS', '§4.1', S),
-    ['venues', 'rooms', 'systems', 'locations', 'racks', 'networks', 'devices', 'cables', 'bundles', 'floorplans', 'attachments', 'templates', 'imports', 'pages', 'problems'],
+    ['venues', 'rooms', 'systems', 'locations', 'racks', 'networks', 'devices', 'cables', 'bundles', 'floorplans', 'attachments', 'templates', 'imports', 'pages', 'problems', 'scenes'],
     m('§4.1', S, 'COLLECTIONS order'));
   assert.deepEqual(need(mc, 'ROOTS', '§4.1', S), ['meta', 'settings', 'media']);
 });
