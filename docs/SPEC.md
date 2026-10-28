@@ -97,7 +97,7 @@ These are deliberately **not** in 0.3.0. Workers MUST NOT start them; the data m
 | ATEM settings XML import | Small, but W2 capacity; listed P2 in FR-IMP-09 and moves here if not delivered | `<Input id shortName longName externalPortType>` |
 | Shure Wireless Workbench `.shw`, Dante Controller `.dcproj`, Q-SYS design import, Crestron/Control4/Savant as-built import | Undocumented or proprietary formats; need real sample files | Generic CSV import is the bridge |
 | RF frequency coordination | Specialist domain; WWB does this | — |
-| Rack power/heat/weight budgets, side views, cable-path routing with length estimation on floor plans | Need reliable template data (power_w, weight) first; fields exist in templates | Template fields already reserved |
+| Rack heat budgets, side views, cable-path routing with length estimation on floor plans | Need reliable template data first | Rack weight and power totals against `max_load_kg` / `power_limit_w` now ship (FR-RACK-09, §4.4.7) |
 | Photo thumbnails / image resizing | No stdlib image codec for JPEG; serve originals with `loading=lazy` | Optional Pillow plugin later |
 | SSO (OIDC/SAML/LDAP), per-field audit UI, i18n, native apps | Scope | Users model allows `provider` later |
 | LLM tool-calling that edits the model | Safety/grounding; 0.3 only proposes ops the user confirms | Suggestion op format reused |
@@ -240,12 +240,20 @@ Format: `ID · Priority · Requirement — **AC:** acceptance criterion · Owner
 
 | ID | Pri | Requirement | Acceptance criterion | Owner |
 | --- | --- | --- | --- | --- |
-| FR-RACK-01 | P0 | Racks: name, room, location, units (1–60), numbering `bottom_up`/`top_down`, faces, notes. | Create a 12U rack in the UI. | W4, W1 |
-| FR-RACK-02 | P0 | Device placement `rack: {id, u, height, face, side, depth}`: `u` = lowest occupied RU (1-based, 1 = bottom), `height` defaults to template `ru` (else 1), face `front`/`rear`, side `full`/`left`/`right` (half-width), depth `full`/`half` (full-depth blocks both faces). | Fixture `shure-wireless` renders at U10, left half, front. | W4, W6 |
+| FR-RACK-01 | P0 | Racks: name, room, location, units (1–60), numbering `bottom_up`/`top_down`, faces, notes; plus (Rackula features, §4.3.7) `width_in` 10/19/21/23, `form_factor`, `start_u`, empty `weight_kg`, `max_load_kg`, `power_limit_w`, `row`, `items`. | Create a 12U rack in the UI. | W4, W1 |
+| FR-RACK-02 | P0 | Device placement `rack: {id, u, height, face, side, depth}`: `u` = lowest occupied RU (1-based, 1 = bottom), `height` defaults to template `ru` (else 1), face `front`/`rear`, side `full`/`left`/`right` (half-width), depth `full`/`half` (full-depth blocks both faces). Optional `shelf`, `slot`, `color`, `image_front`, `image_rear` (§4.3.8). | Fixture `shure-wireless` renders at U10, left half, front. | W4, W6 |
 | FR-RACK-03 | P0 | Front/rear elevation: rails with RU numbers per numbering, device blocks (name, model, `nU`, discipline color stripe), empty RU shown as blanks. | Harness shows the 12U FOH rack with one device. | W4 |
 | FR-RACK-04 | P0 | Drag within/between racks snapping to RU; drag unracked devices in from a side list; dropping on an occupied RU is refused (red ghost) unless Alt/Option is held (force, creates a collision warning). | Drop onto an occupied RU is refused; Alt-drop places with a warning. | W4 |
-| FR-RACK-05 | P0 | Validation warnings `rack_overlap`, `rack_out_of_range`, `rack_unknown` (§4.7). | `racks.validate_racks` lists an overlap for two full-width devices at the same U/face. | W6 |
-| FR-RACK-06 | P0 | Print stylesheet (one rack per page, front and rear side by side) and server SVG per rack/face for builds. | Build contains `racks/rk-foh-front.svg` and `racks/rk-foh-rear.svg`. | W4, W6 |
+| FR-RACK-05 | P0 | Validation warnings `rack_overlap`, `rack_out_of_range`, `rack_unknown`, and for items, shelves and budgets `rack_shelf_unknown`, `rack_slot_out_of_range`, `rack_shelf_overlap`, `rack_overweight`, `rack_over_power` (§4.7). | `racks.validate_racks` lists an overlap for two full-width devices at the same U/face. | W6 |
+| FR-RACK-06 | P0 | Print stylesheet (one rack per page, front and rear side by side) and server SVG per rack/face for builds; builds also carry a both-faces SVG and a rack page per rack (§5.9). | Build contains `racks/rk-foh-front.svg`, `racks/rk-foh-rear.svg`, `racks/rk-foh.svg` and `racks/rk-foh.html`. | W4, W6 |
+| FR-RACK-07 | P1 | Rack accessories (`racks[].items`, §4.3.7): blank, vent, shelf, drawer, cable manager, brush, lacing bar, other. Items are full width, occupy RUs and collide with devices by the face/depth rules; each type draws distinctly in the SVG. | `tests/test_rack_contract.py` (fixture `rack_contract.json`) passes in Python and JS. | — |
+| FR-RACK-08 | P1 | Shelves: a `shelf` item has 1–4 cells; a device with `rack.shelf` + `rack.slot` stands in a cell, outside rack-level occupancy (§4.4.7). | `racks.shelf_contents` returns one entry per cell; two devices on one cell warn `rack_shelf_overlap`. | — |
+| FR-RACK-09 | P1 | Rack totals: U used/free, weight (rack + devices + items) against `max_load_kg`, power against `power_limit_w` (§4.4.7); `GET …/racks/<rack>/totals`. | Over the limit → `rack_overweight` / `rack_over_power`. | — |
+| FR-RACK-10 | P1 | Public rack page `/p/<n>/rk/<rack>` (front + rear elevation, totals, device and accessory lists, notes, QR) and its QR route (§5.8.3, §5.13). | `tests/test_rack_viewer.py`. | — |
+| FR-RACK-11 | P1 | Rack SVG options: `face=both`, `images=1` (device images from the catalog, §4.5.1), `annotate=<field>` (a right-hand column of device facts). | `rack_svg(doc, rack, face="both", images=True)` parses as XML and embeds `data:image/webp`. | — |
+| FR-RACK-12 | P1 | Rackula import: `.Rackula.zip`, YAML/JSON layouts and count.racku.la share links preview as ops and apply as one revision (§4.13.2). | Fixture `tests/fixtures/rackula/media-server.rackula.yaml` previews 6 devices. | — |
+| FR-RACK-13 | P1 | Five starter rack templates create a rack with placeholder devices and accessories (§4.13.1). | Every template applies to a new doc and to campus-demo with no schema errors and no rack collisions (`tests/test_rack_templates.py`). | — |
+| FR-RACK-14 | P1 | Rack UI modules (§6.13.11): device-image display and annotations, a library palette over every tier including the catalog, and an export dialog (SVG, PNG 2×, print). The elevation, landing and rack-page wiring is wave 2 of the Rackula work. | `tests/test_ui_rack_palette.py`, `tests/test_ui_rack_export.py`. | — |
 
 ### 3.10 FR-CAB — Cable schedule & labels
 
@@ -284,9 +292,11 @@ Format: `ID · Priority · Requirement — **AC:** acceptance criterion · Owner
 | FR-LIB-01 | P0 | ≥ 48 templates (Appendix E lists 55; ship all that you can verify) as `fathom/library/templates/<id>.json`. | `len(load_library()) ≥ 48`; every template passes `validate_template`. | W2 |
 | FR-LIB-02 | P0 | Template format §4.5 (port groups expanded by §4.4.3; `ru`, `width`, `power_w`, `weight_kg`, `cost`, `dmx_footprint`, `routing`, `checks`, `tags`, `source_url`). | Schema test. | W2 |
 | FR-LIB-03 | P0 | Library list/search/get API and a picker dialog (search, discipline filter, port-group preview). | Search "rio" returns `yamaha-rio3224-d2` and `yamaha-rio1608-d2`. | W2, W1, W5 |
-| FR-LIB-04 | P0 | Custom templates: per project (`doc.templates[]`) and global (`<data>/library/*.json`, editor role via API); extension dirs `FATHOM_LIBRARY`. Precedence: project > global custom > extension dirs > built-in. | A project template with a built-in id overrides it in that project only. | W2 |
+| FR-LIB-04 | P0 | Custom templates: per project (`doc.templates[]`) and global (`<data>/library/*.json`, editor role via API); extension dirs `FATHOM_LIBRARY`. Precedence: project > global custom > extension dirs > built-in > presets > Rackula catalog (§4.5.1). | A project template with a built-in id overrides it in that project only. | W2 |
 | FR-LIB-05 | P0 | "Save as template" from a device (ports → groups by `group`) and "Apply template" (adds missing ports by id, never removes cabled ports; idempotent). | Applying twice yields no ops the second time. | W2, W5 |
 | FR-LIB-06 | P1 | **Device type presets** (`fathom/presets.py`, `GET /api/v2/presets`): ≥ 26 generic AV / IT device types (UPS, PDU, copper and fibre patch panels, 24/48-port switches, router/firewall, access point, server, NAS, KVM, media converter, Dante/AES67 interface, stagebox, audio console, amplifier, DSP, wireless mic receiver, IEM transmitter, video switcher, projector, display, camera, encoder/decoder, lighting console, dimmer/relay pack, DMX node) grouped Power / Network & IT / Audio / Video / Lighting. Each has an Appendix A.1 `kind` (no new kinds), default port groups, typical `ru`, aliases and the relevant fields (`dante`, `dmx_footprint`, `width`, `routing`). Presets are also library templates (`manufacturer: "Generic"`, `source: "preset"`, lowest precedence; cannot be deleted, `?override=1` to shadow). The Add gear dialog opens on a **Presets** tab (searchable, grouped) that pre-fills a create form (name, kind, manufacturer, model, rack units, per-group port counts; 0 drops a group); the **Library** tab is the FR-LIB-03 picker. An unedited form keeps `device.template = <preset id>`; editing kind, manufacturer, model, RU or ports detaches the device and stores its RU as `rack.height`. The CSV `kind` column accepts a preset id, label or alias (§5.7.4). | `len(presets) ≥ 26`; every preset validates as a template; CSV `kind: ups` → `kind: power`, `template: generic-ups`, 6 outlets. | — |
+| FR-LIB-07 | P1 | **Rackula catalog tier** (§4.5.1): 711 rack-mountable device types from Rackula (NetBox devicetype-library data) with RU, depth, airflow, weight, category and front/rear images, read-only, lowest precedence, hidden from the default library list and from `library.suggest`; `?source=catalog\|all`, `?ids=`, `?rack=1` on `GET /api/v2/library`. | `len(catalog_templates()) ≥ 600`; every entry validates; every image path exists (`tests/test_rack_catalog.py`). | — |
+| FR-LIB-08 | P1 | NetBox device-type YAML: import as a global custom template (`POST /api/v2/library/import/netbox`) and export any template (`GET /api/v2/library/<id>/netbox.yaml`) (§4.13.3). | Export → import round-trips the subset (`tests/test_netbox_devicetype.py`). | — |
 
 ### 3.14 FR-INV — Inventory
 
@@ -400,6 +410,7 @@ Format: `ID · Priority · Requirement — **AC:** acceptance criterion · Owner
 | FR-EXP-03 | P0 | Options: `state` (`as_built`, `planned`, `all`), `rooms` (subset), `pdf`, `png`. | API test with `rooms: ["main"]` builds only that room folder. | W2, W1 |
 | FR-EXP-04 | P0 | Device pages use relative links; QR codes encode `<public_url>/p/<project>/d/<device>` where public_url = `settings.public_url` or `FATHOM_PUBLIC_URL` or (server builds) the request's scheme+host+script root; none → no QR, with a build note. | Test both branches. | W2 |
 | FR-EXP-05 | P1 | `report.html` (print-oriented: maps, patch tables, schedules, and a *Console channels* section — `render_html.render_console_report_section`, one `<article class="console-report" id="console-<device>">` per console with channels, the same Inputs / Buses / DCAs & mute groups / Racks tables as its device page, no trace buttons — alongside `console-channels.csv`) and `report.pdf` from it when Chrome is present. | With Chrome, `report.pdf` > 10 KB; `test_console_channels.py::Overlay::test_build_report_tables_and_csv`. | W2, W5 |
+| FR-EXP-06 | P1 | Racks in builds: per rack `racks/<rack>-front.svg`, `-rear.svg`, a both-faces SVG with images `racks/<rack>.svg` and the rack page `racks/<rack>.html` (relative links); device pages link their Rack line to it; `report.html` has a *Racks* section (§5.9). | `tests/test_rack_builds.py`. | — |
 
 ### 3.24 FR-QR — QR codes
 
@@ -407,6 +418,7 @@ Format: `ID · Priority · Requirement — **AC:** acceptance criterion · Owner
 | --- | --- | --- | --- | --- |
 | FR-QR-01 | P0 | Stdlib encoder `fathom/qr.py`: byte mode (UTF-8), EC L/M/Q/H, versions 1–40, smallest fitting version by default, mask chosen by ISO/IEC 18004 penalties (N1=3, N2=3, N3=40, N4=10) or forced; SVG with 4-module quiet zone. | Appendix C vectors match bit-for-bit with `mask=2, ecl="M"`; Reed–Solomon self-check (all syndromes zero) on 200 random payloads. | W2 |
 | FR-QR-02 | P0 | `GET /api/v2/projects/<n>/qr/<device>.svg`; QR in inspector, device pages, builds (`qr/<device>.svg`); label sheet QR P1. | SVG parses as XML; module count = 17 + 4·version. | W2, W1, W5 |
+| FR-QR-03 | P1 | `GET /api/v2/projects/<n>/qr/rack/<rack>.svg` encodes the public rack page, or its share-link mirror with `?share=` (§5.8.3); the rack page shows it. | `tests/test_rack_routes.py`. | — |
 
 ### 3.25 FR-IMP — Importers
 
@@ -423,6 +435,7 @@ Format: `ID · Priority · Requirement — **AC:** acceptance criterion · Owner
 | FR-IMP-09 | P2 | ATEM Software Control settings XML: `<Input id shortName longName externalPortType>` → overlay port labels on the ATEM device (inputs by index). | Sample XML yields labels. | W2 |
 | FR-IMP-11 | P1 | ChamSys MagicQ head-list CSV (Patch → View Heads → Print Window → Create CSV, or the legacy EXPORT HEADS file `Headno, Headname, Dmxno, Headtype, Gel, Pinv, Tinv, Swap`): headings matched with MagicQ's own IMPORT HEADS synonyms, case-insensitive; delimiter = first `,` / `;` / tab; DMX `u-aaa`, `u/a`, `u.a`, absolute, or in-universe with a `Universe` column; `virtual`/blank = unpatched (noted, skipped); `Headtype` `Manufacturer_Model` split unless a Manufacturer column exists; overlaps and runs past 512 noted. Contribution as FR-IMP-06 with `source: "magicq"`, ids `mq-<head>`, and name matching only for head names that are unique in the file. A `.shw` show file (undocumented format) is refused with 422 and export instructions. | Samples yield heads with universe/address/footprint/mode. | — |
 | FR-IMP-12 | P1 | Generic CSV templates and validation: importers may declare `templates` (+ `template(name, doc)`); `GET …/imports/templates/<kind>/<name>.csv` returns an example file (UTF-8 BOM, examples use the project's default room) that previews without errors; every row is validated and rows with problems are skipped and returned as `errors: [{row, column, value, message}]` (spreadsheet row numbers, the user's header text) and mirrored into `warnings`. | Template download → edit → preview → apply round-trip. | — |
+| FR-IMP-13 | P1 | Rackula layouts (`POST …/racks/import`, FR-RACK-12, mapping §4.13.2) and NetBox device types (FR-LIB-08, §4.13.3), read with the stdlib YAML subset `parsers/mini_yaml.py`. | `tests/test_import_rackula.py`, `tests/test_netbox_devicetype.py`. | — |
 | FR-IMP-10 | P0 | Imports view: upload cards generated from registry metadata (label, help, accepts, folder), registered imports with Inspect/Remove, overlay summary with "Promote" for auto devices. | Manual QA. | W5 |
 
 ### 3.25a FR-DISC — Network discovery (on demand; passive by default, opt-in read-only active probes)
@@ -580,6 +593,44 @@ Types: `str`, `int`, `num` (float), `bool`, `obj`, `[T]` array of T. "Req" = req
 
 `id`, `name` (req), `room`, `location`, `units` (int 1–60, req), `numbering` (`bottom_up` default | `top_down`), `faces` (`["front","rear"]` default), `depth_mm` (num), `order` (int), `notes`.
 
+Rackula features (all optional, additive; `schema.RACK_WIDTHS`, `RACK_FORM_FACTORS`, `RACK_ITEM_TYPES`):
+
+| Field | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `width_in` | int | 19 | `10` \| `19` \| `21` \| `23`; else `bad_enum` |
+| `form_factor` | str | `cabinet` | `cabinet` \| `open_frame` \| `two_post` \| `four_post` \| `wall_mount` \| `road_case`; else `bad_enum` |
+| `start_u` | int ≥ 0 | 1 | the label of RU 1 (§4.4.7) |
+| `weight_kg` | num ≥ 0 | | the empty rack |
+| `max_load_kg`, `power_limit_w` | num ≥ 0 | | budgets for `rack_overweight` / `rack_over_power` |
+| `row` | str | | bay/row name; racks sharing a row are grouped (`rack-core.racksByRow`) |
+| `items` | `[RackItem]` | | accessories, below |
+
+**RackItem** — `{id, type, u, height, face, depth, label, color, slots, weight_kg, notes}`:
+
+| Field | Type | Req | Notes |
+| --- | --- | --- | --- |
+| `id` | str | yes | unique within its rack (`duplicate_id`); new ids are `ri-<n>` with the smallest unused n ≥ 1 |
+| `type` | str | yes | a key of the table below (`bad_enum`); readers treat an unknown type as `other` |
+| `u` | int ≥ 1 | yes | lowest occupied RU, as for devices |
+| `height` | int ≥ 1 | no | default from the type |
+| `face`, `depth` | `front`\|`rear`, `full`\|`half` | no | default from the type (`bad_enum`) |
+| `label`, `color` (`#rrggbb`), `notes` | str | no | |
+| `slots` | int 1–4 | no | shelves only, default 2 |
+| `weight_kg` | num | no | counted in the rack totals |
+
+Items are always full width. **ITEM_TYPES** (`racks.ITEM_TYPES` in Python and `rack-core.ITEM_TYPES` in JS, same order):
+
+| type | label | height | face | depth | color | slots |
+| --- | --- | --- | --- | --- | --- | --- |
+| `blank` | Blank panel | 1 | front | half | `#44475a` | — |
+| `vent` | Vent panel | 1 | front | half | `#44475a` | — |
+| `shelf` | Shelf | 1 | front | full | `#6272a4` | 2 |
+| `drawer` | Drawer | 2 | front | full | `#6272a4` | — |
+| `cable_manager` | Cable manager | 1 | front | half | `#6272a4` | — |
+| `brush` | Brush panel | 1 | front | half | `#6272a4` | — |
+| `lacing_bar` | Lacing bar | 1 | rear | half | `#6272a4` | — |
+| `other` | Accessory | 1 | front | half | `#6272a4` | — |
+
 #### 4.3.8 `devices[]` and ports
 
 | Field | Type | Req | Notes |
@@ -601,7 +652,8 @@ Types: `str`, `int`, `num` (float), `bool`, `obj`, `[T]` array of T. "Req" = req
 | `channels`, `channel_links` | `[Channel]`, `[ChannelLink]` | no | console internals — input channels, buses, DCAs and the patch edges between them (§4.3.17); a doc with them is v2-only |
 | `flow` | obj | no | `{group, column, order, seq, show}` map placement for the device's primary card; `show:false` hides it from the map |
 | `patch` | obj | no | `{x, y}` world coordinates in the patch view (px at zoom 1); `collapsed: bool` |
-| `rack` | obj | no | `{id, u, height, face, side, depth}` (FR-RACK-02) |
+| `rack` | obj | no | `{id, u, height, face, side, depth}` (FR-RACK-02), plus optional `shelf` (str: id of a `shelf` item in the same rack), `slot` (int ≥ 0: the cell, 0 = leftmost), `color` (`#rrggbb` block colour override), `image_front`, `image_rear` (str: attachment ids of this device). A device with `shelf` keeps `u` and `face` equal to the shelf's so older clients draw it at the right height (§4.4.7) |
+| `weight_kg`, `power_w` | num ≥ 0 | no | override the template values in rack totals and annotations; a doc with either is v2-only (§4.6.7) |
 | `inventory` | obj | no | `{serial, asset_tag, firmware, purchase_date (YYYY-MM-DD), warranty_until (YYYY-MM-DD), vendor, cost (num), currency, po, notes}` |
 | `interfaces` | `[Interface]` | no | §4.3.9 |
 | `dmx` | obj | no | `{universe, address, footprint, mode, channel, protocol, port}` (FR-DMX-01) |
@@ -815,6 +867,28 @@ Default mode per kind is the `routing` column of Appendix A.1; a template's `rou
 
 `state=all` (default): everything except `retired`; `state=everything`: include retired; `state=planned`: planned + installed; `state=as_built`: installed only. Applies to devices; cables follow their own status, and a cable is excluded if either endpoint device is excluded. Spares (`spare`) are included only in `all`/`everything` and in inventory/BOM regardless of state.
 
+#### 4.4.7 Rack semantics (shared Python/JS: `fathom/racks.py`, `js/rack-core.js`, `js/rack-display-core.js`)
+
+The contract fixture `tests/fixtures/rack_contract.json` (≥ 14 cases, run by `tests/test_rack_contract.py` and `tests/js/rack-contract.test.mjs`) pins these rules in both languages.
+
+- **Labels.** `racks.ru_label(rack, u)` / `ruLabel(rack, u)` returns the printed label of physical RU `u` as a string. With `s = start_u` (default 1): `bottom_up` → `u − 1 + s`; `top_down` → `units − u + s`. Numbering changes **only the labels**: RU 1 is always drawn at the bottom (`_block_y`, `uToY`), and `u` in the data always counts from the bottom.
+- **Width.** `racks.rack_width_px(rack)` / `rackWidthPx(rack)` = `round(320 × width_in / 19)`: 10″ → 168, 19″ → 320, 21″ → 354, 23″ → 387 px. `RU_PX = 22`.
+- **Participants.** Rack-level devices (racked, with a `u`, not on a shelf) and items with a `u`. Item refs are written `item:<id>`. A device occupies `u … u+height−1`; full depth blocks both faces, half depth only its `face`; half-width sides collide only with the same side or `full`; items are always `full` width.
+- **Collisions.** `collisions(doc, rack)` → `[{a, b, u, face}]`, one per colliding pair and face, `u` = lowest overlapping RU, `a < b` as strings, sorted by `(u, face, a, b)`. `fits(doc, rack, device, u, opts)` counts items, so its conflicts may contain `item:<id>`. `itemFits(doc, rack, itemId|null, u, spec)` → `{ok, reason, conflicts}` with `reason` ∈ `''`, `rack_unknown`, `out_of_range`, `occupied`.
+- **Shelves.** A device with `rack.shelf` stands in cell `rack.slot` of that shelf item: it is drawn inside the cell (cell x = `slot × width / slots`), is **not** a participant and keeps `u`/`face` equal to the shelf's. `racks.shelf_contents(doc, rack, item)` / `shelfCells` → `[{slot, device}]` of length `slots`; `device` is the first device on that cell in `doc.devices` order, or null; devices whose slot is outside `0…slots−1` are left out. Taking a device off a shelf (`placeOps`) clears `shelf` and `slot`; deleting a shelf (`delItemOps`) unracks its children.
+- **Totals.** `racks.rack_totals(doc, rack)` / `rackTotals(doc, rack, info)` → `{units, used_u, free_u, weight_kg, max_load_kg, power_w, power_limit_w, devices, items}`. `used_u` = number of RUs 1…units with a participant on either face; `free_u = units − used_u`. `weight_kg` = rack `weight_kg` + Σ device weight + Σ item `weight_kg`; `power_w` = Σ device power; device weight/power = the device's `weight_kg`/`power_w`, else the template's, else 0, over every device whose `rack.id` is this rack (shelf children and devices without a `u` included). `max_load_kg`/`power_limit_w` = the rack value or null; `devices` / `items` = counts. Numbers are rounded to 1 decimal. Python resolves templates with `library.get_template` (every tier, including the catalog); JS uses `doc.templates`, then the optional `info` map `{templateId: summary}` (`rack-display.loadTemplateInfo`). Unknown rack: Python raises `KeyError`, JS returns null. See the known differences below.
+- **Annotations.** `racks.annotation_value(doc, device, field)` / `annotationValue(doc, device, field, info)` → string, `''` when unknown: `name`; `model` = `manufacturer + ' ' + model` trimmed; `ip` = the first interface ip with `role: "primary"`, else the first non-empty ip; `serial`, `asset_tag` (from `inventory`); `code`; `power` = `'<n> W'` and `weight` = `'<n> kg'` when > 0 (no trailing `.0`); `status` (default `installed`).
+- **Block colour.** `rack.color`, else `CATEGORY_COLORS[template.rack_category]`, else the discipline colour, else `#9aa3b5` (JS). Category colours (from Rackula): server `#4A7A8A`, network `#7968A6`, firewall `#C0392B`, storage `#3D7A4A`, power `#A84A4A`, kvm `#926A40`, av-media `#A85A7A`, cooling `#75753F`, chassis `#5A6A8A`, shelf `#6272A4`, blank `#44475A`, cable-management / patch-panel / other `#6272A4`. Text on a block is black or white by WCAG contrast (`textColorOn`).
+- **Images.** A device image for a face is the template's `image_<face>` (a path under `static/rack-images/`, §4.5.1). The front image is never shown on the rear. JS `deviceImage(device, info, face, {base, attachmentUrl})` prefers the device's `rack.image_<face>` attachment when `attachmentUrl` is given; the server SVG uses template images only.
+- **Ops** (JS, pure, §6.7): every item op is one `merge racks/<id>` with the whole `items` array (plus device merges where needed). `addItemOps` without `u` takes the first fit from the top and returns `{ops: [], id: ''}` when nothing fits; `moveItemOps` refuses (`[]`) on a collision unless `force`; `placeOnShelfOps` writes `{id, u: shelf.u, height: 1, face: shelf.face, side: 'full', shelf, slot}` and returns `[]` when the target is not a shelf, the slot is out of range or the cell is taken. `duplicateDeviceOps` copies a device (new slug id, name + ` (copy)`; drops serial, asset tag, interface ip/mac/hostname, `merged_from`, `patch`) to the first fit in the same rack, else unracked; `duplicateRackOps` copies the rack (new `rk-` id, same items) and, with `devices`, its devices at the same positions.
+
+**Known differences** (recorded, not yet reconciled):
+
+1. **Totals: `auto` devices and rounding.** Python `rack_totals` counts every device with `rack.id` equal to the rack, including overlay devices with `auto: true`, and rounds half up (`floor(x × 10 + 0.5) / 10`, so 0.25 → 0.3). JS `rackTotals` (and `rackDevices`, `shelfCells`) leave out `auto` devices and round exact binary ties to even like Python's `round()` (0.25 → 0.2). Persisted docs never hold `auto` devices (§4.4.1), so the counts only differ for overlay-merged docs; the rounding differs on exact ties.
+2. **Item label.** Python `rack_items` returns `label: ''` for an unlabeled item (with `type_label` beside it); JS `rackItems` fills `label` with the type label.
+3. **Item colour.** The schema checks only that an item `color` is a string; readers fall back to the type colour when it is not `#rrggbb`.
+4. **Fit checks are JS only.** `fits` and `itemFits` exist only in `rack-core.js`; `racks.py` has no `fits`/`item_fits`, so the six `fits` cases of the contract fixture skip in `tests/test_rack_contract.py` and run only in `tests/js/rack-contract.test.mjs`. Python checks collisions after the fact (`collisions`, `validate_racks`).
+
 ### 4.5 Equipment template format (library, `doc.templates`, `<data>/library/*.json`)
 
 ```json
@@ -853,9 +927,26 @@ Default mode per kind is the `routing` column of Appendix A.1; a template's `rou
 | `manufacturer`, `model`, `kind` | yes | |
 | `name` | no | default `model` |
 | `discipline`, `brand`, `ru`, `width` (`full|half`), `depth_mm`, `power_w`, `weight_kg`, `cost`, `currency`, `dante`, `routing`, `dmx_footprint`, `dante_channels`, `checks`, `tags`, `source_url`, `notes` | no | |
+| `full_depth` | no | bool (rack depth; the Rackula importer maps it to `rack.depth`) |
+| `airflow` | no | str, NetBox values `front-to-rear` \| `rear-to-front` \| `left-to-right` \| `right-to-left` \| `side-to-rear` \| `passive` \| `mixed` |
+| `rack_category` | no | str, Rackula category `server` \| `network` \| `firewall` \| `patch-panel` \| `power` \| `storage` \| `kvm` \| `av-media` \| `cooling` \| `shelf` \| `blank` \| `cable-management` \| `chassis` \| `other` (block colour, §4.4.7) |
+| `image_front`, `image_rear` | no | str, a path relative to `fathom/static/rack-images/`, e.g. `apc/apc-smt1500rmi2uc.front.webp`; `validate_template` rejects `\`, `:`, control characters, more than 200 characters, and empty, `.` or `..` segments (the rack SVG reads these files from disk) |
+| `part_number` | no | str; matched by the library search `q` |
 | `ports` | yes | groups for §4.4.3 (non-v1 mode) |
 
 `library.instantiate(template, device_id=..., name=None, room="", count=None)` returns a device dict: `id, name (name or template.name), kind, discipline (only if ≠ kind default), manufacturer, model, brand, template: <id>, room, ports: expand_port_groups(template.ports)`, `dante: true` if template.dante, `dmx: {"footprint": dmx_footprint}` if set, `rack: {"height": ru}` is **not** set until racked (the UI reads `ru` from the template when racking).
+
+#### 4.5.1 Tiers and the Rackula catalog (`fathom/library/__init__.py`)
+
+Tiers, later wins on the same id: **catalog** < presets (`source: "preset"`) < built-in (`builtin`) < extension dirs (`extension`) < global custom (`custom`) < project (`project`). The catalog is read-only and opt-in:
+
+- `CATALOG_PATH = fathom/library/rackula/catalog.json` = `{"source", "license": "MIT (Rackula) / CC0 (NetBox devicetype-library data)", "commit", "generated", "count", "templates": [...]}`, generated by `tools/rackula_catalog.py --src <Rackula checkout>` from Rackula commit `9c7af6dd28209a776aebdb92080bcf2916cd29e6` (sorted by manufacturer then model, one template per line). It is loaded once and re-read when its mtime or size changes; a missing, unreadable or > 32 MB file gives an empty tier. Only entries that pass `validate_template` load, each stamped `source: "catalog"`.
+- Contents (generated 2026-10-28): 711 templates with integer `ru ≥ 1` (Rackula's `blank`, `shelf` and `cable-management` categories are skipped; they are rack items in Fathom). Kinds: switch 224, computer 222, network 138, power 97, patch_panel 9, video_switcher 8, other 6, amp 5, processor 1, encoder 1. Ids follow §4.5 and get `-rk` when they would collide with a built-in or preset id; `tags: ["rackula"]`; weights converted to kg. A model matching `patch panel` / `keystone` is `patch_panel` whatever its Rackula category.
+- Images: 260 WebP files (1.4 MB) under `fathom/static/rack-images/<vendor>/` (ac-infinity, apc, apple, cisco, dell, eaton, generic, lenovo, mikrotik, netgear, qnap, supermicro, synology, ubiquiti); 155 templates have a front image and 105 a rear image. Rackula's `_generic` folder ships as `generic/` because every `/static/` path segment must start with a letter or digit. Budget ≤ 4.5 MB. Origin and licence: `fathom/static/rack-images/README.md` and `THIRD_PARTY_NOTICES.md` (Rackula MIT; NetBox devicetype-library CC0; device images from vastoholic/draw-io; Dracula palette MIT for the category colours).
+- `load_library()`, the default `list_templates()` and `library.suggest` do **not** see the catalog. `get_template(id, doc)` falls back to it last, so a device with `template: <catalog id>` resolves its `ru`, weight, power and images. `catalog_templates(refresh=False)` → the list in file order.
+- `list_templates(q="", discipline="", kind="", doc=None, source=None, ids=None, rack=False)`: `source` `None` = every tier but the catalog; `"catalog"` = the catalog only; `"all"` = every tier (higher tiers shadow the same id); any other value (`builtin`, `extension`, `custom`, `project`, `preset`) keeps that source. `ids` (list or comma string) returns exactly those templates, in the given order (unsorted), unknown ids skipped, from every tier (only the catalog with `source="catalog"`). `rack` keeps `ru ≥ 1`. `q` also matches `part_number`.
+- `summarize(t)` adds `full_depth`, `airflow`, `rack_category`, `image_front`, `image_rear`, `part_number`, `weight_kg`, `power_w`, `width`, `depth_mm` when present.
+- Global custom ids are checked against `_builtin_ids()` (built-in, extension and preset ids) for the 409 override rule; the catalog is **not** in that set, so a custom template may shadow a catalog id without `override`.
 
 ### 4.6 Migration v1 → v2 (`schema.migrate`)
 
@@ -949,7 +1040,7 @@ For each v1 link in order (`seq` = position), with endpoints remapped to canonic
 
 #### 4.6.7 v1-expressibility (`schema.is_v1_expressible(doc) -> bool`)
 
-True iff: ≤ 1 venue and ≤ 1 room; no `racks`, `networks`, `floorplans`, `attachments`, `templates`, `locations`; ≤ 1 system; every device has no `inventory`, `rack`, `interfaces`, `dmx`, `template`, `routing`, `patch`, `tags`, `status` other than `installed`; every port has `origin ∈ {declared, link}` and no `label`/`note`; no cable has `tag`, `type`, `length_m`, `color`, `status`; no bundle has `tag`, `type`, `length_m`. `schema.to_v1(doc) -> dict` = `flow_project(doc).to_dict()` (with declared ports) for such docs.
+True iff: ≤ 1 venue and ≤ 1 room; no `racks`, `networks`, `floorplans`, `attachments`, `templates`, `locations`; ≤ 1 system; every device has no `inventory`, `rack`, `interfaces`, `dmx`, `template`, `routing`, `patch`, `tags`, `weight_kg`, `power_w`, `status` other than `installed`; every port has `origin ∈ {declared, link}` and no `label`/`note`; no cable has `tag`, `type`, `length_m`, `color`, `status`; no bundle has `tag`, `type`, `length_m`. `schema.to_v1(doc) -> dict` = `flow_project(doc).to_dict()` (with declared ports) for such docs.
 
 #### 4.6.8 Identity invariant (tested, FR-MIG-03)
 
@@ -968,13 +1059,17 @@ For every v1 dict `d` among RRC, `blank_project_dict()`, and T1's extra fixtures
 | `duplicate_port` | error | duplicate port id in a device |
 | `dangling_ref` | error | cable endpoint device, bundle, room.venue, system.room, extra_card.device, marker.device, floorplan.room, attachment.device, import.device that does not exist |
 | `dangling_port` | warning | cable endpoint port id not on the device (kept; drawn device-level) |
-| `bad_enum` | error | `dir`, `status`, `numbering`, `face`, `side`, `depth`, `units` outside its enum |
+| `bad_enum` | error | `dir`, `status`, `numbering`, `face`, `side`, `depth`, `units` outside its enum; rack `width_in` / `form_factor`; rack item `type` / `face` / `depth` |
+| `bad_type` (racks) | error | rack `start_u` not an int ≥ 0; rack `weight_kg` / `max_load_kg` / `power_limit_w` not a number ≥ 0; `row` not a string; `items` not a list or an item not an object; item `id` not a string; item `u` / `height` not an int ≥ 1, `slots` not an int 1–4, `weight_kg` not a number ≥ 0, `label` / `color` / `notes` not strings; device `weight_kg` / `power_w` not a number ≥ 0; device `rack.slot` not an int ≥ 0; `rack.shelf` / `color` / `image_front` / `image_rear` not strings. An **out-of-range** integer (`start_u: -1`, `slots: 5`, `u: 0`) also reports `bad_type`, not `bad_enum` |
+| `missing_field` (racks) / `duplicate_id` (racks) | error | rack item without `id`, `type` or `u` / an item id repeated within one rack (path `racks/<rack>/items/<index>/<field>`) |
 | `unknown_kind` / `unknown_medium` / `unknown_discipline` | warning | not in vocab (kept) |
 | `bad_direction` | warning | cable from an `in` port or to an `out` port |
 | `medium_mismatch` / `medium_incompatible` | warning | §4.4.4 |
 | `port_overuse` | warning | §4.4.4 |
 | `tag_duplicate` | warning | two cables (or bundles) with the same tag |
-| `rack_unknown` / `rack_out_of_range` / `rack_overlap` | warning | §3.9 (computed by `racks.validate_racks`, called from `validate_doc`) |
+| `rack_unknown` / `rack_out_of_range` / `rack_overlap` | warning | §3.9 (computed by `racks.validate_racks`, called from `validate_doc`); range and overlap cover items too: an item problem has ref `racks/<rack>` and path `racks/<rack>/items/<index>`, a device–item overlap is reported on the device |
+| `rack_shelf_unknown` / `rack_slot_out_of_range` / `rack_shelf_overlap` | warning | a device's `rack.shelf` is not a shelf item of that rack / its `slot` is outside `0…slots−1` / two devices on one cell (ref `devices/<id>`, path `devices/<id>/rack`) |
+| `rack_overweight` / `rack_over_power` | warning | totals `weight_kg > max_load_kg` / `power_w > power_limit_w` (§4.4.7; ref `racks/<rack>`, path `racks/<rack>/max_load_kg` / `…/power_limit_w`) |
 | `bad_ip` / `bad_subnet` / `bad_mac` / `ip_duplicate` / `ip_outside_subnet` / `vlan_mismatch` | warning | §3.11 (helpers in `network.py`, called from `validate_doc`) |
 | `dmx_range` / `dmx_overlap` / `dmx_overflow` | warning | §3.12 (helpers in `dmx.py`) |
 | `bad_date` | warning | inventory dates not `YYYY-MM-DD` |
@@ -1092,7 +1187,7 @@ Two entries for one physical box (typically an import-created device and a hand-
 
 ### 4.12 JSON Schema
 
-`schema.JSON_SCHEMA` is a JSON Schema 2020-12 document covering §4.3 (types, required, enums, id patterns; `additionalProperties: true` everywhere for forward compatibility), served at `GET /api/v2/schema.json` and referenced from OpenAPI. `validate_doc` does **not** need a general JSON-Schema engine: it implements the rules of §4.7 directly. T1 checks the fixture and campus-demo against both (`validate_doc`, plus a tiny in-test subset validator for `type/required/enum/pattern/items/properties`).
+`schema.JSON_SCHEMA` is a JSON Schema 2020-12 document covering §4.3 (types, required, enums, id patterns; `additionalProperties: true` everywhere for forward compatibility), served at `GET /api/v2/schema.json` and referenced from OpenAPI. `validate_doc` does **not** need a general JSON-Schema engine: it implements the rules of §4.7 directly. T1 checks the fixture and campus-demo against both (`validate_doc`, plus a tiny in-test subset validator for `type/required/enum/pattern/items/properties`). The schema carries the §4.3.7 rack fields, `RackItem` (required `id`, `type`, `u`), device `weight_kg` / `power_w` and the `rack` placement keys `shelf`, `slot`, `color`, `image_front`, `image_rear`.
 
 Annotated example: Appendix B is the normative full example. Minimal valid doc (what `schema.new_doc(org="Hillside")` returns):
 
@@ -1113,6 +1208,45 @@ Annotated example: Appendix B is the normative full example. Minimal valid doc (
 
 `fathom.project.blank_project_dict()` keeps returning the **v1** dict (frozen tests use it); `new_project(..., template="blank")` writes `schema.new_doc(org)` (v2).
 
+### 4.13 Rack templates and rack importers
+
+Rack features adapted from [Rackula](https://github.com/RackulaLives/Rackula) (MIT, commit `9c7af6dd`). Fathom re-implements the behaviour; it copies only the catalog data and images (§4.5.1).
+
+#### 4.13.1 Rack templates (`fathom/rack_templates.py`)
+
+Plain Python data (`TEMPLATES`), in display order:
+
+| id | Name | Units | Width | Form factor |
+| --- | --- | --- | --- | --- |
+| `church-audio-12u` | Church audio rack · 12U | 12 | 19″ | `cabinet` |
+| `road-case-8u` | Wireless road case · 8U | 8 | 19″ | `road_case` |
+| `video-stream-16u` | Video & streaming rack · 16U | 16 | 19″ | `cabinet` |
+| `network-closet-24u` | Network closet · 24U | 24 | 19″ | `four_post` |
+| `desk-10in-6u` | Desk rack · 10in 6U | 6 | 10″ | `open_frame` |
+
+Every device names a library template id from `fathom/presets.py` or `fathom/library/templates/*.json` (tested). `list_templates()` → `[{id, name, description, units, width_in, form_factor}]`; `get_rack_template(id)` (a deep copy, or None); `template_ids(id)` (the library template ids it uses); `apply_ops(doc, template_id, *, name="", room="", location="")` → `{ops: [put racks/<rack> (with its items), put devices/<id> …], rack_id}`, `KeyError` for an unknown template, `RuntimeError` when a library template is missing. The rack id is `rk-<slug of name>` deduped against the doc; devices come from `library.instantiate` with `status: "planned"`, ids deduped, at fixed U/face; item ids are `ri-1, ri-2, …`. **Shelf children** get `height: 1`, the shelf's `u` and `face`, `depth: "full"`, `shelf` + `slot`, and `side` `left` / `right` by slot on a 2-cell shelf (else `full`).
+
+#### 4.13.2 Rackula layouts (`fathom/parsers/rackula.py`)
+
+`preview(doc, payload)` → `{layout: {name, version, format}, racks: [{id, name, units, width_in, form_factor, row, order, devices, items, source}], devices: [{id, name, kind, manufacturer, model, template, rack, u, height, face, shelf, slot, new}], items: [{rack, id, type, u, height, face, depth, label, slots}], warnings: [str], ops}`; `ValueError` on unreadable input. Never writes.
+
+- **Payload** (one of): `text` — a Rackula YAML or JSON layout, the minimal share JSON, or a share link pasted as text; `zip_b64` — a `.Rackula.zip` (a `data:` URL prefix is accepted; `assets/` is ignored; with several layouts one is picked, with a warning); `url` — a count.racku.la share link (`?l=` lz-string URI-encoded, or the older zlib/gzip base64url) or the bare code. Optional `room` (default: the doc's default room, else the first room). Limits: 64 KB encoded share, 8 MB decompressed, 16 MB text, 48 MB zip.
+- **Positions** are in 1/6 U (`u = position // 6`); legacy whole-U layouts are converted with a warning.
+- **Racks**: id `rk-<slug>` deduped (a warning when a rack of that name exists); `units` = height (non-integer → 42 with a warning, clamped to 60); `numbering: top_down` when `desc_units`; `start_u` = `starting_unit`; `width_in` (other than 10/19/21/23 → 19 with a warning); `form_factor` via `FORM_FACTORS` (`2-post` → `two_post`, `4-post` → `four_post`, `4-post-cabinet` → `cabinet`, `wall-mount` → `wall_mount`, `open-frame` → `open_frame`; unknown → `cabinet` with a warning); `depth_mm`; `weight_kg` = `base_weight`; `notes`; `order` = the doc's highest `order` + 1 + position; `row` = the rack group name (or id).
+- **Accessories**: placed device types of category `blank`, `cable-management` or `shelf`, or any type with `slots`, become RackItems: a container → `shelf`; `blank` → `vent` when the name says vent, else `blank`; `cable-management` → `brush`, `lacing_bar` or `cable_manager` by name; otherwise `drawer` when the name says drawer, else `shelf`. Shelf `slots` = the cell count, capped at 4 with a warning; `colour_override` → `color`; weight and notes carried.
+- **Shelf children** (`container_id` + `slot_id`) → `rack.shelf` + `rack.slot`. An unknown cell takes the first free cell (warning); more children than cells → unracked (warning); two on one cell → warning.
+- **Devices**: `kind` = the matched template's kind; else, for `av-media` / `other`, model keywords (ATEM / switcher → `video_switcher`, amp, processor, encoder, …); patch panel / keystone → `patch_panel`; `network` with router / gateway / firewall / UDM in the name → `network`; else `KIND_BY_CATEGORY` (server, storage, kvm, chassis → `computer`; network → `switch`; firewall → `network`; patch-panel → `patch_panel`; power → `power`; av-media → `video`; else `other`). `template` = the device-type slug when `library.get_template(slug)` finds it (any tier, including the catalog). Placement `{id, u, height, face, depth, side}`: face `both` → `front` + full depth; `is_full_depth: false` → half depth; `slot_position` left/right → `side`; `colour_override` → `rack.color`; a device past the top is moved down with a warning. `weight_kg` (unit-converted), `power_w` = Σ `allocated_draw`, `note` = notes. Ports from the device type's interfaces and power ports (origin `user`, the NetBox port table of §4.13.3), else the template's.
+- **Reuse**: an unracked doc device with the same normalized name is merged (placement, plus manufacturer/model/template when missing) instead of created, and listed with `new: false`.
+- Collisions after import are warnings, not refusals. The ops are validated with `schema.apply_ops` + `validate_doc`; errors are reported as warnings.
+
+#### 4.13.3 NetBox device types (`fathom/parsers/netbox_devicetype.py`)
+
+`to_template(text, warnings=None)` reads one NetBox devicetype-library YAML (≤ 2 MB) into a template that passes `validate_template`; `ValueError` when it is not a device type. Mapping: `manufacturer`, `model` (required); `id` = `slug`, else `<manufacturer>-<model>` slugged, else `netbox-<model>`; `brand` when known; `part_number`; `ru` = ceil(`u_height`), ≤ 60; `full_depth` = `is_full_depth`; `airflow` when in `AIRFLOWS`; `weight_kg` (from `weight` + `weight_unit`); `power_w` = Σ power-port `allocated_draw`; `rack_category` by kind; `notes` from description/comments; `tags: ["netbox"]`. Components (interfaces, console-ports, power-ports, power-outlets, front-ports, rear-ports) become port groups: consecutive ports of one type with consecutive numbers collapse into a numbered group; straight-through rear ports are folded; `module-bays`, `device-bays` and `inventory-items` are noted as not imported. `kind`: power outlets → `power`; AV keywords (ATEM / switcher → `video_switcher`, Videohub → `video_router`, HyperDeck / recorder → `recorder`, amplifier, DSP / processor, encoder / streaming / Web Presenter, receiver → `wireless_rx`); front ports or unpowered rear ports → `patch_panel`; router / gateway / firewall / FortiGate → `network`; ≥ 8 interfaces → `switch`; else `other`. When the result fails validation, the extension keys (`full_depth`, `airflow`, `part_number`, `rack_category`) are dropped and it is retried.
+
+`from_template(t)` writes NetBox YAML for any template; a port whose medium, direction or connector NetBox cannot express carries `description: "fathom: medium=… dir=… connector=…"`, which `to_template` reads back, so template → YAML → template keeps the ports. `port_kind`, `port_groups`, `kind_from_keywords`, `AIRFLOWS` and `SIGNAL_MEDIUM` are shared with the Rackula importer.
+
+`fathom/parsers/mini_yaml.py` (stdlib YAML subset used by both): `loads(text)` reads one document of block mappings and sequences, plain / quoted scalars with escapes, core-schema scalars, `|` / `>` block scalars with indicators, flow collections, comments and `---` / `...`; anchors, aliases, tags, directives, complex keys and multiple documents raise `ValueError("line N: …")`. `dumps(obj)` writes plain block style; `resolve_scalar(text)`.
+
 ---
 
 ## 5. API contract v2
@@ -1122,7 +1256,7 @@ Annotated example: Appendix B is the normative full example. Minimal valid doc (
 - WSGI app `fathom.server:app`. All URLs below are relative to the **app root** (`SCRIPT_NAME`, empty by default); the SPA and viewer always use relative URLs so Fathom works behind a sub-path reverse proxy.
 - JSON in/out (`application/json; charset=utf-8`). Request JSON must be an object. Dates are UTC ISO 8601 with `Z`.
 - Every mutating request from `api.js`, the CLI or scripts SHOULD send `X-Fathom: 1`; multipart/urlencoded/text POSTs MUST (FR-SEC-03).
-- Errors: `{"error": "<human message>", "code": "<machine code>", "details": {…}}` with these status codes: 400 `bad_request`, 401 `auth_required` (with `WWW-Authenticate: Basic realm="Fathom"` only when the request had a Basic header or `Accept` is not HTML), 403 `forbidden` / `csrf`, 404 `not_found`, 405 `method_not_allowed`, 409 `conflict` / `v2_required` / `exists`, 413 `too_large`, 415 `unsupported_format` / `dwg_unsupported`, 422 `invalid` (with `details.problems`) / `pdf_unsupported`, 428 `precondition_required`, 429 `throttled`, 500 `internal` (no trace).
+- Errors: `{"error": "<human message>", "code": "<machine code>", "details": {…}}` with these status codes: 400 `bad_request`, 401 `auth_required` (with `WWW-Authenticate: Basic realm="Fathom"` only when the request had a Basic header or `Accept` is not HTML), 403 `forbidden` / `csrf`, 404 `not_found`, 405 `method_not_allowed`, 409 `conflict` / `v2_required` / `exists`, 413 `too_large`, 415 `unsupported_format` / `dwg_unsupported`, 422 `invalid` (with `details.problems`) / `pdf_unsupported`, 428 `precondition_required`, 429 `throttled`, 500 `internal` (no trace), 501 `not_available` (an optional engine module or function a route needs is not installed: the handler raises 501 "not available", never a 500; server helper `_engine(module, name)`), 507 `no_space`.
 - Unauthenticated browser navigation to an app page (`/`, `/static/app.html`) when auth is on → `302 /login?next=<path>`.
 - Caching: API responses `Cache-Control: no-store`; `/static/**`, `/sw.js`, `/manifest.webmanifest` → `Cache-Control: no-cache` + `ETag` (sha1 of path+size+mtime) with 304 support; viewer pages `no-cache`.
 - Every handler is registered with `@route(method, pattern, role=..., summary=..., tags=..., body=..., response=...)`; `openapi.py` builds the spec from that table (§5.14).
@@ -1174,11 +1308,13 @@ Username regex `^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$`. Session cookie payload `{"u
 | --- | --- | --- | --- |
 | GET | `/api/v2/meta` | viewer | `{"version", "vocab": vocab.as_dict(), "importers": [{"kind", "label", "mode", "accepts", "folder", "help"}], "plugins_errors": [str], "samples": [str], "capabilities": {"chrome": bool, "pdf_rasterizer": str\|null, "oda": bool, "llm": {"configured": bool, "model": str}, "secure_context_hint": bool}, "auth": {"enabled": bool, "public_view": bool}, "limits": {"max_upload_mb", "max_json_mb"}, "library_count": int}` |
 | GET | `/api/v2/schema.json` | public | `schema.JSON_SCHEMA` |
-| GET | `/api/v2/library?q=&discipline=&kind=&project=` | viewer | `{"templates": [{"id", "manufacturer", "model", "name", "kind", "discipline", "ru", "ports_summary": "32× Analog In · 16× Analog Out …", "source": "builtin\|extension\|custom\|project"}]}` (project-local included when `project` given) |
+| GET | `/api/v2/library?q=&discipline=&kind=&project=&source=&ids=&rack=` | viewer | `{"templates": [{"id", "manufacturer", "model", "name", "kind", "discipline", "ru", "ports_summary": "32× Analog In · 16× Analog Out …", "source": "builtin\|extension\|custom\|project\|preset\|catalog", "tags"}]}` (project-local included when `project` given). Summaries add `full_depth`, `airflow`, `rack_category`, `image_front`, `image_rear`, `part_number`, `weight_kg`, `power_w`, `width`, `depth_mm` when present. `source=catalog\|all\|<source>`, `ids=a,b` (that order, unknown skipped) and `rack=1\|true\|yes` (`ru ≥ 1`) per §4.5.1; without `source` the catalog is left out |
 | GET | `/api/v2/library/<id>?project=` | viewer | full template; 404 |
 | GET | `/api/v2/library/suggest?manufacturer=&model=&text=&kind=&project=&limit=` | viewer | `{"query": {…}, "suggestions": [{"template", "manufacturer", "model", "name", "kind", "source", "score", "level": "high\|medium\|low", "evidence", "kind_matches"}]}` ranked library models for identity strings (§4.11 `suggestions`); presets are never suggested; `limit` ≤ 20 |
 | POST | `/api/v2/library` | editor | body = template → 201 (written to `<data>/library/<id>.json`); 422 problems; 409 when id is built-in and `?override=1` absent |
 | DELETE | `/api/v2/library/<id>` | editor | custom only → 204; built-in → 409 |
+| POST | `/api/v2/library/import/netbox` | editor | body `{"text": <NetBox device-type YAML>, "override?": true}` (route body name `NetboxImport`; `?override=1` also works) → 201 with the saved global custom template (§4.13.3); 400 without `text`; 422 `invalid` when it does not parse, or with `details.problems` when it does not validate; 409 `exists` when the id is a built-in, extension or preset id and no override (a catalog id may be shadowed freely) |
+| GET | `/api/v2/library/<id>/netbox.yaml?project=` | viewer | `application/yaml; charset=utf-8` attachment `<id>.yaml` (`from_template`, any tier, project templates with `project`); 404 |
 | GET | `/api/v2/presets` | viewer | `{"groups": ["Power", "Network & IT", "Audio", "Video", "Lighting"], "presets": [{"id", "label", "group", "kind", "description", "aliases", "ru", "ports": [port groups], "dante"?, "dmx_footprint"?, "width"?, "routing"?, "tags"}]}` (FR-LIB-06; the same presets are served by the library routes with `source: "preset"`) |
 
 ### 5.6 Projects, documents, changes, history
@@ -1189,7 +1325,7 @@ Username regex `^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$`. Session cookie payload `{"u
 | POST | `/api/v2/projects` | editor | `{"name", "template": "blank"\|<sample>, "org"}` | 201 `{"name", "revision"}`; 400 bad name; 409 `exists` |
 | GET | `/api/v2/projects/<n>` | viewer | — | `{"name", "revision", "doc", "problems", "role", "migrated_from": 1\|null}` + `ETag` |
 | PUT | `/api/v2/projects/<n>` | editor | `{"doc", "summary?", "base_revision?"}` + `If-Match` | `{"revision", "rebased", "problems"}`; 409; 422; 428 |
-| POST | `/api/v2/projects/<n>/changes` | editor | `{"base_revision", "ops": [...], "summary?"}` (≤ 2000 ops) | `{"revision", "rebased", "problems", "touched"}`; 409; 422 |
+| POST | `/api/v2/projects/<n>/changes` | editor | `{"base_revision", "ops": [...], "summary?"}` (≤ 2000 ops, else 400) | `{"revision", "rebased", "problems", "touched"}`; 409; 422 |
 | DELETE | `/api/v2/projects/<n>?confirm=<n>` | admin | — | `{"ok": true}`; 400 without confirm |
 | GET | `/api/v2/projects/<n>/doc.json` | viewer | — | doc as download (`Content-Disposition: attachment; filename="<n>-project.json"`) |
 | GET | `/api/v2/projects/<n>/history?limit=50&before=<rev>` | viewer | — | `{"revisions": [index lines, newest first]}` |
@@ -1263,7 +1399,7 @@ Device `kind` cells are normalized to an Appendix A.1 key when they spell a kind
 | --- | --- | --- | --- | --- |
 | GET | `/api/v2/projects/<n>/schedules/<kind>` | viewer | `room`, `state`, `discipline`, `format=json\|csv\|html` | `kind ∈ patch, cables, ip, dmx, bom, inventory, racks, labels`. JSON: `{"kind", "columns": [{"key", "label"}], "rows": [{…}], "problems": [Problem], "totals?": {…}}`; CSV: `text/csv` attachment `<n>-<kind>.csv` (UTF-8, header row = column labels, `\r\n` line endings as `csv` module default); `labels` supports only `format=html` (printable sheet) |
 | GET | `/api/v2/projects/<n>/cables/tag-preview` | editor | `scope=missing\|all`, `pattern?` | `{"ops": [...], "count": int, "base_revision"}` |
-| GET | `/api/v2/projects/<n>/racks/<rack>.svg` | viewer | `face=front\|rear` | SVG |
+| GET | `/api/v2/projects/<n>/racks/<rack>.svg` | viewer | `face=front\|rear\|both`, `images=1`, `annotate=name\|model\|ip\|serial\|asset_tag\|code\|power\|weight\|status` | SVG (`racks.rack_svg`, images embedded as data URIs, `FILE_CSP`); 400 bad `face`, 400 `bad_enum` bad `annotate`; 404; 501 `not_available` for `face=both` on an engine without the keyword arguments (§5.8.3) |
 | GET | `/api/v2/projects/<n>/qr/<device>.svg` | viewer | `ecl=M`, `scale=4` | SVG; 409 `no_public_url` when no base URL can be determined |
 | GET | `/api/v2/projects/<n>/trace` | viewer | `from=<dev[:port]>` (also `dev:in-12`, `CL5 · CH 12`, `CL5 · Bass`, `Rio · Dante 6`, `rio:dante-primary#tx6`, §6.9.4), `to?`, `direction=up\|down` (when no `to`), `discipline?`, `max_depth=24`, `limit=50`, `dca=1?` (DCA membership as hops) | `{"paths": [{"hops": [{"device", "device_name", "port", "label", …channel-level keys §6.9.4}], "cables": [ids], "via": [str], "text", "incomplete?"}], "from": "<node ref>", "to": "<node ref>\|null"}`; the node refs it returns (`dev:@in-12`, `dev:@fx-1.A`, `dev:~REC 1`, `dev:port#rx17`) are accepted back in `from` / `to`; 400 unknown endpoint |
 | GET | `/api/v2/projects/<n>/search` | viewer | `q`, `limit=20`, `kinds=device,port,…` | `{"hits": [Hit]}` (§5.11) |
@@ -1279,9 +1415,21 @@ Device `kind` cells are normalized to an Appendix A.1 key when they spell a kind
 | `dmx` | `universe` Universe, `address` Address, `end` End, `footprint` Footprint, `device` Device, `room` Room, `mode` Mode, `channel` Console channel, `protocol` Protocol, `sacn_group` sACN group, `artnet` Art-Net (net:sub:uni), `source` Source |
 | `bom` | `category` Category (discipline), `manufacturer` Manufacturer, `model` Model, `template` Template, `qty` Qty, `unit_cost` Unit cost, `extended` Extended, `currency` Currency, `planned` Planned, `installed` Installed, `spare` Spare, `retired` Retired; cable lines use `category = "cable"`, `model = "<medium> · <type>"`, `qty` = count, plus `length_total_m` Total length (m) |
 | `inventory` | `id`, `name`, `room`, `location`, `kind`, `discipline`, `manufacturer`, `model`, `status`, `serial`, `asset_tag`, `firmware`, `purchase_date`, `warranty_until`, `vendor`, `cost`, `currency`, `po`, `rack`, `ru`, `ips` (semicolon-joined), `notes` |
-| `racks` | `rack` Rack, `room` Room, `units` Units, `face` Face, `u` U, `height` Height, `side` Side, `device` Device, `model` Model |
+| `racks` | `rack` Rack, `room` Room, `units` Units, `face` Face, `u` U, `height` Height, `side` Side, `device` Device, `model` Model — one row per racked device (shelf children included), then one per rack item (`device` = item label or type label, `model` = type label, `side` = `full`, JSON adds `item_id`, `item_type`, `device_id: ""`) |
 
 Device and port columns contain **names** (device `name`, port `label or name`) in CSV and both `*_id` and name keys in JSON rows (e.g. `device`, `device_id`, `port`, `port_id`).
+
+#### 5.8.3 Racks (Rackula features; server block `# ---- racks: Rackula features`)
+
+| Method | Path | Role | Request / query | Response / codes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/v2/projects/<n>/racks/<rack>/totals` | viewer | — | `racks.rack_totals` (§4.4.7); 404 unknown rack |
+| GET | `/api/v2/projects/<n>/qr/rack/<rack>.svg` | viewer (page `file`) | `ecl=M` (L/M/Q/H, else 400), `scale=4` (1–40), `share?` | QR SVG of `<public base>/p/<n>/rk/<rack>`, or with `share` of `<public base>/s/<token>/rk/<rack>`; 404 unknown rack; 409 `no_public_url`; 404 `share_missing` (unknown token); 409 `share_scope` (a `scope: "sop"` link cannot open racks) |
+| POST | `/api/v2/projects/<n>/racks/import` | editor | `{"text"\|"zip_b64"\|"url", "apply?", "base_revision?"}` (route body name `RackImport`) | without `apply`: the preview of §4.13.2, **no write**. With `apply: true`: the ops are committed like `POST …/changes` (`base_revision` required → 428; rebase/409 rules of §5.4; one revision, source `import`, summary "Import from Rackula") → `{"revision", "applied": <op count>, "warnings"}` + `ETag`; an empty op list still needs `base_revision` and returns the current revision with `applied: 0`. 400 when none of `text`/`zip_b64`/`url` is a non-empty string; 422 `invalid` when the layout cannot be read |
+| GET | `/api/v2/rack-templates` | viewer | — | `{"templates": [{id, name, description, units, width_in, form_factor}]}` (§4.13.1) |
+| POST | `/api/v2/projects/<n>/racks/from-template` | editor | `{"template", "name?", "room?", "location?", "base_revision"}` (route body name `RackFromTemplate`) | **201** `{"revision", "rack": <new rack id>}` + `ETag` (one revision, source `changes`, summary "Added rack from template <id>"); 400 without `template`; 404 unknown `room`; 404 unknown template; 428 without `base_revision`; 409 conflict |
+
+The rack page, totals, import, template and NetBox handlers load their engine through `_engine(module, name)`: a missing module or function answers 501 `not_available`; the rack SVG answers 501 for `face=both` when `rack_svg` lacks the keyword arguments and falls back to the plain call for one face. Server-built ops (import, from-template) go through `_rack_apply` → `project.apply_changes`, the same path as `/changes`, but without its 2000-op cap: an applied Rackula import is **not** limited to 2000 ops. The body `room` of `racks/import` is not passed to the parser (only `text`, `zip_b64`, `url` are), so the import always lands in the default room (`settings.default_room`, else the first room).
 
 ### 5.9 Builds
 
@@ -1306,6 +1454,8 @@ devices/<device>.html          device pages
 patch-table.csv  cable-schedule.csv  cable-labels.html  ip-schedule.csv  dmx-schedule.csv  bom.csv  inventory.csv
 console-channels.csv           (only when a console has channels, §4.3.17: Console, Group, Channel, Name, Fed by, Goes to, DCA / mute, Members, Source — `console.console_schedule`)
 racks/<rack>-front.svg  racks/<rack>-rear.svg
+racks/<rack>.svg               both faces with template images embedded (rack_svg face="both", images=True)
+racks/<rack>.html              rack page (render_rack.rack_page_html, link_style="build")
 floorplans/<floorplan>.svg
 qr/<device>.svg                (when a public URL is known)
 report.html                    (P1) print-oriented compilation ; report.pdf (optional, Chrome)
@@ -1314,6 +1464,8 @@ diagram.png                    (optional, Chrome)
 ```
 
 All internal links in a build are relative so the folder works from `file://` and from `/builds/…`.
+
+Racks in a build (`export._write_racks`, written before the device pages): `-front.svg` / `-rear.svg` always (a built-in fallback renderer when `fathom.racks` is missing or fails, with a build note); `racks/<rack>.svg` is skipped with a note when `rack_svg` does not take `face="both"` / `images` or fails; `racks/<rack>.html` is skipped with a note when `fathom.render_rack` is missing or the page fails. The rack page in a build links devices as `../devices/<id>.html` and the room as `../rooms/<room>/index.html`, embeds the elevation images, and inlines a QR only when `settings.public_url` or `FATHOM_PUBLIC_URL` is an absolute URL. Device pages link their Rack line to `racks/<rack>.html` only when that page was written (`render_device_page(..., rack_pages=…)`). `report.html` has a **Racks** section (`render_html.render_rack_report_section`, CSS prefix `rr-`; `export._fallback_rack_section` when unavailable): one row per rack — Rack, Room, Units, Used U, Free U, Devices, Files (Page, Elevation SVG, Front SVG, Rear SVG) — then a figure per rack (the both-faces SVG, else front and rear).
 
 ### 5.10 Assistant
 
@@ -1398,12 +1550,13 @@ For ports `id` = `<device>:<port>`; cables `id` = cable id; interfaces `id` = `<
 | GET | `/p/<n>/r/<room>` | viewer | room map HTML (`render_html` with nav) |
 | GET | `/p/<n>/r/<room>/diagram.svg` | viewer | room map SVG |
 | GET | `/p/<n>/r/<room>/patch` | viewer | read-only patch table HTML |
-| GET | `/p/<n>/d/<device>` | viewer | device page HTML |
+| GET | `/p/<n>/d/<device>` | viewer | device page HTML; its Rack line links to `../rk/<rack>` (carrying `?share=<token>` when the page was opened with a valid `?share=` or through `/s/<token>/`) |
+| GET | `/p/<n>/rk/<rack>` | viewer (page `viewer`) | rack page HTML (`render_rack.rack_page_html(doc, project, rack, base=<script root>/, share=…, link_style="viewer")`, CSS prefix `rv-`, print stylesheet): header (name, room, U, width, form factor; nav to the room map, All rooms, and *Open in editor* only without a share), facts (room, location, row, units with numbering and start, width, form factor, depth, empty weight), totals cards (space, weight vs max load, power vs limit, contents; over a limit styled `.rv-over`) and an overlap warning, the front and rear elevations as two `rack_svg` calls with image `href`s under the app root, the device list top-down (`U<top>–<bottom>`, shelf/cell, half depth), accessories, Markdown notes and a QR. 404 unknown rack. **Share links**: `share` = a valid `?share=` token, else the token of a `/s/<token>/rk/<rack>` path; with a share, links go through the `s/<token>/…` mirror and the QR is inlined (anonymous visitors cannot call the QR API) from `settings.public_url` / `FATHOM_PUBLIC_URL`, omitted when neither is set; without a share the QR is `<img src="api/v2/projects/<n>/qr/rack/<rack>.svg">`. Overlay (`auto`) devices are listed without links |
 | GET | `/p/<n>/sop` | viewer | published procedures index (`render_html.render_sop_index`): tree order, kind / review-due badges, ≥44 px rows |
 | GET | `/p/<n>/sop/<slug>` | viewer | chrome-free SOP page (`render_html.render_sop_page`, §5.15): published pages only (drafts/archived → 404), the pages-API payload rendered with relative refs (`../d/<id>`, `../r/<id>`, `../sop/<slug>`, `../files/<att>/<name>`), phone-first (17 px body, sticky "Applies to", collapsible contents, tap-to-toggle checklist kept in `sessionStorage` under the app's key, tap-to-zoom images, prev/next, Print button), no edit controls, inline CSS/JS only (`static/css/sop.css` is inlined). Through a `scope: "sop"` share link device/room refs render as plain chips. |
 | GET | `/p/<n>/files/<att>/<filename>` | viewer | attachment (same as `/api/v2/…/files/…`) so share links can mirror images embedded in pages |
 | GET | `/s/<token>/…` | public (valid token) | P1 mirror of `/p/<project>/…` read-only; honours the share `scope` (§5.6) |
-| GET | `/static/<path>` | public | files under `fathom/static/` with extensions `.html .js .css .json .svg .png .webmanifest .txt`; `.js` served as `text/javascript; charset=utf-8`; containment check; `dev/` harness files served only when `FATHOM_DEV=1` or the request comes from loopback |
+| GET | `/static/<path>` | public | files under `fathom/static/` with extensions `.html .js .css .json .svg .png .webmanifest .txt .webp` (`.webp` as `image/webp`; the server also registers it with `mimetypes`), every path segment matching `^[A-Za-z0-9][A-Za-z0-9._-]*$`; rack images live under `static/rack-images/<vendor>/` (§4.5.1); `.js` served as `text/javascript; charset=utf-8`; containment check; `dev/` harness files served only when `FATHOM_DEV=1` or the request comes from loopback |
 | GET | `/sw.js` | public | `fathom/static/sw.js`, `Service-Worker-Allowed: /` (scope = app root) |
 | GET | `/manifest.webmanifest` | public | `application/manifest+json` |
 | GET | `/favicon.ico`, `/apple-touch-icon.png` | public | icons from `fathom/static/icons/` |
@@ -1412,7 +1565,7 @@ For ports `id` = `<device>:<port>`; cables `id` = cable id; interfaces `id` = `<
 
 ### 5.14 OpenAPI
 
-`openapi.build_spec(routes, version) -> dict`: `openapi: "3.1.0"`, `info {title: "Fathom API", version}`, `servers: [{"url": "./"}]`, `components.securitySchemes {basic: http basic, session: apiKey cookie fathom_session}`, `components.schemas` (`Doc` → `$ref` to `/api/v2/schema.json`, `Op`, `Problem`, `Hit`, `Answer`, `Error`, `Floorplan`, `Attachment`, `Import`, `User`, `Page`, `PagePreview`, `PageMove`), and one `paths` entry per registered route (path params converted from regex groups to `{name}`), each with `summary`, `tags`, `x-fathom-role`, `requestBody` (when declared) and `responses` including the error codes of §5.1. `/api/docs` renders a table of method/path/role/summary grouped by tag.
+`openapi.build_spec(routes, version) -> dict`: `openapi: "3.1.0"`, `info {title: "Fathom API", version}`, `servers: [{"url": "./"}]`, `components.securitySchemes {basic: http basic, session: apiKey cookie fathom_session}`, `components.schemas` (`Doc` → `$ref` to `/api/v2/schema.json`, `Op`, `Problem`, `Hit`, `Answer`, `Error`, `Floorplan`, `Attachment`, `Import`, `User`, `Page`, `PagePreview`, `PageMove`), and one `paths` entry per registered route (path params converted from regex groups to `{name}`), each with `summary`, `tags`, `x-fathom-role`, `requestBody` (when declared) and `responses` including the error codes of §5.1. A route body name without a component schema (today `RackImport`, `RackFromTemplate`, `NetboxImport`) is emitted as `{"type": "object"}`. `/api/docs` renders a table of method/path/role/summary grouped by tag.
 
 ### 5.15 SOP pages (`fathom/markdown.py`, server section "SOP pages")
 
@@ -1764,8 +1917,28 @@ export function placeOps(doc, deviceId, rackId, u, opts) {} // opts {face, heigh
 export function unplaceOps(doc, deviceId) {}
 export function uToY(rack, u, height) {}          // top px of a block; respects numbering
 export function yToU(rack, y, height) {}          // snapped, clamped to 1..units-height+1
-export function ruLabel(rack, u) {}
+export function ruLabel(rack, u) {}               // honours start_u (§4.4.7)
+// Rackula features (§4.4.7; ids of items are 'item:<id>' wherever devices and items mix):
+export const ITEM_TYPES = [];                     // §4.3.7 table
+export function rackItems(doc, rackId) {}         // normalized items; unlabeled items get the type label
+export function itemBlocks(doc, rackId, face) {}  // [{id:'item:'+id, item, type, u, height, face, depth, label, color, slots, x:0, y, w, h, behind}]
+export function shelfCells(doc, rackId, itemId) {}       // [{slot, device|null}]
+export function shelfChildBlocks(doc, rackId, face) {}   // [{device, item, slot, x, y, w, h, behind}]
+export function itemFits(doc, rackId, itemId, u, spec) {} // {ok, reason, conflicts}
+export function rackTotals(doc, rackId, info) {}  // §4.4.7, null for an unknown rack
+export function racksByRow(racks) {}              // [{row, racks}], racks by (order ?? 1e9, name), a shared row grouped at its first rack
+export function rackWidthPx(rack) {}              // 168 / 320 / 354 / 387
+export function sideX(side, rack) {} ; export function sideW(side, rack) {}  // rack optional (width_in)
+export function addItemOps(doc, rackId, spec) {}  // {ops, id}; spec {type, u?, height?, face?, depth?, label?, color?, slots?, force?}
+export function moveItemOps(doc, rackId, itemId, u, opts) {}   // opts {face?, force?}
+export function updateItemOps(doc, rackId, itemId, patch) {}
+export function delItemOps(doc, rackId, itemId) {}             // unracks shelf children
+export function placeOnShelfOps(doc, deviceId, rackId, itemId, slot) {}
+export function duplicateDeviceOps(doc, deviceId, opts) {}     // {ops, id}; opts {rackId?}
+export function duplicateRackOps(doc, rackId, opts) {}         // {ops, id}; opts {devices?}
 ```
+
+`fits`, `firstFit`, `occupancy` and `collisions` count items; `faceBlocks` leaves out shelf children; `placement()` adds `shelf`, `slot`, `color`. Existing exports keep their signatures and behaviour for docs without the new fields.
 
 DOM modules: `floorplan.js` `mount(el, ctx)`: toolbar `div.fp-toolbar[role=toolbar]` with `#fp-select`, `#fp-fit`, `#fp-zoom-out`, `#fp-zoom-in`, `#fp-upload` (file input, label *Upload plan…*), `#fp-dev-plan` (sample plans), `#fp-calibrate` (dialog `#fp-cal-distance`, `#fp-cal-unit`), `#fp-measure`, `#fp-layers`; tools that do not fit move into ⋯ (`button.fp-menu-more` → `#fp-menu`); the device list is an explorer (§6.13.2, key `plan-unplaced`, title *Devices*, *Unplaced* and *Placed* groups) whose `ul.ex-list` is `#fp-unplaced`; canvas `div.fp-viewport[role=application]`, markers `div.fp-marker[data-device]`; delete dialog `#fp-del-*`. `rack.js`: toolbar `div.rk-toolbar` with `#rk-select`, `#rk-add`, `#rk-edit`, `#rk-face`, `#rk-print`; rack form `#rk-f-*`; unracked devices in an explorer (key `racks-unracked`, discipline chips) whose list is `#rk-unracked`; blocks `div.rk-block[data-device]`; with a route id it mounts the rack page (`page-rack.js`, explorer list `#rp-racks`, classes `rp-*`) and embeds the elevation there. `schedules.js` tabs `a[role=tab]#sch-tab-<kind>[data-kind]` for `cables|ip|dmx|bom|patch|racks|labels` (`schedules/<kind>` in the URL), panel `#sch-panel`; `#sch-state` (select), `#sch-assign-tags` (`#sch-tag-scope`, `#sch-tag-pattern`), `#sch-bulk-add` (§6.13.9 wizard), `#sch-print`, `#sch-csv-all` (server CSV of every row), `#sch-csv`; each kind is a DataTable (key `schedules.<kind>`, `ids {root: 'sch-dt', search: 'sch-filter', csv: 'sch-csv', filters: {disc: 'sch-disc', room: 'sch-room'}}`; `#sch-disc` filters a client-side Discipline column; in the app `#sch-room` is the Room column filter, in the harness a room select); BOM drill-downs open `openTableDialog` (keys `schedules.bom.cables`, `schedules.bom.devices`); the labels tab keeps its print sheet (`.sch-labels`, §6.13.4 exemption). Inline edits commit ops for doc-backed columns (cable tag/type/length/color/note/status; interface ip/vlan/mac/hostname/switch/switch_port; dmx universe/address/footprint/mode/channel). `inventory.js`: a DataTable (key `inventory`, `ids {table: 'inv-table', columns: 'inv-columns', csv: 'inv-csv', search: 'inv-filter', selectAll: 'inv-select-all', filters: {room: 'inv-room', status: 'inv-status', location: 'inv-location', kind: 'inv-kind', system: 'inv-system'}}`); `#inv-scope` (select: current room, all rooms, shared inventory), quick filters `#inv-q-warranty`, `#inv-q-serial` (URL key `quick`), `#inv-group` (group by location), `#inv-bulk-add` (wizard), `#inv-dups` (duplicates, with the API), `#inv-csv-all` (import-format export, in ⋯); bulk bar (`.dt-bulk`): `#inv-bulk-status`, `#inv-bulk-room`, `#inv-bulk-location`, `#inv-mark-installed`, `#inv-merge`; edit form `#inv-form-*`. Scope and grouping persist in the table state's `extra`. Schedules and inventory read rows from the server when `ctx.api` exists, else compute minimal rows locally from the doc (harness mode).
 
@@ -1839,7 +2012,7 @@ Node = port ref `dev:port`; plus a virtual node `dev:*` per device used by devic
 
 ### 6.10 Service worker & manifest (W1 files, W5 registration)
 
-`sw.js` (W1, SHELL): `const VERSION = '0.4.0'`, cache names `fathom-shell-<VERSION>`, `fathom-pages-<VERSION>`. `VERSION` is bumped whenever the precache list or a precached file's contract changes, so `activate` drops the old caches; it is no longer equal to `fathom.__version__` (`0.3.0`). The server still replaces a `__FATHOM_VERSION__` placeholder when serving `/sw.js`, but the file holds a literal version. Precache list (exact; relative to the SW scope; `const PRECACHE` in `sw.js`):
+`sw.js` (W1, SHELL): `const VERSION = '0.5.0'`, cache names `fathom-shell-<VERSION>`, `fathom-pages-<VERSION>`, plus `IMAGES_CACHE = 'fathom-images-1'` for rack images. `VERSION` is bumped whenever the precache list or a precached file's contract changes, so `activate` drops the old caches; it is no longer equal to `fathom.__version__` (`0.3.0`). The server still replaces a `__FATHOM_VERSION__` placeholder when serving `/sw.js`, but the file holds a literal version. Precache list (exact; relative to the SW scope; `const PRECACHE` in `sw.js`):
 
 ```text
 ./  static/app.html  static/login.html  static/css/app.css  static/css/patchview.css  static/css/plan.css
@@ -1860,11 +2033,16 @@ static/css/search.css  static/css/home.css  static/css/feedback.css  static/css/
 static/css/page-device.css  static/css/page-room.css  static/css/rack.css  static/css/inventory.css
 static/css/schedules.css  static/css/admin.css  static/css/discovery.css  static/css/inspector.css
 static/css/patchtable.css
+static/js/rack-elevation.js  static/js/rack-display.js  static/js/rack-display-core.js
+static/js/rack-palette.js  static/js/rack-palette-core.js  static/js/rack-export.js  static/js/rack-export-core.js
+static/css/rack-toolbar.css  static/css/rack-palette.css  static/css/rack-export.css  static/css/page-rack.css
 ```
+
+`rack-toolbar.css` and `page-rack.css` are listed ahead of the wave-2 units that create them; install tolerates the 404s.
 
 Every file under `static/js/` (except `package.json`) and `static/css/` is precached, so every view works offline once the shell has loaded online.
 
-Precache uses `cache.addAll` per file with individual try/catch (a missing file must not break install). Strategies: navigations under `p/` and `s/` → network-first (3 s timeout) then cache; `GET api/v2/projects/<n>` and `api/v2/meta` → network-first then cache (response header `X-Fathom-Offline: 1` added when served from cache so the shell switches to read-only offline mode); `static/**` → stale-while-revalidate; everything else → network only. `activate` deletes caches of other versions. Message `{type: "fathom:prefetch", urls}` → fetch + cache each (pages cache), reply via `event.source.postMessage({type: "fathom:prefetched", ok: n, failed: [urls]})`. `{type: "fathom:skip-waiting"}` → `skipWaiting()`.
+Precache uses `cache.addAll` per file with individual try/catch (a missing file must not break install). Strategies: navigations under `p/` and `s/` → network-first (3 s timeout) then cache; `GET api/v2/projects/<n>` and `api/v2/meta` → network-first then cache (response header `X-Fathom-Offline: 1` added when served from cache so the shell switches to read-only offline mode); `static/rack-images/**` → stale-while-revalidate in `IMAGES_CACHE` (never precached; that cache name does not follow `VERSION`, so images survive version bumps); other `static/**` → stale-while-revalidate; everything else → network only. `activate` deletes `fathom-*` caches other than the current shell, pages and images caches. Message `{type: "fathom:prefetch", urls}` → fetch + cache each (pages cache), reply via `event.source.postMessage({type: "fathom:prefetched", ok: n, failed: [urls]})`. `{type: "fathom:skip-waiting"}` → `skipWaiting()`.
 
 Registration (W5, `app.js` and viewer pages): only if `'serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:'`; `navigator.serviceWorker.register(<app root> + 'sw.js', {scope: <app root>})`; viewer pages get `<app root>` from `render_html(..., base_url=...)`. When not a secure context, Settings shows "Offline mode needs HTTPS (or localhost)".
 
@@ -1899,6 +2077,8 @@ Each frontend unit ships a harness page under `fathom/static/dev/` that works wh
 | `dev/search.html` + `search-harness.js` | SEARCH | `openSearch` against the server (`?project=`, default `campus-demo`) or the fixture offline (`?fixture=1`); `?role=viewer`, `?recent=`, `?q=&cat=`; navigations in `window.__sr` |
 | `dev/feedback.html` + `feedback-harness.js` | FEEDBACK | every `feedback.js` state side by side, notices and bell; `window.__fb` |
 | `dev/wizard.html` + `wizard-harness.js` | WIZARD | `openWizard` and `bulkAdd` with a `makeCtx` ctx; `?open=devices\|cables\|generic`, `&sample=1`, `&step=…`, `?readonly=1`; commits in `window.__wz` |
+| `dev/rack-palette.html` | PAL | `mountRackPalette` over a stub library (`bootHarness` in `rack-palette.js`); `?api=0` offline presets only, `?fail=1` library failure, `?many=N` extra entries |
+| `dev/rack-export.html` + `rack-export-harness.js` | XPT | `openRackExport` on the page's inline doc with a stub ctx (stub library API, attachments resolved to a static image); `?api=0` drops `ctx.api`, `?open=1` opens on load; `window.__rx = {ctx, open(opts), results, last, calls}` |
 
 `fathom/static/dev/fixture-gen.js` (W3): `export function makeFixture({devices = 150, cables = 600, seed = 1} = {})` → a valid v2 doc (single room `main`, mixed disciplines, 4–24 ports per device, cables only between compatible ports, deterministic for a seed). T2 tests validate it with `validateLocal` (0 errors).
 
@@ -2074,6 +2254,18 @@ export function on(target, type, fn, opts) {} // addEventListener -> idempotent 
 
 New modules import `h`/`esc`/`on` from `dom.js` (`app.js` re-exports `h` and `esc` for older callers). Tests: `tests/js/dom.test.mjs`.
 
+#### 6.13.11 Rack modules — display, palette, export, elevation (Rackula features)
+
+Wave 1 ships these modules and their harnesses; the racks landing (`rack.js`), the elevation display options and the rack page (`page-rack.js`) are wired to them in wave 2. Modules that consume an export another module may lack import it as a namespace and feature-detect it.
+
+- **`js/rack-display-core.js`** (pure): `DISPLAY_MODES = ['label', 'image', 'both']`; `ANNOTATION_FIELDS` = `[{key: '', label: 'None'}, name, model, ip ("IP address"), serial, asset_tag, code, power, weight, status]`; `CATEGORY_COLORS` (§4.4.7); `STORAGE = {display, annotate, face}` (§6.14); `FALLBACK_COLOR = '#9aa3b5'`; `isHexColor(s)`, `templateInfo(doc, device, info)` (`info[template]`, else the `doc.templates` entry — the reverse of `rack-core.rackTotals`, which looks in `doc.templates` first), `blockColor(device, vocab, info)`, `deviceImage(device, info, face, {base, attachmentUrl})`, `formatNumber(n)`, `annotationValue(doc, device, field, info)` (§4.4.7), `airflowGlyph(airflow, face)` → `{glyph, title}` or null (mirrored on the rear), `luminance(hex)`, `contrastRatio(l1, l2)`, `textColorOn(hex)` → `#000` or `#fff`.
+- **`js/rack-display.js`**: `loadTemplateInfo(ctx, ids)` → Promise of `{id: summary}` — project templates come from `ctx.store.doc.templates`; the rest from `ctx.api.library({ids, project})` in chunks of `CHUNK = 100` ids, cached per project and id; never rejects (`{}` without `ctx.api`). `peekTemplateInfo(ctx, id)` (a project template, the cached summary or null once settled, `undefined` while unknown or in flight), `clearTemplateInfoCache()`.
+- **`js/rack-palette-core.js`** (pure) + **`js/rack-palette.js`** + `css/rack-palette.css` (prefix `rpal-`): a searchable library palette of rack-mountable templates. `mountRackPalette(el, ctx, {onPick(entry, template), onDragStart(entry, event), presets, storage})` → `{root, destroy, focus, refresh}`. Data from `ctx.api.library({source: 'all', rack: 1, project})` (presets passed in `opts` without an API); `onPick` gets the full template (`ctx.api.template`). Search, category chips, Favourites and Recent sections, results in pages of 200 with "show more"; rows show a lazy thumbnail (`static/rack-images/<image_front>`) or a category swatch, name, maker/model, `nU`, a star and Add; Enter adds, `f` stars, arrows move; a pointer drag calls `onDragStart` (long-press 350 ms on touch); 44 px rows under coarse pointers; a picker list (D9 exemption), not a DataTable. Core: `STORAGE_KEY`, `PREFS_VERSION = 1`, `MAX_RECENTS = 12`, `MAX_FAVS = 200`, `CATEGORY_ORDER`, `CATEGORY_LABELS`, `SOURCE_ORDER = [project, custom, builtin, extension, preset, catalog]`, `categoryOf`, `categoryLabel`, `categoryColor`, `kindLabel`, `presetAsTemplate`, `dedupeCatalog` (catalog twins with the same manufacturer + model collapse into one entry with `aliases`), `normalizeEntries(libraryResponse, presets)`, `compareEntries`, `entryFields`, `scoreEntry` / `searchEntries(entries, q, opts)` (exact 100 > prefix 80 > token 60 > substring 40 > edit distance 1 on tokens ≥ 4 chars 25, over name, manufacturer, model, part number, kind label and category; ties by source then name), `groupByCategory`, `readPrefs` / `isFav` / `toggleFav` / `pushRecent`, `entriesFor`, `nextRow`, and `deviceFromTemplate(doc, template, {room, name, vocab})` → `{ops: [put device], id}` mirroring `library.instantiate` (slug id deduped, ports expanded like `presets-core.presetPorts`, `template` kept; it never sets `rack`).
+- **`js/rack-export-core.js`** (pure) + **`js/rack-export.js`** + `css/rack-export.css` (prefix `rx-`): `openRackExport(ctx, {racks, face})` opens a dialog (racks, face front / rear / both, format SVG / PNG 2× / Print-PDF, legend, annotation field, live preview; full screen at sm) and resolves with `{format, filename, racks, face}` of the export made, or null when cancelled. Device images (`imageRequests`) are fetched as data URLs so the PNG canvas is not tainted. Core: `STORAGE_KEY`, `FACE_CHOICES`, `FORMATS`, `DEFAULT_PREFS = {v: 1, face: 'front', format: 'svg', legend: true, annotate: ''}`, `readPrefs`, `exportFilename(project, rackIds, face, ext)` → `<project>-<rack|racks>-<face>.<ext>`, `pngScale(width, height, want)` (kept under Safari's canvas limits), `templateIds`, `imageRequests`, `legendEntries`, `buildRackSvg(doc, rackIds, {face, annotate, legend, images, info, vocab, title})` → a standalone, escaped SVG string (racks left to right by `racksByRow`, titles, U labels, blocks, items, shelf children, legend of categories/disciplines, footer with project and date).
+- **`js/rack-elevation.js`**: `createElevation(el, ctx, opts)` — the elevation moved out of `rack.js` (no behaviour change): viewport, faces, blocks, ghost, drag within/between racks, drop targets, keyboard, selection, fitWidth, print. `opts` = `{rack?, racks?(), face?, root?, list?: {el, accept(e)}, empty?(), onChange?(state, api)}`; API `{render, destroy, setFace, getState, setState, setOptions(o), focus, route, startDrag(e, deviceId, fromList, grabEl), print(done), addToRack(deviceId, rackId?), addDevice, templateInfo}`; also exports `roomRacks`, `deviceById`, `disciplineOf`, `discColor`, `modelLine` (imported by `rack.js`, which re-exports `createElevation`).
+
+Harnesses: `dev/rack-palette.html` (`?api=0` offline presets, `?fail=1` API failure, `?many=N`), `dev/rack-export.html` + `rack-export-harness.js`. Tests: `tests/js/rack-core-items.test.mjs`, `rack-contract.test.mjs`, `rack-display-core.test.mjs`, `rack-palette-core.test.mjs`, `rack-export-core.test.mjs`; `tests/test_ui_rack_palette.py`, `test_ui_rack_export.py`, `test_ui_rk_regress.py`.
+
 ### 6.14 Client storage keys (D8)
 
 All UI state keys start with `fathom.ui.`; every read tolerates missing, full or throwing storage and corrupt JSON.
@@ -2088,6 +2280,11 @@ All UI state keys start with `fathom.ui.`; every read tolerates missing, full or
 | `fathom.ui.notices.<project>` | session | tab, project | bell notices (max 50) |
 | `fathom.ui.seen.<project>` | local | project | ISO time of the newest open problem report already announced |
 | `fathom.ui.form.<key>` | local | form | remembered wizard input, e.g. `bulk-devices`, `bulk-cables` column mappings |
+| `fathom.ui.rack.display` | local | browser | rack block display mode `label` \| `image` \| `both` (`rack-display-core.STORAGE.display`; written by the wave-2 rack views) |
+| `fathom.ui.rack.annotate` | local | browser | rack annotation field, `''` = none (`STORAGE.annotate`; wave 2) |
+| `fathom.ui.rack.face` | local | browser | rack face `front` \| `rear` \| `both` (`STORAGE.face`; wave 2) |
+| `fathom.ui.rack.palette` | local | browser | `{v: 1, favs: [ids ≤ 200], recents: [ids ≤ 12]}` library palette favourites and recents |
+| `fathom.ui.rack.export` | local | browser | `{v: 1, face, format, legend, annotate}` last rack export choices |
 
 Deliberately **not** persisted: DataTable search text (`q`) and page (`pg`) — URL only; the selection, drawer and section (`sel`, `sec`, `drawer`) — URL only; search palette text and category. Older keys outside the prefix stay as they were: `fathom.pending.<project>` (local, unsent ops, §6.3), `fathom.sop.tasks.*` and `fathom.sop.done.*` (session, SOP task ticks), `fathom.sop.draft.*` (local, SOP editor drafts), `fathom.addgear.tab` (local, add-gear dialog tab), `fathom:login-bounces` (session, login redirect loop guard).
 
@@ -2314,8 +2511,9 @@ def promote_ops(doc: Doc, overlay: Dict[str, Any], device_ids: List[str]) -> Lis
 
 # fathom/library/__init__.py
 def load_library(refresh: bool = False) -> Dict[str, Dict[str, Any]]: ...      # builtin + extension + custom
-def list_templates(q: str = "", discipline: str = "", kind: str = "", doc: Optional[Doc] = None) -> List[Dict[str, Any]]: ...
-def get_template(template_id: str, doc: Optional[Doc] = None) -> Optional[Dict[str, Any]]: ...
+def list_templates(q: str = "", discipline: str = "", kind: str = "", doc: Optional[Doc] = None, source: Optional[str] = None, ids: Any = None, rack: Any = False) -> List[Dict[str, Any]]: ...  # §4.5.1
+def get_template(template_id: str, doc: Optional[Doc] = None) -> Optional[Dict[str, Any]]: ...   # falls back to the catalog
+def catalog_templates(refresh: bool = False) -> List[Dict[str, Any]]: ...                       # Rackula catalog tier, file order
 def validate_template(t: Dict[str, Any]) -> List[str]: ...
 def instantiate(t: Dict[str, Any], *, device_id: str, name: Optional[str] = None, room: str = "", count: Optional[int] = None) -> Dict[str, Any]: ...
 def apply_template_ops(doc: Doc, device_id: str, t: Dict[str, Any]) -> List[Op]: ...
@@ -2367,6 +2565,23 @@ def svg(text: str, ecl: str = "M", **kw: Any) -> str: ...
 def write_build(project, project_dir: Path, run_dir: Path, pdf: bool = False, png: bool = False, *, doc: Optional[Doc] = None, state: str = "all", rooms: Optional[List[str]] = None, base_url: str = "") -> Dict[str, str]: ...
 def build_doc(name_or_dir: str, *, state: str = "all", rooms: Optional[List[str]] = None, pdf: bool = False, png: bool = False, base_url: str = "", run_dir: Optional[Path] = None) -> Path: ...
 def device_url(base_url: str, project: str, device_id: str) -> str: ...
+
+# fathom/rack_templates.py (§4.13.1)
+def list_templates() -> List[Dict[str, Any]]: ...                     # [{id, name, description, units, width_in, form_factor}]
+def get_rack_template(template_id: str) -> Optional[Dict[str, Any]]: ...
+def template_ids(template_id: str) -> List[str]: ...             # library template ids a rack template uses
+def apply_ops(doc: Doc, template_id: str, *, name: str = "", room: str = "", location: str = "") -> Dict[str, Any]: ...   # {ops, rack_id}; KeyError
+
+# fathom/parsers/rackula.py (§4.13.2), parsers/netbox_devicetype.py (§4.13.3), parsers/mini_yaml.py
+def preview(doc: Doc, payload: Dict[str, Any]) -> Dict[str, Any]: ...        # {layout, racks, devices, items, warnings, ops}; ValueError
+def read_layout(payload: Dict[str, Any], warnings: Optional[List[str]] = None) -> Dict[str, Any]: ...
+def decode_share(value: str) -> Dict[str, Any]: ...
+def to_template(text: str, warnings: Optional[List[str]] = None) -> Dict[str, Any]: ...   # ValueError
+def from_template(t: Dict[str, Any]) -> str: ...
+def loads(text: str) -> Any: ...  ; def dumps(obj: Any) -> str: ...  ; def resolve_scalar(text: str) -> Any: ...
+
+# tools/rackula_catalog.py (not shipped in the wheel): python tools/rackula_catalog.py --src <Rackula checkout> writes
+# fathom/library/rackula/catalog.json and fathom/static/rack-images/<vendor>/*.webp (deterministic for a pinned commit)
 ```
 
 #### 7.4.3 W6
@@ -2393,10 +2608,22 @@ def build_index(doc: Doc, overlay: Optional[Dict[str, Any]] = None) -> SearchInd
 def search(index_or_doc: Union[SearchIndex, Doc], q: str, limit: int = 20, kinds: Optional[List[str]] = None) -> List[Dict[str, Any]]: ...  # Hit[] §5.11
 
 # fathom/racks.py
-def rack_occupancy(doc: Doc, rack_id: str) -> Dict[str, Any]: ...    # {"rack","slots":[…],"collisions":[…]}
+def rack_occupancy(doc: Doc, rack_id: str) -> Dict[str, Any]: ...    # {"rack","devices","items","shelved","slots":[…],"collisions":[…]}
 def validate_racks(doc: Doc) -> List[Problem]: ...
-def rack_svg(doc: Doc, rack_id: str, face: str = "front", scale: float = 1.0) -> str: ...
+def rack_svg(doc: Doc, rack_id: str, face: str = "front", scale: float = 1.0, *, images: bool = False,
+             annotate: Optional[str] = None, base_url: str = "") -> str: ...   # face "both"; KeyError for an unknown rack
 def rack_schedule(doc: Doc, room: str = "*") -> Dict[str, Any]: ...
+# Rackula features (§4.4.7)
+ITEM_TYPES: List[Dict[str, Any]]; CATEGORY_COLORS: Dict[str, str]; ANNOTATION_LABELS: Dict[str, str]; RACK_IMAGES_DIR: Path; IMAGE_BUDGET = 3 * 1024 * 1024
+def ru_label(rack: Optional[Dict[str, Any]], u: int) -> str: ...
+def rack_width_px(rack: Optional[Dict[str, Any]]) -> int: ...
+def placement(doc: Doc, dev: Dict[str, Any]) -> Optional[Dict[str, Any]]: ...   # {device, rack, u, height, face, side, depth, shelf, slot, color}
+def rack_devices(doc: Doc, rack_id: str) -> List[Dict[str, Any]]: ...          # shelf children included (shelf set)
+def rack_items(doc: Doc, rack_id: str) -> List[Dict[str, Any]]: ...            # [{id: 'item:<id>', item, index, type, type_label, u, height, face, depth, side, label, color, slots, weight_kg, notes}]
+def collisions(doc: Doc, rack_id: str) -> List[Dict[str, Any]]: ...            # [{a, b, u, face}]
+def shelf_contents(doc: Doc, rack_id: str, item_id: str) -> List[Dict[str, Any]]: ...   # [{slot, device}]
+def rack_totals(doc: Doc, rack_id: str) -> Dict[str, Any]: ...                 # KeyError for an unknown rack
+def annotation_value(doc: Doc, device: Dict[str, Any], field: str) -> str: ...
 
 # fathom/dmx.py
 def dmx_schedule(doc: Doc, overlay: Optional[Dict[str, Any]] = None, room: str = "*") -> Dict[str, Any]: ...
@@ -2426,6 +2653,11 @@ def render_room_index(doc: Doc, *, project: str, base_url: str = "", sw: bool = 
 def render_device_page(doc: Doc, device_id: str, *, project: str, overlay=None, base_url: str = "", qr_svg: str = "", sw: bool = False) -> str: ...
 def render_patch_page(doc: Doc, room_id: str, blocks: List[Dict[str, Any]], *, project: str, base_url: str = "", sw: bool = False) -> str: ...
 def render_report(doc: Doc, *, project: str, sections: Dict[str, str]) -> str: ...   # P1, print-oriented report.html
+# device pages also take link_style ("viewer" | "build"), share="" (carried on the rack link) and rack_pages=None (§5.9)
+def rack_summary(doc: Doc, rack_id: str) -> Dict[str, Any]: ...
+def render_rack_report_section(doc: Doc, files: Dict[str, Dict[str, str]]) -> str: ...   # report.html Racks section (rr-)
+# fathom/render_rack.py
+def rack_page_html(doc: Doc, project: str, rack_id: str, *, base: str, share: str = "", link_style: str = "viewer") -> str: ...   # §5.13; KeyError
 # fathom/render_svg.py, fathom/layout.py: signatures unchanged
 ```
 
@@ -2446,7 +2678,14 @@ def render_report(doc: Doc, *, project: str, sections: Dict[str, str]) -> str: .
 | schedules `ip` | `network.ip_schedule(doc, overlay)` |
 | schedules `dmx` | `dmx.dmx_schedule(doc, overlay)` |
 | schedules `bom`, `inventory` | `bom.bom`, `bom.inventory_schedule` |
-| schedules `racks`, `racks/<rack>.svg` | `racks.rack_schedule`, `racks.rack_svg` |
+| schedules `racks`, `racks/<rack>.svg` | `racks.rack_schedule`, `racks.rack_svg(doc, rack, face=…, images=…, annotate=…, base_url="")` |
+| `racks/<rack>/totals` | `racks.rack_totals` |
+| `racks/import` | `parsers.rackula.preview(doc, {text\|zip_b64\|url})`, then `project.apply_changes` (via `_rack_apply`) |
+| `rack-templates`, `racks/from-template` | `rack_templates.list_templates()`, `rack_templates.apply_ops(doc, template, name=, room=, location=)` + `project.apply_changes` |
+| `qr/rack/<rack>.svg` | `qr.svg(<base>/p/<n>/rk/<rack>` or `<base>/s/<token>/rk/<rack>)` |
+| `/p/<n>/rk/<rack>` | `render_rack.rack_page_html(doc, project, rack, base=<script root>/, share=…, link_style="viewer")` |
+| `library?source=&ids=&rack=` | `library.list_templates(q, discipline, kind, doc, source=, ids=, rack=)` |
+| `library/import/netbox`, `library/<id>/netbox.yaml` | `parsers.netbox_devicetype.to_template` + `library.validate_template` + `library.save_custom_template`; `library.get_template` + `parsers.netbox_devicetype.from_template` |
 | `cables/tag-preview` | `cables.assign_tags_ops` |
 | `qr/<device>.svg` | `qr.svg(export.device_url(base, project, device))` |
 | `trace` | `trace.resolve_ref`, `trace.port_graph`, `*_paths`, `path_text` |
@@ -2484,16 +2723,18 @@ def render_report(doc: Doc, *, project: str, sections: Dict[str, str]) -> str: .
 | G1 | Unit tests, current Python | `python3 -m unittest discover -s tests -v` | 0 failures/errors; skips only with a reason mentioning Chrome, rasterizer, Docker or ODA |
 | G2 | Unit tests, Python 3.9 | `/usr/bin/python3 -m unittest discover -s tests` (macOS ships 3.9.6) — or `uv run --python 3.9 --no-project python -m unittest discover -s tests` — or `docker run --rm -v "$PWD":/src -w /src python:3.9-slim python -m unittest discover -s tests` | same as G1 |
 | G3 | Selftest | `python3 -m fathom selftest` and `/usr/bin/python3 -m fathom selftest` | exit 0, last line `ok: fathom selftest passed` |
-| G4 | JS unit tests | `node --test tests/js` (Node ≥ 18) | 0 failures |
+| G4 | JS unit tests | `node --test tests/js/*.test.mjs` (Node ≥ 18; pass the files, the bare directory form fails on recent Node) | 0 failures |
 | G5 | Py 3.9 syntax | `/usr/bin/python3 -m compileall -q fathom tests` (or the uv/docker equivalents) | exit 0 |
 | G6 | JS syntax & ES2018 | `for f in fathom/static/js/*.js fathom/static/sw.js fathom/static/dev/*.js; do node --check "$f" \|\| exit 1; done` and `node --test tests/js/syntax.test.mjs` (T2: rejects `?.`, `??`, `\|\|=`, `&&=`, `??=`, class fields/`#private`, `static {`, numeric separators, top-level `await` outside functions, `import.meta` outside `*.mjs` tests; ignores strings/comments) | exit 0 |
 | G7 | Frontend smoke | `python3 -m unittest discover -s tests -p test_frontend_smoke.py -v` (the dotted `tests.test_frontend_smoke` form breaks when the `discovery` extra's `x690` installs a top-level `tests` package); the UI suites: `-p 'test_ui_*.py'` | all pages `ready` with `errors == []`; perf budget met; skipped only if no Chrome |
 | G8 | Frozen files untouched | `git diff --quiet -- tests/test_fathom.py fathom/samples/rrc-littleton/project.json fathom/samples/rrc-littleton/exports` | exit 0 |
 | G9 | Ownership | `git status --porcelain` — every new/modified path is listed in §7.2 (or `docs/notes/*.md`, `docs/QA-REPORT.md`) | QA confirms |
 | G10 | Demo builds | `python3 -m fathom demo` ; `FATHOM_DATA=$(mktemp -d) sh -c 'python3 -m fathom new cd --template campus-demo && python3 -m fathom build cd'` | exit 0; run folder contains every §5.9 file (QR only if a public URL is set: run once with `FATHOM_PUBLIC_URL=http://localhost:8080`) |
-| G11 | Packaging | `python3 -m pip wheel . --no-deps -w "$(mktemp -d)"` then `python3 -m zipfile -l <wheel>` | wheel contains `fathom/static/js/patchview.js`, `fathom/library/templates/yamaha-rio3224-d2.json`, `fathom/checklists/kinds.json`, `fathom/samples/campus-demo/project.json`, `fathom/static/sw.js` |
+| G11 | Packaging | `python3 -m pip wheel . --no-deps -w "$(mktemp -d)"` then `python3 -m zipfile -l <wheel>` | wheel contains `fathom/static/js/patchview.js`, `fathom/library/templates/yamaha-rio3224-d2.json`, `fathom/library/rackula/catalog.json`, `fathom/static/rack-images/apc/` images, `fathom/checklists/kinds.json`, `fathom/samples/campus-demo/project.json`, `fathom/static/sw.js` |
 | G12 | Docker | `docker build -t fathom:0.3 .` ; `docker run --rm -d --name fq -p 18080:8080 fathom:0.3` ; `curl -fsS http://127.0.0.1:18080/healthz` ; `docker exec fq which pdftoppm` ; `docker rm -f fq` | healthz `{"ok": true, "version": "0.3.0"}` within 20 s; pdftoppm present |
 | G13 | Live server walk | `FATHOM_DATA=$(mktemp -d) python3 -m fathom serve --port 18081` + the manual items of §9 | QA report |
+
+**Selftest rack checks** (`selftest._check_racks`, part of G3): the catalog has ≥ 600 templates and every id resolves through `get_template`; for the catalog templates with both a front and a rear image (104 today) the front image file exists (`tests/test_rack_catalog.py` checks every image path); a rack with a blank, a vent, a shelf, a catalog device and a shelf child validates with no errors, no collisions and no rack warnings; `shelf_contents` and `rack_totals` give the exact expected values; `rack_svg(face="both", images=True)` parses and embeds `data:image/webp`, and with `base_url` the rear face links only the rear image; an inline Rackula layout and `tests/fixtures/rackula/media-server.rackula.yaml` (6 devices, no collisions) preview and apply without errors; all five rack templates apply to a new doc and to campus-demo; the campus-demo build contains `racks/rk-foh-front.svg`, `racks/rk-foh-rear.svg`, `racks/rk-foh.svg` and `racks/rk-foh.html`.
 
 ### 8.2 Performance targets
 
