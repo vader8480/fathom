@@ -28,7 +28,8 @@ const PRECACHE = [
   'static/css/search.css', 'static/css/home.css', 'static/css/feedback.css', 'static/css/wizard.css',
   'static/css/page-device.css', 'static/css/page-room.css', 'static/css/rack.css', 'static/css/inventory.css',
   'static/css/schedules.css', 'static/css/admin.css', 'static/css/discovery.css', 'static/css/inspector.css',
-  'static/css/patchtable.css'
+  'static/css/patchtable.css',
+  'static/js/speech.js', 'static/css/assistant.css'
 ];
 
 const SCOPE = new URL(self.registration ? self.registration.scope : self.location.href);

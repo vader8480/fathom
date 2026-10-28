@@ -922,7 +922,7 @@ const SETTINGS_TABS = [
 // Settings › Assistant (P4C): provider labels in the order the select shows them, env variable names
 // for the "Set by environment" hint, and the local-server presets used when the catalogue has none.
 const LLM_LABELS = { openai: 'OpenAI', anthropic: 'Anthropic', xai: 'xAI Grok', openai_compat: 'Local / OpenAI-compatible server' };
-const LLM_ENV = { base_url: 'FATHOM_LLM_URL', api_key: 'FATHOM_LLM_KEY', provider: 'FATHOM_LLM_PROVIDER', model: 'FATHOM_LLM_MODEL', api: 'FATHOM_LLM_API',
+const LLM_ENV = { base_url: 'FATHOM_LLM_URL', api_key: 'FATHOM_LLM_API_KEY', provider: 'FATHOM_LLM_PROVIDER', model: 'FATHOM_LLM_MODEL', api: 'FATHOM_LLM_API',
   temperature: 'FATHOM_LLM_TEMPERATURE', max_tokens: 'FATHOM_LLM_MAX_TOKENS', web_lookup: 'FATHOM_LLM_WEB_LOOKUP', daily_cap: 'FATHOM_LLM_DAILY_CAP' };
 const LLM_PRESETS = [['ollama', 'Ollama', 'http://localhost:11434/v1'], ['lmstudio', 'LM Studio', 'http://localhost:1234/v1'], ['vllm', 'vLLM', 'http://localhost:8000/v1'], ['llamacpp', 'llama.cpp', 'http://localhost:8080/v1']];
 const INVITE_TTL = [['24', '24 hours'], ['72', '72 hours'], ['168', '7 days']];
