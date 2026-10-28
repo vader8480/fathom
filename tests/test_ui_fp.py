@@ -297,7 +297,7 @@ class CableRunsUi(UiCase):
             pg.shot("plan-runs-d")
 
     def test_runs_404_hides_layer_and_tool(self) -> None:
-        with self.open(CHAPEL, "d") as pg:  # this server has no /runs route yet: answers 404
+        with self.open(CHAPEL, "d", intercepts=[(RUNS_URL + "*", 404, {"error": "not_found"}, "GET")]) as pg:  # an older server without the /runs route
             ready(pg)
             pg.wait_for("document.querySelector('#fp-runs').hidden")
             self.assertTrue(pg.js("document.querySelector('#fp-paths').hidden"), "Paths tool hidden")
