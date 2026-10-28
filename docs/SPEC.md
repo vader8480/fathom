@@ -887,6 +887,7 @@ The contract fixture `tests/fixtures/rack_contract.json` (≥ 14 cases, run by `
 1. **Totals: `auto` devices and rounding.** Python `rack_totals` counts every device with `rack.id` equal to the rack, including overlay devices with `auto: true`, and rounds half up (`floor(x × 10 + 0.5) / 10`, so 0.25 → 0.3). JS `rackTotals` (and `rackDevices`, `shelfCells`) leave out `auto` devices and round exact binary ties to even like Python's `round()` (0.25 → 0.2). Persisted docs never hold `auto` devices (§4.4.1), so the counts only differ for overlay-merged docs; the rounding differs on exact ties.
 2. **Item label.** Python `rack_items` returns `label: ''` for an unlabeled item (with `type_label` beside it); JS `rackItems` fills `label` with the type label.
 3. **Item colour.** The schema checks only that an item `color` is a string; readers fall back to the type colour when it is not `#rrggbb`.
+4. **Fit checks are JS only.** `fits` and `itemFits` exist only in `rack-core.js`; `racks.py` has no `fits`/`item_fits`, so the six `fits` cases of the contract fixture skip in `tests/test_rack_contract.py` and run only in `tests/js/rack-contract.test.mjs`. Python checks collisions after the fact (`collisions`, `validate_racks`).
 
 ### 4.5 Equipment template format (library, `doc.templates`, `<data>/library/*.json`)
 
