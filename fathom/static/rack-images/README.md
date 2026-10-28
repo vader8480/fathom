@@ -14,9 +14,10 @@ Copied unchanged by `tools/rackula_catalog.py` from Rackula
 Only these vendor folders are bundled, to keep the package small (total
 ≤ 4.5 MB): `_generic`, `apc`, `eaton`, `ac-infinity`, `ubiquiti`, `netgear`,
 `cisco`, `tp-link`, `mikrotik`, `synology`, `qnap`, `dell`, `apple`, `lenovo`,
-`supermicro`. `_generic` holds Rackula's own generic artwork (flattened from
-its `server/`, `network/`, … subfolders). Catalog entries from other vendors
-ship without images.
+`supermicro`. Rackula's `_generic` folder (its own generic artwork, flattened
+from its `server/`, `network/`, … subfolders) ships here as `generic/`,
+because the static file route rejects path segments that start with `_` or
+`.`. Catalog entries from other vendors ship without images.
 
 Do not edit these files by hand: change the generator and run
 `python tools/rackula_catalog.py --src /tmp/rackula`.

@@ -23,7 +23,7 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,79}$")
 CATEGORIES = {"server", "network", "firewall", "patch-panel", "power", "storage", "kvm", "av-media", "cooling",
               "shelf", "blank", "cable-management", "chassis", "other"}
 AIRFLOWS = {"front-to-rear", "rear-to-front", "left-to-right", "right-to-left", "side-to-rear", "passive", "mixed"}
-IMAGE_VENDORS = {"_generic", "apc", "eaton", "ac-infinity", "ubiquiti", "netgear", "cisco", "tp-link", "mikrotik",
+IMAGE_VENDORS = {"generic", "apc", "eaton", "ac-infinity", "ubiquiti", "netgear", "cisco", "tp-link", "mikrotik",
                  "synology", "qnap", "dell", "apple", "lenovo", "supermicro"}
 IMAGE_BUDGET = int(4.5 * 1024 * 1024)
 
@@ -161,6 +161,24 @@ class CatalogImages(unittest.TestCase):
             self.assertTrue(p.endswith(".webp"), p)
             self.assertIn(p.split("/")[0], IMAGE_VENDORS, p)
             self.assertEqual(len(p.split("/")), 2, p)
+
+    def test_image_paths_are_servable(self):
+        """The static route serves only segments starting with a letter or digit."""
+        n = 0
+        for t in self.templates:
+            for k in ("image_front", "image_rear"):
+                p = t.get(k)
+                if not p:
+                    continue
+                n += 1
+                with self.subTest(t["id"], face=k):
+                    bad = [s for s in p.split("/") if not s or s[0] in "_."]
+                    self.assertEqual(bad, [], p)
+                    self.assertTrue((IMAGES / p).is_file(), p)
+        self.assertGreater(n, 0)
+        self.assertTrue(any(t.get("image_front", "").startswith("generic/") for t in self.templates))
+        dirs = [d.name for d in IMAGES.iterdir() if d.is_dir()]
+        self.assertEqual([d for d in dirs if d[0] in "_."], [])
 
     def test_faces_match_file_names(self):
         for t in self.templates:
