@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import urllib.request
+from pathlib import Path
 
 try:
     from _ui import UiCase
@@ -32,9 +33,39 @@ def _q(s: str) -> str:
     return json.dumps(s)
 
 
-class InventoryUi(UiCase):
+# Knox-parity fields (FR-INV-10..13) the sibling backend assigns; the UI only reads and writes them.
+# `knox_seed` adds a container (``case-foh``), an accessory stored in it (``di-kit``), gives ``foh-cl5``
+# a short code, condition, container and custom fields, and spreads conditions over a few devices.
+def knox_seed(doc: dict) -> dict:
+    by = {d["id"]: d for d in doc["devices"]}
+    if "case-foh" not in by:
+        doc["devices"].append({"id": "case-foh", "name": "FOH road case", "kind": "container", "room": "main", "discipline": "other",
+                               "ports": [], "short_code": "CASE2345", "inventory": {"condition": "good"}})
+    if "di-kit" not in by:
+        doc["devices"].append({"id": "di-kit", "name": "DI box kit", "kind": "other", "room": "main", "discipline": "audio", "ports": [],
+                               "container": "case-foh", "inventory": {"condition": "fair", "fields": {"owner": "AV office", "insured": "yes", "bin": "B-07"}}})
+    cl5 = by["foh-cl5"]
+    cl5["short_code"] = "ABCD2345"
+    cl5["container"] = "case-foh"
+    cl5.setdefault("inventory", {})
+    cl5["inventory"]["condition"] = "good"
+    cl5["inventory"]["fields"] = {"owner": "AV office", "insured": "yes", "bin": "B-01", "lease": "2027-01"}
+    by["cam-3"].setdefault("inventory", {})["condition"] = "broken"
+    by["rio-sr"].setdefault("inventory", {})["condition"] = "poor"
+    by["rio-sr"]["short_code"] = "RIOS2345"
+    by["projector"].setdefault("inventory", {})["condition"] = "new"
+    return doc
 
-    # ------------------------------------------------------------ helpers
+
+def seed_campus(server, seed=knox_seed) -> None:
+    """Rewrite the throwaway campus-demo copy of ``server`` (before any page loads it)."""
+    path = Path(server.data) / "projects" / "campus-demo" / "project.json"
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(json.dumps(seed(doc)), encoding="utf-8")
+
+
+class _InventoryBase(UiCase):
+    """Shared page helpers; the test classes below each get their own ``UiServer``."""
 
     def _ready(self, pg, rows: int = 1) -> None:
         self.assertEqual(pg.smoke.get("errors"), [], pg.smoke)
@@ -83,6 +114,10 @@ class InventoryUi(UiCase):
     def _wait_server(self, pg, project: str, js_pred: str, timeout: float = 15.0) -> None:
         pg.wait_for("fetch('/api/v2/projects/%s', {headers: {Accept: 'application/json'}}).then(function (r) { return r.json(); })"
                     " .then(function (p) { var doc = p.doc; return !!(%s); })" % (project, js_pred), timeout)
+
+
+
+class InventoryUi(_InventoryBase):
 
     # ------------------------------------------------------------ row -> drawer
 
@@ -357,7 +392,10 @@ class InventoryUi(UiCase):
                 cols = pg.js("Array.prototype.filter.call(document.querySelectorAll('#inv-table thead th[data-col]'), function (th) { return th.getClientRects().length > 0; })"
                              ".map(function (th) { return th.getAttribute('data-col'); })")
                 if size == "m":
-                    self.assertEqual(cols, ["name", "room", "status", "edit"], "only Name, Room, Status (and the row action) at sm")
+                    self.assertEqual(cols, ["name", "kind", "status", "condition", "container", "code", "edit"],
+                                     "cards at sm show name, kind, status, condition, container, code (and the row action)")
+                    self.assertTrue(pg.js("document.querySelector('.inv-root .dt-root').classList.contains('dt-cards')"), "card mode at sm")
+                    self.assertEqual(pg.js("getComputedStyle(document.querySelector('#inv-table tbody tr.dt-row')).display"), "block", "one card per device")
                     for sel in ("#inv-filter", ".inv-root .dt-filter", "#inv-bulk-add", "#inv-csv", "#inv-scope"):
                         self.assertEqual(pg.offscreen(sel, "x"), 0, "%s is inside the viewport at m" % sel)
                     self.assertEqual(pg.offscreen("#inv-table tbody tr.dt-row:first-child td[data-col=status]", "x"), 0)
@@ -388,6 +426,150 @@ class InventoryUi(UiCase):
         with self.open("/static/dev/schedules.html", "d") as pg:
             self.assertEqual(pg.smoke.get("errors"), [], pg.smoke)
             pg.wait_for("!!document.querySelector('.inv-root #inv-table')")
+
+
+class InventoryKnoxUi(_InventoryBase):
+    """FR-INV-10..13 on a campus-demo copy seeded by ``knox_seed`` (51 devices in Main Auditorium)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super(InventoryKnoxUi, cls).setUpClass()
+        seed_campus(cls.server)
+
+    def _cell(self, pg, dev: str, col: str) -> str:
+        return pg.js("(function () { var td = document.querySelector('#inv-table tr[data-device=%s] td[data-col=%s]'); return td ? td.textContent : null; })()" % (dev, _q(col)))
+
+    def _clear_filter(self, pg, col: str) -> None:
+        pg.click("#inv-" + col)
+        pg.wait_for("!!document.querySelector('.inv-root .dt-pop[data-col=%s]')" % col)
+        pg.click(".inv-root .dt-pop .dt-pop-clear")
+        pg.wait_for("location.hash.indexOf('f.%s=') < 0" % col)
+        pg.press("Escape")
+        pg.wait_for("!document.querySelector('.inv-root .dt-pop')")
+
+    def _undo(self, pg, size: str) -> None:
+        # the header undo button is in the user menu at sm; the shortcut works everywhere
+        if size == "m":
+            pg.press("Control+z")
+        else:
+            pg.click("#app-undo")
+
+    def test_knox_columns_filters_and_quick_filters(self) -> None:
+        with self.open(CAMPUS, "d") as pg:
+            self._ready(pg)
+            self.assertEqual(self._count(pg), "51 devices")
+            cols = pg.js("Array.prototype.map.call(document.querySelectorAll('#inv-table thead th[data-col]'), function (th) { return th.getAttribute('data-col'); })")
+            for c in ("condition", "container", "code", "field:owner", "field:insured", "field:bin"):
+                self.assertIn(c, cols, "%s is a visible column by default" % c)
+            self.assertNotIn("field:lease", cols, "only the first three custom-field columns show by default")
+            self.assertTrue(pg.js("!!document.querySelector('.inv-root .dt-cols-list input[data-col=%s]')" % _q("field:lease")), "the fourth custom field is in the Columns menu")
+            self.assertEqual(self._cell(pg, "foh-cl5", "condition"), "good")
+            self.assertEqual(pg.js("document.querySelector('#inv-table tr[data-device=foh-cl5] td[data-col=condition] .inv-cond').getAttribute('data-condition')"), "good")
+            self.assertEqual(self._cell(pg, "foh-cl5", "container"), "FOH road case")
+            self.assertEqual(self._cell(pg, "foh-cl5", "field:owner"), "AV office")
+            self.assertEqual(pg.js("document.querySelector('#inv-table tr[data-device=foh-cl5] td[data-col=code] .inv-code-text').textContent"), "ABCD-2345")
+            copy = pg.js("document.querySelector('#inv-table tr[data-device=foh-cl5] td[data-col=code] .inv-copy').getAttribute('data-copy')")
+            self.assertTrue(copy.endswith("/c/ABCD-2345"), copy)
+            self.assertEqual(self._cell(pg, "cam-1", "code"), "\u2014", "no code yet shows an em dash")
+            self.assertEqual(self._cell(pg, "cam-1", "container"), "")
+
+            # the container cell selects the container
+            pg.click("#inv-table tr[data-device=foh-cl5] td[data-col=container] .inv-container-link")
+            pg.wait_for("location.hash.indexOf('sel=device%3Acase-foh') > 0 || location.hash.indexOf('sel=device:case-foh') > 0")
+            pg.press("Escape")
+
+            # condition filter (multi) and the container filter
+            self._filter(pg, "condition", "good")
+            pg.wait_for("document.querySelector('.inv-root .dt-count').textContent === '2 of 51 devices'")
+            self.assertEqual(sorted(self._ids(pg)), ["case-foh", "foh-cl5"])
+            pg.click("#inv-condition")
+            pg.wait_for("!!document.querySelector('.inv-root .dt-pop[data-col=condition]')")
+            pg.click(".inv-root .dt-pop input[value=broken]")
+            pg.wait_for("document.querySelector('.inv-root .dt-count').textContent === '3 of 51 devices'")
+            pg.press("Escape")
+            pg.wait_for("!document.querySelector('.inv-root .dt-pop')")
+            self._clear_filter(pg, "condition")
+            pg.wait_for("document.querySelector('.inv-root .dt-count').textContent === '51 devices'")
+            self._filter(pg, "container", "FOH road case")
+            pg.wait_for("document.querySelector('.inv-root .dt-count').textContent === '2 of 51 devices'")
+            self.assertEqual(sorted(self._ids(pg)), ["di-kit", "foh-cl5"])
+            self._clear_filter(pg, "container")
+            pg.wait_for("document.querySelector('.inv-root .dt-count').textContent === '51 devices'")
+
+            # quick filters: accessories (no ports, not a container), in containers, containers
+            pg.click("#inv-q-accessories")
+            pg.wait_for("document.querySelector('.inv-root .dt-count').textContent === '1 device'")
+            self.assertEqual(self._ids(pg), ["di-kit"])
+            self.assertEqual(self._query(pg).get("quick"), "accessories")
+            pg.click("#inv-q-accessories")
+            pg.click("#inv-q-contained")
+            pg.wait_for("document.querySelector('.inv-root .dt-count').textContent === '2 devices'")
+            self.assertEqual(sorted(self._ids(pg)), ["di-kit", "foh-cl5"])
+            pg.click("#inv-q-contained")
+            pg.click("#inv-q-containers")
+            pg.wait_for("document.querySelector('.inv-root .dt-count').textContent === '1 device'")
+            self.assertEqual(self._ids(pg), ["case-foh"])
+            self.assertEqual(pg.js("document.getElementById('inv-q-containers').getAttribute('aria-pressed')"), "true")
+            pg.reload()
+            self._ready(pg)
+            self.assertEqual(self._ids(pg), ["case-foh"], "quick filters live in the URL")
+            pg.shot("inv-knox-d")
+
+    def test_knox_bulk_condition_and_container_commit_and_undo(self) -> None:
+        for size in ("d", "m"):
+            with self.open(CAMPUS, size) as pg:
+                self._ready(pg)
+                self._type(pg, "#inv-filter", "hang")
+                pg.wait_for("document.querySelectorAll(%s).length === 2" % _q(ROWS))
+                # cards at m have no header row: select by the per-card checkboxes
+                pg.click("#inv-table tr[data-device=main-l] .dt-check-hit")
+                pg.click("#inv-table tr[data-device=main-r] .dt-check-hit")
+                pg.wait_for("document.querySelectorAll('#inv-table tbody .dt-row-check:checked').length === 2")
+                opts = pg.js("Array.prototype.map.call(document.querySelectorAll('#inv-bulk-condition option'), function (o) { return o.value; })")
+                self.assertEqual(opts, ["", "new", "good", "fair", "poor", "broken", "__none"], "the five conditions plus clear")
+                self._select(pg, "inv-bulk-condition", "poor")
+                pg.wait_for("!!document.querySelector('.app-dialog')")
+                self.assertEqual(pg.js("document.querySelector('.app-dialog .body').textContent").split("\n")[0],
+                                 "Set condition of 2 devices in Main Auditorium?")
+                pg.click(".app-dialog footer button:last-child")
+                pg.wait_for("!document.querySelector('.app-dialog')")
+                self._wait_server(pg, "campus-demo", "doc.devices.filter(function (d) { return (d.id === 'main-l' || d.id === 'main-r') && d.inventory && d.inventory.condition === 'poor'; }).length === 2")
+                pg.wait_for("document.querySelector('#inv-table tr[data-device=main-l] td[data-col=condition]').textContent === 'poor'")
+                self.assertEqual(pg.js("document.getElementById('inv-bulk-condition').value"), "")
+                self._undo(pg, size)
+                self._wait_server(pg, "campus-demo", "doc.devices.filter(function (d) { return (d.id === 'main-l' || d.id === 'main-r') && !(d.inventory && d.inventory.condition); }).length === 2")
+                pg.wait_for("document.querySelector('#inv-table tr[data-device=main-l] td[data-col=condition]').textContent === ''")
+
+                # put in container, then undo
+                pg.wait_for("document.querySelectorAll('#inv-table tbody .dt-row-check:checked').length === 2")
+                conts = pg.js("Array.prototype.map.call(document.querySelectorAll('#inv-bulk-container option'), function (o) { return o.value; })")
+                self.assertEqual(conts, ["", "__none", "case-foh"], "containers of the project plus None")
+                self._select(pg, "inv-bulk-container", "case-foh")
+                pg.wait_for("!!document.querySelector('.app-dialog')")
+                pg.click(".app-dialog footer button:last-child")
+                self._wait_server(pg, "campus-demo", "doc.devices.filter(function (d) { return (d.id === 'main-l' || d.id === 'main-r') && d.container === 'case-foh'; }).length === 2")
+                pg.wait_for("document.querySelector('#inv-table tr[data-device=main-l] td[data-col=container]').textContent === 'FOH road case'")
+                if size == "m":
+                    self.assertLessEqual(pg.page_hscroll(), 0, "no horizontal page scroll at m")
+                    for sel in ("#inv-bulk-condition", "#inv-bulk-container", "#inv-q-accessories"):
+                        self.assertGreaterEqual(pg.rect(sel)["height"], 44 - 0.5, "%s is a 44px touch target" % sel)
+                pg.shot("inv-knox-bulk-%s" % size)
+                self._undo(pg, size)
+                self._wait_server(pg, "campus-demo", "doc.devices.filter(function (d) { return (d.id === 'main-l' || d.id === 'main-r') && !d.container; }).length === 2")
+                pg.wait_for("document.querySelector('#inv-table tr[data-device=main-l] td[data-col=container]').textContent === ''")
+
+    def test_knox_cards_at_m_show_the_knox_fields(self) -> None:
+        with self.open(CAMPUS + "?q=foh", "m") as pg:
+            self._ready(pg)
+            self.assertLessEqual(pg.page_hscroll(), 0)
+            labels = pg.js("Array.prototype.map.call(document.querySelectorAll('#inv-table tr[data-device=foh-cl5] td[data-col]'), function (td) {"
+                           " return getComputedStyle(td).display === 'none' ? null : td.getAttribute('data-col'); }).filter(Boolean)")
+            self.assertEqual(labels, ["name", "kind", "status", "condition", "container", "code", "edit"])
+            self.assertEqual(self._cell(pg, "foh-cl5", "condition"), "good")
+            self.assertEqual(pg.js("document.querySelector('#inv-table tr[data-device=foh-cl5] td[data-col=code] .inv-code-text').textContent"), "ABCD-2345")
+            self.assertGreaterEqual(pg.rect("#inv-table tr[data-device=foh-cl5] .inv-copy")["height"], 44 - 0.5, "Copy link is a 44px target")
+            self.assertEqual(pg.offscreen("#inv-table tr[data-device=foh-cl5] .inv-copy", "x"), 0)
+            pg.shot("inv-knox-m")
 
 
 if __name__ == "__main__":  # pragma: no cover
