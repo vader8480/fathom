@@ -2,11 +2,17 @@
 // measure, pan / zoom / pinch, layer toggles, upload. mount(el, ctx) (§6.4, §6.7).
 // Route plan/<fp> (docs/ui-audit.md D1, B.3 FP); the room's devices are an explorer
 // (#fp-unplaced) that is a sidebar at md/lg and a drawer at sm.
+// Phase 5 (P5B): shared paths (#fp-paths tool), cable runs between placed markers
+// (#fp-runs toggle, labels, run panel with length estimates, route editing) and the
+// export menu (#fp-export). Runs are computed locally from the doc; GET …/runs confirms
+// the numbers when the server has them (404 = older server: layer and tools hidden).
 import {
   findPlan, planSize, imageToNorm, normToImage, metersPerPx, distance, formatLength,
   markerOf, markerOps, removeMarkerOps, calibrateOps, unplacedDevices, roomDevices, nudge,
   plansForRoom, newPlanOps, renamePlanOps, deletePlanOps, reorderPlanOps, toggleLayerOps, layerVisible,
   fitView, zoomAt, panBy, pinchView, screenToWorld,
+  PATH_KINDS, PATH_KIND_LABELS, ESTIMATE_ROUND, pathById, polylineLength, snapToPaths, resolveRun, runsForPlan,
+  estimateChanges, runLabel, roundUp, pathUsers, addPathOps, updatePathOps, deletePathOps, setRouteOps, clearRouteOps, normalizeRoute,
 } from './floorplan-core.js';
 import { h, on as listen } from './dom.js';
 import { layoutFor } from './router-core.js';
@@ -29,6 +35,28 @@ export const DEV_PLANS = [
 const ACCEPT = '.png,.jpg,.jpeg,.svg,.pdf,.drawio,.xml,.dxf,.dwg';
 const DRAG_SLOP = 5;
 const EXPLORER_KEY = 'plan-unplaced';
+const RUNS_KEY = 'fathom.ui.plan.runs';
+const SNAP_PX = 20;
+const LONG_PRESS_MS = 500;
+const CHROME_HINT = 'Needs Chrome on the server';
+const MISSING_HINT = 'Export is not available on this server';
+const EXPORTS = [['svg', 'Plan SVG'], ['png', 'Plan PNG'], ['pdf', 'Plan PDF']];
+
+function storage() {
+  try { return window.localStorage; } catch (e) { return null; }
+}
+
+function readRunsPref() {
+  try {
+    const s = storage();
+    const v = s ? s.getItem(RUNS_KEY) : null;
+    return v === null ? true : v !== '0';
+  } catch (e) { return true; }
+}
+
+function writeRunsPref(on) {
+  try { const s = storage(); if (s) s.setItem(RUNS_KEY, on ? '1' : '0'); } catch (e) { /* storage full or disabled */ }
+}
 
 // The shell loads explorer.css through the VIEWS registry; the dev harness only
 // links plan.css, so put explorer.css beside it there.
@@ -68,6 +96,32 @@ function deviceById(doc, id) {
   return null;
 }
 
+function cableById(doc, id) {
+  const cs = (doc && doc.cables) || [];
+  for (let i = 0; i < cs.length; i++) if (cs[i].id === id) return cs[i];
+  const bs = (doc && doc.bundles) || [];
+  for (let i = 0; i < bs.length; i++) if (bs[i].id === id) return bs[i];
+  return null;
+}
+
+function mediumDisc(medium, vocab) {
+  const m = vocab && vocab.media && vocab.media[medium];
+  return (m && m.discipline) || 'other';
+}
+
+function mediumLabel(medium, vocab) {
+  const m = vocab && vocab.media && vocab.media[medium];
+  return (m && m.label) || medium || 'Other';
+}
+
+function ptsEqual(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (Math.abs(Number(a[i][0]) - Number(b[i][0])) > 2e-3 || Math.abs(Number(a[i][1]) - Number(b[i][1])) > 2e-3) return false;
+  }
+  return true;
+}
+
 export function mount(el, ctx) {
   const store = ctx.store;
   const vocab = ctx.vocab || store.vocab || {};
@@ -75,6 +129,10 @@ export function mount(el, ctx) {
     fpId: null, view: {x: 0, y: 0, k: 1}, fitted: {}, tool: '', points: [], measure: null,
     sel: null, pointers: {}, gesture: null, natural: {}, imgUrl: '', highlight: null, popFor: null,
     pinned: false, routeSel: '', destroyed: false, emptyKey: '', imgState: '',
+    // P5B: runs layer toggle, server confirmations per plan ({ok, byCable, calibrated, unit} or {ok: false}
+    // after a 404), selected run / path, device filter, route editing, export probe.
+    runs: readRunsPref(), server: {}, fetching: {}, runSel: null, pathSel: null, runFilter: null,
+    routeEdit: false, dragRun: null, chrome: null, pathDraft: null,
   };
   const offs = [];
   function on(target, type, fn, opts) { offs.push(listen(target, type, fn, opts)); }
@@ -93,6 +151,13 @@ export function mount(el, ctx) {
   const devAdd = h('button', {type: 'button', class: 'fp-btn', text: 'Add plan'});
   const btnCal = h('button', {id: 'fp-calibrate', type: 'button', class: 'fp-btn', 'aria-pressed': 'false', text: 'Calibrate'});
   const btnMeasure = h('button', {id: 'fp-measure', type: 'button', class: 'fp-btn', 'aria-pressed': 'false', text: 'Measure'});
+  const btnPaths = h('button', {id: 'fp-paths', type: 'button', class: 'fp-btn', 'aria-pressed': 'false', text: 'Paths',
+    title: 'Draw a shared path (tray, catwalk, trench) that cable runs can follow'});
+  const btnRuns = h('button', {id: 'fp-runs', type: 'button', class: 'fp-btn', 'aria-pressed': 'false', text: 'Runs',
+    title: 'Show cable runs between placed devices'});
+  const btnExport = h('button', {id: 'fp-export', type: 'button', class: 'fp-btn', 'aria-expanded': 'false', 'aria-haspopup': 'true', text: 'Export'});
+  const exportPop = h('div', {class: 'fp-pop fp-export-pop', role: 'group', 'aria-label': 'Export plan', hidden: true});
+  const exportWrap = h('span', {class: 'fp-export-wrap'}, [btnExport, exportPop]);
   const btnLayers = h('button', {id: 'fp-layers', type: 'button', class: 'fp-btn', 'aria-expanded': 'false', 'aria-haspopup': 'true', text: 'Layers'});
   const layersPop = h('div', {class: 'fp-pop fp-layers-pop', role: 'group', 'aria-label': 'Layers', hidden: true});
   const btnZoomOut = h('button', {id: 'fp-zoom-out', type: 'button', class: 'fp-btn fp-icon', 'aria-label': 'Zoom out', text: '\u2212'});
@@ -103,7 +168,7 @@ export function mount(el, ctx) {
   const uploadGroup = h('span', {class: 'fp-group fp-upload'}, [upload, uploadLabel]);
   // Inline at lg when the row has room, otherwise inside the ⋯ menu (fitToolbar).
   const tools = h('span', {class: 'fp-group fp-tools'}, [
-    uploadGroup, devGroup, btnCal, btnMeasure, h('span', {class: 'fp-layers-wrap'}, [btnLayers, layersPop]),
+    uploadGroup, devGroup, btnCal, btnMeasure, btnPaths, btnRuns, h('span', {class: 'fp-layers-wrap'}, [btnLayers, layersPop]), exportWrap,
     h('span', {class: 'fp-group fp-planedit'}, [btnUp, btnDown, btnRename, btnDelete]),
   ]);
   const menuBtn = h('button', {type: 'button', class: 'fp-btn fp-icon fp-menu-more', 'aria-haspopup': 'true', 'aria-expanded': 'false',
@@ -119,8 +184,11 @@ export function mount(el, ctx) {
   const main = h('div', {class: 'fp-main'});
   const img = h('img', {class: 'fp-img', alt: '', draggable: 'false'});
   const overlay = svgEl('svg', {class: 'fp-overlay'});
+  const runsSvg = svgEl('svg', {class: 'fp-runs', 'aria-hidden': 'true'});
+  const labelsEl = h('div', {class: 'fp-runlabels'});
+  const handlesEl = h('div', {class: 'fp-handles'});
   const markersEl = h('div', {class: 'fp-markers'});
-  const world = h('div', {class: 'fp-world'}, [img, overlay, markersEl]);
+  const world = h('div', {class: 'fp-world'}, [img, runsSvg, overlay, labelsEl, markersEl, handlesEl]);
   const empty = h('div', {class: 'fp-empty', hidden: true});
   // Plan image state: a skeleton under the (hidden) image while it loads, an inline error with
   // Retry over the canvas when it fails. Markers stay usable in both.
@@ -138,9 +206,20 @@ export function mount(el, ctx) {
   calForm.appendChild(calCancel);
   const pop = h('div', {class: 'fp-pop fp-markerpop', hidden: true, role: 'dialog', 'aria-label': 'Marker'});
   const delPop = h('div', {class: 'fp-pop fp-delpop', hidden: true, role: 'dialog', 'aria-labelledby': 'fp-del-title'});
+  // P5B: the path sheet (name + kind after drawing), the run / path panel (side panel at md/lg,
+  // bottom sheet at sm) and the runs bar (count, Estimate all, device filter chip).
+  const pathForm = h('form', {class: 'fp-pop fp-pathform', hidden: true, 'aria-label': 'New path'});
+  const pathName = h('input', {id: 'fp-path-name', type: 'text', 'aria-label': 'Path name', placeholder: 'Name', autocomplete: 'off'});
+  const pathKindSel = h('select', {id: 'fp-path-kind', 'aria-label': 'Path kind'}, PATH_KINDS.map(function (k) { return h('option', {value: k, text: PATH_KIND_LABELS[k]}); }));
+  const pathCancel = h('button', {type: 'button', class: 'fp-btn', text: 'Cancel'});
+  pathForm.appendChild(h('strong', {text: 'New path'}));
+  pathForm.appendChild(h('div', {class: 'fp-pathfields'}, [pathName, pathKindSel]));
+  pathForm.appendChild(h('div', {class: 'fp-poprow'}, [h('button', {type: 'submit', class: 'fp-btn fp-primary', id: 'fp-path-save', text: 'Save path'}), pathCancel]));
+  const panel = h('div', {class: 'fp-pop fp-runpanel', id: 'fp-runpanel', hidden: true, role: 'region', 'aria-label': 'Cable run'});
+  const runsBar = h('div', {class: 'fp-runsbar', hidden: true});
   const viewport = h('div', {class: 'fp-viewport', role: 'application', tabindex: '0',
     'aria-label': 'Floor plan. Arrow keys pan, plus and minus zoom, F fits. With a marker focused, arrows move it, Delete removes it, Enter opens it.'},
-  [imgLoad, world, empty, imgError, crosshair, calForm, pop, readout]);
+  [imgLoad, world, empty, imgError, crosshair, calForm, pathForm, runsBar, pop, panel, readout]);
   const ghost = h('div', {class: 'fp-ghost', hidden: true, 'aria-hidden': 'true'});
   root.appendChild(toolbar);
   root.appendChild(main);
@@ -282,7 +361,16 @@ export function mount(el, ctx) {
     [btnUp, btnDown, btnRename, btnDelete, uploadGroup, btnCal].forEach(function (b) { b.hidden = ro; });
     devGroup.hidden = !harness || ro;
     hint.hidden = ro;
-    if (ro !== S.ro) { S.ro = ro; fitToolbar(true); }
+    // P5B: runs need the server's /runs route (older servers answer 404: tool and layer hidden).
+    const rs = runsSupported();
+    btnPaths.hidden = ro || !rs;
+    btnPaths.disabled = ro || !fp;
+    btnRuns.hidden = !rs;
+    btnRuns.disabled = !fp;
+    exportWrap.hidden = !(ctx.api && ctx.api.floorplanExportUrl);
+    btnExport.disabled = !fp;
+    const tbKey = [ro, rs, exportWrap.hidden].join('|');
+    if (tbKey !== S.tbKey) { S.tbKey = tbKey; fitToolbar(true); }
     btnMeasure.disabled = !fp;
     btnLayers.disabled = !fp || !(fp.layers && fp.layers.length);
     btnZoomIn.disabled = btnZoomOut.disabled = btnFit.disabled = !fp;
@@ -302,8 +390,10 @@ export function mount(el, ctx) {
       overlay.setAttribute('width', sz.w);
       overlay.setAttribute('height', sz.h);
       overlay.setAttribute('viewBox', '0 0 ' + sz.w + ' ' + sz.h);
-      markersEl.style.width = sz.w + 'px';
-      markersEl.style.height = sz.h + 'px';
+      runsSvg.setAttribute('width', sz.w);
+      runsSvg.setAttribute('height', sz.h);
+      runsSvg.setAttribute('viewBox', '0 0 ' + sz.w + ' ' + sz.h);
+      [markersEl, labelsEl, handlesEl].forEach(function (layer) { layer.style.width = sz.w + 'px'; layer.style.height = sz.h + 'px'; });
       img.alt = 'Floor plan: ' + fp.name;
       img.classList.toggle('fp-img-dark', !!(fp.source && fp.source.kind === 'dxf'));
       const url = imageUrl(fp);
@@ -314,8 +404,11 @@ export function mount(el, ctx) {
     renderDevList();
     renderLayers();
     renderOverlay();
+    renderRuns();
+    renderPanel();
     renderTool();
     applyView();
+    probeRuns();
     const title = fp ? fp.name + ' \u00b7 Plan' : 'Plan';
     if (title !== S.title) { S.title = title; if (typeof ctx.setTitle === 'function') ctx.setTitle(title); }
     scheduleRouteSync();
@@ -477,7 +570,14 @@ export function mount(el, ctx) {
       const c = fp.calibration;
       line({x: c.p1[0], y: c.p1[1]}, {x: c.p2[0], y: c.p2[1]}, 'fp-calline fp-old');
     }
-    if (S.tool) {
+    if (S.tool === 'paths') {
+      // The path being drawn: corners plus the open polyline (closed by double-click / Enter).
+      if (S.points.length > 1) {
+        const pl = svgEl('polyline', {class: 'fp-pathdraft', points: S.points.map(function (p) { const q = normToImage(fp, p); return q.x + ',' + q.y; }).join(' ')});
+        overlay.appendChild(pl);
+      }
+      S.points.forEach(function (p) { dot(p, 'fp-pathdraft-pt'); });
+    } else if (S.tool) {
       const cls = S.tool === 'calibrate' ? 'fp-calline' : 'fp-mline';
       S.points.forEach(function (p) { dot(p, cls + '-pt'); });
       if (S.points.length === 2) line(S.points[0], S.points[1], cls);
@@ -494,9 +594,13 @@ export function mount(el, ctx) {
   function renderTool() {
     btnCal.setAttribute('aria-pressed', S.tool === 'calibrate' ? 'true' : 'false');
     btnMeasure.setAttribute('aria-pressed', S.tool === 'measure' ? 'true' : 'false');
+    btnPaths.setAttribute('aria-pressed', S.tool === 'paths' ? 'true' : 'false');
+    btnRuns.setAttribute('aria-pressed', S.runs ? 'true' : 'false');
     viewport.classList.toggle('fp-tool', !!S.tool);
-    crosshair.hidden = !S.tool;
+    crosshair.hidden = !S.tool || !pathForm.hidden;
     calForm.hidden = !(S.tool === 'calibrate' && S.points.length === 2);
+    if (S.tool !== 'paths') pathForm.hidden = true;
+    runsBar.hidden = !!S.tool || runsBar.childNodes.length === 0;
     const fp = plan();
     let txt = '';
     if (S.tool === 'calibrate') {
@@ -505,10 +609,690 @@ export function mount(el, ctx) {
     } else if (S.tool === 'measure') {
       txt = S.measure ? 'Distance: ' + S.measure : 'Measure: pick point ' + (S.points.length + 1) + ' of 2';
       if (fp && metersPerPx(fp) == null) txt += ' \u00b7 plan not calibrated';
+    } else if (S.tool === 'paths') {
+      txt = !pathForm.hidden ? 'Name the path and pick its kind'
+        : 'Path: click to add corners (' + S.points.length + '), double-click or Enter to finish, Esc cancels (Space adds the crosshair point)';
     } else if (fp) {
       txt = metersPerPx(fp) == null ? 'Not calibrated' : 'Calibrated \u00b7 ' + Math.round(S.view.k * 100) + '%';
     }
     readout.textContent = txt;
+  }
+
+  // ------------------------------------------------------ runs & paths (P5B)
+  function sceneId() { return (ctx.preview && ctx.preview.scene) || undefined; }
+  function collOfId(id) { return (doc().cables || []).some(function (x) { return x.id === id; }) ? 'cables' : 'bundles'; }
+  function serverInfo() { return S.fpId ? S.server[S.fpId] : null; }
+  function runsSupported() { const si = serverInfo(); return !(si && si.ok === false); }
+  function runsShown() { return S.runs && runsSupported() && !!plan(); }
+  function pathsShown() { return runsSupported() && !!plan() && (S.runs || S.tool === 'paths' || !!S.pathSel); }
+
+  function localRuns(fp) {
+    const all = runsForPlan(doc(), fp.id);
+    if (!S.runFilter) return all;
+    return all.filter(function (r) { return r.from === S.runFilter || r.to === S.runFilter; });
+  }
+
+  function runOf(fp, cableId) {
+    const c = cableById(doc(), cableId);
+    return c ? resolveRun(doc(), fp, c) : null;
+  }
+
+  // The server's length wins when it confirmed the same geometry (P5A is the source of truth).
+  function runLength(run) {
+    const si = serverInfo();
+    const sr = si && si.byCable && si.byCable[run.cable];
+    if (sr && sr.unit === 'm' && typeof sr.length_m === 'number' && ptsEqual(sr.points, run.points)) {
+      return {text: formatLength(sr.length_m, units()), meters: sr.length_m, server: true};
+    }
+    if (run.unit !== 'm') return {text: '?', meters: null, server: false};
+    return {text: runLabel(run, units()), meters: run.length_m, server: false};
+  }
+
+  function runEstimate(run) {
+    const si = serverInfo();
+    const sr = si && si.byCable && si.byCable[run.cable];
+    if (sr && typeof sr.estimate_m === 'number' && ptsEqual(sr.points, run.points)) return sr.estimate_m;
+    return run.estimate_m;
+  }
+
+  // GET …/runs once per plan (and again after edits while runs are shown); 404 = older server.
+  function probeRuns() {
+    const fp = plan();
+    if (!fp || !ctx.api || typeof ctx.api.planRuns !== 'function') return;
+    const key = fp.id + '|' + (sceneId() || '');
+    if (S.fetching[key] || (S.server[fp.id] && S.server[fp.id].key === key && !S.server[fp.id].stale)) return;
+    S.fetching[key] = true;
+    Promise.resolve(ctx.api.planRuns(ctx.project, fp.id, sceneId())).then(function (res) {
+      delete S.fetching[key];
+      if (S.destroyed) return;
+      const byCable = {};
+      ((res && res.runs) || []).forEach(function (r) { if (r && r.cable) byCable[r.cable] = r; });
+      S.server[fp.id] = {ok: true, key: key, byCable: byCable, calibrated: !!(res && res.calibrated), unit: (res && res.unit) || 'm', totals: (res && res.totals) || null};
+      renderRuns();
+      renderPanel();
+    }, function (err) {
+      delete S.fetching[key];
+      if (S.destroyed) return;
+      if (err && err.status === 404) {
+        S.server[fp.id] = {ok: false, key: key};
+        if (S.tool === 'paths') { S.tool = ''; S.points = []; }
+        S.runSel = null;
+        S.pathSel = null;
+        render();
+      } else {
+        // Network or server error: keep the local numbers, retry on the next render.
+        S.server[fp.id] = Object.assign({}, S.server[fp.id] || {ok: true, byCable: {}}, {key: key, stale: false});
+      }
+    });
+  }
+
+  let refetchTimer = 0;
+  function scheduleRefetch() {
+    if (!ctx.api || !S.fpId || !S.runs) return;
+    if (S.server[S.fpId]) S.server[S.fpId].stale = true;
+    if (refetchTimer) clearTimeout(refetchTimer);
+    // After the change queue's debounce and save.
+    refetchTimer = setTimeout(function () { refetchTimer = 0; if (!S.destroyed) probeRuns(); }, 1500);
+  }
+
+  function runColor(cable) {
+    return discColor(mediumDisc(cable && cable.medium, vocab), vocab);
+  }
+
+  function imgPts(fp, pts) {
+    return pts.map(function (p) { const q = normToImage(fp, p); return [q.x, q.y]; });
+  }
+
+  function midpoint(pts) {
+    // Point halfway along the polyline and the unit normal of the segment it falls on.
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    let acc = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (acc + len >= total / 2 || i === pts.length - 1) {
+        const u = len > 0 ? (total / 2 - acc) / len : 0;
+        const nx = len > 0 ? -(b[1] - a[1]) / len : 0;
+        const ny = len > 0 ? (b[0] - a[0]) / len : -1;
+        return {x: a[0] + (b[0] - a[0]) * u, y: a[1] + (b[1] - a[1]) * u, nx: nx, ny: ny || -1};
+      }
+      acc += len;
+    }
+    return {x: pts[0][0], y: pts[0][1], nx: 0, ny: -1};
+  }
+
+  function labelAt(fp, pts, cls, attrs, text, offset) {
+    const m = midpoint(imgPts(fp, pts));
+    const ny = m.ny <= 0 ? m.ny : -m.ny;
+    const nx = m.ny <= 0 ? m.nx : -m.nx;
+    const el = h('span', Object.assign({class: cls, text: text,
+      style: 'left:' + m.x + 'px;top:' + m.y + 'px;--fp-ox:' + (nx * offset) + 'px;--fp-oy:' + (ny * offset) + 'px'}, attrs));
+    labelsEl.appendChild(el);
+    return el;
+  }
+
+  function polyAttr(fp, pts) {
+    return imgPts(fp, pts).map(function (p) { return p[0] + ',' + p[1]; }).join(' ');
+  }
+
+  function renderRuns() {
+    while (runsSvg.firstChild) runsSvg.removeChild(runsSvg.firstChild);
+    labelsEl.innerHTML = '';
+    handlesEl.innerHTML = '';
+    const fp = plan();
+    const showPaths = pathsShown();
+    const showRuns = runsShown();
+    runsSvg.classList.toggle('fp-runs-editing', S.routeEdit && !!S.runSel);
+    if (!fp || (!showPaths && !showRuns)) { renderRunsBar(null, []); return; }
+    if (showPaths) {
+      (fp.paths || []).forEach(function (p) {
+        const pts = (p.points || []).filter(function (q) { return Array.isArray(q) && q.length >= 2; });
+        if (pts.length < 2) return;
+        const kind = PATH_KINDS.indexOf(p.kind) >= 0 ? p.kind : 'other';
+        const sel = S.pathSel === p.id;
+        const attrs = {points: polyAttr(fp, pts), class: 'fp-path fp-path-' + kind + (sel ? ' fp-selected' : ''), 'data-path': p.id};
+        if (p.color) attrs.style = 'stroke:' + p.color;
+        runsSvg.appendChild(svgEl('polyline', attrs));
+        runsSvg.appendChild(svgEl('polyline', {points: attrs.points, class: 'fp-path-hit', 'data-path': p.id}));
+        labelAt(fp, pts, 'fp-pathlabel fp-pathlabel-' + kind + (sel ? ' fp-selected' : ''), {'data-path': p.id, role: 'button', tabindex: '0', title: PATH_KIND_LABELS[kind]}, p.name || p.id, 0);
+      });
+    }
+    let runs = [];
+    if (showRuns) {
+      runs = localRuns(fp);
+      const stack = {};
+      const d = doc();
+      runs.forEach(function (r) {
+        const cable = cableById(d, r.cable);
+        const sel = S.runSel === r.cable;
+        const dragging = S.dragRun && S.dragRun.cable === r.cable ? S.dragRun.points : null;
+        const pts = dragging || r.points;
+        const color = runColor(cable);
+        const cls = 'fp-run' + (r.auto && !dragging ? ' fp-auto' : '') + (sel ? ' fp-selected' : '') + (S.runSel && !sel ? ' fp-dim' : '');
+        runsSvg.appendChild(svgEl('polyline', {points: polyAttr(fp, pts), class: cls, 'data-run': r.cable, style: 'stroke:' + color}));
+        runsSvg.appendChild(svgEl('polyline', {points: polyAttr(fp, pts), class: 'fp-run-hit', 'data-run': r.cable}));
+        // Coincident runs (same two markers, straight) stack their labels along the normal.
+        const key = pts.map(function (p) { return Math.round(p[0] * 1e3) + ',' + Math.round(p[1] * 1e3); }).join('|');
+        const n = stack[key] || 0;
+        stack[key] = n + 1;
+        const len = runLength(r);
+        const tag = cable && cable.tag ? cable.tag + ' \u00b7 ' : '';
+        const lab = labelAt(fp, pts, 'fp-runlabel' + (sel ? ' fp-selected' : '') + (S.runSel && !sel ? ' fp-dim' : ''),
+          {'data-run': r.cable, role: 'button', tabindex: '0', 'aria-label': 'Cable run ' + (cable && cable.tag ? cable.tag : r.cable) + ', ' + (len.text === '?' ? 'length unknown' : len.text)},
+          tag + len.text, 14 + n * 20);
+        lab.style.setProperty('--fp-runcolor', color);
+        if (len.text === '?') lab.title = 'Calibrate the plan to get lengths';
+      });
+      if (S.routeEdit && S.runSel) renderHandles(fp);
+    }
+    renderRunsBar(fp, runs);
+  }
+
+  // Route editing: corner handles (manual routes) and midpoint "add a corner" handles.
+  function renderHandles(fp) {
+    const run = S.dragRun || runOf(fp, S.runSel);
+    if (!run || readOnly()) return;
+    const cable = cableById(doc(), S.runSel);
+    const manual = !!(cable && cable.route && cable.route.mode === 'manual' && (!cable.route.plan || cable.route.plan === fp.id));
+    const pts = run.points;
+    if (manual) {
+      pts.slice(1, -1).forEach(function (p, i) {
+        const q = normToImage(fp, p);
+        handlesEl.appendChild(h('div', {class: 'fp-handle fp-corner', 'data-corner': String(i), role: 'button', tabindex: '0',
+          'aria-label': 'Corner ' + (i + 1) + '. Drag to move, double-click to remove', title: 'Drag to move \u00b7 double-click to remove',
+          style: 'left:' + q.x + 'px;top:' + q.y + 'px'}, [h('span', {class: 'fp-handle-in'})]));
+      });
+    }
+    for (let i = 1; i < pts.length; i++) {
+      const a = normToImage(fp, pts[i - 1]);
+      const b = normToImage(fp, pts[i]);
+      handlesEl.appendChild(h('div', {class: 'fp-handle fp-mid', 'data-seg': String(i - 1), role: 'button', tabindex: '0',
+        'aria-label': 'Add a corner on segment ' + i, title: 'Drag to add a corner (near a path: follow it)',
+        style: 'left:' + (a.x + b.x) / 2 + 'px;top:' + (a.y + b.y) / 2 + 'px'}, [h('span', {class: 'fp-handle-in'})]));
+    }
+  }
+
+  function renderRunsBar(fp, runs) {
+    runsBar.innerHTML = '';
+    if (!fp || !runsShown()) { runsBar.hidden = true; return; }
+    let total = 0;
+    let calibrated = true;
+    runs.forEach(function (r) { const l = runLength(r); if (l.meters == null) calibrated = false; else total += l.meters; });
+    const n = runs.length;
+    runsBar.appendChild(h('span', {class: 'fp-runs-total', text: n + ' run' + (n === 1 ? '' : 's') + (n && calibrated ? ' \u00b7 ' + formatLength(total, units()) : '')}));
+    if (S.runFilter) {
+      const dev = deviceById(doc(), S.runFilter);
+      runsBar.appendChild(h('button', {type: 'button', class: 'fp-chip', 'data-act': 'clear-filter', 'aria-label': 'Show runs for every device',
+        text: 'Runs: ' + (dev ? dev.name : S.runFilter) + ' \u2715'}));
+    }
+    if (!readOnly() && n && calibrated) {
+      runsBar.appendChild(h('button', {type: 'button', class: 'fp-btn', id: 'fp-estimate-all', text: 'Estimate all', title: 'Write the plan lengths into every run\u2019s cable length'}));
+    }
+    runsBar.hidden = !!S.tool;
+  }
+
+  // ---------------------------------------------------------- run panel
+  function closePanel() {
+    S.runSel = null;
+    S.pathSel = null;
+    S.routeEdit = false;
+    panel.hidden = true;
+    panel.innerHTML = '';
+    renderRuns();
+  }
+
+  function selectRun(id) {
+    S.pathSel = null;
+    S.runSel = id;
+    S.routeEdit = false;
+    hidePop();
+    if (id) ctx.select({type: 'cable', id: id});
+    renderRuns();
+    renderPanel();
+  }
+
+  function selectPath(id) {
+    S.runSel = null;
+    S.routeEdit = false;
+    S.pathSel = id;
+    hidePop();
+    renderRuns();
+    renderPanel();
+  }
+
+  function lengthIn(meters) {
+    // Panel inputs follow settings.units: metres, or feet when imperial.
+    if (meters == null) return '';
+    return units() === 'imperial' ? String(Math.round(meters / 0.3048 * 100) / 100) : String(Math.round(meters * 1000) / 1000);
+  }
+  function lengthOut(text) {
+    const v = parseFloat(String(text || '').replace(',', '.'));
+    if (!(v >= 0)) return 0;
+    return units() === 'imperial' ? v * 0.3048 : v;
+  }
+  function unitLabel() { return units() === 'imperial' ? 'ft' : 'm'; }
+
+  function row(label, value, cls) {
+    return h('div', {class: 'fp-runrow' + (cls ? ' ' + cls : '')}, [h('span', {class: 'fp-runkey', text: label}), h('span', {class: 'fp-runval', text: value})]);
+  }
+
+  function renderPanel() {
+    const fp = plan();
+    if (!fp || (!S.runSel && !S.pathSel) || !runsSupported()) { panel.hidden = true; panel.innerHTML = ''; return; }
+    panel.innerHTML = '';
+    const ro = readOnly();
+    const closeBtn = h('button', {type: 'button', class: 'fp-btn fp-icon', 'data-act': 'close', 'aria-label': 'Close', text: '\u00d7'});
+    if (S.pathSel) {
+      const p = pathById(fp, S.pathSel);
+      if (!p) { closePanel(); return; }
+      const kind = PATH_KINDS.indexOf(p.kind) >= 0 ? p.kind : 'other';
+      const users = pathUsers(doc(), p.id);
+      const len = polylineLength(p.points || [], fp);
+      panel.setAttribute('aria-label', 'Path ' + (p.name || p.id));
+      panel.appendChild(h('div', {class: 'fp-runhead'}, [h('strong', {class: 'fp-runtitle', text: p.name || p.id}), h('span', {class: 'fp-hint', text: PATH_KIND_LABELS[kind]}), closeBtn]));
+      panel.appendChild(row('Length', metersPerPx(fp) == null ? Math.round(len) + ' px (not calibrated)' : formatLength(len, units())));
+      panel.appendChild(row('Corners', String((p.points || []).length)));
+      panel.appendChild(row('Used by', users.length ? users.length + ' run' + (users.length === 1 ? '' : 's') : 'no runs'));
+      if (!ro) {
+        const nameIn = h('input', {type: 'text', id: 'fp-path-rename', 'aria-label': 'Path name', value: p.name || ''});
+        const kindIn = h('select', {id: 'fp-path-rekind', 'aria-label': 'Path kind'}, PATH_KINDS.map(function (k) { return h('option', {value: k, text: PATH_KIND_LABELS[k], selected: k === kind}); }));
+        const elevIn = h('input', {type: 'number', id: 'fp-path-elev', inputmode: 'decimal', min: '0', step: 'any', 'aria-label': 'Extra rise per use', value: lengthIn(p.elevation_m || 0)});
+        nameIn.addEventListener('change', function () { commit(updatePathOps(doc(), fp.id, p.id, {name: nameIn.value}), 'Renamed path ' + nameIn.value.trim()); });
+        kindIn.addEventListener('change', function () { commit(updatePathOps(doc(), fp.id, p.id, {kind: kindIn.value}), 'Changed path kind'); });
+        elevIn.addEventListener('change', function () { commit(updatePathOps(doc(), fp.id, p.id, {elevation_m: lengthOut(elevIn.value)}), 'Set path rise'); });
+        panel.appendChild(h('label', {class: 'fp-runfield'}, [h('span', {text: 'Name'}), nameIn]));
+        panel.appendChild(h('label', {class: 'fp-runfield'}, [h('span', {text: 'Kind'}), kindIn]));
+        panel.appendChild(h('label', {class: 'fp-runfield'}, [h('span', {text: 'Rise per use (' + unitLabel() + ')'}), elevIn]));
+        panel.appendChild(h('div', {class: 'fp-poprow'}, [h('button', {type: 'button', class: 'fp-btn fp-danger', id: 'fp-path-delete', 'data-act': 'delete-path', text: 'Delete path'})]));
+      }
+      panel.hidden = false;
+      return;
+    }
+    const cable = cableById(doc(), S.runSel);
+    const run = cable ? resolveRun(doc(), fp, cable) : null;
+    if (!cable || !run) { closePanel(); return; }
+    const from = deviceById(doc(), cable.from.device);
+    const to = deviceById(doc(), cable.to.device);
+    const len = runLength(run);
+    const est = runEstimate(run);
+    const route = normalizeRoute(Object.assign({plan: fp.id}, cable.route || {}));
+    const entered = cable.length_m != null && isFinite(Number(cable.length_m)) ? formatLength(Number(cable.length_m), units()) : '\u2014';
+    panel.setAttribute('aria-label', 'Cable run ' + (cable.tag || cable.id));
+    panel.appendChild(h('div', {class: 'fp-runhead'}, [
+      h('span', {class: 'fp-dot', style: 'background:' + runColor(cable)}),
+      h('strong', {class: 'fp-runtitle', text: cable.tag || cable.label || cable.id}),
+      h('span', {class: 'fp-hint', text: mediumLabel(cable.medium, vocab)}),
+      closeBtn,
+    ]));
+    panel.appendChild(h('div', {class: 'fp-runends', text: (from ? from.name : cable.from.device) + ' \u2192 ' + (to ? to.name : cable.to.device)}));
+    const lenRow = row('Length (plan)', len.text === '?' ? '? (calibrate the plan to get lengths)' : len.text + (run.auto ? ' \u00b7 straight / auto' : ' \u00b7 manual route'), 'fp-runlen');
+    if (len.server) lenRow.title = 'Confirmed by the server';
+    panel.appendChild(lenRow);
+    panel.appendChild(row('Length (entered)', entered, 'fp-runentered'));
+    if (est != null) {
+      const extra = [];
+      if (route.slack_m) extra.push('slack ' + formatLength(route.slack_m, units()));
+      if (route.drop_m) extra.push('2 \u00d7 drop ' + formatLength(route.drop_m, units()));
+      if (run.via.length) extra.push('path rise');
+      panel.appendChild(row('Estimate', formatLength(roundUp(est, ESTIMATE_ROUND), units()) + (extra.length ? ' (' + extra.join(', ') + ')' : ''), 'fp-runest'));
+    }
+    if (run.via.length || route.via.length) {
+      const chips = h('div', {class: 'fp-viarow', role: 'group', 'aria-label': 'Paths followed'}, [h('span', {class: 'fp-hint', text: 'via'})]);
+      route.via.forEach(function (id, i) {
+        const p = pathById(fp, id);
+        const chip = h('span', {class: 'fp-chip fp-viachip', 'data-via': id}, [
+          i > 0 ? h('span', {class: 'fp-hint', text: '\u203a '}) : null,
+          h('span', {text: p ? (p.name || id) : id}),
+          ro ? null : h('button', {type: 'button', class: 'fp-chip-x', 'data-act': 'drop-via', 'data-via': id, 'aria-label': 'Stop following ' + (p ? p.name : id), text: '\u2715'}),
+        ]);
+        chips.appendChild(chip);
+      });
+      panel.appendChild(chips);
+    }
+    if (!ro) {
+      const canEstimate = est != null;
+      const use = h('button', {type: 'button', class: 'fp-btn fp-primary', id: 'fp-use-estimate', 'data-act': 'use-estimate', disabled: !canEstimate,
+        title: canEstimate ? 'Write the estimate into the cable length' : 'Calibrate the plan to get lengths', text: 'Use estimate'});
+      const edit = h('button', {type: 'button', class: 'fp-btn', id: 'fp-edit-route', 'data-act': 'edit-route', 'aria-pressed': S.routeEdit ? 'true' : 'false', text: S.routeEdit ? 'Done editing' : 'Edit route'});
+      const straight = h('button', {type: 'button', class: 'fp-btn', id: 'fp-straighten', 'data-act': 'straighten', disabled: !cable.route, text: 'Straighten'});
+      panel.appendChild(h('div', {class: 'fp-poprow'}, [use, edit, straight]));
+      if (S.routeEdit) panel.appendChild(h('p', {class: 'fp-hint fp-edithint', text: 'Drag a hollow handle to add a corner; drop it on a path to follow that path. Double-click a corner to remove it.'}));
+      const slackIn = h('input', {type: 'number', id: 'fp-run-slack', inputmode: 'decimal', min: '0', step: 'any', 'aria-label': 'Slack', value: lengthIn(route.slack_m)});
+      const dropIn = h('input', {type: 'number', id: 'fp-run-drop', inputmode: 'decimal', min: '0', step: 'any', 'aria-label': 'Drop at each end', value: lengthIn(route.drop_m)});
+      slackIn.addEventListener('change', function () { setRoute(cable.id, Object.assign({}, route, {slack_m: lengthOut(slackIn.value)}), 'Set slack'); });
+      dropIn.addEventListener('change', function () { setRoute(cable.id, Object.assign({}, route, {drop_m: lengthOut(dropIn.value)}), 'Set drop'); });
+      panel.appendChild(h('div', {class: 'fp-runfields'}, [
+        h('label', {class: 'fp-runfield'}, [h('span', {text: 'Slack (' + unitLabel() + ')'}), slackIn]),
+        h('label', {class: 'fp-runfield'}, [h('span', {text: 'Drop each end (' + unitLabel() + ')'}), dropIn]),
+      ]));
+    }
+    panel.appendChild(h('div', {class: 'fp-poprow'}, [
+      h('button', {type: 'button', class: 'fp-btn', 'data-act': 'cable-details', text: 'Cable details'}),
+    ]));
+    panel.hidden = false;
+  }
+
+  function setRoute(cableId, route, label) {
+    const fp = plan();
+    if (!fp) return;
+    const cable = cableById(doc(), cableId);
+    commit(setRouteOps(doc(), cableId, Object.assign({plan: fp.id}, route)), (label || 'Changed route') + ' of ' + (cable && cable.tag ? cable.tag : cableId));
+    scheduleRefetch();
+  }
+
+  function onPanelClick(e) {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    const act = b.getAttribute('data-act');
+    const fp = plan();
+    if (act === 'close') { closePanel(); viewport.focus(); return; }
+    if (!fp) return;
+    if (act === 'cable-details' && S.runSel) { openDetails({type: 'cable', id: S.runSel}); return; }
+    if (act === 'edit-route') { S.routeEdit = !S.routeEdit; renderRuns(); renderPanel(); return; }
+    if (act === 'straighten' && S.runSel) {
+      const cable = cableById(doc(), S.runSel);
+      commit(clearRouteOps(doc(), S.runSel), 'Straightened run ' + (cable && cable.tag ? cable.tag : S.runSel));
+      S.routeEdit = false;
+      scheduleRefetch();
+      return;
+    }
+    if (act === 'drop-via' && S.runSel) {
+      const cable = cableById(doc(), S.runSel);
+      const route = normalizeRoute(Object.assign({plan: fp.id}, (cable && cable.route) || {}));
+      route.via = route.via.filter(function (v) { return v !== b.getAttribute('data-via'); });
+      setRoute(S.runSel, route, 'Changed paths');
+      return;
+    }
+    if (act === 'use-estimate' && S.runSel) { useEstimate([S.runSel], false); return; }
+    if (act === 'delete-path' && S.pathSel) { deletePath(S.pathSel); }
+  }
+
+  function deletePath(id) {
+    const fp = plan();
+    const p = fp && pathById(fp, id);
+    if (!p) return;
+    const users = pathUsers(doc(), id);
+    const msg = 'Delete path "' + (p.name || id) + '"?' + (users.length ? '\n' + users.length + ' run' + (users.length === 1 ? ' follows' : 's follow') + ' it and will go straight again.' : '\nNo runs follow it.');
+    Promise.resolve(ctx.confirm ? ctx.confirm(msg, {danger: true, ok: 'Delete path'}) : window.confirm(msg)).then(function (yes) {
+      if (yes !== true) return;
+      commit(deletePathOps(doc(), fp.id, id), 'Deleted path ' + (p.name || id));
+      closePanel();
+      scheduleRefetch();
+      viewport.focus();
+    });
+  }
+
+  // Use estimate / Estimate all: the server writes length_m (POST …/runs/estimate); the harness
+  // (no API) commits the same change locally. The toast offers Undo (inverse merges).
+  function useEstimate(ids, all) {
+    const fp = plan();
+    if (!fp || readOnly()) return;
+    const label = function (ch) {
+      if (ch.length === 1) return 'Length set to ' + formatLength(ch[0].to_m, units());
+      return 'Updated ' + ch.length + ' cable length' + (ch.length === 1 ? '' : 's');
+    };
+    const local = estimateChanges(doc(), fp.id, all ? null : ids, ESTIMATE_ROUND);
+    if (!ctx.api || typeof ctx.api.planEstimate !== 'function') {
+      if (!local.length) { ctx.toast('Lengths already match the plan', 'info'); return; }
+      commit(local.map(function (c) { return {op: 'merge', coll: collOfId(c.cable), id: c.cable, value: {length_m: c.to_m}}; }),
+        'Estimated cable lengths from ' + fp.name + ' (' + local.length + ')');
+      toastUndo(label(local), local);
+      renderPanel();
+      return;
+    }
+    const body = Object.assign(all ? {all: true} : {cables: ids}, {base_revision: store.revision, round_to: ESTIMATE_ROUND});
+    const flush = typeof ctx.flush === 'function' ? Promise.resolve(ctx.flush()).catch(function () { return null; }) : Promise.resolve(null);
+    panel.classList.add('fp-busy');
+    flush.then(function () {
+      body.base_revision = store.revision;
+      return ctx.api.planEstimate(ctx.project, fp.id, body);
+    }).then(function (res) {
+      panel.classList.remove('fp-busy');
+      const updated = (res && res.updated) || [];
+      const ops = updated.filter(function (u) { return u && cableById(doc(), u.cable); }).map(function (u) {
+        return {op: 'merge', coll: collOfId(u.cable), id: u.cable, value: {length_m: u.to_m}};
+      });
+      try { if (ops.length && store.applyRemote) store.applyRemote(ops, 'remote'); } catch (e) { /* the next resync brings the server doc */ }
+      if (res && typeof res.revision === 'number' && store.setRevision && !(store.revision >= res.revision)) store.setRevision(res.revision);
+      if (!updated.length) { ctx.toast('Lengths already match the plan', 'info'); renderPanel(); return; }
+      toastUndo(label(updated), updated);
+      renderPanel();
+    }, function (err) {
+      panel.classList.remove('fp-busy');
+      if (err && err.status === 409) {
+        ctx.toast('The project changed since the plan was loaded \u2014 reloading, then try again.', 'warn');
+        if (typeof ctx.reload === 'function') Promise.resolve(ctx.reload()).catch(function () { return null; });
+      } else if (err && (err.status === 423 || err.code === 'locked')) {
+        ctx.toast('Editing is locked \u2014 the lengths were not changed.', 'warn');
+      } else if (err && err.status === 404) {
+        ctx.toast('This server cannot estimate lengths (update Fathom).', 'warn');
+      } else {
+        ctx.toast('Could not estimate: ' + ((err && err.message) || 'error'), 'err');
+      }
+    });
+  }
+
+  function toastUndo(text, changes) {
+    const t = ctx.toast(text, 'ok');
+    if (!t || !t.appendChild) return;
+    const inverse = changes.map(function (c) {
+      return {op: 'merge', coll: collOfId(c.cable), id: c.cable, value: {length_m: c.from_m == null ? null : c.from_m}};
+    });
+    t.appendChild(document.createTextNode(' \u00b7 '));
+    t.appendChild(h('button', {type: 'button', class: 'small fp-toast-undo', onclick: function (e) {
+      e.stopPropagation();
+      t.remove();
+      commit(inverse, 'Undo: ' + text);
+      ctx.toast('Undone', 'ok');
+      scheduleRefetch();
+    }}, 'Undo'));
+  }
+
+  function estimateAll() {
+    const fp = plan();
+    if (!fp || readOnly()) return;
+    const runs = runsForPlan(doc(), fp.id);
+    const changes = estimateChanges(doc(), fp.id, null, ESTIMATE_ROUND);
+    const msg = 'Estimate lengths for ' + runs.length + ' run' + (runs.length === 1 ? '' : 's') + ' on ' + fp.name + '?\n'
+      + (changes.length ? changes.length + ' cable length' + (changes.length === 1 ? '' : 's') + ' would change (rounded up to ' + formatLength(ESTIMATE_ROUND, units()) + ').' : 'Every length already matches the plan.');
+    Promise.resolve(ctx.confirm ? ctx.confirm(msg, {ok: 'Estimate', title: 'Estimate all'}) : window.confirm(msg)).then(function (yes) {
+      if (yes === true) useEstimate(null, true);
+    });
+  }
+
+  function onRunsBarClick(e) {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.getAttribute('data-act') === 'clear-filter') { S.runFilter = null; renderRuns(); return; }
+    if (b.id === 'fp-estimate-all') estimateAll();
+  }
+
+  function filterRuns(deviceId) {
+    S.runFilter = deviceId;
+    if (!S.runs) toggleRuns(true);
+    hidePop();
+    renderRuns();
+    const dev = deviceById(doc(), deviceId);
+    announce('Showing runs for ' + (dev ? dev.name : deviceId));
+  }
+
+  function toggleRuns(force) {
+    S.runs = typeof force === 'boolean' ? force : !S.runs;
+    writeRunsPref(S.runs);
+    if (!S.runs) { S.runSel = null; S.routeEdit = false; S.runFilter = null; }
+    renderRuns();
+    renderPanel();
+    renderTool();
+    if (S.runs) probeRuns();
+  }
+
+  // --------------------------------------------------------- paths tool
+  function finishPath() {
+    const fp = plan();
+    if (!fp || S.tool !== 'paths') return;
+    // A double-click leaves a duplicate last corner.
+    const pts = [];
+    S.points.forEach(function (p) {
+      const q = normToImage(fp, p);
+      const last = pts.length ? normToImage(fp, pts[pts.length - 1]) : null;
+      if (!last || Math.hypot(q.x - last.x, q.y - last.y) > 2 / (S.view.k || 1)) pts.push(p);
+    });
+    S.points = pts;
+    if (pts.length < 2) { ctx.toast('A path needs at least two corners.', 'warn'); renderOverlay(); renderTool(); return; }
+    pathName.value = 'Path ' + ((fp.paths || []).length + 1);
+    pathKindSel.value = 'tray';
+    pathForm.hidden = false;
+    renderOverlay();
+    renderTool();
+    pathName.focus();
+    pathName.select();
+  }
+
+  function onPathSubmit(e) {
+    e.preventDefault();
+    const fp = plan();
+    if (!fp || S.tool !== 'paths' || S.points.length < 2) return;
+    const res = addPathOps(doc(), fp.id, {name: pathName.value, kind: pathKindSel.value, points: S.points.map(function (p) { return [p.x, p.y]; })});
+    S.tool = '';
+    S.points = [];
+    pathForm.hidden = true;
+    commit(res.ops, 'Added path ' + (pathName.value.trim() || res.id) + ' to ' + fp.name);
+    S.pathSel = res.id;
+    render();
+    scheduleRefetch();
+    viewport.focus();
+  }
+
+  function cancelPathForm() {
+    pathForm.hidden = true;
+    if (S.tool === 'paths') setTool('paths');
+  }
+
+  // ------------------------------------------------------- route editing
+  function handleGesture(el, pt, pointerId) {
+    const fp = plan();
+    const run = fp && runOf(fp, S.runSel);
+    if (!run) return null;
+    const corner = el.getAttribute('data-corner');
+    const seg = el.getAttribute('data-seg');
+    return {type: 'handle', start: pt, moved: false, pointer: pointerId, run: run, cable: S.runSel,
+      corner: corner == null ? -1 : parseInt(corner, 10), seg: seg == null ? -1 : parseInt(seg, 10), el: el, last: null, snap: null};
+  }
+
+  function snapNorm(fp, n) {
+    const sz = planSize(fp);
+    const maxNorm = SNAP_PX / ((S.view.k || 1) * Math.sqrt(sz.w * sz.h));
+    return snapToPaths(fp, [n.x, n.y], maxNorm);
+  }
+
+  function moveHandle(g, pt) {
+    const fp = plan();
+    if (!fp) return;
+    const n0 = normAtScreen(pt);
+    const n = {x: Math.max(0, Math.min(1, n0.x)), y: Math.max(0, Math.min(1, n0.y))};
+    const snap = snapNorm(fp, n);
+    const p = snap ? snap.point : [n.x, n.y];
+    const pts = g.run.points.slice();
+    if (g.corner >= 0) pts[g.corner + 1] = p;
+    else pts.splice(g.seg + 1, 0, p);
+    g.last = p;
+    g.snap = snap;
+    S.dragRun = {cable: g.cable, points: pts};
+    viewport.classList.toggle('fp-snapping', !!snap);
+    renderRuns();
+  }
+
+  function endHandle(g) {
+    S.dragRun = null;
+    viewport.classList.remove('fp-snapping');
+    if (!g.moved || !g.last || readOnly()) { renderRuns(); return; }
+    const fp = plan();
+    const cable = cableById(doc(), g.cable);
+    if (!fp || !cable) { renderRuns(); return; }
+    const route = normalizeRoute(Object.assign({plan: fp.id}, cable.route || {}));
+    const manual = route.mode === 'manual' && (!cable.route || !cable.route.plan || cable.route.plan === fp.id);
+    if (!manual && g.snap && g.corner < 0) {
+      // Dropped on a path while auto: follow it (inserted after the paths the run already uses before this segment).
+      let before = 0;
+      g.run.segments.slice(0, g.seg).forEach(function (s) { if (s.kind === 'path') before++; });
+      const via = route.via.filter(function (v) { return v !== g.snap.path; });
+      via.splice(Math.min(before, via.length), 0, g.snap.path);
+      const p = pathById(fp, g.snap.path);
+      setRoute(g.cable, Object.assign({}, route, {mode: 'auto', points: [], via: via}), 'Routed via ' + (p ? p.name : g.snap.path));
+      return;
+    }
+    // Otherwise the geometry becomes a manual route with the dragged / added corner.
+    const inner = g.run.points.slice(1, -1).map(function (q) { return [q[0], q[1]]; });
+    if (g.corner >= 0) inner[g.corner] = g.last;
+    else inner.splice(g.seg, 0, g.last);
+    setRoute(g.cable, Object.assign({}, route, {mode: 'manual', points: inner}), g.corner >= 0 ? 'Moved a corner' : 'Added a corner');
+  }
+
+  function removeCorner(idx) {
+    const fp = plan();
+    const cable = fp && cableById(doc(), S.runSel);
+    if (!cable || !cable.route || cable.route.mode !== 'manual') return;
+    const route = normalizeRoute(Object.assign({plan: fp.id}, cable.route));
+    route.points.splice(idx, 1);
+    setRoute(S.runSel, route, 'Removed a corner');
+  }
+
+  // ----------------------------------------------------------- export menu
+  function exportHrefs(fp) {
+    return EXPORTS.map(function (f) {
+      return {fmt: f[0], label: f[1], href: ctx.api.floorplanExportUrl(ctx.project, fp.id, f[0], {runs: S.runs, scene: sceneId()})};
+    });
+  }
+
+  function renderExport() {
+    exportPop.innerHTML = '';
+    const fp = plan();
+    if (!fp || !ctx.api || !ctx.api.floorplanExportUrl) return;
+    const missing = S.chrome === 'missing';
+    exportHrefs(fp).forEach(function (x) {
+      const needsChrome = x.fmt !== 'svg';
+      const off = missing || (needsChrome && S.chrome === false);
+      const hint = missing ? MISSING_HINT : (needsChrome && S.chrome === false ? CHROME_HINT : null);
+      const a = h('a', {class: 'fp-btn fp-export-item', 'data-fmt': x.fmt, href: off ? null : x.href, download: off ? null : '',
+        'aria-disabled': off ? 'true' : null, title: hint, text: x.label});
+      exportPop.appendChild(a);
+    });
+    const note = missing ? MISSING_HINT + '.' : S.chrome === false ? CHROME_HINT + ' for PNG and PDF.'
+      : (S.runs ? 'Includes the cable runs.' : 'Without the cable runs (turn Runs on to include them).');
+    exportPop.appendChild(h('p', {class: 'fp-hint', text: note}));
+  }
+
+  // One HEAD on the PNG route tells whether the server can rasterise (400 chrome_missing) or lacks the
+  // export routes altogether (404: every item disabled).
+  function probeChrome() {
+    const fp = plan();
+    if (S.chrome !== null || !fp || !ctx.api || typeof fetch !== 'function') return;
+    S.chrome = 'probing';
+    const href = ctx.api.floorplanExportUrl(ctx.project, fp.id, 'png', {});
+    fetch(href, {method: 'HEAD', credentials: 'same-origin', headers: {'X-Fathom': '1'}}).then(function (res) {
+      S.chrome = res.status === 400 ? false : res.status === 404 ? 'missing' : true;
+      if (!exportPop.hidden) renderExport();
+    }, function () {
+      S.chrome = null;
+    });
+  }
+
+  function toggleExport(open) {
+    const want = typeof open === 'boolean' ? open : exportPop.hidden;
+    if (want) { renderExport(); probeChrome(); }
+    exportPop.hidden = !want;
+    btnExport.setAttribute('aria-expanded', want ? 'true' : 'false');
+    if (want) { const first = exportPop.querySelector('a[href]'); if (first) first.focus(); }
+  }
+
+  function onExportClick(e) {
+    const a = e.target.closest('a.fp-export-item');
+    if (!a) return;
+    if (a.getAttribute('aria-disabled') === 'true') { e.preventDefault(); ctx.toast(a.title || CHROME_HINT, 'warn'); return; }
+    toggleExport(false);
+    closeMenu(false);
   }
 
   function applyView() {
@@ -578,6 +1362,10 @@ export function mount(el, ctx) {
     const details = h('button', {type: 'button', class: 'fp-btn', 'data-act': 'details', text: 'Details'});
     row.appendChild(details);
     row.appendChild(h('a', {class: 'fp-btn', href: 'p/' + encodeURIComponent(ctx.project || '') + '/d/' + encodeURIComponent(id), target: '_blank', rel: 'noopener', text: 'Open device page'}));
+    if (runsSupported()) {
+      const n = runsForPlan(doc(), fp.id).filter(function (r) { return r.from === id || r.to === id; }).length;
+      row.appendChild(h('button', {type: 'button', class: 'fp-btn', 'data-act': 'runs', disabled: !n, text: 'Show runs for this device' + (n ? ' (' + n + ')' : '')}));
+    }
     if (!readOnly()) row.appendChild(h('button', {type: 'button', class: 'fp-btn fp-danger', 'data-act': 'remove', text: 'Remove from plan'}));
     row.appendChild(h('button', {type: 'button', class: 'fp-btn fp-icon', 'data-act': 'close', 'aria-label': 'Close', text: '\u00d7'}));
     pop.appendChild(row);
@@ -606,12 +1394,15 @@ export function mount(el, ctx) {
     S.tool = S.tool === t ? '' : t;
     S.points = [];
     S.measure = null;
+    pathForm.hidden = true;
+    if (S.tool === 'paths') { S.runSel = null; S.routeEdit = false; hidePop(); renderPanel(); }
     if (S.tool === 'calibrate') {
       const fp = plan();
       calUnit.value = fp && fp.calibration && fp.calibration.unit ? fp.calibration.unit : (units() === 'imperial' ? 'ft' : 'm');
       calInput.value = fp && fp.calibration ? String(fp.calibration.distance) : '';
     }
     renderOverlay();
+    renderRuns();
     renderTool();
     viewport.focus();
   }
@@ -619,6 +1410,13 @@ export function mount(el, ctx) {
   function addPoint(n) {
     const fp = plan();
     if (!fp || !S.tool) return;
+    if (S.tool === 'paths') {
+      if (!pathForm.hidden) return;
+      S.points.push({x: Math.max(0, Math.min(1, n.x)), y: Math.max(0, Math.min(1, n.y))});
+      renderOverlay();
+      renderTool();
+      return;
+    }
     if (S.points.length >= 2) { S.points = []; S.measure = null; }
     S.points.push({x: n.x, y: n.y});
     if (S.tool === 'measure' && S.points.length === 2) {
@@ -645,12 +1443,13 @@ export function mount(el, ctx) {
 
   function onDown(e) {
     if (e.button != null && e.button > 0 && e.pointerType === 'mouse') return;
-    if (e.target.closest('.fp-pop, .fp-empty, .fp-imgerror')) return;
+    if (e.target.closest('.fp-pop, .fp-empty, .fp-imgerror, .fp-runsbar')) return;
     const pt = localPt(e);
     S.pointers[e.pointerId] = {id: e.pointerId, x: pt.x, y: pt.y};
     const ps = pointerList();
     if (ps.length === 2) {
       cancelMarkerDrag();
+      clearLongPress();
       S.gesture = {type: 'pinch', a: {x: ps[0].x, y: ps[0].y}, b: {x: ps[1].x, y: ps[1].y}, view: S.view, ids: [ps[0].id, ps[1].id]};
       capture(viewport, e.pointerId);
       return;
@@ -661,11 +1460,30 @@ export function mount(el, ctx) {
     if (mk && !S.tool) {
       const id = mk.getAttribute('data-device');
       S.gesture = {type: 'marker', id: id, el: mk, start: pt, moved: false, pointer: e.pointerId};
+      // Long-press (touch / pen) opens the marker menu with "Show runs for this device".
+      if (e.pointerType !== 'mouse' && runsSupported()) {
+        clearLongPress();
+        longPress = setTimeout(function () {
+          longPress = 0;
+          if (S.gesture && S.gesture.type === 'marker' && !S.gesture.moved) { S.gesture.longPressed = true; selectDevice(id, true); }
+        }, LONG_PRESS_MS);
+      }
       e.preventDefault();
       return;
     }
-    S.gesture = {type: 'pan', start: pt, view: S.view, moved: false, pointer: e.pointerId};
+    const handle = e.target.closest('.fp-handle');
+    if (handle && !S.tool && S.routeEdit && S.runSel && !readOnly()) {
+      const g = handleGesture(handle, pt, e.pointerId);
+      if (g) { S.gesture = g; e.preventDefault(); return; }
+    }
+    // Run / path hits select on release when the pointer did not pan.
+    const hitEl = S.tool ? null : e.target.closest('[data-run], [data-path]');
+    const hit = hitEl ? (hitEl.getAttribute('data-run') ? {run: hitEl.getAttribute('data-run')} : {path: hitEl.getAttribute('data-path')}) : null;
+    S.gesture = {type: 'pan', start: pt, view: S.view, moved: false, pointer: e.pointerId, hit: hit};
   }
+
+  let longPress = 0;
+  function clearLongPress() { if (longPress) { clearTimeout(longPress); longPress = 0; } }
 
   function onMove(e) {
     if (!S.pointers[e.pointerId]) return;
@@ -685,11 +1503,14 @@ export function mount(el, ctx) {
     const dy = pt.y - g.start.y;
     if (!g.moved && Math.hypot(dx, dy) < DRAG_SLOP) return;
     g.moved = true;
+    clearLongPress();
     if (g.type === 'pan') {
       setView(panBy(g.view, dx, dy), false);
       positionPop();
+    } else if (g.type === 'handle') {
+      moveHandle(g, pt);
     } else if (g.type === 'marker') {
-      if (readOnly()) return;
+      if (readOnly() || g.longPressed) return;
       const fp = plan();
       const n = normAtScreen(pt);
       const p = normToImage(fp, {x: Math.max(0, Math.min(1, n.x)), y: Math.max(0, Math.min(1, n.y))});
@@ -713,7 +1534,9 @@ export function mount(el, ctx) {
     }
     if (g.pointer !== e.pointerId) return;
     S.gesture = null;
+    clearLongPress();
     if (g.type === 'marker') {
+      if (g.longPressed) return;
       if (g.moved && g.last && !readOnly()) {
         const dev = deviceById(doc(), g.id);
         commit(markerOps(doc(), S.fpId, g.id, g.last), 'Moved ' + (dev ? dev.name : g.id) + ' on ' + plan().name);
@@ -722,10 +1545,14 @@ export function mount(el, ctx) {
         selectDevice(g.id, true);
         g.el.focus();
       }
+    } else if (g.type === 'handle') {
+      endHandle(g);
     } else if (g.type === 'pan') {
       if (!g.moved) {
         if (S.tool) addPoint(normAtScreen(pt));
-        else { selectDevice(null, false); }
+        else if (g.hit && g.hit.run) selectRun(g.hit.run);
+        else if (g.hit && g.hit.path) selectPath(g.hit.path);
+        else { selectDevice(null, false); if (S.runSel || S.pathSel) closePanel(); }
       } else { renderOverlay(); }
     }
   }
@@ -733,7 +1560,23 @@ export function mount(el, ctx) {
   function cancelMarkerDrag() {
     const g = S.gesture;
     if (g && g.type === 'marker' && g.moved) renderMarkers();
+    if (g && g.type === 'handle') { S.dragRun = null; viewport.classList.remove('fp-snapping'); renderRuns(); }
+    clearLongPress();
     S.gesture = null;
+  }
+
+  function onDblClick(e) {
+    if (S.tool === 'paths') { e.preventDefault(); finishPath(); return; }
+    const hd = e.target.closest('.fp-handle.fp-corner');
+    if (hd && S.routeEdit && S.runSel && !readOnly()) { e.preventDefault(); removeCorner(parseInt(hd.getAttribute('data-corner'), 10)); }
+  }
+
+  // Right-click on a marker: the marker menu (with "Show runs for this device").
+  function onContextMenu(e) {
+    const mk = e.target.closest('.fp-marker');
+    if (!mk || S.tool) return;
+    e.preventDefault();
+    selectDevice(mk.getAttribute('data-device'), true);
   }
 
   function onCancel(e) {
@@ -852,12 +1695,35 @@ export function mount(el, ctx) {
 
   // ----------------------------------------------------------- keyboard
   function onKey(e) {
-    if (e.target.closest('input,select,textarea,form,.fp-pop,.fp-empty,.fp-imgerror')) {
-      if (e.key === 'Escape') { if (S.tool) setTool(S.tool); hidePop(); viewport.focus(); }
+    if (e.target.closest('input,select,textarea,form,.fp-pop,.fp-empty,.fp-imgerror,.fp-runsbar')) {
+      if (e.key === 'Escape') {
+        if (!pathForm.hidden) { cancelPathForm(); viewport.focus(); return; }
+        if (S.tool) setTool(S.tool);
+        hidePop();
+        if (S.runSel || S.pathSel) closePanel();
+        viewport.focus();
+      }
       return;
     }
     const fp = plan();
     if (!fp) return;
+    // Run labels, path labels and route handles are keyboard targets too.
+    const runEl = e.target.closest('[data-run], [data-path]');
+    if (runEl && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      if (runEl.getAttribute('data-run')) selectRun(runEl.getAttribute('data-run')); else selectPath(runEl.getAttribute('data-path'));
+      return;
+    }
+    const hd = e.target.closest('.fp-handle.fp-corner');
+    if (hd && (e.key === 'Delete' || e.key === 'Backspace') && S.routeEdit && !readOnly()) {
+      e.preventDefault();
+      removeCorner(parseInt(hd.getAttribute('data-corner'), 10));
+      return;
+    }
+    if (S.tool === 'paths') {
+      if (e.key === 'Enter') { e.preventDefault(); if (S.points.length >= 2) finishPath(); else addPoint(centerNorm()); return; }
+      if (e.key === ' ') { e.preventDefault(); addPoint(centerNorm()); return; }
+    }
     const mk = e.target.closest('.fp-marker');
     const step = e.shiftKey ? 0.025 : 0.005;
     const dirs = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]};
@@ -896,13 +1762,15 @@ export function mount(el, ctx) {
     if (e.key === 'Enter' && S.tool) { e.preventDefault(); addPoint(centerNorm()); return; }
     if (e.key === 'Escape') {
       e.preventDefault();
-      if (S.tool) setTool(S.tool); else selectDevice(null, false);
+      if (S.tool) setTool(S.tool);
+      else if (S.runSel || S.pathSel) closePanel();
+      else selectDevice(null, false);
     }
   }
 
   // Explicit inspection opens the drawer at every width (D4); plain selection stays ctx.select.
   function openDetails(id) {
-    const sel = {type: 'device', id: id};
+    const sel = typeof id === 'string' ? {type: 'device', id: id} : id;
     if (typeof ctx.openDrawer === 'function') ctx.openDrawer(sel);
     else if (ctx.openInspector) ctx.openInspector(sel);
   }
@@ -927,6 +1795,7 @@ export function mount(el, ctx) {
     S.tool = '';
     S.points = [];
     hidePop();
+    leavePlan();
     render();
     if (routed()) ctx.navigateRoute({id: S.fpId || ''});
   }
@@ -970,7 +1839,20 @@ export function mount(el, ctx) {
     S.points = [];
     S.measure = null;
     hidePop();
+    leavePlan();
     return true;
+  }
+
+  // Per-plan P5B state that does not carry over to another plan.
+  function leavePlan() {
+    S.runSel = null;
+    S.pathSel = null;
+    S.routeEdit = false;
+    S.runFilter = null;
+    S.dragRun = null;
+    pathForm.hidden = true;
+    exportPop.hidden = true;
+    btnExport.setAttribute('aria-expanded', 'false');
   }
 
   // -------------------------------------------------- toolbar and ⋯ menu
@@ -1012,18 +1894,21 @@ export function mount(el, ctx) {
     menuBtn.setAttribute('aria-expanded', 'false');
     layersPop.hidden = true;
     btnLayers.setAttribute('aria-expanded', 'false');
+    exportPop.hidden = true;
+    btnExport.setAttribute('aria-expanded', 'false');
     if (focusBtn) menuBtn.focus();
   }
 
   function onMenuClick(e) {
     const b = e.target.closest('button, label.fp-btn');
-    if (!b || b === btnLayers || layersPop.contains(b)) return;
+    if (!b || b === btnLayers || layersPop.contains(b) || b === btnExport || exportPop.contains(b)) return;
     // The label opens the file picker first; the menu closes after that click.
     setTimeout(function () { closeMenu(false); }, 0);
   }
 
   function onDocPointer(e) {
     if (menuOpen() && !menuWrap.contains(e.target)) closeMenu(false);
+    if (!exportPop.hidden && !exportWrap.contains(e.target)) toggleExport(false);
   }
 
   function onRename() {
@@ -1189,6 +2074,7 @@ export function mount(el, ctx) {
     const id = S.popFor;
     const act = b.getAttribute('data-act');
     if (act === 'details') openDetails(id);
+    else if (act === 'runs') filterRuns(id);
     else if (act === 'remove') removeMarker(id);
     else if (act === 'close') { hidePop(); refocusMarker(id); }
   }
@@ -1206,14 +2092,22 @@ export function mount(el, ctx) {
   }
 
   // ------------------------------------------------------- store events
-  function onDoc() { render(); positionPop(); }
+  function onDoc(e) {
+    render();
+    positionPop();
+    const d = e && e.detail;
+    const touched = (d && d.touched) || [];
+    if (d && d.source === 'load') { Object.keys(S.server).forEach(function (k) { if (S.server[k].ok !== false) S.server[k].stale = true; }); probeRuns(); }
+    else if (touched.some(function (t) { return /^(floorplans|cables|bundles)\//.test(String(t)); })) scheduleRefetch();
+  }
   function onSelection(e) {
     const sel = e.detail;
     const id = sel && (sel.type === 'device' || sel.type === 'marker') ? (sel.device || sel.id) : null;
     if (id !== S.sel) { S.sel = id; renderMarkers(); }
+    if (S.runSel && !(sel && sel.type === 'cable' && sel.id === S.runSel)) { S.runSel = null; S.routeEdit = false; renderRuns(); renderPanel(); }
   }
   function onHighlight(e) { S.highlight = e.detail; renderMarkers(); }
-  function onRoom() { S.fpId = null; S.pinned = false; S.tool = ''; hidePop(); render(); }
+  function onRoom() { S.fpId = null; S.pinned = false; S.tool = ''; hidePop(); leavePlan(); render(); }
 
   on(menuBtn, 'click', function () { if (menuOpen()) closeMenu(true); else openMenu(); });
   on(menu, 'click', onMenuClick);
@@ -1234,6 +2128,17 @@ export function mount(el, ctx) {
   on(devAdd, 'click', onDevAdd);
   on(btnCal, 'click', function () { setTool('calibrate'); });
   on(btnMeasure, 'click', function () { setTool('measure'); });
+  on(btnPaths, 'click', function () { setTool('paths'); });
+  on(btnRuns, 'click', function () { toggleRuns(); });
+  on(btnExport, 'click', function () { toggleExport(); });
+  on(exportPop, 'click', onExportClick);
+  on(exportPop, 'keydown', function (e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); toggleExport(false); btnExport.focus(); } });
+  on(pathForm, 'submit', onPathSubmit);
+  on(pathCancel, 'click', cancelPathForm);
+  on(panel, 'click', onPanelClick);
+  on(runsBar, 'click', onRunsBarClick);
+  on(viewport, 'dblclick', onDblClick);
+  on(viewport, 'contextmenu', onContextMenu);
   on(btnLayers, 'click', function () {
     layersPop.hidden = !layersPop.hidden;
     btnLayers.setAttribute('aria-expanded', layersPop.hidden ? 'false' : 'true');
@@ -1331,6 +2236,8 @@ export function mount(el, ctx) {
     destroy: function () {
       S.destroyed = true;
       if (syncTimer) clearTimeout(syncTimer);
+      if (refetchTimer) clearTimeout(refetchTimer);
+      clearLongPress();
       offs.forEach(function (off) { off(); });
       if (resizeObs) resizeObs.disconnect();
       if (toolbarObs) toolbarObs.disconnect();
