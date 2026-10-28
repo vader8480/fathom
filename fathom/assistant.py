@@ -7,7 +7,10 @@ suspect segment, build numbered checks from the checklists (kinds, media,
 template ``checks``, generic) and propose a note for the map. The optional LLM
 bridge (``llm.py``) only adds ``llm.text``; it never changes the deterministic
 fields and its output is never executed. Suggested ops are only proposals the
-user must confirm.
+user must confirm. With a tool-calling provider the grounded loop of
+``assistant_tools`` runs afterwards (§6.9.6 "tool loop"); edits it suggests
+come back as a ``proposal`` (``assistant_edits``) that is applied only through
+``POST …/assistant/apply``.
 """
 
 from __future__ import annotations
