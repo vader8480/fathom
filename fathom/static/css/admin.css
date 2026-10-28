@@ -127,6 +127,7 @@
 .adm-llm-spin{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid var(--border-2);border-top-color:var(--accent);animation:adm-llm-spin .8s linear infinite}
 @keyframes adm-llm-spin{to{transform:rotate(360deg)}}
 .adm-llm-toggle{display:inline-flex;align-items:center;gap:8px;min-height:40px;cursor:pointer;font-size:13px}
+.adm-llm-toggle input{width:auto;flex:none;margin:0}
 .adm-llm-actions{margin-top:12px;gap:10px}
 .adm-llm-missing{margin:0;font-size:13px}
 
