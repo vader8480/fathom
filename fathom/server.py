@@ -3572,7 +3572,7 @@ def r_api_docs(req: Request) -> Response:
 
 
 _MUTATING = ("POST", "PUT", "PATCH", "DELETE")
-_PUBLIC_VIEW_PREFIXES = ("/p/", "/builds/")
+_PUBLIC_VIEW_PREFIXES = ("/p/", "/builds/", "/c/")
 
 
 def _authenticate(req: Request) -> None:

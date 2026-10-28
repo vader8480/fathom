@@ -69,7 +69,7 @@ Design principles:
 | Storage | Atomic writes, per-project lock, **revisions** with history (ops log + snapshots), restore, **entity-level optimistic concurrency** (ETag/If-Match + rebasing change ops) | W1 |
 | Users & roles | admin / editor / viewer, session cookie login, PBKDF2-SHA256 passwords, CLI user admin, `FATHOM_AUTH` bootstrap, public read-only viewer, share links (P1) | W1 (+W2 CLI) |
 | API v2 + OpenAPI | Full REST API under `/api/v2`, v1 endpoints kept, `/api/openapi.json`, static/PWA routes, hardening | W1 |
-| AVL vocabulary | 34 device kinds, 41 media (audio, video, lighting, control, power), 7 disciplines with colors and key | W2 |
+| AVL vocabulary | 35 device kinds, 41 media (audio, video, lighting, control, power), 7 disciplines with colors and key | W2 |
 | Importers | Plugin registry; existing Yamaha/Dante/Waves; **new** ETC Eos (CSV/USITT ASCII/Lightwright text), Blackmagic Videohub (protocol dump), generic device/cable CSV (one-shot) | W2 |
 | Equipment library | 55 starter templates (Appendix E; ≥ 48 required) + custom templates (global and per project) | W2 |
 | Floor plans | Upload PNG/JPG/SVG/PDF/Draw.io/DXF; server converts Draw.io & DXF subsets to SVG, PDF → PNG via a local rasterizer when present; DWG explained | W2 (convert), W4 (UI) |
@@ -139,7 +139,7 @@ Format: `ID · Priority · Requirement — **AC:** acceptance criterion · Owner
 
 | ID | Pri | Requirement | Acceptance criterion | Owner |
 | --- | --- | --- | --- | --- |
-| FR-VOC-01 | P0 | `fathom/vocab.py` defines the 34 device kinds of Appendix A.1; the 9 v1 keys keep their v1 colors. | `len(KINDS) == 34`; v1 keys present with identical `color`. | W2 |
+| FR-VOC-01 | P0 | `fathom/vocab.py` defines the 35 device kinds of Appendix A.1; the 9 v1 keys keep their v1 colors. | `len(KINDS) == 34`; v1 keys present with identical `color`. | W2 |
 | FR-VOC-02 | P0 | 41 media (Appendix A.2) with `label, color, dash, width, arrow, discipline, carries, ip, connector, short`; the 14 v1 keys keep identical `label/color/dash/width/arrow`. | Unit test compares the v1 subset field by field. | W2 |
 | FR-VOC-03 | P0 | 7 disciplines (audio, video, lighting, network, control, power, other) with color and tag letter (Appendix A.3). | `vocab.as_dict()["disciplines"]` has 7 entries with `color` and `letter`. | W2 |
 | FR-VOC-04 | P0 | `GET /api/v2/meta` returns `vocab.as_dict()`; `GET /api/meta` (v1) still returns `kinds`/`media` keyed dicts (now larger) and its other v1 keys. | API test on both endpoints. | W1 |
@@ -1303,7 +1303,7 @@ Device `kind` cells are normalized to an Appendix A.1 key when they spell a kind
 | `ip` | `room` Room, `device` Device, `interface` Interface, `role` Role, `ip` IP, `prefix` Prefix, `gateway` Gateway, `vlan` VLAN, `network` Network, `mac` MAC, `hostname` Hostname, `switch` Switch, `switch_port` Switch port, `protocol` Protocol, `dhcp` DHCP, `source` Source, `note` Note |
 | `dmx` | `universe` Universe, `address` Address, `end` End, `footprint` Footprint, `device` Device, `room` Room, `mode` Mode, `channel` Console channel, `protocol` Protocol, `sacn_group` sACN group, `artnet` Art-Net (net:sub:uni), `source` Source |
 | `bom` | `category` Category (discipline), `manufacturer` Manufacturer, `model` Model, `template` Template, `qty` Qty, `unit_cost` Unit cost, `extended` Extended, `currency` Currency, `planned` Planned, `installed` Installed, `spare` Spare, `retired` Retired; cable lines use `category = "cable"`, `model = "<medium> · <type>"`, `qty` = count, plus `length_total_m` Total length (m) |
-| `inventory` | `id`, `name`, `room`, `location`, `kind`, `discipline`, `manufacturer`, `model`, `status`, `serial`, `asset_tag`, `firmware`, `purchase_date`, `warranty_until`, `vendor`, `cost`, `currency`, `po`, `rack`, `ru`, `ips` (semicolon-joined), `notes` |
+| `inventory` | `id`, `name`, `room`, `location`, `kind`, `discipline`, `manufacturer`, `model`, `status`, `serial`, `asset_tag`, `firmware`, `purchase_date`, `warranty_until`, `vendor`, `cost`, `currency`, `po`, `rack`, `ru`, `ips` (semicolon-joined), `notes`, `condition`, `container` (container device name), `short_code` (`XXXX-XXXX`), then one `field:<key>` column per custom-field key in the doc (sorted; FR-INV-06..09) |
 | `racks` | `rack` Rack, `room` Room, `units` Units, `face` Face, `u` U, `height` Height, `side` Side, `device` Device, `model` Model |
 
 Device and port columns contain **names** (device `name`, port `label or name`) in CSV and both `*_id` and name keys in JSON rows (e.g. `device`, `device_id`, `port`, `port_id`).
