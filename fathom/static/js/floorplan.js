@@ -393,7 +393,8 @@ export function mount(el, ctx) {
       runsSvg.setAttribute('width', sz.w);
       runsSvg.setAttribute('height', sz.h);
       runsSvg.setAttribute('viewBox', '0 0 ' + sz.w + ' ' + sz.h);
-      [markersEl, labelsEl, handlesEl].forEach(function (layer) { layer.style.width = sz.w + 'px'; layer.style.height = sz.h + 'px'; });
+      markersEl.style.width = sz.w + 'px';
+      markersEl.style.height = sz.h + 'px';
       img.alt = 'Floor plan: ' + fp.name;
       img.classList.toggle('fp-img-dark', !!(fp.source && fp.source.kind === 'dxf'));
       const url = imageUrl(fp);
@@ -723,12 +724,14 @@ export function mount(el, ctx) {
     return {x: pts[0][0], y: pts[0][1], nx: 0, ny: -1};
   }
 
-  function labelAt(fp, pts, cls, attrs, text, offset) {
+  // The label sits `offset` screen px off the midpoint along the segment normal (upwards side);
+  // the nth label of runs sharing that midpoint stacks below the first (`stack` screen px).
+  function labelAt(fp, pts, cls, attrs, text, offset, stack) {
     const m = midpoint(imgPts(fp, pts));
     const ny = m.ny <= 0 ? m.ny : -m.ny;
     const nx = m.ny <= 0 ? m.nx : -m.nx;
     const el = h('span', Object.assign({class: cls, text: text,
-      style: 'left:' + m.x + 'px;top:' + m.y + 'px;--fp-ox:' + (nx * offset) + 'px;--fp-oy:' + (ny * offset) + 'px'}, attrs));
+      style: 'left:' + m.x + 'px;top:' + m.y + 'px;--fp-ox:' + (nx * offset) + 'px;--fp-oy:' + (ny * offset + (stack || 0)) + 'px'}, attrs));
     labelsEl.appendChild(el);
     return el;
   }
@@ -773,7 +776,7 @@ export function mount(el, ctx) {
         const cls = 'fp-run' + (r.auto && !dragging ? ' fp-auto' : '') + (sel ? ' fp-selected' : '') + (S.runSel && !sel ? ' fp-dim' : '');
         runsSvg.appendChild(svgEl('polyline', {points: polyAttr(fp, pts), class: cls, 'data-run': r.cable, style: 'stroke:' + color}));
         runsSvg.appendChild(svgEl('polyline', {points: polyAttr(fp, pts), class: 'fp-run-hit', 'data-run': r.cable}));
-        // Coincident runs (same two markers, straight) stack their labels along the normal.
+        // Coincident runs (same two markers, straight) stack their labels downwards.
         const key = pts.map(function (p) { return Math.round(p[0] * 1e3) + ',' + Math.round(p[1] * 1e3); }).join('|');
         const n = stack[key] || 0;
         stack[key] = n + 1;
@@ -781,7 +784,7 @@ export function mount(el, ctx) {
         const tag = cable && cable.tag ? cable.tag + ' \u00b7 ' : '';
         const lab = labelAt(fp, pts, 'fp-runlabel' + (sel ? ' fp-selected' : '') + (S.runSel && !sel ? ' fp-dim' : ''),
           {'data-run': r.cable, role: 'button', tabindex: '0', 'aria-label': 'Cable run ' + (cable && cable.tag ? cable.tag : r.cable) + ', ' + (len.text === '?' ? 'length unknown' : len.text)},
-          tag + len.text, 14 + n * 20);
+          tag + len.text, 14, n * 24);
         lab.style.setProperty('--fp-runcolor', color);
         if (len.text === '?') lab.title = 'Calibrate the plan to get lengths';
       });
@@ -927,7 +930,8 @@ export function mount(el, ctx) {
       closeBtn,
     ]));
     panel.appendChild(h('div', {class: 'fp-runends', text: (from ? from.name : cable.from.device) + ' \u2192 ' + (to ? to.name : cable.to.device)}));
-    const lenRow = row('Length (plan)', len.text === '?' ? '? (calibrate the plan to get lengths)' : len.text + (run.auto ? ' \u00b7 straight / auto' : ' \u00b7 manual route'), 'fp-runlen');
+    const how = !run.auto ? 'manual route' : run.via.length ? 'via ' + run.via.length + ' path' + (run.via.length === 1 ? '' : 's') : 'straight';
+    const lenRow = row('Length (plan)', len.text === '?' ? '? (calibrate the plan to get lengths)' : len.text + ' \u00b7 ' + how, 'fp-runlen');
     if (len.server) lenRow.title = 'Confirmed by the server';
     panel.appendChild(lenRow);
     panel.appendChild(row('Length (entered)', entered, 'fp-runentered'));
@@ -935,7 +939,8 @@ export function mount(el, ctx) {
       const extra = [];
       if (route.slack_m) extra.push('slack ' + formatLength(route.slack_m, units()));
       if (route.drop_m) extra.push('2 \u00d7 drop ' + formatLength(route.drop_m, units()));
-      if (run.via.length) extra.push('path rise');
+      const rise = run.via.reduce(function (acc, id) { const p = pathById(fp, id); return acc + (p && p.elevation_m > 0 ? Number(p.elevation_m) : 0); }, 0);
+      if (rise > 0) extra.push('rise ' + formatLength(rise, units()));
       panel.appendChild(row('Estimate', formatLength(roundUp(est, ESTIMATE_ROUND), units()) + (extra.length ? ' (' + extra.join(', ') + ')' : ''), 'fp-runest'));
     }
     if (run.via.length || route.via.length) {
@@ -1095,8 +1100,15 @@ export function mount(el, ctx) {
     if (!fp || readOnly()) return;
     const runs = runsForPlan(doc(), fp.id);
     const changes = estimateChanges(doc(), fp.id, null, ESTIMATE_ROUND);
+    const MAX = 6;
+    const lines = changes.slice(0, MAX).map(function (c) {
+      const cable = cableById(doc(), c.cable);
+      return (cable && (cable.tag || cable.label) || c.cable) + ': ' + (c.from_m == null ? '\u2014' : formatLength(c.from_m, units())) + ' \u2192 ' + formatLength(c.to_m, units());
+    });
+    if (changes.length > MAX) lines.push('\u2026 and ' + (changes.length - MAX) + ' more');
     const msg = 'Estimate lengths for ' + runs.length + ' run' + (runs.length === 1 ? '' : 's') + ' on ' + fp.name + '?\n'
-      + (changes.length ? changes.length + ' cable length' + (changes.length === 1 ? '' : 's') + ' would change (rounded up to ' + formatLength(ESTIMATE_ROUND, units()) + ').' : 'Every length already matches the plan.');
+      + (changes.length ? changes.length + ' cable length' + (changes.length === 1 ? '' : 's') + ' would change (rounded up to ' + formatLength(ESTIMATE_ROUND, units()) + '):\n' + lines.join('\n')
+        : 'Every length already matches the plan.');
     Promise.resolve(ctx.confirm ? ctx.confirm(msg, {ok: 'Estimate', title: 'Estimate all'}) : window.confirm(msg)).then(function (yes) {
       if (yes === true) useEstimate(null, true);
     });
@@ -1273,7 +1285,12 @@ export function mount(el, ctx) {
     const href = ctx.api.floorplanExportUrl(ctx.project, fp.id, 'png', {});
     fetch(href, {method: 'HEAD', credentials: 'same-origin', headers: {'X-Fathom': '1'}}).then(function (res) {
       S.chrome = res.status === 400 ? false : res.status === 404 ? 'missing' : true;
-      if (!exportPop.hidden) renderExport();
+      if (!exportPop.hidden) {
+        const had = document.activeElement && exportPop.contains(document.activeElement) ? document.activeElement.getAttribute('data-fmt') : null;
+        renderExport();
+        const again = had ? exportPop.querySelector('[data-fmt="' + had + '"][href]') : null;
+        if (had) (again || btnExport).focus();
+      }
     }, function () {
       S.chrome = null;
     });
@@ -2132,7 +2149,7 @@ export function mount(el, ctx) {
   on(btnRuns, 'click', function () { toggleRuns(); });
   on(btnExport, 'click', function () { toggleExport(); });
   on(exportPop, 'click', onExportClick);
-  on(exportPop, 'keydown', function (e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); toggleExport(false); btnExport.focus(); } });
+  on(exportWrap, 'keydown', function (e) { if (e.key === 'Escape' && !exportPop.hidden) { e.preventDefault(); e.stopPropagation(); toggleExport(false); btnExport.focus(); } });
   on(pathForm, 'submit', onPathSubmit);
   on(pathCancel, 'click', cancelPathForm);
   on(panel, 'click', onPanelClick);

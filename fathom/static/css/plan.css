@@ -83,7 +83,8 @@
 .fp-mline { stroke: var(--ok, #2fd4b4); }
 .fp-mline-pt { fill: var(--ok, #2fd4b4); stroke: #000; stroke-width: 1px; vector-effect: non-scaling-stroke; }
 .fp-mtext { fill: #fff; stroke: #0b1020; stroke-width: 4px; paint-order: stroke; text-anchor: middle; font-weight: 700; font-family: system-ui, sans-serif; vector-effect: non-scaling-stroke; }
-.fp-markers { position: absolute; left: 0; top: 0; }
+.fp-markers { position: absolute; left: 0; top: 0; pointer-events: none; }
+.fp-marker { pointer-events: auto; }
 .fp-marker {
   position: absolute; width: 0; height: 0; cursor: grab; touch-action: none; outline: none;
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
@@ -159,7 +160,8 @@
 .fp-path.fp-selected { opacity: 1; stroke-width: 10px; filter: drop-shadow(0 0 3px rgba(255,255,255,.6)); }
 .fp-pathdraft { fill: none; stroke: var(--accent, #8ea2ff); stroke-width: 6px; stroke-dasharray: 10 6; opacity: .8; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .fp-pathdraft-pt { fill: var(--accent, #8ea2ff); stroke: #000; stroke-width: 1px; vector-effect: non-scaling-stroke; }
-.fp-runlabels, .fp-handles { position: absolute; left: 0; top: 0; }
+.fp-runlabels, .fp-handles { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: visible; pointer-events: none; }
+.fp-runlabels > *, .fp-handles > * { pointer-events: auto; }
 .fp-runlabel, .fp-pathlabel {
   position: absolute; --fp-ox: 0px; --fp-oy: -14px; transform-origin: 0 0;
   transform: scale(var(--fp-inv)) translate(var(--fp-ox), var(--fp-oy)) translate(-50%, -50%);
@@ -471,11 +473,10 @@ span.inv-planned { color: var(--accent, #8ea2ff); border-style: dashed; }
   .fp-readout, .rk-readout, .sch-count { margin-left: 0; width: 100%; }
   /* the run / path panel is a bottom sheet on phones */
   .fp-viewport > .fp-runpanel {
-    left: 0; right: 0; top: auto; bottom: 0; width: auto; max-width: none; max-height: 60%;
+    left: 0; right: 0; top: auto; bottom: 0; width: auto; max-width: none; max-height: 55%;
     border-radius: 14px 14px 0 0; border-bottom: 0; padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
   }
   .fp-viewport > .fp-runpanel::before { content: ""; display: block; width: 36px; height: 4px; margin: -4px auto 2px; border-radius: 2px; background: var(--border, rgba(255,255,255,.2)); }
-  .fp-runfields { grid-template-columns: 1fr; }
   .fp-viewport > .fp-runsbar { bottom: 8px; left: 8px; right: 8px; max-width: none; border-radius: 12px; }
   .fp-pathform { left: 8px; right: 8px; bottom: 8px; min-width: 0; }
   .fp-pathfields { grid-template-columns: 1fr; }
