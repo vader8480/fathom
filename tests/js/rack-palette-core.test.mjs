@@ -237,3 +237,58 @@ test('nextRow: arrows, Home/End, paging, back to the search box', () => {
   assert.equal(pal.nextRow(0, 0, 'ArrowDown'), -1);
   assert.equal(pal.nextRow(5, 2, 'x'), 2);
 });
+
+test('dedupeCatalog: catalog twins (same maker + model, any case) collapse to one row', () => {
+  const lib = { templates: [
+    { id: 'dell-poweredge-r640', manufacturer: 'Dell', model: 'PowerEdge R640', kind: 'computer', ru: 1, source: 'catalog', rack_category: 'server' },
+    { id: 'poweredge-r640', manufacturer: 'dell', model: 'poweredge r640', kind: 'computer', ru: 1, source: 'catalog', rack_category: 'server', image_front: 'dell/r640.front.webp' },
+    { id: 'ubiquiti-usw-24', manufacturer: 'Ubiquiti', model: 'USW-24', kind: 'switch', ru: 1, source: 'catalog', image_rear: 'ubiquiti/usw-24.rear.webp' },
+    { id: 'usw-24', manufacturer: 'Ubiquiti', model: 'USW-24', kind: 'switch', ru: 1, source: 'catalog' },
+    { id: 'apc-ap7900b', manufacturer: 'APC', model: 'AP7900B', kind: 'power', ru: 1, source: 'catalog' },
+    { id: 'ap7900b', manufacturer: 'APC', model: 'AP7900B', kind: 'power', ru: 1, source: 'catalog' },
+    { id: 'my-ap7900b', manufacturer: 'APC', model: 'AP7900B', kind: 'power', ru: 1, source: 'custom' },
+    { id: 'house-ap7900b', manufacturer: 'APC', model: 'AP7900B', kind: 'power', ru: 1, source: 'project' },
+    { id: 'house-ap7900b-2', manufacturer: 'APC', model: 'AP7900B', kind: 'power', ru: 1, source: 'project' },
+    { id: 'netgear-gs724t', manufacturer: 'Netgear', model: 'GS724T', kind: 'switch', ru: 1, source: 'catalog' },
+  ] };
+  const list = pal.normalizeEntries(lib, null);
+  assert.deepEqual(ids(list), ['poweredge-r640', 'ubiquiti-usw-24', 'ap7900b', 'my-ap7900b', 'house-ap7900b', 'house-ap7900b-2', 'netgear-gs724t'],
+    'front image wins, then rear image, then the shorter id; kept at the first twin\'s place; other sources untouched');
+  assert.deepEqual(list[0].aliases, ['dell-poweredge-r640']);
+  assert.deepEqual(list[1].aliases, ['usw-24']);
+  assert.deepEqual(list[2].aliases, ['apc-ap7900b']);
+  assert.equal('aliases' in list[3], false);
+  assert.equal('aliases' in list[6], false, 'singletons unchanged');
+  const raw = lib.templates.map((s) => Object.assign({}, s));
+  const r = pal.dedupeCatalog(raw);
+  assert.deepEqual(r.dropped, { 'dell-poweredge-r640': 'poweredge-r640', 'usw-24': 'ubiquiti-usw-24', 'apc-ap7900b': 'ap7900b' });
+  assert.equal(r.entries.length, raw.length - 3);
+  assert.equal('aliases' in raw[1], false, 'input untouched');
+  assert.deepEqual(pal.dedupeCatalog(null), { entries: [], dropped: {} });
+  // Same id length and no images: the smaller id wins.
+  const tie = pal.dedupeCatalog([
+    { id: 'b-x', manufacturer: 'M', model: 'X', source: 'catalog' }, { id: 'a-x', manufacturer: 'M', model: 'X', source: 'catalog' }]);
+  assert.deepEqual(ids(tie.entries), ['a-x']);
+});
+
+test('dedupeCatalog: favourites and recents on a dropped id resolve to the kept twin', () => {
+  const list = pal.normalizeEntries({ templates: [
+    { id: 'dell-poweredge-r640', manufacturer: 'Dell', model: 'PowerEdge R640', kind: 'computer', ru: 1, source: 'catalog' },
+    { id: 'poweredge-r640', manufacturer: 'Dell', model: 'PowerEdge R640', kind: 'computer', ru: 1, source: 'catalog', image_front: 'dell/r640.front.webp' },
+    { id: 'netgear-gs724t', manufacturer: 'Netgear', model: 'GS724T', kind: 'switch', ru: 1, source: 'catalog' },
+  ] }, null);
+  const kept = list[0];
+  assert.deepEqual(ids(pal.entriesFor(list, ['dell-poweredge-r640', 'netgear-gs724t'])), ['poweredge-r640', 'netgear-gs724t']);
+  assert.deepEqual(ids(pal.entriesFor(list, ['dell-poweredge-r640', 'poweredge-r640'])), ['poweredge-r640'], 'listed once');
+  const old = { v: 1, favs: ['dell-poweredge-r640'], recents: ['dell-poweredge-r640', 'netgear-gs724t'] };
+  assert.equal(pal.isFav(old, kept.id, kept.aliases), true);
+  assert.equal(pal.isFav(old, kept.id), false, 'without aliases only the id counts');
+  assert.deepEqual(pal.toggleFav(old, kept.id, kept.aliases).favs, [], 'un-starring drops the alias too');
+  assert.deepEqual(pal.toggleFav({ v: 1, favs: [], recents: [] }, kept.id, kept.aliases).favs, ['poweredge-r640']);
+  assert.deepEqual(pal.pushRecent(old, kept.id, kept.aliases).recents, ['poweredge-r640', 'netgear-gs724t']);
+});
+
+test('CATEGORY_COLORS is rack-display-core\'s table', async () => {
+  const dc = await import('../../fathom/static/js/rack-display-core.js');
+  assert.equal(pal.CATEGORY_COLORS, dc.CATEGORY_COLORS);
+});

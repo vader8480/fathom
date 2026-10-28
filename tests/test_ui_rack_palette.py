@@ -204,6 +204,36 @@ class RackPaletteUi(UiCase):
             self.assertEqual(len(self.ids(pg)), RACKABLE + 450)
             self.assertIsNone(pg.rect(".rpal-more"))
 
+    def test_real_api_catalog(self) -> None:
+        for size, (w, hgt) in (("d", (1440, 900)), ("m", (390, 844))):
+            with self.subTest(size=size), self.open(HARNESS + "?api=real&project=campus-demo", size) as pg:
+                self.assertEqual(pg.smoke.get("errors"), [], pg.smoke)
+                if size == "d":
+                    pg.command("Emulation.setDeviceMetricsOverride", {"width": w, "height": hgt, "deviceScaleFactor": 1, "mobile": False})
+                    pg.wait_for("window.innerWidth === %d" % w)
+                self.assertEqual(pg.js("window.__rpal.libraryCalls"), [{"source": "all", "rack": 1, "project": "campus-demo"}])
+                total = int(pg.js("document.querySelector('.rpal-sec[data-sec=results] .rpal-count').textContent"))
+                self.assertGreaterEqual(total, 600, "catalog tier is listed")
+                self.assertEqual(len(self.ids(pg)), 200, "capped at 200")
+                self.assertTrue(pg.js("!!document.querySelector('.rpal-row[data-source=catalog]')"))
+                # Catalog twins (same maker + model) are one row each.
+                pg.click(".rpal-chip[data-cat=all]")
+                twins = pg.js("""(function () {
+                  var seen = {}, dup = [];
+                  Array.prototype.forEach.call(document.querySelectorAll('.rpal-row[data-sec=results][data-source=catalog]'), function (r) {
+                    var k = (r.getAttribute('aria-label') || '').toLowerCase(); if (seen[k]) dup.push(k); seen[k] = 1; });
+                  return dup; })()""")
+                self.assertEqual(twins, [])
+                self.type(pg, "smt1500")
+                self.assertEqual(len([i for i in self.ids(pg) if i in ("apc-smt1500rmi2uc", "smt1500rmi2uc")]), 1)
+                self.type(pg, "")
+                # Thumbnails come from /static/rack-images and decode.
+                pg.click(".rpal-chip[data-cat=server]")
+                pg.wait_for("""Array.prototype.some.call(document.querySelectorAll('.rpal-row img.rpal-img'),
+                  function (i) { return i.complete && i.naturalWidth > 0; })""")
+                self.assertLessEqual(pg.page_hscroll(), 0)
+                pg.shot("rack-palette-catalog-%dx%d" % (w, hgt))
+
     def test_screenshots(self) -> None:
         for size, (w, hgt) in (("d", (1440, 900)), ("m", (390, 844))):
             with self.subTest(size=size), self.open(HARNESS, size) as pg:

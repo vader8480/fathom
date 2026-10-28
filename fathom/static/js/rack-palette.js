@@ -94,7 +94,7 @@ export function mountRackPalette(el, ctx, opts) {
   }
 
   function row(e, sec) {
-    const fav = st.prefs.favs.indexOf(e.id) >= 0;
+    const fav = core.isFav(st.prefs, e.id, e.aliases);
     const sub = [e.manufacturer, e.model && e.model !== e.name ? e.model : ''].filter(Boolean).join(' \u00b7 ');
     const key = sec + ':' + e.id;
     const li = h('li', {
@@ -238,9 +238,9 @@ export function mountRackPalette(el, ctx, opts) {
   }
 
   function toggleFav(e) {
-    st.prefs = core.toggleFav(st.prefs, e.id);
+    st.prefs = core.toggleFav(st.prefs, e.id, e.aliases);
     savePrefs(storage, st.prefs);
-    const fav = st.prefs.favs.indexOf(e.id) >= 0;
+    const fav = core.isFav(st.prefs, e.id, e.aliases);
     render();
     announce((fav ? 'Added to' : 'Removed from') + ' favourites: ' + e.name);
   }
@@ -263,7 +263,7 @@ export function mountRackPalette(el, ctx, opts) {
     render();
     return resolveTemplate(e).then(function (t) {
       delete st.busy[e.id];
-      st.prefs = core.pushRecent(st.prefs, e.id);
+      st.prefs = core.pushRecent(st.prefs, e.id, e.aliases);
       savePrefs(storage, st.prefs);
       render();
       announce('Added ' + e.name);
@@ -420,10 +420,24 @@ export function mountRackPalette(el, ctx, opts) {
 // ------------------------------------------------------------ dev harness (fathom/static/dev/rack-palette.html)
 
 // Boots the harness page from its JSON data block: a stub ctx whose api serves the inline library and
-// templates. Query: ?api=0 (no api: presets only), ?fail=1 (the first library call fails), ?many=N
-// (N extra synthetic entries), ?smoke=1 (data-smoke on <html>). window.__rpal exposes the handle and
-// the recorded picks, drags and calls.
+// templates. Query: ?api=0 (no api: presets only), ?api=real (the server's library through api.js;
+// &project=<name> for project templates), ?fail=1 (the first library call fails), ?many=N (N extra
+// synthetic entries), ?smoke=1 (data-smoke on <html>). window.__rpal exposes the handle and the
+// recorded picks, drags and calls.
 export function bootHarness() {
+  if (new URLSearchParams(location.search).get('api') === 'real') {
+    return import('./api.js').then(function (m) {
+      const real = m.createApi({ base: '/' });
+      return fetch('/api/v2/meta', { headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .catch(function () { return null; })
+        .then(function (meta) { return bootStub(real, (meta && meta.vocab) || null); });
+    });
+  }
+  return bootStub(null, null);
+}
+
+function bootStub(realApi, realVocab) {
   const errs = window.__fathomErrors = window.__fathomErrors || [];
   window.addEventListener('error', function (e) { errs.push(String((e && e.message) || e)); });
   window.addEventListener('unhandledrejection', function (e) { errs.push('unhandled: ' + String(e && e.reason && (e.reason.message || e.reason))); });
@@ -442,10 +456,12 @@ export function bootHarness() {
     library: function (p) {
       rec.libraryCalls.push(p);
       if (fails > 0) { fails--; return Promise.reject(new Error('Library unavailable (harness ?fail=1)')); }
+      if (realApi) return realApi.library(p);
       return Promise.resolve({ templates: templates });
     },
     template: function (id, project) {
       rec.templateCalls.push([id, project]);
+      if (realApi) return realApi.template(id, project);
       const t = data.templates && data.templates[id];
       if (t) return Promise.resolve(JSON.parse(JSON.stringify(t)));
       const s = templates.filter(function (x) { return x.id === id; })[0];
@@ -457,7 +473,8 @@ export function bootHarness() {
     if (!log) return;
     log.insertBefore(h('li', null, text), log.firstChild);
   }
-  const ctx = { api: api, project: 'harness', vocab: data.vocab || null, toast: function (m) { note('toast: ' + m); } };
+  const project = realApi ? (params.get('project') || '') : 'harness';
+  const ctx = { api: api, project: project, vocab: realVocab || data.vocab || null, toast: function (m) { note('toast: ' + m); } };
   const host = document.getElementById('rpal-h-palette');
   rec.handle = mountRackPalette(host, ctx, {
     presets: data.presets || null,
