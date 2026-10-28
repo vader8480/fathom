@@ -526,7 +526,7 @@ Knox AV keeps whole copies of a map per event; Fathom keeps one shared model and
 
 - A project is one folder; its model is one JSON file `project.json` holding a **doc**: a JSON object with root objects (`meta`, `settings`, `media`) and **collections** (arrays of entities with unique `id`).
 - Python passes docs as plain `dict` (no dataclasses for v2). JS passes plain objects. The v1 dataclasses (`fathom.model.Project` etc.) remain and are produced from a doc by the **flow adapter** `schema.flow_project(doc, room_id)` for the signal-flow map.
-- Collections (exact names, in this order when serialized): `venues, rooms, systems, locations, racks, networks, devices, cables, bundles, floorplans, attachments, templates, imports, pages`. `pages` (§4.3.15) is optional on disk; `normalize` adds it.
+- Collections (exact names, in this order when serialized): `venues, rooms, systems, locations, racks, networks, devices, cables, bundles, floorplans, attachments, templates, imports, pages, problems, scenes`. `pages` (§4.3.15), `problems` (§4.3.16) and `scenes` (§4.3.18) are optional on disk; `normalize` adds them.
 - Optional fields are **omitted** when empty/default (like v1 `to_dict`), except where a table says "always written". Readers MUST tolerate missing optional fields and unknown extra fields (unknown fields are preserved on round-trip).
 - Units: lengths in meters (`length_m`), distances on plans in meters internally; `settings.units` only affects display.
 - Computed data (imports overlay, validation problems, search index, trace graphs) is **never persisted** in `project.json`. Entities marked `"auto": true` are overlay-only and MUST be stripped by `schema.normalize` before saving.
