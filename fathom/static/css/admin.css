@@ -61,8 +61,59 @@
 .adm-share-row{gap:6px;flex-wrap:nowrap}
 .adm-share-url{flex:1 1 auto;min-width:0;width:100%}
 
+/* ---- per-project role rows (users access dialog, invites form); also used inside .app-dialog */
+.adm-pr{display:flex;flex-direction:column;gap:6px;min-width:0}
+.adm-pr-rows{display:flex;flex-direction:column;gap:6px}
+.adm-pr-row{display:flex;align-items:center;gap:6px;min-width:0}
+.adm-pr-row select{min-height:40px}
+.adm-pr-proj{flex:1 1 160px;min-width:0}
+.adm-pr-role{flex:0 1 120px;min-width:0}
+.adm-pr-rm{flex:none;min-width:40px}
+.adm-pr-dot{flex:none}
+.adm-pr-dup select{border-color:var(--err)}
+.adm-pr-err:empty{display:none}
+.adm-pr-err{color:var(--err);font-size:12px}
+.adm-pr-hint{font-size:12px}
+.adm-pr [hidden]{display:none!important}
+.adm-access h4{margin:0 0 4px;font-size:13px}
+.adm-access>p{margin:0 0 8px;font-size:12px}
+.adm-user-access:empty{display:none}
+.adm-user-access{margin-top:8px}
+.adm-user-access .adm-access{border:1px solid var(--border);border-radius:10px;padding:12px}
+
+/* ---- invites */
+.adm-inv-form{max-width:720px}
+.adm-inv-form .field>div{min-width:0}
+.adm-inv-row{margin-top:8px}
+.adm-inv-out{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.adm-inv-out[hidden],.adm-inv-form [hidden]{display:none!important}
+.adm-inv-url{flex:1 1 auto;min-width:0;width:100%}
+.adm-inv-hint{font-size:12px}
+
+/* ---- lock card */
+.adm-lock-status{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-height:28px}
+.adm-lock-who{font-size:12.5px}
+.adm-lock-row{margin-top:8px}
+.adm-lock-hint{margin:8px 0 0;font-size:12px}
+
+/* ---- suggestions */
+.adm-sug-head{margin-top:4px}
+.adm-sug-all{font-size:13px}
+.adm-sug-summary{font-size:12px}
+.adm-sug-text{min-width:0;white-space:normal}
+.adm-sug-resolved-note{font-size:11.5px;margin-top:2px}
+.adm .dt-table tr.adm-sug-resolved td[data-col=text]{color:var(--muted)}
+
 @media (max-width:699px){
   .adm{padding-left:12px;padding-right:12px}
+  .adm-pr-row{flex-wrap:wrap}
+  .adm-pr-proj{flex:1 1 100%}
+  .adm-pr-role{flex:1 1 0}
+  .adm-pr-dot{display:none}
+  .adm-inv-form .field>label{margin-top:4px}
+  .adm-inv-row button,.adm-lock-row button{width:100%}
+  .adm-sug-head{flex-direction:column;align-items:flex-start;gap:4px}
+  .dt-cards .dt-table td[data-col=text] .adm-sug-text{text-align:left;width:100%}
   .adm-tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;padding-bottom:2px}
   .adm-tab{flex:none}
   .adm-grid,.adm-cards{grid-template-columns:minmax(0,1fr)}
@@ -77,6 +128,7 @@
 @media (pointer:coarse){
   .adm :is(button,select,a.btn,a.chip,.adm-tab,input:not([type=checkbox]):not([type=radio]):not([type=file])){min-height:44px}
   .adm-radio{min-height:44px}
+  .adm-pr :is(button,select){min-height:44px}
 }
 
 @media (prefers-reduced-motion:reduce){

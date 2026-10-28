@@ -4,7 +4,7 @@
 // highlights a row of the view's primary table.
 
 import { h } from './dom.js';
-import { canSee } from './router-core.js';
+import { canSee, buildRoute } from './router-core.js';
 import { createTable } from './datatable.js';
 import { skeleton, emptyState, inlineError, staleBadge, reviewBadge, confirmScope } from './feedback.js';
 import { openWizard } from './wizard.js';
@@ -102,6 +102,108 @@ function errSlot(cls) {
     show: function (err, retry, compact) { el.innerHTML = ''; el.appendChild(inlineError(err, retry, { compact: compact !== false })); },
     clear: function () { el.innerHTML = ''; },
   };
+}
+
+// Endpoints the api object has no method for yet (invites, suggestions): the api's generic request
+// helper when it exists (same base, CSRF header and error mapping), else fetch with the same contract.
+function apiCall(ctx, method, path, body, params) {
+  const api = ctx.api || {};
+  if (typeof api.request === 'function') return api.request(method, path, body, { params: params }).then(function (r) { return r.data; });
+  const q = Object.keys(params || {}).filter(function (k) { return params[k] !== undefined && params[k] !== null && params[k] !== ''; })
+    .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(String(params[k])); }).join('&');
+  const headers = { 'X-Fathom': '1', 'Accept': 'application/json' };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  return fetch((api.base || '') + path + (q ? '?' + q : ''), { method: method, headers: headers, body: body === undefined ? undefined : JSON.stringify(body), credentials: 'same-origin' }).then(function (res) {
+    if (res.status === 204) return null;
+    return res.json().catch(function () { return null; }).then(function (data) {
+      if (res.ok) return data;
+      const err = new Error((data && data.error) || 'HTTP ' + res.status);
+      err.status = res.status;
+      err.code = (data && data.code) || '';
+      throw err;
+    });
+  });
+}
+// A server without the endpoint (older build, sibling feature not merged yet): the list is empty
+// rather than broken.
+function isMissing(e) { return !!(e && (e.status === 404 || e.status === 405)); }
+function absUrl(ctx, rel) {
+  if (!rel) return '';
+  try { return new URL(rel, ctx.appRoot || location.href).href; } catch (e) { return rel; }
+}
+// Copy to the clipboard (clipboard API, else select + execCommand); the input keeps the text selected
+// so a manual copy works too.
+function copyField(ctx, input, text) {
+  function fallback() {
+    input.focus();
+    input.select();
+    let ok = false;
+    try { ok = document.execCommand && document.execCommand('copy'); } catch (e) { ok = false; }
+    ctx.toast(ok ? 'Link copied' : 'Select the link and copy it', ok ? 'ok' : 'warn');
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { ctx.toast('Link copied', 'ok'); }, fallback);
+  else fallback();
+}
+function overridesText(projects) {
+  const n = Object.keys(projects || {}).length;
+  return n ? n + (n === 1 ? ' override' : ' overrides') : '\u2014';
+}
+
+// Per-project role overrides (users, invites): rows of `project · role` with add / remove. `value()`
+// is the whole map (rows without a project are skipped); `valid()` marks duplicate projects.
+function projectRolesEditor(ctx, initial, opts) {
+  opts = opts || {};
+  const live = (ctx.projects || []).map(function (p) { return { name: p.name, title: p.title && p.title !== p.name ? p.name + ' \u00b7 ' + p.title : p.name }; });
+  if (ctx.project && !live.some(function (p) { return p.name === ctx.project; })) live.unshift({ name: ctx.project, title: ctx.project });
+  const rows = [];
+  const list = h('div', { class: 'adm-pr-rows' });
+  const err = h('div', { class: 'adm-pr-err', 'aria-live': 'polite' });
+  const hint = h('div', { class: 'muted adm-pr-hint' }, opts.hint || 'No overrides: the server role applies to every project.');
+  function options(cur) {
+    const names = live.slice();
+    if (cur && !names.some(function (p) { return p.name === cur; })) names.push({ name: cur, title: cur + ' (not on this server)' });
+    return [h('option', { value: '' }, 'Choose a project\u2026')].concat(names.map(function (p) { return h('option', { value: p.name, selected: p.name === cur ? true : null }, p.title); }));
+  }
+  function sync() {
+    hint.hidden = rows.length > 0;
+    valid();
+    if (opts.onChange) opts.onChange();
+  }
+  function addRow(name, role) {
+    const proj = h('select', { class: 'adm-pr-proj', 'aria-label': 'Project' }, options(name || ''));
+    const rl = h('select', { class: 'adm-pr-role', 'aria-label': 'Role in that project' }, ['viewer', 'editor'].map(function (x) { return h('option', { value: x, selected: x === (role || 'viewer') ? true : null }, x); }));
+    const rm = h('button', { type: 'button', class: 'small adm-pr-rm', 'aria-label': 'Remove this project' }, '\u00d7');
+    const row = h('div', { class: 'adm-pr-row' }, [proj, h('span', { class: 'muted adm-pr-dot', 'aria-hidden': 'true' }, '\u00b7'), rl, rm]);
+    const entry = { el: row, proj: proj, rl: rl };
+    rm.addEventListener('click', function () { rows.splice(rows.indexOf(entry), 1); row.remove(); sync(); });
+    proj.addEventListener('change', sync);
+    rl.addEventListener('change', sync);
+    rows.push(entry);
+    list.appendChild(row);
+    hint.hidden = true;
+  }
+  function value() {
+    const out = {};
+    rows.forEach(function (r) { if (r.proj.value) out[r.proj.value] = r.rl.value; });
+    return out;
+  }
+  function valid() {
+    const seen = {};
+    let dup = false;
+    rows.forEach(function (r) { r.el.classList.remove('adm-pr-dup'); });
+    rows.forEach(function (r) {
+      const n = r.proj.value;
+      if (!n) return;
+      if (seen[n]) { dup = true; r.el.classList.add('adm-pr-dup'); seen[n].el.classList.add('adm-pr-dup'); } else seen[n] = r;
+    });
+    err.textContent = dup ? 'A project is listed twice. Remove one of the rows.' : '';
+    return !dup;
+  }
+  Object.keys(initial || {}).sort().forEach(function (k) { addRow(k, initial[k]); });
+  hint.hidden = rows.length > 0;
+  const add = h('button', { type: 'button', class: 'small adm-pr-add', onclick: function () { addRow('', 'viewer'); const last = rows[rows.length - 1]; if (last) last.proj.focus(); sync(); } }, '+ Add project');
+  const el = h('div', { class: 'adm-pr', 'data-rows': 'projects' }, [list, hint, err, h('div', { class: 'row' }, add)]);
+  return { el: el, value: value, valid: valid, count: function () { return rows.length; } };
 }
 
 // DataTable `empty` as a node: the emptyState when there are no rows at all, otherwise the table's
@@ -814,8 +916,10 @@ function crudTable(ctx, coll, cols, opts) {
 
 const SETTINGS_TABS = [
   ['project', 'Project'], ['rooms', 'Venues & rooms'], ['systems', 'Systems'], ['locations', 'Locations'], ['networks', 'Networks'],
-  ['templates', 'Templates'], ['users', 'Users'], ['backups', 'Backups'], ['sharing', 'Sharing'], ['offline', 'Offline'], ['trash', 'Trash'],
+  ['templates', 'Templates'], ['users', 'Users'], ['invites', 'Invites'], ['backups', 'Backups'], ['sharing', 'Sharing'], ['suggestions', 'Suggestions'],
+  ['offline', 'Offline'], ['trash', 'Trash'],
 ];
+const INVITE_TTL = [['24', '24 hours'], ['72', '72 hours'], ['168', '7 days']];
 
 function isoIn(days) {
   return new Date(Date.now() + days * 864e5).toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -970,6 +1074,30 @@ export function mountSettings(el, ctx) {
     all[j].focus();
   });
 
+  // Lock editing (P2C): one `settings.locked` op through the ops pipeline; the server stamps
+  // locked_by / locked_at and answers other ops with 423 while locked. The toggle is shown to every
+  // editor even while the store is read-only, because unlocking is how it stops being read-only.
+  function lockCard() {
+    const s = store.doc.settings || {};
+    const locked = s.locked === true;
+    const who = locked && (s.locked_by || s.locked_at) ? (s.locked_by ? 'by ' + s.locked_by : '') + (s.locked_at ? (s.locked_by ? ' \u00b7 ' : '') + fmtTime(s.locked_at) : '') : '';
+    const status = h('div', { class: 'adm-lock-status', 'data-locked': locked ? 'true' : 'false' }, [
+      h('span', { class: 'chip' + (locked ? ' on' : '') }, locked ? 'Locked' : 'Unlocked'),
+      who ? h('span', { class: 'adm-lock-who' }, who) : null,
+    ]);
+    const mayToggle = role !== 'viewer' && (!store.readOnly || locked) && !(ctx.isTimeTravel && ctx.isTimeTravel());
+    const toggle = mayToggle ? h('button', { type: 'button', class: locked ? 'primary' : '', 'data-act': 'lock-toggle', 'aria-pressed': locked ? 'true' : 'false', onclick: function () {
+      ctx.commit([{ op: 'root', key: 'settings', value: { locked: !locked } }], locked ? 'Unlock editing' : 'Lock editing');
+      ctx.toast(locked ? 'Editing unlocked' : 'Editing locked', 'ok');
+    } }, locked ? 'Unlock editing' : 'Lock editing') : null;
+    return h('section', { class: 'adm-card', 'data-card': 'lock' }, [
+      h('h3', null, 'Lock editing'),
+      status,
+      toggle ? h('div', { class: 'row adm-lock-row' }, toggle) : null,
+      h('p', { class: 'muted adm-lock-hint' }, 'While locked, nobody can change the model until someone unlocks it. Builds, files and procedures are unaffected.'),
+    ]);
+  }
+
   function projectPanel() {
     const m = store.doc.meta || {};
     function rootField(key, sub, label, opts) {
@@ -1007,6 +1135,7 @@ export function mountSettings(el, ctx) {
         rootField('settings', 'autosave', 'Autosave', { check: true }),
         h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Tag pattern tokens: {D} discipline letter, {M} medium, {room}, {from}, {to}, {n:03}. ' + (m.slug ? 'Project slug: ' + m.slug : '')),
       ]),
+      lockCard(),
     ];
     if (role === 'admin' && ctx.api) {
       // Typing the name stays: it is a stronger guard than confirmScope for the one delete that
@@ -1126,6 +1255,7 @@ export function mountSettings(el, ctx) {
     const dt = createTable(host, {
       key: 'settings.users', scope: '', caption: 'Users', noun: { one: 'user', many: 'users' },
       url: urlBinding(ctx), highlight: hlOf(ctx), csvName: 'users.csv', rowId: function (u) { return u.username; },
+      rowAttrs: function (u) { return { 'data-user': u.username }; }, cards: true,
       empty: 'No user accounts yet. Add a user below to turn sign-in on.',
       columns: [
         { key: 'username', header: 'User', sticky: true },
@@ -1134,6 +1264,11 @@ export function mountSettings(el, ctx) {
           sel.addEventListener('change', function () { update(u, { role: sel.value }, 'Could not change the role of ' + u.username, 'Role updated'); });
           return sel;
         } },
+        { key: 'projects', header: 'Projects', value: function (u) { return overridesText(u.projects); }, csv: function (u) { return Object.keys(u.projects || {}).sort().map(function (k) { return k + ': ' + u.projects[k]; }).join('; '); },
+          cell: function (u) {
+            const keys = Object.keys(u.projects || {}).sort();
+            return h('span', { class: keys.length ? 'adm-user-projects' : 'muted adm-user-projects', title: keys.map(function (k) { return k + ': ' + u.projects[k]; }).join('\n') || null }, overridesText(u.projects));
+          } },
         { key: 'disabled', header: 'Disabled', filterable: true, value: function (u) { return u.disabled ? 'yes' : ''; }, cell: function (u) {
           const dis = h('input', { type: 'checkbox', 'aria-label': 'Disable ' + u.username });
           dis.checked = !!u.disabled;
@@ -1143,6 +1278,7 @@ export function mountSettings(el, ctx) {
         timeCol('created', 'Created', function (u) { return u.created; }),
         actions(function (u) {
           return [
+            h('button', { type: 'button', class: 'small', 'data-act': 'access', 'aria-label': 'Access per project for ' + u.username, onclick: function () { openAccess(u); } }, 'Access'),
             h('button', { type: 'button', class: 'small', onclick: function () {
               ctx.prompt('New password for ' + u.username + ' (8+ characters)', '', { type: 'password', title: 'Reset password', ok: 'Set password' }).then(function (pw) {
                 if (pw) update(u, { password: pw }, 'Could not reset the password of ' + u.username, 'Password reset', true);
@@ -1178,6 +1314,34 @@ export function mountSettings(el, ctx) {
         if (!destroyed) list.fail(actErr('Could not remove user ' + u.username, e), function () { return removeUser(u); });
       });
     }
+    // Access per project (P2C): a dialog (bottom sheet at sm) with the per-project rows; Save PATCHes
+    // the whole `projects` map. Admins have no overrides to edit.
+    const accessSlot = h('div', { class: 'adm-user-access' });
+    function openAccess(u) {
+      const admin = u.role === 'admin';
+      const body = h('div', { class: 'adm-access', 'data-user': u.username }, [
+        h('h4', null, 'Access per project'),
+        admin ? h('p', { class: 'muted adm-access-admin' }, 'Admins have full access everywhere.')
+          : h('p', { class: 'muted' }, 'The server role (' + (u.role || 'viewer') + ') applies everywhere except in the projects listed here.'),
+      ]);
+      const editor = admin ? null : projectRolesEditor(ctx, u.projects || {});
+      if (editor) body.appendChild(editor.el);
+      function save() {
+        return update(u, { projects: editor.value() }, 'Could not save the access of ' + u.username, 'Access updated');
+      }
+      if (ctx.openDialog) {
+        return ctx.openDialog({
+          title: u.username,
+          body: body,
+          buttons: editor ? [{ label: 'Cancel', value: null }, { label: 'Save', primary: true, validate: editor.valid, value: true }] : [{ label: 'Close', value: null }],
+        }).then(function (v) { if (v && editor) return save(); return null; });
+      }
+      // harness: no dialog host, the editor opens under the table
+      accessSlot.innerHTML = '';
+      if (editor) body.appendChild(h('div', { class: 'row' }, [h('button', { type: 'button', class: 'small primary', onclick: function () { if (editor.valid()) save().then(function () { accessSlot.innerHTML = ''; }); } }, 'Save'), h('button', { type: 'button', class: 'small', onclick: function () { accessSlot.innerHTML = ''; } }, 'Cancel')]));
+      accessSlot.appendChild(body);
+      return Promise.resolve(null);
+    }
     const un = h('input', { placeholder: 'username', autocapitalize: 'none', autocomplete: 'off', 'aria-label': 'New username' });
     const pw = h('input', { type: 'password', placeholder: 'password (8+)', autocomplete: 'new-password', 'aria-label': 'New password' });
     const rl = h('select', { 'aria-label': 'New user role' }, ['viewer', 'editor', 'admin'].map(function (x) { return h('option', { value: x, selected: x === 'editor' ? true : null }, x); }));
@@ -1194,8 +1358,203 @@ export function mountSettings(el, ctx) {
     };
     const add = h('button', { type: 'button', class: 'small primary', onclick: addUser }, 'Add user');
     load();
-    nodes.push(host, h('div', { class: 'row adm-addrow' }, [un, pw, rl, add]), addErr.el);
+    nodes.push(host, accessSlot, h('div', { class: 'row adm-addrow' }, [un, pw, rl, add]), addErr.el);
     return { nodes: nodes, tables: [dt], primary: dt };
+  }
+
+  // Settings › Invites (P2C, admin): one-time invite links with a role, optional per-project
+  // overrides and an expiry; the list of open invites with Revoke.
+  function invitesPanel() {
+    if (!ctx.api) return needsServer();
+    const host = h('div');
+    const roleSel = h('select', { id: 'adm-inv-role', 'aria-label': 'Role of the invited user' }, ['viewer', 'editor', 'admin'].map(function (x) { return h('option', { value: x, selected: x === 'editor' ? true : null }, x); }));
+    const ttl = h('select', { id: 'adm-inv-ttl', 'aria-label': 'Link expires' }, INVITE_TTL.map(function (o) { return h('option', { value: o[0], selected: o[0] === '72' ? true : null }, o[1]); }));
+    const note = h('input', { id: 'adm-inv-note', placeholder: 'e.g. for Jordan, Sunday volunteers', autocomplete: 'off', maxlength: '120' });
+    const pr = projectRolesEditor(ctx, {}, { hint: 'No overrides: the role above applies to every project.' });
+    const adminNote = h('div', { class: 'muted adm-access-admin' }, 'Admins have full access everywhere.');
+    const prField = h('div', { class: 'field adm-inv-projects' }, [h('label', null, 'Access per project'), h('div', null, [pr.el, adminNote])]);
+    function syncRole() {
+      const admin = roleSel.value === 'admin';
+      pr.el.hidden = admin;
+      adminNote.hidden = !admin;
+    }
+    roleSel.addEventListener('change', syncRole);
+    syncRole();
+    const out = h('div', { class: 'adm-inv-out', hidden: true, 'aria-live': 'polite' });
+    const createErr = errSlot();
+    const create = h('button', { type: 'button', class: 'primary adm-inv-create', 'data-act': 'create-invite' }, 'Create link');
+    function showLink(r) {
+      const url = absUrl(ctx, r.url || ((r.accept_url || 'invite/') + (/\/$/.test(r.accept_url || 'invite/') ? '' : '/') + (r.token || (r.invite && r.invite.token) || '')));
+      out.innerHTML = '';
+      out.hidden = false;
+      const input = h('input', { class: 'adm-inv-url mono', readonly: true, value: url, 'aria-label': 'Invite link' });
+      input.addEventListener('focus', function () { input.select(); });
+      const copy = h('button', { type: 'button', class: 'small adm-inv-copy', 'data-act': 'copy-invite', onclick: function () { copyField(ctx, input, url); } }, 'Copy');
+      out.appendChild(h('div', { class: 'row adm-share-row' }, [input, copy]));
+      out.appendChild(h('div', { class: 'muted adm-inv-hint' }, 'Send this link yourself \u2014 it works once' + (r.expires ? ' and expires ' + fmtTime(r.expires) : '') + '.'));
+    }
+    function doCreate() {
+      if (!pr.valid()) return null;
+      create.disabled = true;
+      createErr.clear();
+      const body = { role: roleSel.value, projects: roleSel.value === 'admin' ? {} : pr.value(), ttl_hours: Number(ttl.value) || 72, note: note.value.trim() };
+      return apiCall(ctx, 'POST', 'api/v2/invites', body).then(function (r) {
+        create.disabled = false;
+        if (destroyed) return null;
+        r = r || {};
+        showLink(r);
+        ctx.toast('Invite link created', 'ok');
+        note.value = '';
+        const token = r.token || (r.invite && r.invite.token);
+        return load().then(function () { if (token) dt.setHighlight(token); });
+      }, function (e) {
+        create.disabled = false;
+        if (destroyed) return null;
+        createErr.show(actErr(isMissing(e) ? 'This server has no invite links yet' : 'Could not create the invite link', e), isMissing(e) ? null : doCreate, false);
+        return null;
+      });
+    }
+    create.addEventListener('click', doCreate);
+    function projectsText(inv) {
+      const p = inv.projects || {};
+      const keys = Object.keys(p).sort();
+      return keys.length ? keys.map(function (k) { return k + ': ' + p[k]; }).join(', ') : '\u2014';
+    }
+    const dt = createTable(host, {
+      key: 'settings.invites', scope: '', caption: 'Open invites', noun: { one: 'invite', many: 'invites' }, cards: true,
+      url: urlBinding(ctx), highlight: hlOf(ctx), csvName: 'invites.csv', rowId: function (i) { return i.token; },
+      rowAttrs: function (i) { return { 'data-invite': i.token }; },
+      empty: emptyFor(function () { return dt; }, { title: 'No open invites.', text: 'Create link makes a one-time link you send yourself; it shows up here until it is used, expires or is revoked.' }),
+      columns: [
+        { key: 'role', header: 'Role', filterable: true, value: function (i) { return i.role || ''; }, sticky: true },
+        { key: 'projects', header: 'Projects', value: projectsText, cell: function (i) { return h('span', { class: Object.keys(i.projects || {}).length ? '' : 'muted' }, projectsText(i)); } },
+        { key: 'created_by', header: 'Created by', filterable: true, value: function (i) { return i.created_by || ''; } },
+        timeCol('expires', 'Expires', function (i) { return i.expires; }),
+        { key: 'note', header: 'Note', value: function (i) { return i.note || ''; } },
+        actions(function (i) {
+          return h('button', { type: 'button', class: 'small danger', 'data-act': 'revoke', 'aria-label': 'Revoke invite ' + (i.note || String(i.token).slice(0, 8)), onclick: function () {
+            confirmScope(ctx, { verb: 'Revoke', noun: 'invite link' + (i.note ? ' \u201c' + i.note + '\u201d' : ''), danger: true, ok: 'Revoke',
+              detail: 'The link stops working at once. Nobody who already used it is affected.' }).then(function (y) { if (y) revoke(i); });
+          } }, 'Revoke');
+        }),
+      ],
+    });
+    const list = listState(dt);
+    function load() {
+      list.busy();
+      return apiCall(ctx, 'GET', 'api/v2/invites').then(function (r) { if (!destroyed) list.done((r && r.invites) || []); }, function (e) {
+        if (destroyed) return;
+        if (isMissing(e)) list.done([]);
+        else list.fail(actErr('Could not load the invites', e), load);
+      });
+    }
+    function revoke(i) {
+      return apiCall(ctx, 'DELETE', 'api/v2/invites/' + encodeURIComponent(i.token)).then(function () { list.clear(); ctx.toast('Invite revoked', 'ok'); return load(); }, function (e) {
+        if (!destroyed) list.fail(actErr('Could not revoke the invite', e), function () { return revoke(i); });
+      });
+    }
+    load();
+    return {
+      nodes: [
+        h('section', { class: 'adm-card adm-form adm-inv-form', 'data-card': 'invite' }, [
+          h('h3', null, 'Invite someone'),
+          h('p', { class: 'muted' }, 'An invite link lets one person create their own account with the role you choose. It works once and expires on its own.'),
+          fld('Role', roleSel),
+          prField,
+          fld('Expires in', ttl),
+          fld('Note', note),
+          h('div', { class: 'row adm-inv-row' }, create),
+          createErr.el,
+          out,
+        ]),
+        h('h3', null, 'Open invites'),
+        host,
+      ],
+      tables: [dt], primary: dt,
+    };
+  }
+
+  // Settings › Suggestions (P2C, admin): problem reports of kind `suggestion` for this project, or
+  // for every project; Resolve / Reopen reuses the problems PATCH.
+  function suggestionsPanel() {
+    if (!ctx.api) return needsServer();
+    const host = h('div');
+    let all = false;
+    const allBox = h('input', { type: 'checkbox', id: 'adm-sug-all' });
+    allBox.addEventListener('change', function () { all = allBox.checked; load(); });
+    const summary = h('span', { class: 'muted adm-sug-summary' });
+    const isOpen = function (r) { return (r.status || 'open') === 'open'; };
+    const projectOf = function (r) { return r.project || ctx.project; };
+    const deviceHref = function (r) { return buildRoute({ project: projectOf(r), room: '*', view: 'devices', id: r.device, query: {} }); };
+    const pageHref = function (r) { return buildRoute({ project: projectOf(r), room: '*', view: 'sop', query: { page: r.page } }); };
+    const aboutText = function (r) { return r.device ? (r.device_name || r.device) : (r.page ? (r.page_title || r.page) : ''); };
+    function setStatus(r, status) {
+      return ctx.api.patchProblem(projectOf(r), r.id, { status: status }).then(function () {
+        list.clear();
+        ctx.toast(status === 'resolved' ? 'Suggestion resolved' : 'Suggestion reopened', 'ok');
+        const p = projectOf(r) === ctx.project && ctx.reload ? ctx.reload() : Promise.resolve();
+        return p.then(load, load);
+      }, function (e) {
+        if (!destroyed) list.fail(actErr('Could not ' + (status === 'resolved' ? 'resolve' : 'reopen') + ' the suggestion', e), function () { return setStatus(r, status); });
+      });
+    }
+    const dt = createTable(host, {
+      key: 'settings.suggestions', scope: ctx.project, caption: 'Suggestions', noun: { one: 'suggestion', many: 'suggestions' }, cards: true,
+      url: urlBinding(ctx), highlight: hlOf(ctx), csvName: 'suggestions.csv', rowId: function (r) { return projectOf(r) + ':' + r.id; },
+      rowAttrs: function (r) { return { 'data-suggestion': r.id, 'data-project': projectOf(r) }; },
+      rowClass: function (r) { return isOpen(r) ? '' : 'adm-sug-resolved'; },
+      empty: emptyFor(function () { return dt; }, { title: 'No suggestions yet.', text: 'Anyone can send one from the user menu.' }),
+      columns: [
+        { key: 'text', header: 'Suggestion', sticky: true, value: function (r) { return r.text || ''; }, cell: function (r) {
+          return h('div', { class: 'adm-sug-text' }, [r.text || '', !isOpen(r) && r.resolved ? h('div', { class: 'muted adm-sug-resolved-note' }, 'Resolved ' + fmtTime(r.resolved) + (r.resolved_by ? ' by ' + r.resolved_by : '') + (r.note ? ' \u2014 ' + r.note : '')) : null]);
+        } },
+        { key: 'project', header: 'Project', filterable: true, value: projectOf, cell: function (r) { return mono(projectOf(r)); } },
+        { key: 'by', header: 'By', filterable: true, value: function (r) { return r.by || ''; } },
+        timeCol('created', 'When', function (r) { return r.created; }),
+        { key: 'about', header: 'About', value: aboutText, cell: function (r) {
+          if (r.device) return h('a', { class: 'chip adm-sug-about', 'data-device': r.device, href: deviceHref(r) }, r.device_name || r.device);
+          if (r.page) return h('a', { class: 'chip adm-sug-about', 'data-page': r.page, href: pageHref(r) }, r.page_title || r.page);
+          return h('span', { class: 'muted' }, '\u2014');
+        } },
+        { key: 'status', header: 'Status', filterable: true, value: function (r) { return isOpen(r) ? 'Open' : 'Resolved'; }, cell: function (r) { return h('span', { class: 'chip' + (isOpen(r) ? ' on' : ''), 'data-status': isOpen(r) ? 'open' : 'resolved' }, isOpen(r) ? 'Open' : 'Resolved'); } },
+        write ? actions(function (r) {
+          const open = isOpen(r);
+          return h('button', { type: 'button', class: 'small', 'data-act': open ? 'resolve' : 'reopen', onclick: function () { setStatus(r, open ? 'resolved' : 'open'); } }, open ? 'Resolve' : 'Reopen');
+        }) : null,
+      ].filter(Boolean),
+    });
+    const list = listState(dt);
+    function done(rows) {
+      list.done(rows);
+      const nOpen = rows.filter(isOpen).length;
+      summary.textContent = rows.length ? nOpen + ' open \u00b7 ' + rows.length + ' total' : '';
+    }
+    function load() {
+      list.busy();
+      const wantAll = all;
+      const p = wantAll
+        ? apiCall(ctx, 'GET', 'api/v2/suggestions').then(function (r) { return ((r && r.items) || []).map(function (x) { return Object.assign({ project: x.project || ctx.project }, x); }); })
+        // an older server ignores ?kind= and returns every report; only suggestions are shown
+        : ctx.api.problems(ctx.project, { kind: 'suggestion' }).then(function (r) { return ((r && r.problems) || []).filter(function (x) { return x.kind === 'suggestion'; }).map(function (x) { return Object.assign({ project: ctx.project }, x); }); });
+      return p.then(function (rows) { if (!destroyed && wantAll === all) done(rows); }, function (e) {
+        if (destroyed || wantAll !== all) return;
+        if (isMissing(e)) done([]);
+        else list.fail(actErr('Could not load the suggestions', e), load);
+      });
+    }
+    load();
+    return {
+      nodes: [
+        h('div', { class: 'adm-sec-head adm-sug-head' }, [
+          h('h3', null, 'Suggestions'),
+          h('label', { class: 'chk adm-sug-all', for: 'adm-sug-all' }, [allBox, 'All projects']),
+          summary,
+        ]),
+        h('p', { class: 'muted' }, 'Ideas and requests people send from the user menu. Resolve them when done; the sender is named so you can follow up.'),
+        host,
+      ],
+      tables: [dt], primary: dt,
+    };
   }
 
   function backupsPanel() {
@@ -1462,7 +1821,7 @@ export function mountSettings(el, ctx) {
     ], tables: [] };
   }
 
-  const PANELS = { project: projectPanel, rooms: roomsPanel, systems: systemsPanel, locations: locationsPanel, networks: networksPanel, templates: templatesPanel, users: usersPanel, backups: backupsPanel, sharing: sharingPanel, offline: offlinePanel, trash: trashPanel };
+  const PANELS = { project: projectPanel, rooms: roomsPanel, systems: systemsPanel, locations: locationsPanel, networks: networksPanel, templates: templatesPanel, users: usersPanel, invites: invitesPanel, backups: backupsPanel, sharing: sharingPanel, suggestions: suggestionsPanel, offline: offlinePanel, trash: trashPanel };
 
   function clearPanel() {
     if (cur) cur.tables.forEach(function (t) { t.destroy(); });
