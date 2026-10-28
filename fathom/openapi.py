@@ -146,7 +146,7 @@ def _components() -> Dict[str, Any]:
                                                   "projects": {"type": "object", "additionalProperties": {"type": "string", "enum": ["viewer", "editor"]}, "description": "per-project role overrides"},
                                                   "ttl_hours": {"type": "integer", "minimum": 1, "maximum": 720, "default": 72}, "note": {"type": "string"}}},
         "PasswordChange": {"type": "object", "required": ["old", "new"], "properties": {"old": {"type": "string"}, "new": {"type": "string"}}},
-        "ProjectCreate": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, "template": {"type": "string"}, "org": {"type": "string"}}},
+        "ProjectCreate": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, "template": {"type": "string", "description": "blank, a sample name, or a saved starter id (user-<slug>)"}, "org": {"type": "string"}}},
         "DocPut": {"type": "object", "required": ["doc"], "properties": {"doc": _ref("Doc"), "summary": {"type": "string"}, "base_revision": {"type": "integer"}}},
         "Changes": {"type": "object", "required": ["base_revision", "ops"], "properties": {
             "base_revision": {"type": "integer"}, "ops": {"type": "array", "items": _ref("Op"), "maxItems": 2000}, "summary": {"type": "string"}}},

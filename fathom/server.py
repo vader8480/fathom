@@ -1076,6 +1076,12 @@ def r_meta_v2(req: Request) -> Response:
 
     out: Dict[str, Any] = {"version": __version__, "vocab": _vocab_dict(), "importers": [], "plugins_errors": [], "samples": _samples()}
     try:
+        from .starters import list_starters
+
+        out["user_starters"] = [{"id": s["id"], "label": s.get("label") or s["id"]} for s in list_starters() if s.get("source") == "user"]
+    except Exception:  # a broken starters dir must not take /meta down
+        out["user_starters"] = []
+    try:
         from . import plugins
 
         out["importers"] = [{"kind": i.kind, "label": i.label, "mode": getattr(i, "mode", "live"), "accepts": list(getattr(i, "accepts", ()) or ()),
@@ -1353,9 +1359,18 @@ def r_projects_create_v2(req: Request) -> Response:
     if (projects_root() / name).exists():
         raise ApiError(409, f"project '{name}' already exists", "exists")
     template = str(body.get("template") or "blank")
-    if template != "blank" and template not in _samples():
-        raise ApiError(400, f"unknown template '{template}'")
-    pdir = new_project(name, template=template, org=str(body.get("org") or ""))
+    if template.startswith("user-"):
+        from .starters import StarterError, load_starter_doc, new_project_from_starter
+
+        try:
+            load_starter_doc(template)
+        except StarterError:
+            raise ApiError(400, f"unknown template '{template}'")
+        pdir = new_project_from_starter(name, template, org=str(body.get("org") or ""))
+    else:
+        if template != "blank" and template not in _samples():
+            raise ApiError(400, f"unknown template '{template}'")
+        pdir = new_project(name, template=template, org=str(body.get("org") or ""))
     doc, _ = _load(pdir)
     return Response.json({"name": pdir.name, "revision": _rev(doc)}, 201)
 
@@ -3935,9 +3950,18 @@ def r_projects_create(req: Request) -> Response:
     if (projects_root() / name).exists():
         raise ApiError(400, f"project '{name}' already exists")
     template = str(body.get("template") or "blank")
-    if template != "blank" and template not in _samples():
-        raise ApiError(400, f"unknown template '{template}'")
-    pdir = new_project(name, template=template, org=str(body.get("org") or ""))
+    if template.startswith("user-"):
+        from .starters import StarterError, load_starter_doc, new_project_from_starter
+
+        try:
+            load_starter_doc(template)
+        except StarterError:
+            raise ApiError(400, f"unknown template '{template}'")
+        pdir = new_project_from_starter(name, template, org=str(body.get("org") or ""))
+    else:
+        if template != "blank" and template not in _samples():
+            raise ApiError(400, f"unknown template '{template}'")
+        pdir = new_project(name, template=template, org=str(body.get("org") or ""))
     return Response.json({"ok": True, "name": pdir.name}, 201)
 
 

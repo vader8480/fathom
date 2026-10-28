@@ -1261,7 +1261,7 @@ Username regex `^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$`. Session cookie payload `{"u
 
 | Method | Path | Role | Response |
 | --- | --- | --- | --- |
-| GET | `/api/v2/meta` | viewer | `{"version", "vocab": vocab.as_dict(), "importers": [{"kind", "label", "mode", "accepts", "folder", "help"}], "plugins_errors": [str], "samples": [str], "capabilities": {"chrome": bool, "pdf_rasterizer": str\|null, "oda": bool, "llm": {"configured": bool, "model": str}, "secure_context_hint": bool}, "auth": {"enabled": bool, "public_view": bool}, "limits": {"max_upload_mb", "max_json_mb"}, "library_count": int}` |
+| GET | `/api/v2/meta` | viewer | `{"version", "vocab": vocab.as_dict(), "importers": [{"kind", "label", "mode", "accepts", "folder", "help"}], "plugins_errors": [str], "samples": [str], "user_starters": [{"id", "label"}], "capabilities": {"chrome": bool, "pdf_rasterizer": str\|null, "oda": bool, "llm": {"configured": bool, "model": str}, "secure_context_hint": bool}, "auth": {"enabled": bool, "public_view": bool}, "limits": {"max_upload_mb", "max_json_mb"}, "library_count": int}` |
 | GET | `/api/v2/schema.json` | public | `schema.JSON_SCHEMA` |
 | GET | `/api/v2/library?q=&discipline=&kind=&project=` | viewer | `{"templates": [{"id", "manufacturer", "model", "name", "kind", "discipline", "ru", "ports_summary": "32× Analog In · 16× Analog Out …", "source": "builtin\|extension\|custom\|project"}]}` (project-local included when `project` given) |
 | GET | `/api/v2/library/<id>?project=` | viewer | full template; 404 |
@@ -1275,7 +1275,7 @@ Username regex `^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$`. Session cookie payload `{"u
 | Method | Path | Role | Request | Response / codes |
 | --- | --- | --- | --- | --- |
 | GET | `/api/v2/projects` | viewer | — | `{"projects": [{"name", "org", "title", "schema": 1\|2, "revision", "rooms", "devices", "cables", "updated", "builds", "role"}]}` |
-| POST | `/api/v2/projects` | editor | `{"name", "template": "blank"\|<sample>, "org"}` | 201 `{"name", "revision"}`; 400 bad name; 409 `exists` |
+| POST | `/api/v2/projects` | editor | `{"name", "template": "blank"\|<sample>\|user-<slug>, "org"}` | 201 `{"name", "revision"}`; a `user-` template is a saved starter (§6.16) written as the whole project; 400 bad name or unknown template; 409 `exists` |
 | GET | `/api/v2/projects/<n>` | viewer | — | `{"name", "revision", "doc", "problems", "role", "migrated_from": 1\|null}` + `ETag` |
 | PUT | `/api/v2/projects/<n>` | editor | `{"doc", "summary?", "base_revision?"}` + `If-Match` | `{"revision", "rebased", "problems"}`; 409; 422; 428 |
 | POST | `/api/v2/projects/<n>/changes` | editor | `{"base_revision", "ops": [...], "summary?"}` (≤ 2000 ops) | `{"revision", "rebased", "problems", "touched"}`; 409; 422 |

@@ -2053,7 +2053,9 @@ function restoreRevision(rev) {
 function newProjectDialog() {
   const name = h('input', { id: 'np-name', placeholder: 'e.g. riverside', autocapitalize: 'none', autocomplete: 'off' });
   const org = h('input', { id: 'np-org', placeholder: 'Organization' });
-  const tpl = h('select', { id: 'np-template' }, [h('option', { value: 'blank' }, 'Blank')].concat(((A.meta && A.meta.samples) || []).map(function (s) { return h('option', { value: s }, 'Sample: ' + s); })));
+  const tpl = h('select', { id: 'np-template' }, [h('option', { value: 'blank' }, 'Blank')]
+    .concat(((A.meta && A.meta.samples) || []).map(function (s) { return h('option', { value: s }, 'Sample: ' + s); }))
+    .concat(((A.meta && A.meta.user_starters) || []).map(function (s) { return h('option', { value: s.id }, 'Starter: ' + (s.label || s.id)); })));
   name.addEventListener('input', function () { if (!org.value) org.placeholder = name.value ? name.value : 'Organization'; });
   return openDialog({
     title: 'New project',
