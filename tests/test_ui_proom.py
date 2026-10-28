@@ -289,6 +289,105 @@ class RoomPageUi(UiCase):
                     self.assertTrue(pg.js("getComputedStyle(document.querySelector('.ex-side')).position !== 'fixed'"))
 
 
+# ---------------------------------------------------------------- add room from starter (phase3 P3C)
+
+STARTER_P = "#/starter-ui/"
+STARTER_CARDS = "[].map.call(document.querySelectorAll('.app-dialog .pr-starter'), function (c) { return c.getAttribute('data-starter'); })"
+
+
+class RoomStarterUi(UiCase):
+    """Rooms ▸ **Add room from starter…** (FR-ROOM-09/10) on its own ``starter-ui`` copy of campus-demo, so
+    the three-room assumptions of ``RoomPageUi`` stay true."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super(RoomStarterUi, cls).setUpClass()
+        req = urllib.request.Request(cls.base + "/api/v2/projects", method="POST",
+                                     data=json.dumps({"name": "starter-ui", "template": "campus-demo"}).encode(),
+                                     headers={"Content-Type": "application/json", "X-Fathom": "1"})
+        with urllib.request.urlopen(req) as r:
+            assert r.status == 201, r.status
+
+    def rooms_ready(self, pg, n: int) -> None:
+        self.assertEqual(pg.smoke["errors"], [])
+        pg.wait_for("document.querySelectorAll('.dt-root[data-table=rooms] tbody tr.dt-row').length === %d" % n)
+
+    def test_dialog_lists_starters_and_adds_a_room(self):
+        with self.open(STARTER_P + "main/rooms", "d") as pg:
+            self.rooms_ready(pg, 3)
+            pg.click("button.pr-add-starter[data-action=add-starter]")
+            pg.wait_for("document.querySelectorAll('.app-dialog .pr-starter').length === 5")
+            self.assertEqual(pg.js(STARTER_CARDS),
+                             ["church-sanctuary", "church-youth-room", "church-chapel", "church-portable", "church-broadcast"])
+            self.assertEqual(pg.js("document.querySelector('.app-dialog .pr-starter[aria-checked=true]').getAttribute('data-starter')"), "church-sanctuary")
+            self.assertEqual(pg.js("document.querySelector('#pr-starter-name').value"), "Sanctuary / auditorium")
+            # Cards carry label, counts, blurb and tag chips.
+            card = pg.js("(function () { var c = document.querySelector('.pr-starter[data-starter=church-portable]');"
+                         " return {label: c.querySelector('.pr-starter-label').textContent, counts: c.querySelector('.pr-starter-counts').textContent,"
+                         " blurb: c.querySelector('.pr-starter-blurb').textContent.length,"
+                         " tags: [].map.call(c.querySelectorAll('.pr-starter-tags .chip'), function (t) { return t.textContent; })}; })()")
+            self.assertEqual(card["label"], "Portable church (road cases)")
+            self.assertIn("devices", card["counts"])
+            self.assertIn("racks", card["counts"])
+            self.assertGreater(card["blurb"], 20)
+            self.assertIn("inventory", card["tags"])
+            pg.click(".app-dialog .pr-starter[data-starter=church-chapel]")
+            self.assertEqual(pg.js("document.querySelector('#pr-starter-name').value"), "Chapel / traditional")
+            # A name the user typed is kept when another card is picked.
+            pg.js("(function () { var i = document.querySelector('#pr-starter-name'); i.value = 'Prayer Chapel'; i.dispatchEvent(new Event('input', {bubbles: true})); })()")
+            pg.click(".app-dialog .pr-starter[data-starter=church-youth-room]")
+            self.assertEqual(pg.js("document.querySelector('#pr-starter-name').value"), "Prayer Chapel")
+            pg.click(".app-dialog .pr-starter[data-starter=church-chapel]")
+            pg.click(".app-dialog footer button.primary")
+            pg.wait_for("location.hash.indexOf('/rooms/prayer-chapel/overview') > 0", timeout=30)
+            pg.wait_for("!document.querySelector('.app-dialog')")
+            pg.wait_for("!!document.querySelector('header.eh[data-id=prayer-chapel]')")
+            self.assertEqual(pg.js("document.querySelector('header.eh .eh-title').textContent").strip(), "Prayer Chapel")
+            self.assertEqual(pg.js("document.querySelectorAll('.ex-root[data-explorer=rooms] .ex-item').length"), 4)
+            self.assertEqual(pg.smoke["errors"], [])
+        raw = json.loads(urllib.request.urlopen(self.base + "/api/v2/projects/starter-ui").read().decode())
+        doc = raw.get("doc", raw)
+        room = [r for r in doc["rooms"] if r["id"] == "prayer-chapel"][0]
+        self.assertEqual(room["name"], "Prayer Chapel")
+        self.assertTrue(all(d["id"].startswith("prayer-chapel-") for d in doc["devices"] if d.get("room") == "prayer-chapel"))
+        hist = json.loads(urllib.request.urlopen(self.base + "/api/v2/projects/starter-ui/history").read().decode())
+        last = hist["revisions"][0] if hist["revisions"][0]["revision"] >= hist["revisions"][-1]["revision"] else hist["revisions"][-1]
+        self.assertEqual(last["source"], "starter")
+        self.assertEqual(last["summary"], "Added room Prayer Chapel from starter Chapel / traditional")
+
+    def test_dialog_at_m_stacks_cards_with_44px_targets(self):
+        with self.open(STARTER_P + "main/rooms", "m") as pg:
+            pg.wait_for("document.querySelectorAll('.dt-root[data-table=rooms] tbody tr.dt-row').length >= 3")
+            self.assertGreaterEqual(pg.rect("button.pr-add-starter")["height"], 44)
+            pg.click("button.pr-add-starter")
+            pg.wait_for("document.querySelectorAll('.app-dialog .pr-starter').length === 5")
+            self.assertLessEqual(pg.page_hscroll(), 0)
+            lefts = pg.js("[].map.call(document.querySelectorAll('.app-dialog .pr-starter'), function (c) { return Math.round(c.getBoundingClientRect().left); })")
+            self.assertEqual(len(set(lefts)), 1, "cards stack in one column at m: %r" % lefts)
+            for t in pg.js(TARGETS % json.dumps(".app-dialog .pr-starter, .app-dialog #pr-starter-name, .app-dialog footer button")):
+                self.assertGreaterEqual(min(t["w"], t["h"]), 44, t)
+            pg.shot("starter-dialog-m")
+            pg.press("Escape")
+            pg.wait_for("!document.querySelector('.app-dialog')")
+
+    def test_viewer_has_no_starter_button_and_error_is_inline(self):
+        raw = json.loads(urllib.request.urlopen(self.base + "/api/v2/projects/starter-ui").read().decode())
+        raw["role"] = "viewer"
+        with self.open(STARTER_P + "main/rooms", "d", intercepts=[("/api/v2/projects/starter-ui", 200, raw, "GET")]) as pg:
+            pg.wait_for("document.querySelectorAll('.dt-root[data-table=rooms] tbody tr.dt-row').length >= 3")
+            self.assertFalse(pg.js("!!document.querySelector('button.pr-add-starter')"))
+        with self.open(STARTER_P + "main/rooms", "d",
+                       intercepts=[("/api/v2/projects/starter-ui/rooms/from-starter", 423, {"error": "locked", "message": "Project is locked"}, "POST")]) as pg:
+            pg.wait_for("document.querySelectorAll('.dt-root[data-table=rooms] tbody tr.dt-row').length >= 3")
+            pg.click("button.pr-add-starter")
+            pg.wait_for("document.querySelectorAll('.app-dialog .pr-starter').length === 5")
+            pg.click(".app-dialog footer button.primary")
+            pg.wait_for("!document.querySelector('.app-dialog .pr-starter-error').hidden")
+            self.assertIn("locked", pg.js("document.querySelector('.app-dialog .pr-starter-error').textContent"))
+            self.assertTrue(pg.js("!!document.querySelector('.app-dialog')"))
+            self.assertFalse(pg.js("document.querySelector('.app-dialog footer button.primary').disabled"))
+
+
 if __name__ == "__main__":  # pragma: no cover
     import unittest
     unittest.main()
