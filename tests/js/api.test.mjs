@@ -210,3 +210,73 @@ T('lookupCode normalises the code; codeLink and label URLs are pure', async () =
   await a.labelPresets();
   assert.equal(f.calls[3].url, '/api/v2/labels/presets');
 });
+
+// ---- P2B: suggestions and lock errors (SPEC §3.28 FR-UX-17/18, §6.3)
+
+T('reportSuggestion posts kind=suggestion; isLockedError recognises 423 and code locked', async () => {
+  const f = fakeFetch(() => jsonResponse(201, { id: 'p1', forwarded: false }));
+  const a = api.createApi({ base: '/', fetchImpl: f });
+  const r = await a.reportSuggestion('my show', { text: 'Bigger buttons', name: 'sam', url: 'http://x/#/my%20show', kind: 'bug' });
+  assert.equal(r.id, 'p1');
+  assert.equal(f.calls[0].method, 'POST');
+  assert.equal(f.calls[0].url, '/api/v2/projects/my%20show/problems');
+  assert.equal(f.calls[0].headers.get('X-Fathom'), '1');
+  const body = JSON.parse(f.calls[0].body);
+  assert.equal(body.kind, 'suggestion', 'kind is always suggestion, whatever the caller passed');
+  assert.equal(body.text, 'Bigger buttons');
+  assert.equal(body.name, 'sam');
+  assert.equal(body.url, 'http://x/#/my%20show');
+  await a.reportSuggestion('my show');
+  assert.deepEqual(JSON.parse(f.calls[1].body), { kind: 'suggestion' }, 'no body still posts the kind');
+  const isLockedError = need(api, 'isLockedError', 'FR-UX-17', S);
+  assert.equal(isLockedError({ status: 423 }), true);
+  assert.equal(isLockedError({ code: 'locked' }), true);
+  assert.equal(isLockedError({ status: 409, code: 'conflict' }), false);
+  assert.equal(isLockedError(null), false);
+  assert.equal(isLockedError(undefined), false);
+  assert.equal(isLockedError(new Error('x')), false);
+});
+
+T('ChangeQueue drops every queued op on 423 locked and reloads the doc', async () => {
+  const { ChangeQueue, createApi } = api;
+  mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] });
+  try {
+    const storage = fakeStorage();
+    const serverDoc = loadFixtureDoc();
+    serverDoc.settings = Object.assign({}, serverDoc.settings, { locked: true, locked_by: 'sam' });
+    const f = fakeFetch((call) => {
+      if (call.method === 'POST') return jsonResponse(423, { error: 'Editing is locked by sam', code: 'locked' });
+      return jsonResponse(200, { name: 'sunday-demo', revision: 7, doc: serverDoc, problems: [], role: 'admin' });
+    });
+    const store = mcL.mod.createStore({ doc: loadFixtureDoc(), vocab, readOnly: false, overlay: null, room: 'main' });
+    store.setRevision(1);
+    const dropped = [];
+    const states = [];
+    const q = new ChangeQueue({ api: createApi({ fetchImpl: f }), project: 'sunday-demo', store, storage, debounceMs: 600, maxBatch: 1 });
+    q.addEventListener('dropped', (e) => dropped.push(e.detail));
+    q.addEventListener('state', (e) => states.push(e.detail));
+    const op1 = [{ op: 'merge', coll: 'devices', id: 'atem-mini', value: { name: 'x' } }];
+    const op2 = [{ op: 'merge', coll: 'devices', id: 'atem-mini', value: { name: 'y' } }];
+    store.commit(op1, 'x'); q.enqueue(op1, 'x');
+    store.commit(op2, 'y'); q.enqueue(op2, 'y');
+    const posts = () => f.calls.filter((c) => c.method === 'POST').length;
+    await q.flush().catch(() => {});
+    await settle();
+    assert.equal(posts(), 1, 'the first 423 stops the flush; nothing is retried');
+    assert.equal(dropped.length, 1, 'one dropped event for the whole queue');
+    assert.equal(dropped[0].locked, true, 'dropped.detail.locked marks the lock case');
+    assert.equal(dropped[0].ops.length, 2, 'every queued op is dropped, not just the failing batch');
+    assert.equal(api.isLockedError(dropped[0].error), true);
+    assert.ok(states.some((d) => d && d.state === 'error' && d.locked === true && d.dropped === 2), 'state error carries dropped count and locked flag');
+    assert.equal(store.doc.settings.locked, true, 'the doc is reloaded from the server');
+    assert.equal(store.revision, 7);
+    assert.equal(store.doc.devices.find((d) => d.id === 'atem-mini').name, serverDoc.devices.find((d) => d.id === 'atem-mini').name, 'pending local edits are gone after the reload');
+    const pend = storage.getItem('fathom.pending.sunday-demo');
+    assert.ok(!pend || JSON.parse(pend).length === 0, 'persisted queue is cleared');
+    await q.flush().catch(() => {});
+    await settle();
+    assert.equal(posts(), 1, 'an empty queue does not post again');
+  } finally {
+    mock.timers.reset();
+  }
+});

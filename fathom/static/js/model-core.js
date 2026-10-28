@@ -620,6 +620,11 @@ export function applyTemplateToDevice(dev, template, vocab) {
 
 // ------------------------------------------------------------ filtering
 
+// Project lock (settings.locked, FR-UX-17): only an explicit `true` locks; a missing key is unlocked.
+export function isLocked(doc) {
+  return !!(doc && isObject(doc.settings) && doc.settings.locked === true);
+}
+
 export function stateIncludes(status, state) {
   const s = status || 'installed';
   const st = state || 'all';
