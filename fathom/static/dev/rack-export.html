@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en" data-harness="rack-export">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fathom · Rack export harness</title>
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/rack-export.css">
+<style>
+  .rxh{max-width:900px;margin:0 auto;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+  .rxh h1{font-size:13px;letter-spacing:1.8px;text-transform:uppercase;color:var(--accent);margin:0 0 6px}
+  .rxh p{color:var(--muted);margin:4px 0 12px}
+  .rxh-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+  .rxh-actions button{min-height:40px}
+  .rxh h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:16px 0 4px}
+  #rx-h-log{list-style:none;margin:0;padding:0;font-size:12px;color:#b9c2d6}
+  #rx-h-log li{padding:4px 0;border-bottom:1px solid var(--border);overflow-wrap:anywhere}
+  @media (pointer:coarse){.rxh-actions button{min-height:44px}}
+</style>
+</head>
+<body>
+  <main class="rxh">
+    <h1>Rack export harness</h1>
+    <p>The export dialog on a small inline project (<code>harness-demo</code>): a 12 U audio rack with accessories, a shelf and an attachment panel image, and a 10&Prime; 6 U video rack without items. The stub ctx has no store writes; <code>?api=0</code> drops the stub library API (no template info or images).</p>
+    <div class="rxh-actions">
+      <button type="button" id="rx-h-open" class="primary">Export racks…</button>
+      <button type="button" id="rx-h-open-one">Export the audio rack (rear)</button>
+    </div>
+    <h2>Results</h2>
+    <ul id="rx-h-log" aria-live="polite"></ul>
+  </main>
+  <div id="fathom-live" class="sr-only" aria-live="polite"></div>
+  <script type="application/json" id="rx-h-doc">
+{
+  "fathom": 2,
+  "meta": {"title": "Harness Chapel & Hall"},
+  "rooms": [{"id": "main", "name": "Main"}],
+  "attachments": [{"id": "att-0000000000a1", "name": "apple-touch-icon.png", "mime": "image/png", "file": "apple-touch-icon.png"}],
+  "templates": [{"id": "demo-sw8", "name": "8-port switch", "kind": "switch", "ru": 1, "manufacturer": "Netgear", "model": "GS308"}],
+  "racks": [
+    {"id": "rk-audio", "name": "Audio rack <A>", "room": "main", "units": 12, "order": 1, "row": "Booth",
+     "items": [
+       {"id": "ri-1", "type": "blank", "u": 1, "face": "front", "depth": "half"},
+       {"id": "ri-2", "type": "vent", "u": 4, "face": "front", "depth": "half"},
+       {"id": "ri-3", "type": "shelf", "u": 5, "face": "front", "depth": "full", "slots": 2, "label": "Shelf"},
+       {"id": "ri-4", "type": "drawer", "u": 6, "height": 2, "face": "front", "depth": "full", "label": "Mic drawer"},
+       {"id": "ri-5", "type": "cable_manager", "u": 9, "face": "front", "depth": "half"},
+       {"id": "ri-6", "type": "lacing_bar", "u": 3, "face": "rear", "depth": "half"}
+     ]},
+    {"id": "rk-video", "name": "Video rack", "room": "main", "units": 6, "order": 2, "row": "Booth", "width_in": 10}
+  ],
+  "devices": [
+    {"id": "console-io", "name": "Stage rack \"SQ\" & I/O", "kind": "stage_io", "room": "main", "manufacturer": "Allen & Heath", "model": "DX168",
+     "rack": {"id": "rk-audio", "u": 10, "height": 2, "face": "front", "side": "full", "image_front": "att-0000000000a1"}},
+    {"id": "wireless", "name": "Wireless receivers", "kind": "wireless_rx", "room": "main", "manufacturer": "Shure", "model": "ULXD4Q",
+     "rack": {"id": "rk-audio", "u": 8, "height": 1, "face": "front", "side": "full"}},
+    {"id": "amp", "name": "Amplifier", "kind": "amp", "room": "main", "manufacturer": "Powersoft", "model": "Quattrocanali",
+     "rack": {"id": "rk-audio", "u": 1, "height": 2, "face": "rear", "side": "full", "depth": "half"}},
+    {"id": "mini", "name": "Playback Mac", "kind": "computer", "room": "main", "manufacturer": "Apple", "model": "Mac mini",
+     "rack": {"id": "rk-audio", "u": 5, "height": 1, "face": "front", "side": "full", "shelf": "ri-3", "slot": 1}},
+    {"id": "pdu", "name": "PDU", "kind": "power", "room": "main", "manufacturer": "Furman", "model": "M-8x2",
+     "rack": {"id": "rk-audio", "u": 12, "height": 1, "face": "front", "side": "full"}},
+    {"id": "switch", "name": "Booth switch", "kind": "switch", "room": "main", "template": "demo-sw8", "manufacturer": "Netgear", "model": "GS308",
+     "rack": {"id": "rk-video", "u": 6, "height": 1, "face": "front", "side": "full"}},
+    {"id": "atem", "name": "ATEM Mini Extreme", "kind": "video_switcher", "room": "main", "manufacturer": "Blackmagic", "model": "ATEM Mini Extreme",
+     "rack": {"id": "rk-video", "u": 3, "height": 2, "face": "front", "side": "left"}},
+    {"id": "loose-mic", "name": "Spare mic", "kind": "mic", "room": "main"}
+  ]
+}
+  </script>
+  <script type="module" src="rack-export-harness.js"></script>
+</body>
+</html>
