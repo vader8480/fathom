@@ -206,7 +206,7 @@ class InventoryUi(_InventoryBase):
             lines = text.split("\r\n")
             self.assertEqual(lines[-1], "")
             self.assertEqual(len(lines) - 2, 8, "header plus the 8 filtered rows")
-            self.assertEqual(lines[0], "Name,Room,Location,Kind,Model,Status,Serial,Asset tag,Warranty until,Cost,Rack,RU,IPs",
+            self.assertEqual(lines[0], "Name,Room,Location,Kind,Model,Status,Condition,Container,Code,Serial,Asset tag,Warranty until,Cost,Rack,RU,IPs",
                              "visible columns only; the Edit column is not exported")
             self.assertTrue(all(",fixture," in ln for ln in lines[1:-1]), lines)
             self.assertEqual(pg.js("document.getElementById('inv-csv').getAttribute('download')"), "campus-demo-inventory.csv")
