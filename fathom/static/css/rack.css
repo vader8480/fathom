@@ -16,6 +16,139 @@
 .rk-pagelink { color: inherit; text-decoration: none; border-radius: 4px; }
 .rk-pagelink:hover { color: var(--accent, #8ea2ff); text-decoration: underline; }
 
+/* ------------------------------------------------------- elevation (rack-elevation.js)
+   Block colours: --rk-color (blockColor) and --rk-text (textColorOn) are set inline. */
+.rk-block { background: var(--rk-color, #242d44); color: var(--rk-text, #fff); border-color: rgba(0,0,0,.4); }
+.rk-stripe { background: rgba(0,0,0,.22); }
+.rk-bmodel, .rk-bru { color: inherit; opacity: .78; }
+.rk-block.rk-behind { color: #b8c0d4; }
+.rk-block.rk-behind .rk-stripe { background: var(--rk-color, #9aa3b5); }
+.rk-block.rk-collide { color: #fff; }
+.rk-block.rk-hl { border-width: 2px; }
+.rk-title { display: flex; flex-wrap: wrap; align-items: center; gap: 0 4px; }
+.rk-facetoggle { margin-left: auto; min-height: 26px; padding: 2px 10px; font-size: 12px; font-weight: 500; }
+
+/* images (display image | both): the photo fills the block; both keeps the name over it */
+.rk-img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; -webkit-user-drag: none; }
+.rk-block.rk-showimg { background: #111; }
+.rk-block.rk-showimg:not(.rk-imglabel) > .rk-stripe,
+.rk-block.rk-showimg:not(.rk-imglabel) > .rk-bname,
+.rk-block.rk-showimg:not(.rk-imglabel) > .rk-bmodel,
+.rk-block.rk-showimg:not(.rk-imglabel) > .rk-bru { visibility: hidden; }
+.rk-block.rk-imglabel > .rk-stripe { position: relative; z-index: 1; background: var(--rk-color, #9aa3b5); }
+.rk-block.rk-imglabel > .rk-bname {
+  position: relative; z-index: 1; justify-self: start; max-width: 100%; padding: 0 6px; border-radius: 3px;
+  background: rgba(11,16,32,.74); color: #fff; line-height: 1.5;
+}
+.rk-block.rk-imglabel > .rk-bmodel, .rk-block.rk-imglabel > .rk-bru { visibility: hidden; }
+.rk-air {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%); z-index: 1; padding: 0 4px; border-radius: 3px;
+  background: rgba(11,16,32,.74); color: #fff; font-size: 11px; line-height: 16px;
+}
+
+/* the ⋯ menu button: shown on focus, selection and hover */
+.rk-more {
+  position: absolute; right: 2px; top: 50%; transform: translateY(-50%); z-index: 2; display: none; align-items: center; justify-content: center;
+  min-width: 28px; height: 20px; max-height: calc(100% - 2px); padding: 0 6px; border-radius: 4px; font: inherit; font-size: 14px; line-height: 1;
+  border: 1px solid rgba(255,255,255,.35); background: rgba(11,16,32,.88); color: #fff; cursor: pointer;
+}
+.rk-block:focus .rk-more, .rk-block.rk-selected .rk-more, .rk-item:focus .rk-more, .rk-item.rk-selected .rk-more,
+.rk-block .rk-more:focus, .rk-item .rk-more:focus { display: inline-flex; }
+@media (hover: hover) {
+  .rk-block:hover .rk-more, .rk-item:hover .rk-more { display: inline-flex; }
+}
+.rk-block.rk-onshelf .rk-more { min-width: 22px; padding: 0 3px; }
+
+/* shelf children: drawn inside their cell, above the shelf's lip */
+.rk-block.rk-onshelf { grid-template-columns: 4px 1fr; column-gap: 4px; padding-right: 2px; z-index: 1; }
+.rk-block.rk-onshelf .rk-bmodel, .rk-block.rk-onshelf .rk-bru { display: none; }
+.rk-block.rk-onshelf .rk-bname { font-size: 11px; }
+
+/* accessories (rack items): each type has its own look */
+.rk-item {
+  position: absolute; display: flex; align-items: center; justify-content: center; overflow: hidden; box-sizing: border-box;
+  border-radius: 2px; border: 1px solid rgba(0,0,0,.45); background: var(--rk-color, #44475a); color: var(--rk-text, #fff);
+  font-size: 10.5px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; outline: none;
+}
+.rk-iname { position: relative; z-index: 1; max-width: 100%; padding: 0 30px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; pointer-events: none; }
+.rk-item.rk-selected, .rk-item:focus-visible { box-shadow: 0 0 0 2px var(--accent, #8ea2ff); z-index: 1; }
+.rk-item.rk-behind { opacity: .6; border-style: dashed; }
+.rk-item.rk-collide { border: 2px solid var(--err, #f06aa8); box-shadow: 0 0 0 2px rgba(240,106,168,.3); }
+.rk-item.rk-dim { opacity: .35; }
+.rk-item-blank {
+  background: radial-gradient(circle at 8px 50%, rgba(0,0,0,.5) 0 2px, transparent 2.6px),
+    radial-gradient(circle at calc(100% - 8px) 50%, rgba(0,0,0,.5) 0 2px, transparent 2.6px), var(--rk-color, #44475a);
+}
+.rk-item-vent {
+  background: repeating-linear-gradient(90deg, transparent 0 5px, rgba(0,0,0,.55) 5px 8px) center / calc(100% - 32px) 56% no-repeat, var(--rk-color, #44475a);
+}
+.rk-item-shelf {
+  align-items: flex-end; border-style: dashed; border-color: var(--rk-color, #6272a4); color: var(--text, #e6eaf4);
+  background: linear-gradient(to top, var(--rk-color, #6272a4) 0 5px, rgba(255,255,255,.04) 5px);
+}
+.rk-item-shelf .rk-iname { font-size: 9.5px; line-height: 1; padding-bottom: 6px; opacity: .6; }
+.rk-cell { position: absolute; top: 0; bottom: 5px; border-right: 1px dashed rgba(255,255,255,.22); pointer-events: none; }
+.rk-cell:last-of-type { border-right: 0; }
+.rk-item-drawer::after {
+  content: ''; position: absolute; left: 36%; right: 36%; bottom: 22%; height: 4px; border-radius: 2px;
+  background: rgba(0,0,0,.55); box-shadow: 0 1px 0 rgba(255,255,255,.2);
+}
+.rk-item-cable_manager {
+  background: radial-gradient(circle at 50% 50%, transparent 0 3px, rgba(0,0,0,.55) 3.5px 5.5px, transparent 6px) 0 50% / 26px 100% repeat-x, var(--rk-color, #6272a4);
+}
+.rk-item-brush { background: repeating-linear-gradient(90deg, rgba(0,0,0,.45) 0 1px, transparent 1px 3px) center / calc(100% - 24px) 100% no-repeat, var(--rk-color, #6272a4); }
+.rk-item-brush::after { content: ''; position: absolute; left: 12px; right: 12px; top: 50%; height: 2px; margin-top: -1px; background: #0e1424; }
+.rk-item-lacing_bar { background: transparent; border-color: transparent; color: #b8c0d4; }
+.rk-item-lacing_bar::before { content: ''; position: absolute; left: 4px; right: 4px; top: 50%; height: 4px; margin-top: -2px; border-radius: 2px; background: var(--rk-color, #6272a4); }
+.rk-item-other { border-style: dashed; border-color: rgba(255,255,255,.35); }
+
+/* annotation column right of each face */
+.rk-face.rk-annotated { display: grid; grid-template-columns: auto auto; align-items: start; }
+.rk-face.rk-annotated > figcaption { grid-column: 1 / -1; }
+.rk-annot { width: 132px; padding: 7px 0; }
+.rk-annot-in { position: relative; }
+.rk-anno {
+  position: absolute; left: 0; right: 0; display: flex; align-items: center; padding-left: 12px; overflow: hidden;
+  font-size: 11px; line-height: 1.3; color: var(--text, #e6eaf4); white-space: nowrap;
+}
+.rk-anno::before { content: ''; position: absolute; left: 2px; width: 7px; top: 50%; border-top: 1px dotted var(--muted, #8e97ab); }
+.rk-anno > span { overflow: hidden; text-overflow: ellipsis; }
+
+/* block menu: a popover, a bottom sheet at sm (.rk-sheet) */
+.rk-menu {
+  position: fixed; z-index: 75; width: 320px; max-width: calc(100vw - 16px); max-height: min(80vh, 640px); overflow: auto; box-sizing: border-box;
+  padding: 10px 12px 12px; background: var(--panel, #111828); border: 1px solid var(--border-2, rgba(255,255,255,.16)); border-radius: 10px;
+  box-shadow: 0 18px 40px rgba(0,0,0,.5); color: var(--text, #e6eaf4); font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.rk-menu *, .rk-menu *::before { box-sizing: border-box; }
+.rk-menu.rk-sheet {
+  left: 0; right: 0; bottom: 0; top: auto; width: auto; max-width: none; max-height: 78vh;
+  border-radius: 14px 14px 0 0; padding: 12px 14px calc(14px + var(--sab, 0px));
+}
+.rk-menu-back { position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 74; background: rgba(0,0,0,.45); }
+.rk-menu-h { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; align-items: center; margin-bottom: 4px; }
+.rk-menu-h strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-menu-sub { grid-column: 1; grid-row: 2; color: var(--muted, #8e97ab); font-size: 12px; }
+.rk-menu-x { grid-column: 2; grid-row: 1 / span 2; min-width: 32px; padding: 0 8px; font-size: 16px; }
+.rk-menu-row { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; margin-top: 8px; }
+.rk-menu-l { color: var(--muted, #8e97ab); font-size: 12px; }
+.rk-seg, .rk-swatches, .rk-menu-inline, .rk-menu-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.rk-menu .rk-btn[aria-pressed=true] { background: rgba(142,162,255,.18); border-color: var(--accent, #8ea2ff); }
+.rk-menu select, .rk-menu input[type=text] {
+  min-width: 0; flex: 1 1 120px; min-height: 30px; padding: 4px 8px; border-radius: 6px; font: inherit;
+  background: var(--panel-2, #161d2e); color: var(--text, #e6eaf4); border: 1px solid var(--border-2, rgba(255,255,255,.16));
+}
+.rk-menu input[type=text] { width: 100%; }
+.rk-swatch { width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,.15); background: var(--rk-sw, #6272a4); cursor: pointer; }
+.rk-swatch[aria-pressed=true] { border-color: #fff; box-shadow: 0 0 0 2px var(--accent, #8ea2ff); }
+.rk-swatch:disabled { opacity: .45; cursor: default; }
+.rk-swclear { min-height: 24px; padding: 0 8px; font-size: 12px; }
+.rk-menu-n { min-width: 36px; text-align: center; font-variant-numeric: tabular-nums; }
+.rk-menu-note { margin: 6px 0 0; color: var(--muted, #8e97ab); font-size: 12px; }
+.rk-menu-acts { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border, rgba(255,255,255,.09)); }
+.rk-menu-acts .rk-primary { margin-left: auto; }
+.rk-menu :focus-visible { outline: 2px solid var(--accent, #8ea2ff); outline-offset: 1px; }
+
 /* ------------------------------------------------------------ rack page */
 .rp-root { position: relative; display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; height: 100%; }
 .rp-root [hidden] { display: none !important; }
@@ -54,8 +187,17 @@ a.rp-card:hover, button.rp-card:hover { border-color: var(--accent, #8ea2ff); }
   .rp-body { padding: 10px 12px calc(12px + var(--sab, 0px)); }
   .rp-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+@media (max-width: 699px) {
+  .rk-annot { width: 96px; }
+}
 @media (pointer: coarse) {
   .rp-face, .rp-add, a.rp-card, button.rp-card { min-height: 44px; }
+  .rk-item { min-height: 44px; }
+  .rk-menu button, .rk-menu select, .rk-menu input[type=text] { min-height: 44px; }
+  .rk-menu button { min-width: 44px; }
+  .rk-menu select, .rk-menu input[type=text] { font-size: 16px; }
+  .rk-swatch { width: 44px; height: 44px; }
+  .rk-menu-row { grid-template-columns: 56px 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   .rp-root *, .rk-devlist * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
@@ -74,4 +216,8 @@ a.rp-card:hover, button.rp-card:hover { border-color: var(--accent, #8ea2ff); }
   .rp-root:not(.rp-printing) .eh-actions, .rp-root:not(.rp-printing) .eh-tabs, .rp-root:not(.rp-printing) .rp-bar { display: none !important; }
   .rp-root:not(.rp-printing) .ex-content { overflow: visible; }
   .rp-card { border-color: #999; background: none; color: #000; }
+  .rk-more, .rk-facetoggle, .rk-menu, .rk-menu-back { display: none !important; }
+  .rk-block.rk-behind { color: #333; }
+  .rk-anno { color: #000; }
+  .rk-item, .rk-item::before, .rk-item::after, .rk-air { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
