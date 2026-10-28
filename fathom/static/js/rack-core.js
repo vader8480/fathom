@@ -646,7 +646,7 @@ function syncChildren(doc, rackId, itemId, shelf, dropped) {
   const ops = [];
   shelfChildren(doc, rackId, itemId).forEach(function (d) {
     if (!shelf || dropped(d)) { ops.push(devMerge(d.id, null)); return; }
-    if (d.rack.u !== shelf.u || d.rack.face !== shelf.face) ops.push(devMerge(d.id, {u: shelf.u, face: shelf.face}));
+    if (d.rack.u !== shelf.u || (d.rack.face === 'rear' ? 'rear' : 'front') !== shelf.face) ops.push(devMerge(d.id, {u: shelf.u, face: shelf.face}));
   });
   return ops;
 }
