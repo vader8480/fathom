@@ -1253,6 +1253,41 @@ def r_projects_v2(req: Request) -> Response:
     return Response.json({"projects": rows})
 
 
+# ---- room starters (phase3 P3C): bundled one-room church samples offered as project templates and as rooms to add
+
+
+@route("GET", "/api/v2/starters", role="viewer", summary="Church room starter templates", tags=["projects"])
+def r_starters(req: Request) -> Response:
+    from .starters import list_starters
+
+    return Response.json({"starters": list_starters()})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/rooms/from-starter", role="editor", summary="Add a room from a starter", tags=["projects"], body="Starter")
+def r_room_from_starter(req: Request) -> Response:
+    from .schema import diff_docs
+    from .starters import StarterError, get_starter, merge_room
+
+    pdir = _project_dir(req.params["name"])
+    body = req.json()
+    starter_id = str(body.get("starter") or "")
+    starter = get_starter(starter_id)
+    if starter is None:
+        raise ApiError(400, f"unknown starter '{starter_id}'", "bad_enum")
+    room_name = str(body.get("name") or "").strip()[:80]
+    doc, _ = _load(pdir)
+    try:
+        merged, info = merge_room(doc, starter_id, room_name or None)
+    except StarterError as exc:
+        raise ApiError(404 if exc.code == "not_found" else 400, str(exc), exc.code)
+    ops = diff_docs(doc, merged)
+    ops = _lock_guard_ops(req, doc, ops)
+    summary = f"Added room {info['name']} from starter {starter['label']}"
+    res = _server_ops(req, pdir, ops, summary, "starter")
+    return Response.json({"room": info["room"], "info": info, "revision": res["revision"], "problems": res.get("problems") or []}, 201,
+                         headers={"ETag": f'"r{res["revision"]}"'})
+
+
 @route("POST", "/api/v2/projects", role="editor", summary="Create a project", tags=["projects"], body="ProjectCreate")
 def r_projects_create_v2(req: Request) -> Response:
     body = req.json()
