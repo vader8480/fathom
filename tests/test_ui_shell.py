@@ -138,8 +138,9 @@ class ShellUi(UiCase):
               var ids = Array.prototype.map.call(document.getElementById('app').children, function (c) { return c.id; });
               return ids;
             })()""")
-            self.assertEqual(order, ["app-banner", "app-top", "app-lock", "app-views", "app-subnav", "app-body", "app-selbar", "app-tabbar"])
+            self.assertEqual(order, ["app-banner", "app-top", "app-lock", "app-preview", "app-views", "app-subnav", "app-scenes", "app-body", "app-selbar", "app-tabbar"])
             self.assertTrue(pg.js("document.getElementById('app-lock').hidden"), "no lock banner on an unlocked project")
+            self.assertTrue(pg.js("document.getElementById('app-preview').hidden"), "no scene preview banner by default")
 
     def test_deep_link_opens_drawer(self):
         for size in ("m", "d"):
