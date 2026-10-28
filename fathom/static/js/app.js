@@ -680,7 +680,12 @@ export function makeCtx(store, extras) {
     env: (typeof window !== 'undefined') ? detectEnv() : { touch: false, narrow: false, platform: 'other', online: true, secure: false },
     commit: function (ops, label) {
       if (!ops || !ops.length) return null;
-      if (ctx.store.readOnly) { ctx.toast(A.locked && A.store === ctx.store ? 'Editing is locked \u2014 this change was not made' : 'Read-only: this change was not made', 'warn'); return null; }
+      if (ctx.store.readOnly) {
+        // The lock itself may always be toggled by an editor (Settings › Project lock card).
+        if (A.locked && A.store === ctx.store && !baseReadOnly() && isLockOnlyOps(ops)) { setLocked(ops[0].value.locked); return null; }
+        ctx.toast(A.locked && A.store === ctx.store ? 'Editing is locked \u2014 this change was not made' : 'Read-only: this change was not made', 'warn');
+        return null;
+      }
       try {
         const d = ctx.store.commit(ops, label);
         announce(label);
@@ -1120,6 +1125,13 @@ function applyLock(initial) {
     const v = A.view;
     setTimeout(function () { if (A.store === store && A.view === v) mountView(v); }, 0);
   }
+}
+
+function isLockOnlyOps(ops) {
+  if (!ops || ops.length !== 1) return false;
+  const o = ops[0];
+  if (!o || o.op !== 'root' || o.key !== 'settings' || !o.value || typeof o.value !== 'object') return false;
+  return Object.keys(o.value).every(function (k) { return k === 'locked' || k === 'locked_by' || k === 'locked_at'; }) && typeof o.value.locked === 'boolean';
 }
 
 // One op through the normal pipeline; the server fills locked_by / locked_at.
