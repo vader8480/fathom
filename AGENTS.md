@@ -124,7 +124,7 @@ with `pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
   `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -p test_backup.py -v`
   (not `python -m unittest tests.test_backup`: the `discovery` extra installs
   `x690`, whose stray top-level `tests` package shadows ours).
-- **Frontend tests:** `node --test tests/js/*.test.mjs` (598 tests; pass the
+- **Frontend tests:** `node --test tests/js/*.test.mjs` (600 tests; pass the
   files, the bare directory form fails on recent Node).
 - **End-to-end check:** `.venv/bin/fathom selftest`.
 - **Calling the API with curl:** mutating requests need `X-Fathom: 1`
