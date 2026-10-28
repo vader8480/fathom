@@ -26,6 +26,7 @@
 .rk-block.rk-collide { color: #fff; }
 .rk-block.rk-hl { border-width: 2px; }
 .rk-title { display: flex; flex-wrap: wrap; align-items: center; gap: 0 4px; }
+.rk-title .rk-pagelink { display: inline-flex; align-items: center; }
 .rk-facetoggle { margin-left: auto; min-height: 26px; padding: 2px 10px; font-size: 12px; font-weight: 500; }
 
 /* images (display image | both): the photo fills the block; both keeps the name over it */
