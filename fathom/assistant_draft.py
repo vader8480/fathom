@@ -38,7 +38,7 @@ _LEAD_RE = re.compile(r"^(?:we have|we've got|we got|there (?:is|are)|i have|i'v
 _TAIL_RE = re.compile(r"\s+(?:on (?:stands|sticks|the wall|the ceiling|a truss|truss)|at foh|at the back|in the booth|in the rack|"
                       r"for (?:the )?(?:stage|foh|stream|lobby|monitors|the band)|each|total|in total|please)$", re.IGNORECASE)
 # "2 K12.2", "4 × ULXD", "2x K12.2" — but not "32 channel mixer", "4 way DSP", "2U rack"
-_Q_LEAD = re.compile(r"^(\d{1,3})(?!\d)\s*(?:x|\u00d7|\*)?\s*(?!(?:ch|channels?|way|inputs?|ins?|outs?|zones?|ports?|u|ru|inch|k|p|m|mm|w|ft|m)\b)(?=\S)", re.IGNORECASE)
+_Q_LEAD = re.compile(r"^(\d{1,3})(?!\d)\s*(?:x|\u00d7|\*|pcs|pieces|units(?:\s+of)?)?\s*(?!(?:ch|channels?|way|inputs?|ins?|outs?|zones?|ports?|u|ru|inch|k|p|m|mm|w|ft|m)\b)(?=\S)", re.IGNORECASE)
 _Q_LEAD_WORD = re.compile(r"^(" + "|".join(sorted(_WORD_NUMBERS, key=len, reverse=True)) + r")\s+(?:of\s+)?", re.IGNORECASE)
 _Q_TAIL = re.compile(r"\s*(?:\(\s*(?:x|\u00d7)?\s*(\d{1,3})\s*\)|(?:x|\u00d7)\s*(\d{1,3})|(\d{1,3})\s*(?:pcs|pieces|units|of them))\s*$", re.IGNORECASE)
 _NOISE = {"", "nothing else", "that's it", "thats it", "etc", "etc.", "and", "with", "plus"}
