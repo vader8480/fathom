@@ -7,7 +7,8 @@ URLs); ``q``/``sort``/``pg`` survive reload; ``?sel=cable:…`` opens the drawer
 in view; each kind's row opens its drawer (cable, device ``sec=net``/``dmx``/``inventory``, port, rack)
 and multi-device BOM lines open a drill-down; the CSV and the print sheet hold every filtered row;
 bulk add cables ends on its filtered result; the layout at d/t/m (hidden columns, sticky lead, no
-horizontal page scroll). Skips without Chrome; set ``FATHOM_CHROME=/usr/bin/google-chrome-stable``.
+horizontal page scroll); the Labels tab's *Device labels* section (Brady M511 presets, scope, preview /
+ZIP / CSV links). Skips without Chrome; set ``FATHOM_CHROME=/usr/bin/google-chrome-stable``.
 With ``FATHOM_UI_SHOTS`` set it writes ``schedules-<kind>-<size>`` screenshots.
 """
 from __future__ import annotations
@@ -438,6 +439,114 @@ class SchedulesUi(UiCase):
             pg.wait_for("document.querySelector('#sch-dt .dt-count').textContent !== ''")
             rows_ready(pg, "cables")
             self.assertGreaterEqual(pg.js("document.querySelectorAll('#sch-dt tbody tr.dt-row').length"), n)
+
+    # ------------------------------------------------------------ device labels (Brady M511, phase 1 P1B)
+
+    def _dl_href(self, pg, el_id):
+        return pg.js("document.getElementById(%s).getAttribute('href') || ''" % q(el_id))
+
+    def test_device_labels_section(self):
+        presets = self.api("/api/v2/labels/presets")
+        main = [d for d in self.api("/api/v2/projects/campus-demo")["doc"]["devices"] if d.get("room") == "main" and not d.get("auto")]
+        for size in ("d", "m"):
+            with self.subTest(size=size), self.open(CAMPUS + "schedules/labels", size) as pg:
+                self.assertEqual(pg.smoke["errors"], [])
+                view_ready(pg)
+                pg.wait_for("!!document.querySelector('.sch-labelbar #sch-state') && !!document.querySelector('.sch-devlabels')")
+                self.assertTrue(shown(pg, ".sch-devlabels"), "the section renders in the Labels tab")
+                self.assertEqual(pg.js("document.querySelector('.sch-devlabels h3').textContent"), "Device labels")
+                pg.wait_for("document.querySelectorAll('#sch-dl-preset option').length === 7")
+                opts = pg.js("Array.prototype.map.call(document.querySelectorAll('#sch-dl-preset option'), function (o) { return [o.value, o.textContent]; })")
+                self.assertEqual([o[0] for o in opts], [p["id"] for p in presets["presets"]], "one option per preset, server order")
+                self.assertEqual(opts[0][1], "1\u2033 \u00d7 0.5\u2033 die-cut \u2014 25.4\u00d712.7 mm", "<label> — <w>×<h> mm")
+                self.assertEqual(pg.js("document.getElementById('sch-dl-preset').value"), presets["default"], "default preset selected")
+                self.assertEqual(pg.js("document.getElementById('sch-dl-scope').value"), "all")
+                for el_id, fmt in (("sch-dl-preview", "html"), ("sch-dl-zip", "zip"), ("sch-dl-csv", "csv")):
+                    href = self._dl_href(pg, el_id)
+                    self.assertIn("/api/v2/projects/campus-demo/labels/devices?", href, el_id)
+                    self.assertIn("preset=m511-1x0.5", href, el_id)
+                    self.assertIn("format=" + fmt, href, el_id)
+                    self.assertNotIn("room=", href)
+                    self.assertNotIn("devices=", href)
+                self.assertEqual(pg.js("document.getElementById('sch-dl-preview').getAttribute('target')"), "_blank")
+                self.assertTrue(pg.js("document.getElementById('sch-dl-zip').hasAttribute('download') && document.getElementById('sch-dl-csv').hasAttribute('download')"))
+                self.assertFalse(pg.js("document.getElementById('sch-dl-preview').hasAttribute('download')"))
+                # preset change rewrites every link
+                pg.js("var s = document.getElementById('sch-dl-preset'); s.value = 'm511-1x2'; s.dispatchEvent(new Event('change', {bubbles: true})); 1")
+                for el_id in ("sch-dl-preview", "sch-dl-zip", "sch-dl-csv"):
+                    self.assertIn("preset=m511-1x2", self._dl_href(pg, el_id))
+                self.assertIn("m511-1x2", pg.js("document.getElementById('sch-dl-zip').getAttribute('download')"))
+                # this room
+                pg.js("var s = document.getElementById('sch-dl-scope'); s.value = 'room'; s.dispatchEvent(new Event('change', {bubbles: true})); 1")
+                self.assertIn("room=main", self._dl_href(pg, "sch-dl-preview"))
+                self.assertEqual(pg.js("document.getElementById('sch-dl-count').textContent"), "%d devices" % len(main))
+                # selected devices: picker with a filter box; links carry devices=
+                pg.js("var s = document.getElementById('sch-dl-scope'); s.value = 'selected'; s.dispatchEvent(new Event('change', {bubbles: true})); 1")
+                pg.wait_for("!document.querySelector('.sch-dl-pick').hidden && document.querySelectorAll('#sch-dl-list li[data-pick]').length > 0")
+                self.assertEqual(pg.js("document.getElementById('sch-dl-preview').getAttribute('aria-disabled')"), "true", "nothing selected: links disabled")
+                self.assertFalse(pg.js("document.getElementById('sch-dl-zip').hasAttribute('href')"))
+                pg.js("""(function () { var i = document.getElementById('sch-dl-filter'); i.value = 'vocal mic 1';
+                  i.dispatchEvent(new Event('input', {bubbles: true})); })()""")
+                pg.wait_for("document.querySelectorAll('#sch-dl-list li[data-pick]').length === 1")
+                pg.click("#sch-dl-list li[data-pick]")
+                pg.wait_for("document.querySelector('#sch-dl-list li[data-pick]').getAttribute('aria-selected') === 'true'")
+                self.assertEqual(pg.js("document.getElementById('sch-dl-count').textContent"), "1 device")
+                href = self._dl_href(pg, "sch-dl-zip")
+                self.assertIn("devices=vox-1", href)
+                self.assertIn("format=zip", href)
+                self.assertNotIn("room=", href)
+                pg.js("""(function () { var i = document.getElementById('sch-dl-filter'); i.value = 'vocal mic 2';
+                  i.dispatchEvent(new Event('input', {bubbles: true})); })()""")
+                pg.wait_for("document.querySelectorAll('#sch-dl-list li[data-pick]').length === 1")
+                pg.click("#sch-dl-list li[data-pick]")
+                pg.wait_for("document.getElementById('sch-dl-count').textContent === '2 devices'")
+                self.assertIn("devices=vox-1%2Cvox-2", self._dl_href(pg, "sch-dl-csv"), "selection order kept, comma-joined")
+                # the links really resolve
+                st = pg.js("fetch(document.getElementById('sch-dl-csv').getAttribute('href')).then(function (r) { return r.status + ' ' + r.headers.get('Content-Type'); })")
+                self.assertTrue(st.startswith("200 text/csv"), st)
+                # the cable-label controls are untouched
+                self.assertTrue(shown(pg, ".sch-labelbar #sch-state") and shown(pg, "#sch-print"))
+                self.assertEqual(pg.js("document.getElementById('sch-csv').getAttribute('aria-disabled')"), "true")
+                self.assertTrue(shown(pg, ".sch-labels-frame"))
+                if size == "m":
+                    self.assertLessEqual(pg.page_hscroll(), 0, "no horizontal overflow at 390px")
+                    self.assertEqual(pg.offscreen("#sch-dl-preset, #sch-dl-scope, #sch-dl-preview, #sch-dl-zip, #sch-dl-csv, #sch-dl-filter", "x"), 0)
+                    heights = pg.js("""['sch-dl-preset', 'sch-dl-scope', 'sch-dl-preview', 'sch-dl-zip', 'sch-dl-csv', 'sch-dl-filter'].map(function (id) {
+                      return Math.round(document.getElementById(id).getBoundingClientRect().height); })""")
+                    self.assertTrue(all(hh >= 44 for hh in heights), heights)
+                    widths = pg.js("""['sch-dl-preview', 'sch-dl-zip', 'sch-dl-csv'].map(function (id) {
+                      return Math.round(document.getElementById(id).getBoundingClientRect().width); })""")
+                    self.assertTrue(all(w >= 300 for w in widths), ("full-width buttons on the phone", widths))
+                    self.assertLessEqual(pg.js("document.querySelector('#sch-dl-list li[data-pick]').getBoundingClientRect().right"), 390)
+                else:
+                    heights = pg.js("""['sch-dl-preset', 'sch-dl-scope', 'sch-dl-preview', 'sch-dl-zip', 'sch-dl-csv'].map(function (id) {
+                      return Math.round(document.getElementById(id).getBoundingClientRect().height); })""")
+                    self.assertTrue(all(hh >= 40 for hh in heights), heights)
+                pg.shot("schedules-labels-devices-%s" % size)
+
+    def test_device_labels_selection_survives_rerender(self):
+        with self.open(CAMPUS + "schedules/labels", "d") as pg:
+            view_ready(pg)
+            pg.wait_for("document.querySelectorAll('#sch-dl-preset option').length === 7")
+            pg.js("var s = document.getElementById('sch-dl-preset'); s.value = 'm511-1x1'; s.dispatchEvent(new Event('change', {bubbles: true})); 1")
+            pg.js("var s = document.getElementById('sch-dl-scope'); s.value = 'selected'; s.dispatchEvent(new Event('change', {bubbles: true})); 1")
+            pg.wait_for("document.querySelectorAll('#sch-dl-list li[data-pick]').length > 0")
+            pg.click("#sch-dl-list li[data-pick=\"vox-1\"]")
+            pg.wait_for("document.getElementById('sch-dl-count').textContent === '1 device'")
+            # a state change re-renders the labels tab; preset, scope and selection stay
+            pg.js("var s = document.getElementById('sch-state'); s.value = 'everything'; s.dispatchEvent(new Event('change', {bubbles: true})); 1")
+            pg.wait_for("document.getElementById('sch-dl-preset').value === 'm511-1x1'")
+            self.assertEqual(pg.js("document.getElementById('sch-dl-scope').value"), "selected")
+            self.assertEqual(pg.js("document.getElementById('sch-dl-count').textContent"), "1 device")
+            self.assertIn("devices=vox-1", self._dl_href(pg, "sch-dl-preview"))
+            self.assertIn("preset=m511-1x1", self._dl_href(pg, "sch-dl-preview"))
+            # another tab and back: no section on table tabs, the section is back on Labels
+            pg.click("#sch-tab-ip")
+            rows_ready(pg, "ip")
+            self.assertFalse(pg.js("!!document.querySelector('.sch-devlabels')"))
+            pg.click("#sch-tab-labels")
+            pg.wait_for("!!document.querySelector('.sch-devlabels') && document.querySelectorAll('#sch-dl-preset option').length === 7")
+            self.assertEqual(pg.js("document.getElementById('sch-dl-preset').value"), "m511-1x1")
 
     # ------------------------------------------------------------ harness
 
