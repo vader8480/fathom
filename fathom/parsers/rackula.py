@@ -636,18 +636,19 @@ def _cells_of(face: str, depth: str, side: str) -> List[Tuple[str, str]]:
     return [(f, s) for f in faces for s in sides]
 
 
-def _collisions(rack_name: str, units: int, blocks: List[Dict[str, Any]], warnings: List[str]) -> None:
-    taken: Dict[Tuple[int, str, str], str] = {}
-    seen: Set[Tuple[str, str, str]] = set()
-    for b in blocks:
+def _collisions(rack_name: str, blocks: List[Dict[str, Any]], warnings: List[str]) -> None:
+    taken: Dict[Tuple[int, str, str], int] = {}
+    pairs: Dict[Tuple[int, int], Tuple[int, List[str]]] = {}
+    for i, b in enumerate(blocks):
         for u in range(b["u"], b["u"] + b["height"]):
             for face, side in _cells_of(b["face"], b["depth"], b["side"]):
-                other = taken.get((u, face, side))
-                if other is None:
-                    taken[(u, face, side)] = b["label"]
-                elif other != b["label"] and (other, b["label"], face) not in seen:
-                    seen.add((other, b["label"], face))
-                    warnings.append(f"{rack_name}: {other} and {b['label']} overlap at U{u} ({face})")
+                j = taken.setdefault((u, face, side), i)
+                if j != i:
+                    faces = pairs.setdefault((j, i), (u, []))[1]
+                    if face not in faces:
+                        faces.append(face)
+    for (j, i), (u, faces) in pairs.items():
+        warnings.append(f"{rack_name}: {blocks[j]['label']} and {blocks[i]['label']} overlap at U{u} ({' and '.join(faces)})")
 
 
 def _build(doc: Doc, layout: Dict[str, Any], payload: Dict[str, Any], warnings: List[str]) -> Dict[str, Any]:
@@ -900,7 +901,7 @@ def _build(doc: Doc, layout: Dict[str, Any], payload: Dict[str, Any], warnings: 
             })
         if items:
             rack["items"] = items
-        _collisions(name, units, blocks, warnings)
+        _collisions(name, blocks, warnings)
         rack_ops.append({"op": "put", "coll": "racks", "id": rid, "value": rack})
         out_racks.append({"id": rid, "name": name, "units": units, "width_in": rack["width_in"],
                           "form_factor": rack["form_factor"], "row": rack.get("row", ""), "order": rack["order"],

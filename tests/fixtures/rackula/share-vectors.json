@@ -1,0 +1,120 @@
+{
+ "_source": "Generated with lz-string 1.5.0 compressToEncodedURIComponent and pako 2 deflate/gzip + base64url, the encodings Rackula (MIT, https://github.com/RackulaLives/Rackula) uses for ?l= share links.",
+ "layout": {
+  "v": "26.9.2",
+  "fv": 2,
+  "n": "Share Lab — é",
+  "rs": [
+   {
+    "i": "0",
+    "n": "Rack A",
+    "h": 12,
+    "w": 19,
+    "wx": 23,
+    "d": [
+     {
+      "t": "usw-24",
+      "p": 10,
+      "f": "front",
+      "n": "Core Switch"
+     },
+     {
+      "t": "shelf-2",
+      "p": 3,
+      "f": "both"
+     },
+     {
+      "t": "mini-pc",
+      "p": 1,
+      "f": "front",
+      "ci": 1,
+      "si": "right"
+     },
+     {
+      "t": "blank-1u",
+      "p": 12,
+      "f": "front"
+     }
+    ]
+   },
+   {
+    "i": "1",
+    "n": "Rack B 🎛",
+    "h": 8,
+    "w": 10,
+    "d": [
+     {
+      "t": "atem-2me",
+      "p": 1,
+      "f": "front"
+     }
+    ]
+   }
+  ],
+  "rg": [
+   {
+    "rs": [
+     "0",
+     "1"
+    ],
+    "n": "Stage Row"
+   }
+  ],
+  "dt": [
+   {
+    "s": "usw-24",
+    "h": 1,
+    "mf": "Ubiquiti",
+    "m": "USW-24",
+    "c": "#7B6BA8",
+    "x": "n"
+   },
+   {
+    "s": "shelf-2",
+    "h": 1,
+    "m": "Shelf 2-up",
+    "c": "#6272A4",
+    "x": "f",
+    "sl": [
+     {
+      "id": "left",
+      "r": 0,
+      "cl": 0,
+      "wf": 0.5
+     },
+     {
+      "id": "right",
+      "r": 0,
+      "cl": 1,
+      "wf": 0.5
+     }
+    ]
+   },
+   {
+    "s": "mini-pc",
+    "h": 1,
+    "m": "Mini PC",
+    "c": "#4A7A8A",
+    "x": "s"
+   },
+   {
+    "s": "blank-1u",
+    "h": 1,
+    "m": "Blank 1U",
+    "c": "#44475A",
+    "x": "b"
+   },
+   {
+    "s": "atem-2me",
+    "h": 2,
+    "mf": "Blackmagic Design",
+    "m": "ATEM 2 M/E Production Studio",
+    "c": "#A85A7A",
+    "x": "a"
+   }
+  ]
+ },
+ "lz": "N4IgbiBcIEwGwDoCcCYgDQgGYUjTAdlCAMoAWAhgE4CmABADIUBGdgKAR0CXGIVAzlADaoAJbEADDyLQAShQDGAazoBBHmSgBGfCADuWpJl0APKDADMmACZDQAF2IBXProC0MACw8ADlvGYsYiwqAHsCB0JiAGEQ2joSXRE7eQ0AX3R7Yj4yGgAbLHcfKEtsYmYQuzSMkAdoAFsRAhFXb3kiyE0AoNDwnnkxDsw+Ad4RAHMyB3TM6GZcigJFV01Hdu0u6GCwqYBdaZARzSliOSU6ACE6QB4NwGz99SgADiM-a1sa4go7Gjr3Opo1jbYHq7VI7TBUMZvfhCECSTBHMEgaSkOwUMb0GQhfSg6y1YQgATQZxuTz3QYgOqBaAAVWYIgAjo4kmJMHViNSSAB1dxeTBtaAAYgA7Oc4OcVA8eKZoER9oSCTl8oVMBpyWzoOQ8lg6DBXI5fHziAK4DAhTAVLyQNLSkNcm8RDZoLkaFgIrwoP4QPI7ZBPboqeIEABWfYO4hUcaTHhUD18n2dPQB4OguXEBpNFptFVaVnEACyjREdAAClE+kaPCohRK1JhrQJU7N5otlqts2riOdm8pNNTy4KPIOhUHa1ayiBGyBPt9fv92zpKZ35ko6miRPI6AARGjDMZEXPQFQAFQAonmdXQ8wB6E8l0JWRzyOwiMLxOyOKwv-sgAUSkfVqUPgnPYgA",
+ "zlib": "eJxtUktOwzAQvYpltk1p3PS7S0t3VKpaEAvUReL8rOZTYocgVZU4ASt2LFhzDm7CCTgCY8f5VGJlzeS9N2_e5ISf8RyTcX_WJ7iHA6hID6fQ20VO7qNbx0U_r-_o-wu-5hzPH0-YwdcBrlBbhx6QDUWE5yYwS3hm8LyAzrCHPUUQACx4aRALgEdADGAS9II8S4UWWmYwbVcyQSN87lUcHvlxYJCKNKw4biZaQMJSZhypVr0UpUy1uHSbszASDcuNnfRgmIWmkS7vvJcoyTG7Gy7Q7-fbR7XmtNpy0N3OEX5ikMT_xwko7iG6UGFVgio8E-91zsIJfbTNSixxnlA43k0sUoqJlLx32VPBBINuIsvdQwWhUFxNFuOFPYUKwgdpuQi_SFELqeNCDxGjONbkMZkQ29LkAF4eV8eGJXHsBzLSHM9haxqrpwQ_g_5IxeU1GXdBZgva12bai7Vm1tBDm2XtxLIn9tTWTnizRudqLXUhm8i8b7iWNRnVXLfhds4TqR9chQlkekickFF043MWpjpV-261RgStr1dok2deQQXLUrQThceyepA9HYFNPciRR_4Dn6jjOg",
+ "gzip": "H4sIAAAAAAAAA21SS07DMBC9imW2TWnc9LtLS3dUqloQC9RF4vys5lNihyBVlTgBK3YsWHMObsIJOAJjx_lUYmXN5L03b97khJ_xHJNxf9YnuIcDqEgPp9DbRU7uo1vHRT-v7-j7C77mHM8fT5jB1wGuUFuHHpANRYTnJjBLeGbwvIDOsIc9RRAALHhpEAuAR0AMYBL0gjxLhRZaZjBtVzJBI3zuVRwe-XFgkIo0rDhuJlpAwlJmHKlWvRSlTLW4dJuzMBINy42d9GCYhaaRLu-8lyjJMbsbLtDv59tHtea02nLQ3c4RfmKQxP_HCSjuIbpQYVWCKjwT73XOwgl9tM1KLHGeUDjeTSxSiomUvHfZU8EEg24iy91DBaFQXE0W44U9hQrCB2m5CL9IUQup40IPEaM41uQxmRDb0uQAXh5Xx4YlcewHMtIcz2FrGqunBD-D_kjF5TUZd0FmC9rXZtqLtWbW0EObZe3Esif21NZOeLNG52otdSGbyLxvuJY1GdVct-F2zhOpH1yFCWR6SJyQUXTjcxamOlX7brVGBK2vV2iTZ15BBctStBOFx7J6kD0dgU09yJFH_gNX-SSaSgMAAA"
+}

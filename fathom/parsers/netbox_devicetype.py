@@ -208,14 +208,20 @@ def port_groups(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if (cur is not None and num is not None and cur["key"] == key and cur["nums"]
                 and cur["nums"][-1] is not None and num == cur["nums"][-1] + 1 and len(cur["nums"]) < _MAX_GROUP):
             cur["nums"].append(num)
+            cur["raw"].append(name)
             cur["labels"].append(e.get("label") or "")
             continue
-        runs.append({"key": key, "name": name, "nums": [num], "labels": [e.get("label") or ""], "section": e.get("section", "")})
+        runs.append({"key": key, "name": name, "nums": [num], "raw": [name], "labels": [e.get("label") or ""], "section": e.get("section", "")})
     groups: List[Dict[str, Any]] = []
     for r in runs:
         section, prefix, medium, dir_, connector, channels = r["key"]
         g: Dict[str, Any] = {}
         nums = r["nums"]
+        tail_names: List[str] = []
+        if len(nums) > 1 and " " in prefix and all(rn == f"{prefix}{n}" for rn, n in zip(r["raw"], nums)):
+            # "RF Out Ch1", "RF Out Ch2": group "RF Out", names "Ch1", "Ch2" keep the names and ids exact
+            prefix, tail = prefix.rsplit(" ", 1)
+            tail_names = [f"{tail}{n}" for n in nums]
         if len(nums) == 1 and nums[0] is not None:
             g["group"] = r["name"] if prefix else f"{_SECTION_GROUP.get(section, 'Port')} {nums[0]}"
             nums = [None]
@@ -228,7 +234,9 @@ def port_groups(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if connector:
             g["connector"] = connector
         if nums[0] is not None:
-            if nums[0] == 0:
+            if tail_names:
+                g["names"] = tail_names
+            elif nums[0] == 0:
                 g["names"] = [str(n) for n in nums]
             else:
                 if len(nums) > 1:
@@ -324,14 +332,24 @@ _RACK_CATEGORY = {
     "processor": "av-media", "encoder": "av-media", "wireless_rx": "av-media", "video": "av-media",
 }
 
-_HINT_RE = re.compile(r"fathom:\s*((?:\w+=(?:\"[^\"]*\"|\S+)\s*)+)")
+_HINT_VAL = r"(?:\"[^\"]*\"|'[^']*'|\S+)"
+_HINT_RE = re.compile(r"fathom:\s*((?:\w+=" + _HINT_VAL + r"\s*)+)")
 
 
 def _hint(desc: Any) -> Dict[str, str]:
     m = _HINT_RE.search(str(desc or ""))
     if not m:
         return {}
-    return {k: v.strip('"') for k, v in re.findall(r"(\w+)=(\"[^\"]*\"|\S+)", m.group(1))}
+    out = {}
+    for k, v in re.findall(r"(\w+)=(" + _HINT_VAL + ")", m.group(1)):
+        out[k] = v[1:-1] if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'" else v
+    return out
+
+
+def _hint_val(v: str) -> str:
+    if v and not re.search(r"[\s\"']", v):
+        return v
+    return f"'{v}'" if '"' in v else f'"{v}"'
 
 
 # ------------------------------------------------------------ to_template
@@ -592,8 +610,7 @@ def from_template(t: Dict[str, Any]) -> str:
         if p.get("dir", "io") != dir_guess:
             hint.append(f"dir={p.get('dir', 'io')}")
         if guess is None or (guess[1] or "") != (p.get("connector") or ""):
-            conn = p.get("connector") or ""
-            hint.append(f'connector="{conn}"' if (" " in conn or not conn) else f"connector={conn}")
+            hint.append("connector=" + _hint_val(str(p.get("connector") or "")))
         if int(p.get("channels") or 1) > 1:
             hint.append(f"channels={int(p['channels'])}")
         if hint:
