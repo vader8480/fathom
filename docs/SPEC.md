@@ -737,6 +737,7 @@ Archived pages are hidden from viewers and volunteers everywhere (app tree, insp
 | `attachment` | str | no | — | Photo uploaded with the report (`attachments[]` entry with `kind: photo`, `note: "Problem report <id>"`; warning `dangling_link`). |
 | `created`, `by`, `via` | str | no | — | Set by the server: UTC time, reporter (login, or the typed name, or `anonymous`), channel `app` / `public` / `share`. |
 | `resolved`, `resolved_by`, `note` | str | no | — | Set when resolved (cleared on reopen). |
+| `kind` | str | no | `problem` | `problem` or `suggestion` ("Suggest an improvement", FR-UX-18 / §5.16); suggestions never change a device status and may be forwarded to `settings.suggest_url`. |
 
 #### 4.3.17 Console channels — `devices[].channels[]` and `channel_links[]` (`fathom/console.py`)
 
@@ -1668,7 +1669,7 @@ Exports for harnesses/tests: `export function boot(root, {api})` (called by app.
 | `data` | Data | `imports`, `discovery`, `history`, `json` | `all` |
 | `settings` | Settings | `settings` | `all` |
 
-Roles: `VIEW_ROLES` is empty (every view is open to viewers); `TAB_ROLES = {settings: {users: 'admin', backups: 'admin', sharing: 'editor', trash: 'admin'}}`; `canSee(view, role, tab)`, `sectionsFor(role)` (sections with ≥ 1 permitted view), `sectionRoot(key, route, role)` (route to the section's first permitted view, same project and room).
+Roles: `VIEW_ROLES` is empty (every view is open to viewers); `TAB_ROLES = {settings: {users: 'admin', backups: 'admin', sharing: 'editor', trash: 'admin', invites: 'admin', suggestions: 'admin'}}`; `canSee(view, role, tab)`, `sectionsFor(role)` (sections with ≥ 1 permitted view), `sectionRoot(key, route, role)` (route to the section's first permitted view, same project and room).
 
 **View contract** (every `mount*` export):
 
@@ -1986,7 +1987,7 @@ export const VIEW_SHAPES = {devices: ['id','tab','sub'], rooms: ['id','tab'], ra
   schedules: ['tab'], imports: ['tab'], settings: ['tab'], discovery: ['tab','sub'], history: ['id']};
 export const SECTIONS = [/* {key, label, glyph, views, nav: 'sm'|'all'} — table in §6.4 */];
 export const VIEW_ROLES = {};                // view -> minimum role (none today)
-export const TAB_ROLES = {settings: {users: 'admin', backups: 'admin', sharing: 'editor'}};
+export const TAB_ROLES = {settings: {users: 'admin', backups: 'admin', sharing: 'editor', trash: 'admin', invites: 'admin', suggestions: 'admin'}};
 export function canSee(view, role, tab) {}   // role rank viewer < editor < admin
 export function sectionOf(view) {}           // section key; unknown views -> 'data'
 export function sectionsFor(role) {}         // SECTIONS with only the permitted views; empty sections dropped
