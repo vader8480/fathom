@@ -329,3 +329,36 @@ T('scene calls surface 404 and 423 as ApiError with status and code', async () =
   await assert.rejects(a.scenes('my show'), (e) => e instanceof api.ApiError && e.status === 404);
   await assert.rejects(a.activateScene('my show', 'sc-00000001'), (e) => e instanceof api.ApiError && e.status === 423 && api.isLockedError(e));
 });
+
+T('P4C: llm settings and proposal methods hit the P4A/P4B routes; ask passes attachments and manual_text through', async () => {
+  const f = fakeFetch((call) => {
+    if (/llm\/providers$/.test(call.url)) return jsonResponse(200, { providers: [{ id: 'openai', label: 'OpenAI', default_base_url: 'https://api.openai.com/v1', needs_key: true, lists_models: true }] });
+    if (/llm\/models$/.test(call.url)) return jsonResponse(400, { error: 'this provider does not list models', code: 'not_supported' });
+    if (/assistant\/apply$/.test(call.url)) return jsonResponse(423, { error: 'locked', code: 'locked' });
+    return jsonResponse(200, { ok: true });
+  });
+  const a = api.createApi({ base: '/', fetchImpl: f });
+  for (const name of ['llmProviders', 'llmSettings', 'saveLlmSettings', 'llmModels', 'llmTest', 'applyProposal']) assert.equal(typeof a[name], 'function', name + ' is an api method');
+  const prov = await a.llmProviders();
+  assert.equal(prov.providers[0].id, 'openai');
+  assert.equal(f.calls[0].method, 'GET'); assert.equal(f.calls[0].url, '/api/v2/llm/providers');
+  await a.llmSettings();
+  assert.equal(f.calls[1].method, 'GET'); assert.equal(f.calls[1].url, '/api/v2/llm/settings');
+  await a.saveLlmSettings({ provider: 'openai', model: 'gpt-4o-mini', api_key: 'sk-x' });
+  assert.equal(f.calls[2].method, 'PUT'); assert.equal(f.calls[2].url, '/api/v2/llm/settings');
+  assert.deepEqual(JSON.parse(f.calls[2].body), { provider: 'openai', model: 'gpt-4o-mini', api_key: 'sk-x' }, 'the body is sent as given (api_key only when present)');
+  await assert.rejects(a.llmModels({ provider: 'anthropic', base_url: 'https://api.anthropic.com' }), (e) => e instanceof api.ApiError && e.status === 400 && e.code === 'not_supported');
+  assert.equal(f.calls[3].method, 'POST'); assert.equal(f.calls[3].url, '/api/v2/llm/models');
+  await a.llmTest({ provider: 'openai', base_url: 'https://api.openai.com/v1', model: 'gpt-4o-mini' });
+  assert.equal(f.calls[4].method, 'POST'); assert.equal(f.calls[4].url, '/api/v2/llm/test');
+  assert.equal(JSON.parse(f.calls[4].body).model, 'gpt-4o-mini');
+  await a.ask('my show', { question: 'q', history: [{ role: 'user', text: 'q', attachments: ['att-1'] }], attachments: ['att-1'], manual_text: 'page 12: …' });
+  assert.equal(f.calls[5].method, 'POST'); assert.equal(f.calls[5].url, '/api/v2/projects/my%20show/assistant');
+  const asked = JSON.parse(f.calls[5].body);
+  assert.deepEqual(asked.history[0].attachments, ['att-1'], 'history[].attachments travels');
+  assert.equal(asked.manual_text, 'page 12: …', 'manual_text travels');
+  await assert.rejects(a.applyProposal('my show', { id: 'prop-1', base_revision: 3 }), (e) => e instanceof api.ApiError && e.status === 423 && api.isLockedError(e));
+  assert.equal(f.calls[6].method, 'POST'); assert.equal(f.calls[6].url, '/api/v2/projects/my%20show/assistant/apply');
+  assert.deepEqual(JSON.parse(f.calls[6].body), { id: 'prop-1', base_revision: 3 });
+  f.calls.forEach((c) => assert.equal(c.headers.get('X-Fathom'), '1'));
+});

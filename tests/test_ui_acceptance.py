@@ -30,7 +30,7 @@ CAMPUS = "#/campus-demo/main/"
 SIZES = ("d", "t", "m")
 
 SCHEDULE_KINDS = ["cables", "ip", "dmx", "bom", "patch", "racks"]  # labels is a sheet (D9)
-SETTINGS_TABS = ["project", "rooms", "systems", "locations", "networks", "templates", "users", "invites", "backups", "sharing", "suggestions", "offline", "trash"]
+SETTINGS_TABS = ["project", "rooms", "systems", "locations", "networks", "templates", "users", "invites", "backups", "sharing", "suggestions", "assistant", "offline", "trash"]
 DISCOVERY_TABS = ["new", "matches", "connections", "networks", "unresolved", "changes", "runs"]
 DEVICE_TABS = ["overview", "ports", "cables", "network", "inventory", "procedures", "files"]
 ROOM_TABS = ["overview", "devices", "cables", "racks", "plans", "procedures"]
