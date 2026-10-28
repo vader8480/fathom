@@ -4,8 +4,11 @@
 // fetches HTML and wires interactions. The viewer pieces (renderPageBody,
 // applyTaskState) are kept free of app chrome so a public page can reuse them.
 
-import { h, parseHash, buildHash } from './app.js';
+import { parseHash, buildHash } from './app.js';
+import { h } from './dom.js';
 import { deviceTitle } from './model-core.js';
+import { createTable } from './datatable.js';
+import { reviewBadge as reviewCount, emptyState, inlineError, skeleton } from './feedback.js';
 
 const KINDS = [['sop', 'SOP'], ['troubleshooting', 'Troubleshooting'], ['checklist', 'Checklist'], ['reference', 'Reference']];
 const STATUSES = [['draft', 'Draft'], ['published', 'Published'], ['archived', 'Archived']];
@@ -185,10 +188,14 @@ export function mount(el, ctx) {
   let destroyed = false;
   const state = { parent: null, query: '', kind: '', slug: '', mode: 'tree', archived: false };
   let editor = null;
+  let problemsTable = null;
   const vocab = ctx.vocab || {};
+  if (ctx.ensureCss) ctx.ensureCss('datatable.css');
 
   function narrow() { return window.innerWidth < 700; }
   function params() { return parseHash(location.hash).params; }
+  function setTitle(t) { if (typeof ctx.setTitle === 'function') ctx.setTitle(t); }
+  function dropTable() { if (problemsTable) { problemsTable.destroy(); problemsTable = null; } }
   function hashFor(p) { return buildHash(project, store.room, 'sop', p); }
   function go(p) { location.hash = hashFor(p); }
   function openPage(slug) { go({ page: slug }); }
@@ -237,6 +244,7 @@ export function mount(el, ctx) {
   function renderTree() {
     state.mode = 'tree';
     editor = null;
+    dropTable();
     root.innerHTML = '';
     root.className = 'sop sop-tree';
     const doc = store.doc;
@@ -327,14 +335,97 @@ export function mount(el, ctx) {
       const side = h('aside', { class: 'sop-side' }, [head, listHost]);
       root.innerHTML = '';
       root.appendChild(side);
-      root.appendChild(h('div', { class: 'sop-main sop-placeholder' }, [h('p', { class: 'muted' }, pagesOf(doc).length ? 'Pick a procedure on the left.' : 'No procedures yet.')]));
+      root.appendChild(renderLanding(doc));
     }
+  }
+
+  // ---------------------------------------------------------- landing (wide screens)
+
+  // Pages a reader can open from the landing: drafts for editors only, never archived ones.
+  function listed(p) {
+    const st = p.status || 'published';
+    if (st === 'archived') return false;
+    return st !== 'draft' || canEdit;
+  }
+
+  function landingList(pages, cls) {
+    return h('ul', { class: 'sop-landing-list' + (cls ? ' ' + cls : ''), role: 'list' }, pages.map(function (p) {
+      return h('li', { class: 'sop-landing-item' }, h('a', { class: 'sop-landing-link', href: hashFor({ page: p.slug }), 'data-page': p.slug }, [
+        h('span', { class: 'sop-landing-title' }, p.title || p.slug),
+        h('span', { class: 'sop-item-sub' }, [kindBadge(p), statusBadge(p), reviewBadge(p)]),
+      ]));
+    }));
+  }
+
+  function landingSection(cls, title, body, extra) {
+    return h('section', { class: 'sop-landing-sec ' + cls }, [h('div', { class: 'sop-landing-head' }, [h('h2', null, title), extra || null]), body]);
+  }
+
+  function renderLanding(doc) {
+    const pages = pagesOf(doc).filter(listed);
+    const landing = h('div', { class: 'sop-main sop-landing' });
+    if (!pages.length) {
+      landing.appendChild(h('div', { class: 'sop-landing-empty' }, emptyState({
+        title: 'No procedures yet.',
+        text: canEdit ? 'Write the first page: a checklist, a how-to or a reference.' : 'Nobody has written a procedure for this project yet.',
+        action: canEdit ? { label: 'New page', run: function () { openNew(); } } : null,
+      })));
+      return landing;
+    }
+    const recentIds = ctx.recent && typeof ctx.recent.list === 'function' ? ctx.recent.list('page') : [];
+    const recent = [];
+    (recentIds || []).forEach(function (slug) { const p = bySlug(doc, slug); if (p && listed(p) && recent.indexOf(p) < 0) recent.push(p); });
+    if (recent.length) landing.appendChild(landingSection('sop-landing-recent', 'Recently opened', landingList(recent.slice(0, 8))));
+
+    const due = pages.filter(function (p) { return !!reviewState(p); }).sort(function (a, b) { return String(a.review_due) < String(b.review_due) ? -1 : 1; });
+    if (due.length) {
+      const list = landingList(due, 'sop-landing-due-list');
+      const badge = reviewCount({ count: due.length, label: 'due for review', onClick: function () { const a = list.querySelector('a'); if (a) a.focus(); } });
+      landing.appendChild(landingSection('sop-landing-due', 'Due for review', list, badge));
+    }
+
+    const rooms = doc.rooms || [];
+    const inRoom = {};
+    const placed = {};
+    pages.forEach(function (p) {
+      const ids = (p.rooms || []).concat(refsInBody(p.body).rooms);
+      ids.forEach(function (rid) {
+        if (!rooms.some(function (r) { return r.id === rid; })) return;
+        const list = inRoom[rid] || (inRoom[rid] = []);
+        if (list.indexOf(p) < 0) list.push(p);
+        placed[p.id] = true;
+      });
+    });
+    const groups = h('div', { class: 'sop-landing-rooms' });
+    rooms.forEach(function (r) {
+      const list = inRoom[r.id];
+      if (!list || !list.length) return;
+      groups.appendChild(h('div', { class: 'sop-landing-room', 'data-room': r.id }, [
+        h('h3', null, [h('span', { 'aria-hidden': 'true' }, '\u25A3 '), r.name || r.id, h('span', { class: 'sop-landing-n' }, String(list.length))]),
+        landingList(list.slice().sort(orderKey)),
+      ]));
+    });
+    const other = pages.filter(function (p) { return !placed[p.id]; }).sort(orderKey);
+    if (other.length) {
+      groups.appendChild(h('div', { class: 'sop-landing-room', 'data-room': '' }, [
+        h('h3', null, ['No room', h('span', { class: 'sop-landing-n' }, String(other.length))]),
+        landingList(other),
+      ]));
+    }
+    landing.appendChild(landingSection('sop-landing-byroom', 'By room', groups));
+    return landing;
   }
 
   // ---------------------------------------------------------- page viewer
 
+  function inspectDevice(id, section) {
+    const sel = { type: 'device', id: id, device: id };
+    if (typeof ctx.openDrawer === 'function') ctx.openDrawer(sel, section ? { section: section } : undefined);
+    else ctx.openInspector(sel);
+  }
+
   function refHandler(kind, id) {
-    if (kind === 'device') { ctx.openInspector({ type: 'device', id: id, device: id }); return true; }
+    if (kind === 'device') { inspectDevice(id); return true; }
     if (kind === 'room') { ctx.navigate('patch', { room: id, keepSel: false }); return true; }
     if (kind === 'page') { openPage(id); return true; }
     return false;
@@ -349,7 +440,9 @@ export function mount(el, ctx) {
     state.mode = 'page';
     state.slug = slug;
     editor = null;
+    dropTable();
     const p = data.page;
+    if (ctx.recent && typeof ctx.recent.push === 'function') ctx.recent.push('page', p.slug);
     const wide = !narrow();
     const main = h('article', { class: 'sop-main sop-page', 'data-page': p.slug, 'aria-labelledby': 'sop-title' });
 
@@ -410,7 +503,7 @@ export function mount(el, ctx) {
       applies.push(h('button', { type: 'button', class: 'chip sop-chip-room', onclick: function () { refHandler('room', r.id); } }, ['\u25A3 ', r.name]));
     });
     (data.links.devices || []).forEach(function (d) {
-      applies.push(h('button', { type: 'button', class: 'chip sop-chip-device', 'data-device': d.id, onclick: function () { refHandler('device', d.id); } }, d.name));
+      applies.push(h('button', { type: 'button', class: 'chip sop-chip-device', 'data-device': d.id, onclick: function () { inspectDevice(d.id, 'procedures'); } }, d.name));
     });
     if (applies.length) {
       main.appendChild(h('div', { class: 'sop-applies', 'aria-label': 'Applies to' }, [h('span', { class: 'sop-applies-label' }, 'Applies to'), h('div', { class: 'sop-applies-chips' }, applies)]));
@@ -525,12 +618,16 @@ export function mount(el, ctx) {
     }
     root.appendChild(main);
     main.scrollTop = 0;
+    setTitle(p.title || p.slug);
   }
 
   function loadPage(slug) {
     const my = ++token;
+    dropTable();
     root.innerHTML = '';
-    root.appendChild(h('div', { class: 'app-loading' }, 'Loading\u2026'));
+    const busy = skeleton('page');
+    busy.classList.add('app-loading', 'sop-loading');
+    root.appendChild(busy);
     return Promise.resolve(ctx.flush ? ctx.flush() : null).catch(function () { return null; }).then(function () {
       return api.getPage(project, slug);
     }).then(function (data) {
@@ -542,7 +639,10 @@ export function mount(el, ctx) {
       root.className = 'sop';
       root.appendChild(h('div', { class: 'sop-main' }, [
         h('div', { class: 'sop-topbar' }, [h('button', { type: 'button', class: 'sop-back', onclick: openTree }, '\u2039 Procedures')]),
-        h('div', { class: 'app-error-card', role: 'alert' }, [h('h3', null, e && e.status === 404 ? 'Page not found' : 'Could not load this page'), h('pre', null, (e && e.message) || String(e))]),
+        h('div', { class: 'sop-load-error' }, [
+          h('h2', null, e && e.status === 404 ? 'Page not found' : 'Could not load this page'),
+          inlineError(e, e && e.status === 404 ? null : function () { return loadPage(slug); }),
+        ]),
       ]));
     });
   }
@@ -657,36 +757,49 @@ export function mount(el, ctx) {
       return String(b.created || '') < String(a.created || '') ? -1 : 1;
     });
     const devName = function (id) { const d = (doc.devices || []).filter(function (x) { return x.id === id; })[0]; return d ? deviceTitle(d) : id; };
+    const isOpen = function (r) { return (r.status || 'open') === 'open'; };
+    const pageOf = function (r) { return r.page ? bySlug(doc, r.page) : null; };
+    const attOf = function (r) { return r.attachment ? (doc.attachments || []).filter(function (a) { return a.id === r.attachment; })[0] || null : null; };
+    const viaText = function (r) { return r.via && r.via !== 'app' ? (r.via === 'share' ? 'share link' : 'public page') : 'app'; };
+    const tableHost = h('div', { class: 'sop-problems' });
     const main = h('div', { class: 'sop-main sop-problems-view' }, [
       h('div', { class: 'sop-topbar' }, [h('button', { type: 'button', class: 'sop-back', onclick: openTree }, '\u2039 Procedures')]),
       h('header', { class: 'sop-head' }, [h('h1', null, 'Problems'), h('p', { class: 'sop-summary' }, openProblems(doc) + ' open \u00b7 ' + items.length + ' total. Reports from procedure pages, QR labels and share links.')]),
+      tableHost,
     ]);
-    if (!items.length) main.appendChild(h('div', { class: 'sop-empty' }, 'No problems reported. Every procedure page has a "Report a problem" button.'));
-    const ul = h('ul', { class: 'sop-problems', role: 'list' });
-    items.forEach(function (r) {
-      const open = (r.status || 'open') === 'open';
-      const att = r.attachment ? (doc.attachments || []).filter(function (a) { return a.id === r.attachment; })[0] : null;
-      const page = r.page ? bySlug(doc, r.page) : null;
-      const meta = [
-        h('span', { class: 'sop-badge ' + (open ? 'sop-badge-open' : 'sop-badge-resolved') }, open ? 'Open' : 'Resolved'),
-        h('span', null, fmtDate(r.created) + (r.by ? ' \u00b7 ' + r.by : '') + (r.via && r.via !== 'app' ? ' \u00b7 via ' + (r.via === 'share' ? 'share link' : 'public page') : '')),
-        r.device ? h('button', { type: 'button', class: 'chip sop-chip-device', onclick: function () { refHandler('device', r.device); } }, devName(r.device)) : null,
-        page ? h('a', { class: 'chip', href: hashFor({ page: page.slug }) }, page.title || page.slug) : null,
-      ];
-      const li = h('li', { class: 'sop-problem' + (open ? '' : ' resolved'), 'data-problem': r.id }, [
-        h('div', { class: 'sop-problem-text' }, r.text),
-        h('div', { class: 'sop-problem-meta' }, meta),
-        att ? h('img', { class: 'sop-problem-photo', src: api.fileUrl(project, att), alt: 'Photo', onclick: function (e) { lightbox(e.currentTarget); } }) : null,
-        !open && r.resolved ? h('div', { class: 'muted small' }, 'Resolved ' + fmtDate(r.resolved) + (r.resolved_by ? ' by ' + r.resolved_by : '') + (r.note ? ' \u2014 ' + r.note : '')) : null,
-        canEdit ? h('div', { class: 'sop-problem-actions' }, [
-          h('button', { type: 'button', 'data-action': open ? 'resolve' : 'reopen', onclick: function () {
-            api.patchProblem(project, r.id, { status: open ? 'resolved' : 'open' }).then(function () { return ctx.reload(); }).then(function () { renderProblems(); }, err);
-          } }, open ? 'Resolve' : 'Reopen'),
-        ]) : null,
-      ]);
-      ul.appendChild(li);
-    });
-    main.appendChild(ul);
+    const columns = [
+      { key: 'text', header: 'Report', value: function (r) { return r.text || ''; }, cell: function (r) {
+        return h('div', { class: 'sop-problem-text' }, [r.text || '',
+          !isOpen(r) && r.resolved ? h('div', { class: 'muted small' }, 'Resolved ' + fmtDate(r.resolved) + (r.resolved_by ? ' by ' + r.resolved_by : '') + (r.note ? ' \u2014 ' + r.note : '')) : null]);
+      } },
+      { key: 'status', header: 'Status', filterable: true, value: function (r) { return isOpen(r) ? 'Open' : 'Resolved'; }, cell: function (r) {
+        return h('span', { class: 'sop-badge ' + (isOpen(r) ? 'sop-badge-open' : 'sop-badge-resolved') }, isOpen(r) ? 'Open' : 'Resolved');
+      } },
+      { key: 'device', header: 'Device', filterable: true, value: function (r) { return r.device ? devName(r.device) : ''; }, cell: function (r) {
+        return r.device ? h('button', { type: 'button', class: 'chip sop-chip-device', 'data-device': r.device, onclick: function () { inspectDevice(r.device, 'problems'); } }, devName(r.device)) : null;
+      } },
+      { key: 'page', header: 'Procedure', filterable: true, value: function (r) { const pg = pageOf(r); return pg ? (pg.title || pg.slug) : (r.page || ''); }, cell: function (r) {
+        const pg = pageOf(r);
+        return pg ? h('a', { class: 'chip', href: hashFor({ page: pg.slug }) }, pg.title || pg.slug) : (r.page || null);
+      } },
+      { key: 'created', header: 'Reported', value: function (r) { return r.created || ''; }, cell: function (r) { return fmtDate(r.created); }, csv: function (r) { return r.created || ''; } },
+      { key: 'by', header: 'By', filterable: true, value: function (r) { return r.by || ''; } },
+      { key: 'via', header: 'Via', filterable: true, hidden: true, value: viaText },
+    ];
+    if (items.some(attOf)) {
+      columns.push({ key: 'photo', header: 'Photo', sortable: false, searchable: false, value: function (r) { return attOf(r) ? 'yes' : ''; }, cell: function (r) {
+        const att = attOf(r);
+        return att ? h('img', { class: 'sop-problem-photo', src: api.fileUrl(project, att), alt: 'Photo', onclick: function (e) { lightbox(e.currentTarget); } }) : null;
+      } });
+    }
+    if (canEdit) {
+      columns.push({ key: 'actions', header: 'Actions', sortable: false, searchable: false, csv: false, value: function () { return ''; }, cell: function (r) {
+        const open = isOpen(r);
+        return h('div', { class: 'sop-problem-actions' }, h('button', { type: 'button', 'data-action': open ? 'resolve' : 'reopen', onclick: function () {
+          api.patchProblem(project, r.id, { status: open ? 'resolved' : 'open' }).then(function () { return ctx.reload(); }).then(function () { if (state.mode === 'problems') renderProblems(); }, err);
+        } }, open ? 'Resolve' : 'Reopen'));
+      } });
+    }
     root.innerHTML = '';
     root.className = 'sop sop-view';
     if (!narrow()) {
@@ -697,6 +810,17 @@ export function mount(el, ctx) {
       state.mode = 'problems';
     }
     root.appendChild(main);
+    dropTable();
+    problemsTable = createTable(tableHost, {
+      key: 'sop.problems', scope: project, caption: 'Problem reports', columns: columns, rows: items,
+      rowId: function (r) { return r.id; },
+      rowAttrs: function (r) { return { 'data-problem': r.id }; },
+      rowClass: function (r) { return 'sop-problem' + (isOpen(r) ? '' : ' resolved'); },
+      cards: true, noun: { one: 'report', many: 'reports' }, csvName: project + '-problems.csv',
+      searchPlaceholder: 'Search reports',
+      empty: 'No problem reports. Report one from any procedure page with \u26A0 Report a problem.',
+    });
+    setTitle('Problems');
   }
 
   function versionsDialog(p) {
@@ -837,6 +961,7 @@ export function mount(el, ctx) {
 
   function renderEditor(page, isNew) {
     state.mode = 'edit';
+    dropTable();
     const wide = !narrow();
     const doc = store.doc;
     const orig = JSON.parse(JSON.stringify(page));
@@ -1155,7 +1280,13 @@ export function mount(el, ctx) {
     if (slug) { loadPage(slug); return; }
     if (q.get('problems')) { renderProblems(); return; }
     renderTree();
+    setTitle('SOPs');
   }
+
+  // Only the SOP's own params re-route; sel/sec/drawer changes (the device drawer, Back) leave the page in place.
+  const ROUTE_KEYS = ['page', 'edit', 'new', 'parent', 'device', 'from', 'problems'];
+  function routeKey(q) { return ROUTE_KEYS.map(function (k) { return k + '=' + (q.get(k) || ''); }).join('&'); }
+  let lastKey = routeKey(params());
 
   function onHash() {
     const r = parseHash(location.hash);
@@ -1165,6 +1296,9 @@ export function mount(el, ctx) {
       const q = r.params;
       if (q.get('edit') && q.get('page') === editor.page.slug) return;
     }
+    const key = routeKey(r.params);
+    if (key === lastKey) return;
+    lastKey = key;
     route();
   }
   function onDoc(e) {
@@ -1188,6 +1322,7 @@ export function mount(el, ctx) {
   return {
     destroy: function () {
       destroyed = true;
+      dropTable();
       window.removeEventListener('hashchange', onHash);
       window.removeEventListener('resize', onResize);
       store.removeEventListener('doc', onDoc);

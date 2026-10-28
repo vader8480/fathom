@@ -16,26 +16,29 @@
 </head>
 <body data-fathom-app>
 <div id="app" class="app">
+  <div id="app-banner" class="app-banner" role="status"></div>
   <header id="app-top" class="app-top">
-    <span class="app-brand">Fathom</span>
+    <a id="app-home" class="app-brand" href="#" aria-label="Fathom home">Fathom</a>
     <label class="sr-only" for="app-project">Project</label>
     <select id="app-project" aria-label="Project"></select>
     <label class="sr-only" for="app-room">Room</label>
     <select id="app-room" aria-label="Room"></select>
-    <nav id="app-views" class="app-views" aria-label="Views"></nav>
+    <button id="app-search" class="app-search" type="button" aria-label="Search" aria-haspopup="dialog" title="Search (Cmd/Ctrl+K)"><span class="app-search-ico" aria-hidden="true">&#9906;</span><span class="app-search-text">Search devices, cables, rooms&#8230;</span><kbd class="app-search-kbd" aria-hidden="true">&#8984;K</kbd></button>
     <button id="app-undo" class="icon ghost app-hide-narrow" type="button" aria-label="Undo" title="Undo (Cmd/Ctrl+Z)">&#8630;</button>
     <button id="app-redo" class="icon ghost app-hide-narrow" type="button" aria-label="Redo" title="Redo (Shift+Cmd/Ctrl+Z)">&#8631;</button>
-    <button id="app-search" class="icon ghost" type="button" aria-label="Search" title="Search (Cmd/Ctrl+K)">&#9906;</button>
-    <button id="app-assistant-btn" class="ghost" type="button" aria-label="Assistant" title="Assistant (Cmd/Ctrl+J)">Helper</button>
-    <button id="app-save" class="app-save" type="button" data-state="idle" title="Save now (Cmd/Ctrl+S)">&nbsp;</button>
+    <button id="app-assistant-btn" class="ghost app-hide-narrow" type="button" aria-label="Assistant" title="Assistant (Cmd/Ctrl+J)">Helper</button>
+    <button id="app-notify" class="icon ghost app-notify" type="button" aria-label="Notifications" aria-haspopup="menu" title="Notifications"><span class="app-notify-ico" aria-hidden="true">&#9873;</span><span id="app-notify-count" class="app-notify-count" hidden></span></button>
+    <button id="app-save" class="app-save" type="button" data-state="idle" title="Save now (Cmd/Ctrl+S)"><span class="app-save-dot" aria-hidden="true"></span><span class="app-save-text">&nbsp;</span></button>
     <button id="app-user" class="icon ghost" type="button" aria-label="User menu" aria-haspopup="menu">&#9679;</button>
   </header>
-  <div id="app-banner" class="app-banner" role="status"></div>
+  <nav id="app-views" class="app-views" aria-label="Sections"></nav>
+  <nav id="app-subnav" class="app-subnav" aria-label="Views in this section" hidden></nav>
   <div id="app-body" class="app-body">
     <main id="app-main" class="app-main" tabindex="-1"><div class="app-loading">Loading…</div></main>
     <aside id="app-inspector" class="app-inspector" aria-label="Inspector"></aside>
   </div>
-  <nav id="app-tabbar" class="app-tabbar" aria-label="Views"></nav>
+  <div id="app-selbar" class="app-selbar" role="region" aria-label="Selection" hidden><span class="app-selbar-title"></span><button type="button" class="app-selbar-open">Details<span aria-hidden="true"> &#8250;</span></button><button type="button" class="icon ghost app-selbar-close" aria-label="Clear selection">&#215;</button></div>
+  <nav id="app-tabbar" class="app-tabbar" aria-label="Sections"></nav>
 </div>
 <aside id="app-assistant" class="app-assistant" aria-label="Assistant" aria-hidden="true"></aside>
 <div id="app-toasts" class="app-toasts" aria-live="polite"></div>

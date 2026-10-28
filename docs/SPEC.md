@@ -335,10 +335,10 @@ Format: `ID · Priority · Requirement — **AC:** acceptance criterion · Owner
 
 | ID | Pri | Requirement | Acceptance criterion | Owner |
 | --- | --- | --- | --- | --- |
-| FR-SRCH-01 | P0 | Search devices (name, code, aliases, manufacturer, model, serial, asset tag, note), ports (name, label, note), cables (tag, label, signal, note), interfaces (ip, mac, hostname), rooms, racks, floor plans, attachments (name). | `10.20.0.40` finds the `atem-mini` interface. | W6 |
-| FR-SRCH-02 | P0 | Command palette (⌘/Ctrl+K; search icon on phones), results grouped by kind; arrows + Enter navigate (device → patch view + select; cable → schedules; interface → inspector). | Keyboard navigation works. | W5 |
-| FR-SRCH-03 | P0 | Offline fallback `searchLocal` with the same hit shape (§5.11). | Works with the network disabled. | W5 |
-| FR-SRCH-04 | P0 | Ranking: exact (100) > prefix (80) > token (60) > substring (40) > fuzzy, edit distance 1 on tokens ≥ 4 chars (25); ties by kind order device, port, cable, interface, room, rack, floorplan, attachment, then name. | "atem" ranks `ATEM Mini` first. | W6, W5 |
+| FR-SRCH-01 | P0 | Search devices (name, code, aliases, manufacturer, model, serial, asset tag, note), ports (name, label, note), cables (tag, label, signal, note), interfaces (ip, mac, hostname), networks (name, id, VLAN, subnet, protocol), rooms, racks, floor plans, attachments (name), SOP pages. Every hit carries `status` (§5.11). Known limits: the query must be a field value, so `vlan 20` does not match a network (`20` does); `model-core.searchLocal` (offline) indexes no SOP pages. | `10.20.0.40` finds the `atem-mini` interface; `20` ranks network `av-dante` first (match `vlan`). | W6, SEARCH |
+| FR-SRCH-02 | P0 | Search palette (⌘/Ctrl+K, `#app-search`; §6.13.6): a dropdown under `#app-search` at md/lg, a full-screen sheet at sm; a category select (`CATEGORIES`: All, Devices, Inventory, Rooms, Racks, Ports, Cables, Networks, Plans, Procedures, Files); results grouped by kind (6 per group in All, 50 in a single category); recents (`fathom.ui.recent.<project>`) and, in All, a *Go to* list of sections when the query is empty; arrows + Enter navigate to `targetFor(hit)` (device → `devices/<id>`; port → `devices/<dev>/ports?sel=port:…`; cable → `schedules/cables?sel=cable:<id>`; interface → `devices/<dev>/network?hl=<iface>`; network → `settings/networks?hl=<id>`; room → `rooms/<id>`; rack → `racks/<id>`; floor plan → `plan/<id>`; attachment → `devices/<dev>/files?hl=<id>`; page → `sop?page=<slug>`; Inventory category → `inventory?sel=device:<id>&sec=inventory`). Viewers see no draft pages. | Keyboard navigation works at three sizes. | W5, SEARCH |
+| FR-SRCH-03 | P0 | Offline fallback `searchLocal` with the same hit shape (§5.11); the palette wraps it in `search-core.augmentLocal`, which adds network hits (same fields as `fathom/search.py`) and `status` on every hit. | Works with the network disabled. | W5, SEARCH |
+| FR-SRCH-04 | P0 | Ranking: exact (100) > prefix (80) > token (60) > substring (40) > fuzzy, edit distance 1 on tokens ≥ 4 chars (25); ties by kind order device, port, cable, interface, network, room, rack, floorplan, attachment, page (`fathom.search.KIND_ORDER` = `search-core.KIND_ORDER`), then title. | "atem" ranks `ATEM Mini` first; networks do not reorder other hits. | W6, W5 |
 
 ### 3.19 FR-HIST — History & concurrency
 
@@ -372,7 +372,7 @@ Format: `ID · Priority · Requirement — **AC:** acceptance criterion · Owner
 
 | ID | Pri | Requirement | Acceptance criterion | Owner |
 | --- | --- | --- | --- | --- |
-| FR-MOB-01 | P0 | Breakpoints: ≥ 1100 px = views + docked inspector; 700–1099 px (iPad portrait) = inspector as slide-over sheet; < 700 px = bottom tab bar (Map, Patch, Table, Plan, SOPs, More), assistant full screen. | QA at 390×844, 820×1180, 1440×900. | W5 |
+| FR-MOB-01 | P0 | Breakpoints (`router-core.layoutFor`, `BP = {md: 700, lg: 1100}`): **lg** ≥ 1100 px = section nav `#app-views` + docked drawer; **md** 700–1099 px (iPad portrait) = drawer as a right-hand sheet; **sm** < 700 px = section bar `#app-tabbar` (one `button[data-tab=<section>]` per `SECTIONS` entry the role may see), drawer as an 88dvh bottom sheet, explorer as a slide-in drawer, search and assistant full screen. Under `(pointer: coarse)` buttons, selects, chips, inputs, section buttons (`.app-sec`) and the `#app-views`/`#app-subnav` bars are ≥ 44 px; the subnav pills (`a.app-subtab`) are 36 px inside the 44 px bar (28 px on fine pointers). No view scrolls the page horizontally. | QA at 390×844, 820×1180, 1440×900; `test_ui_shell.py::test_sections_and_tab_bar`, `::test_no_page_hscroll_on_any_view`. | W5, SHELL |
 | FR-MOB-02 | P0 | Editing works on iPad by touch in patch view, plans, racks, inspector; inputs ≥ 16 px font; hit targets ≥ 44 px under `(pointer: coarse)`. | QA on iPad Safari or Chrome touch emulation. | W3, W4, W5 |
 | FR-MOB-03 | P0 | Viewer pages work on phones (map pinch-zoom, tap tips, stacked patch table, device pages). | QA. | W5 |
 | FR-MOB-04 | P0 | `/manifest.webmanifest` (name "Fathom", short_name "Fathom", id "/", start_url "./", scope "./", display "standalone", theme_color `#0b1020`, background_color `#0b1020`, icons 192/512 PNG any + 512 maskable) and `apple-touch-icon` 180 PNG. | Chrome DevTools manifest pane shows no errors. | W1 |
@@ -470,13 +470,19 @@ Format: `ID · Priority · Requirement — **AC:** acceptance criterion · Owner
 | ID | Pri | Requirement | Acceptance criterion | Owner |
 | --- | --- | --- | --- | --- |
 | FR-UX-01 | P0 | Top bar: brand, project picker, room picker, view tabs, search, assistant, save state (`Saved · r17`, `Saving…`, `3 pending`, `Offline · 3 pending`, `Conflict`), user menu; ⌘/Ctrl+S flushes immediately. | QA. | W5 |
-| FR-UX-02 | P0 | Hash routing `#/<project>/<room>/<view>?sel=<type>:<id>[:<port>]`; legacy `/?p=<project>` redirects to `#/<project>`. | A deep link selects the device. | W5 |
+| FR-UX-02 | P0 | Hash routing `#/<project>/<room>/<view>[/<seg4>[/<seg5>[/<seg6>]]][?<query>]` (§6.4 Router); `sel=<type>:<id>[:<port>]` selects. Legacy `/?p=<project>` (no hash) is replaced by `#/<project>//home`, keeping the other search params; an empty view canonicalizes to `home` and keeps the query. | A deep link selects the device; `test_ui_shell.py::test_legacy_project_url_lands_on_home`. | W5, ROUTER, SHELL |
 | FR-UX-03 | P0 | Views load via dynamic `import()`; a failing module shows an inline error card with the message; the rest of the app keeps working. | Smoke test with a deliberately missing module path. | W5 |
 | FR-UX-04 | P0 | Inspector for device, port, cable, rack, floor plan, marker covering every editable field of §4.3; text edits debounce 400 ms into one op. | QA. | W5 |
 | FR-UX-05 | P0 | Autosave default on (`settings.autosave`); off → ops queue until Save. | QA. | W5 |
 | FR-UX-06 | P0 | New project dialog (blank + samples), project settings (meta, units, tag pattern, public URL, currency), JSON view (raw doc; Apply = PUT with If-Match). | QA. | W5 |
 | FR-UX-07 | P0 | Admin views: Imports, History, Builds, Settings (venues/rooms/systems/locations/networks, users for admins, share links P1). | QA. | W5 |
 | FR-UX-08 | P0 | Dark theme on the existing palette (`--bg #0b1020`, `--panel #111828`, `--border rgba(255,255,255,.09)`, `--text #e6eaf4`, `--muted #8e97ab`, `--accent #8ea2ff`, `--ok #2fd4b4`, `--warn #ff9548`, `--err #f06aa8`); fonts = system stack; no web fonts. | QA. | W3, W4, W5 |
+| FR-UX-09 | P0 | Sections and nav memory: the shell groups views into `router-core.SECTIONS` (Home, Patch, Rooms, Devices, Schedules, SOPs, Data, Settings; filtered by `sectionsFor(role)`). md/lg: `#app-views` holds one `button.app-sec[data-section]` per section with a `ul.app-sec-menu` of its views (ArrowDown, context menu or 500 ms long-press); `#app-subnav` shows `a.app-subtab[data-view]` when the section has ≥ 2 views. sm: `#app-tabbar`. Clicking another section returns to its last route this session (`navMemory`, sessionStorage `fathom.ui.nav`, room rewritten to the current room); clicking the active section goes to its root view. | `test_ui_shell.py::test_sections_and_tab_bar`, `::test_nav_memory`, `::test_section_menu_lists_views`. | ROUTER, SHELL |
+| FR-UX-10 | P0 | Entity pages with URL tabs: `devices/<id>/<tab>[/<sub>]`, `rooms/<id>/<tab>`, `racks/<id>/<tab>[/<sub>]` (tabs §6.13.3). Each page = explorer (§6.13.2) + sticky entity header (compact after scroll and at sm) + tab body. Without an id, `devices` and `rooms` are landing pages listing the entities in a DataTable, and `racks` is the rack elevation canvas (`rack.js`, which mounts `page-rack.js` when the route has an id; the elevation tab's `<sub>` is `front` or `rear`). A missing or unknown tab resolves to `overview` with a history *replace*; a tab click *pushes* (Back returns); an unknown id shows an inline error with a back link. | `test_ui_entity.py`, `test_ui_pdev.py`, `test_ui_proom.py`, `test_ui_rk.py`. | ENTITY, PDEV, PROOM, RK |
+| FR-UX-11 | P0 | Every list of records renders through the shared DataTable (§6.13.4; exemptions §6.13.4): search, sort, per-column filters, pagination, column chooser, density, CSV of the filtered rows, select-all of the filtered set, sticky header with `th[scope]`, mobile columns hidden at sm. Table state is in the URL (`q`, `sort`, `f.<col>`, `pg`; history *replace*); sort, filters, page size, hidden columns and density also persist in `fathom.ui.table.<scope>.<key>` (§6.14); search text and page are URL-only. | `test_ui_datatable.py`; `tests/js/datatable-core.test.mjs`. | TABLE |
+| FR-UX-12 | P0 | Drawer URL state (§6.13.5): `sel` names the subject, `sec` the inspector section, `drawer=0` keeps the selection with the drawer closed (`#app-selbar` shows it). Opening from closed *pushes* when there is explicit intent or below lg, so Back closes it; switching subject or section *replaces*. A canvas selection (patch, plan, map, rack elevation) below lg leaves the drawer closed. Modes docked/sheet/full by width; Esc closes the top layer (palette, dialog, trace, assistant, explorer, drawer); reload restores the drawer and section. | `test_ui_drawer.py`, `test_ui_ins.py`, `test_ui_shell.py::test_deep_link_opens_drawer`, `::test_drawer_closed_shows_selection_bar`, `::test_canvas_selection_below_lg_keeps_drawer_closed`. | DRAWER, INS, SHELL |
+| FR-UX-13 | P0 | Home launchpad (`DEFAULT_VIEW = 'home'`, §6.13.7): project title and counts, one card per permitted section, room cards, a recents strip (`fathom.ui.recent.<project>`: devices, rooms, racks, pages; 8 each) and project cards; every card is a real `<a href>`. An empty project shows a start card. | `test_ui_home.py`; `tests/js/home-core.test.mjs`. | HOME |
+| FR-UX-14 | P0 | Feedback states (§6.13.8): every view shows a skeleton while loading, an empty state with a next action, an inline error with Retry (never a blank pane or only a toast), a scoped confirm for destructive or bulk changes (verb, count, noun, room), a stale badge on overlay data, review badges, and bell notices (`#app-notify`) for offline edits, overlay refresh failures and finished builds. Viewers get the states without write actions. | `test_ui_feedback.py`, `test_ui_states_shell.py`, `test_ui_states_entity.py`, `test_ui_states_lists.py`, `test_ui_states_canvas.py`, `test_ui_states_admin.py`. | FEEDBACK, ST-* |
 
 ---
 
@@ -1356,13 +1362,13 @@ Rules (normative where tested): `summary` uses `**bold**` only (UI escapes HTML 
 ### 5.11 Search hit shape
 
 ```json
-{"kind": "device|port|cable|interface|room|rack|floorplan|attachment|page",
+{"kind": "device|port|cable|interface|network|room|rack|floorplan|attachment|page",
  "id": "atem-mini", "device": "atem-mini", "port": null,
  "title": "ATEM Mini", "subtitle": "Blackmagic Design ATEM Mini Pro · Main Auditorium",
- "room": "main", "score": 100, "match": "name"}
+ "room": "main", "score": 100, "match": "name", "status": "installed"}
 ```
 
-For ports `id` = `<device>:<port>`; cables `id` = cable id; interfaces `id` = `<device>/<interface>`; pages `id` = slug (matches title, slug, summary, tags, headings and body text).
+For ports `id` = `<device>:<port>`; cables `id` = cable id; interfaces `id` = `<device>/<interface>`; networks `id` = network id (`device`/`port` null, `room` `""`, subtitle `VLAN <n> · <subnet>` without missing parts; matches name, id, vlan, subnet, protocol); pages `id` = slug (matches title, slug, summary, tags, headings and body text). `status` is always present: the device status for devices, the page status for pages, `""` for other kinds. Kinds sort per FR-SRCH-04 (`fathom.search.KIND_ORDER`). A whole query is matched against each field value, so `vlan 20` finds no network; offline (`model-core.searchLocal`) there are no page hits.
 
 ### 5.12 v1 endpoints (kept)
 
@@ -1458,7 +1464,7 @@ Every SOP page — in the app, under `/p/<n>/sop/<slug>` and through share links
 - Plain ES modules (`import`/`export`), ES2018 syntax only (§2.3 item 9), no third-party code, no build step, no inline event-handler attributes (CSP). Relative imports with explicit `.js` extensions.
 - **`*-core.js` modules and `model-core.js` are pure**: no access to `window`, `document`, `localStorage`, `fetch` or timers at import time or in exported functions (they may accept callbacks). They MUST import and run in Node ≥ 18 (`node --test tests/js`). DOM modules may import cores, never the reverse.
 - DOM modules render into the element they are given, never query outside it (except `#fathom-live` for announcements and `document` for global key listeners they add/remove in `mount`/`destroy`).
-- CSS: each unit owns its CSS file; class names prefixed (`pv-` patch view, `fp-` floor plan, `rk-` rack, `sch-` schedules, `inv-` inventory, `app-`/`pt-`/`ins-`/`ast-` shell). Shared CSS variables are defined only in `css/app.css` (`:root{--bg…}` as FR-UX-08 plus `--discipline-<key>` colors injected at runtime from vocab by `app.js`).
+- CSS: each unit owns its CSS file; class names prefixed (`pv-` patch view, `fp-` floor plan, `rk-` rack, `sch-` schedules, `inv-` inventory, `app-`/`pt-`/`ins-`/`ast-` shell; shared components §6.13: `ex-` explorer, `eh-` entity header, `dt-` DataTable, `dr-` drawer, `sr-` search, `hm-` home, `fb-` feedback, `wz-` wizard; pages: `pd-` device, `pr-` room, `rp-` rack; also `adm-` admin, `disc-` discovery, `sop-` SOPs, `trace-` trace drawer). Shared CSS variables are defined only in `css/app.css` (`:root{--bg…}` as FR-UX-08 plus `--discipline-<key>` colors injected at runtime from vocab by `app.js`).
 - Loading: `app.html` loads `css/app.css` and `<script type="module" src="static/js/app.js">`; views and their CSS are loaded lazily by `app.js` (`import()` + `<link rel=stylesheet>` added once).
 
 ### 6.2 `js/model-core.js` (W5) — doc helpers, ops, store
@@ -1569,27 +1575,48 @@ export class ChangeQueue extends EventTarget {
 
 Rules: every request sends `X-Fathom: 1` and `Accept: application/json`; JSON bodies `Content-Type: application/json`; non-2xx → `ApiError` from the error body. `ChangeQueue` batches ops (debounce 600 ms, max 200 per request), sends `postChanges` with the last known revision, updates the store revision on success, keeps order, retries network errors with backoff 1, 2, 5, 10, 30 s while emitting `offline`, persists unsent ops to `storage["fathom.pending.<project>"]` (JSON) and restores them on startup (FR-MOB-08). On 409 it emits `conflict` with `details.conflicts` and pauses until the shell calls `resolveConflict('reload'|'keep')`.
 
-### 6.4 `js/app.js` (W5) — shell, router, view contract
+### 6.4 `js/app.js` (W5, SHELL) — shell, router, view contract
 
-Exports for harnesses/tests: `export function boot(root, {api, location})` (called by app.html), `export const VIEWS` (registry), `export function makeCtx(store, extras)`.
+Exports for harnesses/tests: `export function boot(root, {api})` (called by app.html; `api` defaults to `createApi({base: <app root>})`), `bootLogin()` (login.html), `bootHarness(name)`, `export const VIEWS` (registry), `export function makeCtx(store, extras)`, `ensureCss(file | file[])` (adds each `<link rel=stylesheet>` once; resolves on load or error), `markRendered()`, `announce(text)` (`#fathom-live`), `toast(message, level)`, `openDialog(o)`, `confirmDialog(message, opts)`, `promptDialog(message, value, opts)`, the legacy router wrappers `parseHash(hash)` → `{project, room, view, params: URLSearchParams}` and `buildHash(project, room, view, params)` (= `router-core.legacyHash`; `views-sop.js` uses both), and re-exports `h`, `esc` (`dom.js`), `selToString`, `selFromString` (`router-core.js`).
 
-**View registry**
+**View registry** (`VIEWS[key] = {label, module, export, css}`; `css` is loaded with `ensureCss` before the module mounts; `PAGE_CSS` = `entity-header.css`, `datatable.css`, `explorer.css`; `ADMIN_CSS` = `datatable.css`, `admin.css`). The shell always loads `BOOT_CSS` = `drawer.css`, `inspector.css`, `search.css`, `feedback.css`.
 
-| key | label | module | export |
+| key | label | module | export | css |
+| --- | --- | --- | --- | --- |
+| `home` | Home | `./home.js` (§6.13.7) | `mount` | `home.css` |
+| `map` | Map | `./app.js` (internal iframe view) | — | — |
+| `patch` | Patch | `./patchview.js` | `mount` | `patchview.css` |
+| `table` | Table | `./patchtable.js` | `mount` | `datatable.css`, `patchtable.css` |
+| `rooms` | Rooms | `./page-room.js` | `mount` | `PAGE_CSS` + `page-room.css` |
+| `plan` | Plan | `./floorplan.js` | `mount` | `plan.css`, `explorer.css` |
+| `racks` | Racks | `./rack.js` (mounts `page-rack.js` when the route has an id) | `mount` | `plan.css`, `explorer.css`, `entity-header.css`, `datatable.css`, `rack.css` |
+| `devices` | Devices | `./page-device.js` | `mount` | `PAGE_CSS` + `page-device.css` |
+| `inventory` | Inventory | `./inventory.js` | `mount` | `plan.css`, `datatable.css`, `inventory.css` |
+| `schedules` | Schedules | `./schedules.js` | `mount` | `plan.css`, `datatable.css`, `schedules.css` |
+| `imports` | Imports | `./views-admin.js` | `mountImports` | `ADMIN_CSS` |
+| `discovery` | Discovery | `./views-discovery.js` | `mount` | `datatable.css`, `discovery.css` |
+| `history` | History | `./views-admin.js` | `mountHistory` | `ADMIN_CSS` |
+| `builds` | Builds | `./views-admin.js` | `mountBuilds` | `ADMIN_CSS` |
+| `settings` | Settings | `./views-admin.js` | `mountSettings` | `ADMIN_CSS` |
+| `sop` | SOPs | `./views-sop.js` | `mount` | `sop.css` — phone-first SOP wiki (§5.15): drill-down page tree with sticky search, rendered page (sticky "Applies to" chips, collapsible TOC, tappable task lists kept in `sessionStorage`, tap-to-zoom images, prev/next), split Markdown editor with live server preview, versions drawer. Query keys `page=<slug>`, `edit=1`, `new=1[&parent=<slug>&device=<id>&from=<slug>]`, `problems=1`. It has no `route(r)` member and listens to `hashchange` itself. |
+| `json` | JSON | `./app.js` (internal) | — | — |
+
+`DEFAULT_VIEW` = `'home'` (`router-core.js`). While a module loads, `#app-main` shows `skeleton(kind)` (§6.13.8): `cards` for home, patch, plan, map; `list` for sop; `table` for the list views; `page` for devices/rooms/racks with an id, `table` without. A failing import shows `.app-error-card[data-error-view]` with Retry (FR-UX-03).
+
+**Sections** (`router-core.SECTIONS`, `{key, label, glyph, views, nav}`; a view's section is `sectionOf(view)`, unknown views → `data`):
+
+| key | label | views | nav |
 | --- | --- | --- | --- |
-| `map` | Map | `./app.js` (internal iframe view) | — |
-| `patch` | Patch | `./patchview.js` | `mount` |
-| `table` | Table | `./patchtable.js` | `mount` |
-| `plan` | Plan | `./floorplan.js` | `mount` |
-| `racks` | Racks | `./rack.js` | `mount` |
-| `inventory` | Inventory | `./inventory.js` | `mount` |
-| `schedules` | Schedules | `./schedules.js` | `mount` |
-| `imports` | Imports | `./views-admin.js` | `mountImports` |
-| `history` | History | `./views-admin.js` | `mountHistory` |
-| `builds` | Builds | `./views-admin.js` | `mountBuilds` |
-| `settings` | Settings | `./views-admin.js` | `mountSettings` |
-| `sop` | SOPs | `./views-sop.js` (+ `sop.css`) | `mount` — phone-first SOP wiki (§5.15): drill-down page tree with sticky search, rendered page (sticky "Applies to" chips, collapsible TOC, tappable task lists kept in `sessionStorage`, tap-to-zoom images, prev/next), split Markdown editor with live server preview, versions drawer. Hash params `?page=<slug>`, `&edit=1`, `?new=1[&parent=<slug>&device=<id>&from=<slug>]`. Also a bottom tab on phones. |
-| `json` | JSON | `./app.js` (internal) | — |
+| `home` | Home | `home` | `sm` (the brand link `#app-home` at md/lg) |
+| `patch` | Patch | `patch`, `table`, `map` | `all` |
+| `rooms` | Rooms | `rooms`, `plan`, `racks` | `all` |
+| `devices` | Devices | `devices`, `inventory` | `all` |
+| `schedules` | Schedules | `schedules`, `builds` | `all` |
+| `sop` | SOPs | `sop` | `all` |
+| `data` | Data | `imports`, `discovery`, `history`, `json` | `all` |
+| `settings` | Settings | `settings` | `all` |
+
+Roles: `VIEW_ROLES` is empty (every view is open to viewers); `TAB_ROLES = {settings: {users: 'admin', backups: 'admin', sharing: 'editor'}}`; `canSee(view, role, tab)`, `sectionsFor(role)` (sections with ≥ 1 permitted view), `sectionRoot(key, route, role)` (route to the section's first permitted view, same project and room).
 
 **View contract** (every `mount*` export):
 
@@ -1599,32 +1626,60 @@ export function mount(el, ctx) {
   return {
     destroy() {},          // remove listeners, timers, DOM
     focus(sel) {},         // optional: scroll/zoom to a selection
+    route(r) {},           // optional: same-view route change (copy of the parsed route); the view re-renders itself
     getState() {},         // optional: {zoom, scroll, …} restored by the shell when re-mounted
     setState(s) {},        // optional
   };
 }
 ```
 
-**ctx** (built by `makeCtx`):
+Same-view route changes (`applyRoute`): when the handle has `route(r)` it is called and the view stays mounted; otherwise the view re-mounts when `id`, `tab` or `sub` changed; otherwise the shell calls `focus(store.selection)` and re-renders the nav. The inspector handle (`mountInspector`, §6.8) adds `render()`, `focusSection(key)` (opens and scrolls to `details[data-section=key]`, writes `sec`; returns false for an unknown key) and `sections()` (the section keys in order).
+
+**ctx** (built by `makeCtx(store, extras)`; the defaults are harness-safe, the shell passes the rest as `extras`; extras are copied as property descriptors, so getters stay live):
 
 | Member | Type | Notes |
 | --- | --- | --- |
 | `store` | Store | §6.2 |
-| `vocab` | object | `meta.vocab` |
-| `api` | api or null | null in harnesses without a server |
+| `vocab` | object | `meta.vocab` (store vocab) |
+| `api` | api or null | null in harnesses; in the app `build()` is wrapped to post a bell notice when a build finishes or fails |
 | `project` | string | project name |
+| `meta`, `role`, `session` | object, string, object | `GET /api/v2/meta`; `viewer`\|`editor`\|`admin` (harness: `viewer` when the store is read-only, else `admin`); `GET /api/v2/session` |
+| `env` | `{touch, narrow, platform: 'ios'\|'mac'\|'other', online, secure}` | |
 | `commit(ops, label)` | fn | store.commit + announce label in `#fathom-live`; no-op + toast when read-only |
-| `select(sel)`, `highlight(h)` | fn | store passthrough |
-| `navigate(view, params)` | fn | changes the hash (`params.sel` to select) |
+| `select(sel)`, `highlight(h)` | fn | store passthrough (re-selecting the item the shell is focusing is a no-op) |
+| `navigate(view, params)` | fn | legacy: `params {room, sel, keepSel}`; pushes; adds `drawer=0` when the selection would not open the drawer (§6.13.5) |
+| `navigateRoute(partial, {replace})` | fn → hash | `mergeRoute` onto the current route (a different view or id clears the query unless `query` is given) and write it (push unless `replace`); harness: `''` |
+| `routeHref(partial)` | fn → string | the hash `navigateRoute` would write; harness: `'#'` |
+| `setParams(patch, {replace = true})` | fn | merge query keys (`null` deletes); `sel`/`sec`/`drawer` also apply the selection and drawer |
+| `route` | getter → Route | copy of the current parsed route (§6.13.1) |
+| `openDrawer(sel, {section})` / `openInspector(sel)` | fn | select with intent (opens the drawer at any width; `sel` may be a string); `section` focuses that inspector section |
+| `closeDrawer()` / `closeInspector()` | fn | close and clear the selection |
+| `layout()` | fn → `'sm'\|'md'\|'lg'` | `layoutFor(innerWidth)` |
+| `subscribe(type, fn)` | fn → off | types `route` (Route), `layout` (`'sm'\|'md'\|'lg'`), `problems`, `overlay` |
+| `recent` | getter | snapshot `{device, room, rack, page: [{id, t}]}` of `fathom.ui.recent.<project>` with non-enumerable `push(type, id)` and `list(type)` → ids |
+| `notify({text, level, href})` | fn | adds a bell notice (§6.13.8; harness: toast) |
+| `sections` | Section[] | `sectionsFor(role)` |
+| `projects`, `projectsStatus()`, `reloadProjects()` | getter, fn, fn → Promise | `[{name, title}]`; `{loading, error}`; re-lists projects |
+| `setTitle(text)` | fn | `document.title = text · project · Fathom` |
+| `problems()` | fn → array | the **validation** results of §4.7 (`{level, code, ref, path, message}` from `getProject` / `postChanges`), not problem reports (`doc.problems`, §5.15) |
+| `overlayInfo()`, `refreshOverlay()` | fn | `{fetchedAt, revision}` of the overlay; refetch it (Promise) |
+| `reload()`, `flush()` | fn → Promise | change-queue resync; flush pending ops |
+| `timeTravel(rev)`, `endTimeTravel()`, `restoreRevision(rev)`, `isTimeTravel()` | fn | History view (FR-HIST) |
+| `queue`, `appRoot` | ChangeQueue, string | |
+| `ensureCss(file)`, `viewCss(key)` | fn → Promise | load a stylesheet; load `VIEWS[key].css` |
 | `pickTemplate({discipline?, kind?})` | fn → Promise\<template\|null\> | library picker dialog (W5) |
 | `pickPort({compatibleWith: {device, port}, room})` | fn → Promise\<{device, port}\|null\> | port picker dialog (W5) |
 | `pickDevice({room, filter})` | fn → Promise\<deviceId\|null\> | device picker (W5) |
-| `toast(message, level)` | fn | `level ∈ info|ok|warn|err` |
-| `confirm(message, {danger})` | fn → Promise\<bool\> | modal |
-| `openInspector(sel)` | fn | shows the inspector for a selection |
-| `env` | `{touch, narrow, platform: 'ios'|'mac'|'other', online, secure}` | |
+| `toast(message, level)` | fn | `level` ∈ `info`, `ok`, `warn`, `err` |
+| `confirm(message, {danger, ok})`, `prompt(message, value, opts)`, `openDialog(o)` | fn → Promise | modals |
 
-Router: `#/<project>/<room>/<view>?sel=<type>:<id>[:<port>]&filter=<disc,…>`; missing parts default to first project, `settings.default_room`, `patch`. On boot: `GET /api/v2/session` (redirect to `login` if needed), `GET /api/v2/meta`, project list, `GET /api/v2/projects/<n>`, then overlay in the background (`store.setOverlay`). Shell DOM ids (stable, used by T2 smoke tests): `#app`, `#app-top`, `#app-project`, `#app-room`, `#app-views` (tab buttons `[data-view=<key>]`), `#app-search`, `#app-assistant-btn`, `#app-save`, `#app-user`, `#app-main` (view host), `#app-inspector`, `#app-assistant`, `#fathom-live`, `#app-toasts`, `#app-dialog`.
+**Router** (pure parts in `router-core.js`, §6.13.1). Grammar `#/<project>/<room>/<view>[/<seg4>[/<seg5>[/<seg6>]]][?<query>]`; `<room>` `*` = all rooms. Segments after the view are named by `VIEW_SHAPES`: `devices` [id, tab, sub], `rooms` [id, tab], `racks` [id, tab, sub], `plan` [id], `schedules` [tab], `imports` [tab], `settings` [tab], `discovery` [tab, sub], `history` [id]; other views take none (surplus segments land in `extra`). Query keys: `sel` (`device:<id>`, `port:<dev>:<port>`, `cable:<id>`, `rack:<id>`, `floorplan:<id>`, `marker:<fp>:<dev>`, `channel:<dev>:<ch>`, `bundle:<id>`, `room:<id>`), `sec` (inspector section), `drawer=0`, `filter` / `q` / `status` (patch view), DataTable `q`, `sort`, `f.<col>`, `pg` (§6.13.4), `hl` (row to highlight), `mode` (patch table `blocks`\|`rows`), `quick` (inventory quick filters), `run` (discovery run), and the SOP keys above. `?smoke=1` and `?debug_missing_view=<key>` are test hooks in `location.search`, not the hash.
+
+History rules (D1): a change of view, id or tab **pushes**; a selection change **replaces**; opening the drawer from closed pushes when there is intent or the layout is below lg (Back closes it), else replaces; DataTable state replaces; `setParams` replaces unless `{replace: false}`. Routing writes go through `historyWrite` (push/replaceState) and then dispatch a synthetic `hashchange` (`writeHash`), so views that listen to `hashchange` (`views-sop.js`) see them; shell-state writes (`syncRoute`) update the URL silently without re-routing. Canonicalization replaces: an empty, unknown or unpermitted view becomes `home` (the query is kept); an unknown room becomes the store room; `rooms/<id>` sets the room to `<id>`. Legacy: `/?p=<project>` without a hash is replaced by `legacyHash(project, '', 'home')` keeping the other search params; `buildHash` output is unchanged for every non-empty view. Nav memory: `navMemory(sessionStorage)` stores the last hash per section per project under `fathom.ui.nav`; a section click goes to that hash (when still permitted, with the room rewritten to the current one) or the section root; clicking the active section goes to its root. Every routed hash is recorded in nav memory and emits `route`; devices, rooms, racks and SOP pages that exist are pushed to recents.
+
+On boot: `GET /api/v2/session` (redirect to `login` if needed), `GET /api/v2/meta`, project list, `GET /api/v2/projects/<n>`, then overlay in the background (`store.setOverlay`). Keys: ⌘/Ctrl+K search, ⌘/Ctrl+J assistant, ⌘/Ctrl+S flush, ⌘/Ctrl+Z undo, ⌘/Ctrl+⇧Z or Ctrl+Y redo; Esc per D4 (§6.13.5).
+
+Shell DOM ids (stable; `SHELL_IDS` in `tests/test_frontend_smoke.py` asserts all but `#app-home`, `#app-undo`, `#app-redo`, `#app-notify-count` and `#app-body`), in `app.html` order: `#app`, `#app-banner` (time-travel and conflict banner, before the header; holds `#app-conflict-reload`, `#app-conflict-keep`), `#app-top`, `#app-home` (brand link), `#app-project`, `#app-room`, `#app-search`, `#app-undo`, `#app-redo`, `#app-assistant-btn`, `#app-notify` (bell) with `#app-notify-count`, `#app-save`, `#app-user`, `#app-views` (md/lg section nav: `div.app-sec-item` > `button.app-sec[data-section][data-views][aria-haspopup=menu]` + `ul.app-sec-menu[role=menu]` of `button[role=menuitem][data-view]`; `.app-views--icons` when labels do not fit), `#app-subnav` (`a.app-subtab[data-view][href]`, hidden for one-view sections), `#app-body`, `#app-main` (view host), `#app-inspector` (drawer host), `#app-selbar` (selection bar while the drawer is closed; `.app-selbar-title`), `#app-tabbar` (sm: `button[data-tab=<section>]` with `span.ico`), `#app-assistant`, `#app-toasts`, `#app-dialog`, `#fathom-live`. Every view key appears as a `[data-view=<key>]` control (section menu or subnav).
 
 ### 6.5 Patch view: `js/patchview-core.js` + `js/patchview.js` (W3)
 
@@ -1651,7 +1706,7 @@ export function traceLocal(doc, overlay, start, opts) {} // §6.9 client port-gr
 **DOM module** `mount(el, ctx)`:
 
 - Structure: `div.pv-root` (toolbar `div.pv-toolbar`, viewport `div.pv-viewport[role=application][aria-label="Patch view"][tabindex=0]` with `touch-action:none`, containing `div.pv-world` transformed by `translate3d(x,y,0) scale(k)`; inside: `svg.pv-wires` (one `<path data-cable=id>` per wire), `div.pv-card[data-device=id][role=group]` cards with `div.pv-port[data-port=id]` rows).
-- Toolbar ids: `#pv-add`, `#pv-arrange`, `#pv-fit`, `#pv-zoom-in`, `#pv-zoom-out`, `#pv-undo`, `#pv-redo`, `#pv-filter-disc` (chips `[data-disc]`), `#pv-filter-status`, `#pv-filter-text`, `#pv-show-unconnected`, `#pv-show-routes`, `#pv-all-rooms`.
+- Toolbar (`div.pv-toolbar[role=toolbar]`, one row): `#pv-add`, `#pv-fit`, `#pv-zoom-out`, `#pv-zoom-in`, `#pv-undo`, `#pv-redo`, `#pv-filter-text` (with `button.pv-search-toggle`), then popovers (`div.pv-pop-wrap[data-menu]` > `button[aria-haspopup]` + `div.pv-pop[role=group]`): **View** (`.pv-menu-view`: `#pv-show-unconnected`, `#pv-show-routes`, `#pv-all-rooms`, `#pv-snap`, `#pv-filter-disc` (chips `[data-disc]`), `#pv-filter-status`), **Arrange** (`.pv-menu-arrange`: `#pv-arrange`, `#pv-save-arrangement`), **More** (`.pv-menu-more`, ⋯). At sm zoom, undo and both popover panes move into More; every `#pv-*` control stays in the DOM exactly once. URL keys `filter`, `q`, `status` mirror the discipline, text and status filters. Context menu `div.pv-menu[role=menu]`; empty state `.pv-empty`; stale overlay badge `.pv-stale-host`.
 - Emits only through `ctx.commit` / `ctx.select` / `ctx.highlight`; listens to store `doc` (incremental update by touched refs; full rebuild when > 50 refs), `filter`, `room`, `highlight`, `overlay`, `mode`.
 - Perf contract: sets `window.__pvStats = {renderMs, cards, wires, lastDragFrameMs}` after first render (harness and app).
 - Inline rename uses an absolutely positioned `<input class="pv-rename">` over the title/row; commit on Enter/blur.
@@ -1681,7 +1736,7 @@ Rules: blocks in `devices` order (filtered by room/discipline/text; `room: '*'` 
 
 CSV row order = blocks → sections → rows; `section` column = section title; `dir` = `in|out|io`; `port` = port label or name; `label` = port label; `peer_device` = peer name; `peer_port` = peer port label or name; `cable_tag` = tag; `source` = source or empty.
 
-DOM `mount(el, ctx)`: ids `#pt-filter-room`, `#pt-filter-disc`, `#pt-filter-text`, `#pt-only-patched`, `#pt-show-overlay`, `#pt-csv`, `#pt-print`; blocks `section.pt-block[data-device]`; "Patch…" buttons `button.pt-patch[data-port]`.
+DOM `mount(el, ctx)`: ids `#pt-filter-room`, `#pt-filter-disc`, `#pt-filter-text`, `#pt-only-patched`, `#pt-show-overlay`, `#pt-csv`, `#pt-print`, `#pt-mode` (`div[role=group]` with the **Blocks** / **Rows** buttons; URL key `mode=blocks|rows`), `#pt-split` (`button[aria-pressed]`, patch view above the table); blocks mode renders `section.pt-block[data-device]` (a §6.13.4 exemption) with "Patch…" buttons `button.pt-patch[data-port]`; rows mode is a DataTable (`ids {search: 'pt-filter-text', csv: 'pt-csv'}`, bulk action *Remove patch*, per-row `button.pt-remove`). Switching to blocks drops the table keys (`sort`, `pg`, `f.*`) from the URL.
 
 ### 6.7 Floor plan, rack, schedules, inventory (W4)
 
@@ -1712,11 +1767,12 @@ export function yToU(rack, y, height) {}          // snapped, clamped to 1..unit
 export function ruLabel(rack, u) {}
 ```
 
-DOM modules: `floorplan.js` `mount(el, ctx)` ids `#fp-select`, `#fp-upload` (file input), `#fp-calibrate`, `#fp-measure`, `#fp-layers`, `#fp-unplaced` (side list), canvas `div.fp-viewport[role=application]`, markers `div.fp-marker[data-device]`. `rack.js` ids `#rk-select`, `#rk-add`, `#rk-face`, `#rk-print`, `#rk-unracked`, blocks `div.rk-block[data-device]`. `schedules.js` tabs `[data-kind=cables|ip|dmx|bom|labels]`, `#sch-csv`, `#sch-assign-tags`, inline edits commit ops for doc-backed columns (cable tag/type/length/color/note/status; interface ip/vlan/mac/hostname/switch/switch_port; dmx universe/address/footprint/mode/channel). `inventory.js` ids `#inv-table`, `#inv-columns`, `#inv-bulk-status`, `#inv-bulk-room`, `#inv-csv`. Schedules and inventory read rows from the server when `ctx.api` exists, else compute minimal rows locally from the doc (harness mode).
+DOM modules: `floorplan.js` `mount(el, ctx)`: toolbar `div.fp-toolbar[role=toolbar]` with `#fp-select`, `#fp-fit`, `#fp-zoom-out`, `#fp-zoom-in`, `#fp-upload` (file input, label *Upload plan…*), `#fp-dev-plan` (sample plans), `#fp-calibrate` (dialog `#fp-cal-distance`, `#fp-cal-unit`), `#fp-measure`, `#fp-layers`; tools that do not fit move into ⋯ (`button.fp-menu-more` → `#fp-menu`); the device list is an explorer (§6.13.2, key `plan-unplaced`, title *Devices*, *Unplaced* and *Placed* groups) whose `ul.ex-list` is `#fp-unplaced`; canvas `div.fp-viewport[role=application]`, markers `div.fp-marker[data-device]`; delete dialog `#fp-del-*`. `rack.js`: toolbar `div.rk-toolbar` with `#rk-select`, `#rk-add`, `#rk-edit`, `#rk-face`, `#rk-print`; rack form `#rk-f-*`; unracked devices in an explorer (key `racks-unracked`, discipline chips) whose list is `#rk-unracked`; blocks `div.rk-block[data-device]`; with a route id it mounts the rack page (`page-rack.js`, explorer list `#rp-racks`, classes `rp-*`) and embeds the elevation there. `schedules.js` tabs `a[role=tab]#sch-tab-<kind>[data-kind]` for `cables|ip|dmx|bom|patch|racks|labels` (`schedules/<kind>` in the URL), panel `#sch-panel`; `#sch-state` (select), `#sch-assign-tags` (`#sch-tag-scope`, `#sch-tag-pattern`), `#sch-bulk-add` (§6.13.9 wizard), `#sch-print`, `#sch-csv-all` (server CSV of every row), `#sch-csv`; each kind is a DataTable (key `schedules.<kind>`, `ids {root: 'sch-dt', search: 'sch-filter', csv: 'sch-csv', filters: {disc: 'sch-disc', room: 'sch-room'}}`; `#sch-disc` filters a client-side Discipline column; in the app `#sch-room` is the Room column filter, in the harness a room select); BOM drill-downs open `openTableDialog` (keys `schedules.bom.cables`, `schedules.bom.devices`); the labels tab keeps its print sheet (`.sch-labels`, §6.13.4 exemption). Inline edits commit ops for doc-backed columns (cable tag/type/length/color/note/status; interface ip/vlan/mac/hostname/switch/switch_port; dmx universe/address/footprint/mode/channel). `inventory.js`: a DataTable (key `inventory`, `ids {table: 'inv-table', columns: 'inv-columns', csv: 'inv-csv', search: 'inv-filter', selectAll: 'inv-select-all', filters: {room: 'inv-room', status: 'inv-status', location: 'inv-location', kind: 'inv-kind', system: 'inv-system'}}`); `#inv-scope` (select: current room, all rooms, shared inventory), quick filters `#inv-q-warranty`, `#inv-q-serial` (URL key `quick`), `#inv-group` (group by location), `#inv-bulk-add` (wizard), `#inv-dups` (duplicates, with the API), `#inv-csv-all` (import-format export, in ⋯); bulk bar (`.dt-bulk`): `#inv-bulk-status`, `#inv-bulk-room`, `#inv-bulk-location`, `#inv-mark-installed`, `#inv-merge`; edit form `#inv-form-*`. Scope and grouping persist in the table state's `extra`. Schedules and inventory read rows from the server when `ctx.api` exists, else compute minimal rows locally from the doc (harness mode).
 
 ### 6.8 Inspector, assistant UI, admin views, search palette (W5)
 
 - `js/inspector.js`: `export function mountInspector(el, ctx)` → handle; renders the current selection's form; field changes → ops via `ctx.commit` (text debounced 400 ms, one op per field burst). Device sections: Identity, Map placement, Ports (table editor + bulk add + apply template), **Console channels** (§6.8.6, only when the device has channels persisted or in the overlay), Rack, Inventory, Network interfaces, DMX, Attachments (upload/list), QR, Notes. Cable: endpoints (pickers), medium, tag, type, length (unit aware), color, channels, status, bundle, signal, note. Port: label, name, medium, connector, channels, note, connected cables. Rack, floor plan, marker: their fields. Devices, ports and channels carry a **Trace path** button (§6.8.7).
+- Drawer content (D4, B.3 INS): the inspector renders into the drawer host `#app-inspector` (§6.13.5 owns modes, focus, Esc). Header `div.ins-head.ins-title[data-kind]`: `.ins-head-row` (`.ins-glyph`, kind label, `a.chip.ins-open-page` to the entity page for devices, rooms and racks, `button.ins-close`), `h3` title, `.ins-head-meta` (`span.ins-status[data-status]` status pill, subtitle), then `div.ins-badges` (review badges on their own row: `[data-badge=dups]` possible duplicates, `[data-badge=problems]` open problem reports of `doc.problems` for the device; each jumps to its section). Every section is `details[data-section=<key>]` (device keys `identity`, `map`, `ports`, `console`, `rack`, `inventory`, `net`, `dmx`, `files`, `procedures`, `problems`, `qr`, `notes`, `dups`, `merged`; port `cables`, `fields`; cable `endpoints`, `fields`; channel `fields`, `input`, `fedby`, `sends`, `groups`, `members`, `outputs`; rack, floor plan, marker, bundle, room `fields`). With ≥ 3 sections a sticky index `nav.ins-index` of `a.ins-index-chip[data-sec][href]` deep links (`sel=…&sec=<key>`) leads; `focusSection(key)` opens and scrolls to the section and writes `sec` (the shell calls it with the URL's `sec`). Ports lead with *Now connected* (`section cables`: `.ins-now-row[data-cable]` with direction, far end `.ins-now-peer`, cable chip `.ins-now-cable`, Trace), then the port fields; cables lead with *Endpoints*. Open/closed state of sections the user toggled persists per entity kind in localStorage `fathom.ui.inspector` (`{"v": 1, "open": {"<kind>": {"<section>": bool}}}`); defaults open: identity, ports, endpoints, fields, console. Viewers get a read-only drawer; an unknown selection says it was not found.
 
 #### 6.8.6 Console channels (inspector)
 
@@ -1730,7 +1786,7 @@ DOM modules: `floorplan.js` `mount(el, ctx)` ids `#fp-select`, `#fp-upload` (fil
 - `bindTraceButtons(root, {base, project})`: any `[data-trace="<node ref>"]` (`data-trace-title`, `data-trace-sub`, `data-trace-dir`) opens the drawer over `fetch(base + "api/v2/projects/<p>/trace?…")`. The viewer device page (`/p/<n>/d/<id>`) renders *Console channels* tables (Inputs, Buses, DCAs & mute groups, Racks: channel, name, fed by, goes to, DCA / mute, members) from `console.effective_channels` plus a *Trace* button per channel (inputs trace upstream, the rest downstream), per port and for the whole device, and loads `trace-ui.js` + `trace.css`; build output (`link_style="build"`, no API) renders the tables from the doc alone and no buttons.
 - `js/assistant-ui.js`: `export function mountAssistant(el, ctx)`; calls `ctx.api.ask(project, {question, room, use_llm, history})`; renders summary (escape HTML, then `**x**` → `<strong>`), path chips (`button.ast-chip[data-device][data-port]`), numbered checks with checkboxes (state local), notes, suggestion card (`#ast-suggest-yes`, `#ast-suggest-no`), "AI notes — verify" block when `llm.used`; offline → message "The assistant needs the server" plus local `traceLocal` path suggestions for any device named in the question.
 - `js/views-admin.js`: `mountImports`, `mountHistory`, `mountBuilds`, `mountSettings` per FR-UX-07/FR-IMP-10/FR-HIST/FR-USER-08.
-- Search palette in `app.js`: overlay `#app-palette` with input `#app-palette-input`, results `li[data-hit-kind][data-hit-id]`; uses `api.search` with 150 ms debounce, falls back to `searchLocal` offline or on error.
+- Search palette: `js/search.js` (§6.13.6; it moved out of `app.js`), opened by `#app-search` and ⌘/Ctrl+K.
 
 ### 6.9 Tracing & assistant algorithms (W6 Python; W3 client `traceLocal` implements §6.9.1–6.9.4)
 
@@ -1783,15 +1839,30 @@ Node = port ref `dev:port`; plus a virtual node `dev:*` per device used by devic
 
 ### 6.10 Service worker & manifest (W1 files, W5 registration)
 
-`sw.js` (W1): `const VERSION = '<fathom version>'` (W1 keeps it equal to `fathom.__version__`; the server MAY substitute `__FATHOM_VERSION__`), cache names `fathom-shell-<VERSION>`, `fathom-pages-<VERSION>`. Precache list (exact; relative to the SW scope):
+`sw.js` (W1, SHELL): `const VERSION = '0.4.0'`, cache names `fathom-shell-<VERSION>`, `fathom-pages-<VERSION>`. `VERSION` is bumped whenever the precache list or a precached file's contract changes, so `activate` drops the old caches; it is no longer equal to `fathom.__version__` (`0.3.0`). The server still replaces a `__FATHOM_VERSION__` placeholder when serving `/sw.js`, but the file holds a literal version. Precache list (exact; relative to the SW scope; `const PRECACHE` in `sw.js`):
 
 ```text
 ./  static/app.html  static/login.html  static/css/app.css  static/css/patchview.css  static/css/plan.css
 static/js/app.js  static/js/api.js  static/js/model-core.js  static/js/inspector.js  static/js/assistant-ui.js
 static/js/patchtable.js  static/js/patchtable-core.js  static/js/patchview.js  static/js/patchview-core.js
 static/js/floorplan.js  static/js/floorplan-core.js  static/js/rack.js  static/js/rack-core.js
-static/js/schedules.js  static/js/inventory.js  static/js/views-admin.js  static/js/presets-core.js  static/icons/icon-192.png  manifest.webmanifest
+static/js/schedules.js  static/js/inventory.js  static/js/views-admin.js  static/js/presets-core.js  static/js/suggest-ui.js
+static/js/views-sop.js  static/css/sop.css  static/js/console-core.js  static/js/trace-ui.js  static/css/trace.css
+static/icons/icon-192.png  manifest.webmanifest
+static/js/router-core.js  static/js/dom.js  static/js/explorer.js  static/js/explorer-core.js
+static/js/entity-header.js  static/js/entity-core.js  static/js/datatable.js  static/js/datatable-core.js
+static/js/drawer.js  static/js/drawer-core.js  static/js/search.js  static/js/search-core.js
+static/js/home.js  static/js/home-core.js  static/js/feedback.js  static/js/feedback-core.js
+static/js/wizard.js  static/js/wizard-core.js  static/js/page-device.js  static/js/page-room.js
+static/js/page-rack.js  static/js/views-discovery.js  static/js/merge-ui.js
+static/css/explorer.css  static/css/entity-header.css  static/css/datatable.css  static/css/drawer.css
+static/css/search.css  static/css/home.css  static/css/feedback.css  static/css/wizard.css
+static/css/page-device.css  static/css/page-room.css  static/css/rack.css  static/css/inventory.css
+static/css/schedules.css  static/css/admin.css  static/css/discovery.css  static/css/inspector.css
+static/css/patchtable.css
 ```
+
+Every file under `static/js/` (except `package.json`) and `static/css/` is precached, so every view works offline once the shell has loaded online.
 
 Precache uses `cache.addAll` per file with individual try/catch (a missing file must not break install). Strategies: navigations under `p/` and `s/` → network-first (3 s timeout) then cache; `GET api/v2/projects/<n>` and `api/v2/meta` → network-first then cache (response header `X-Fathom-Offline: 1` added when served from cache so the shell switches to read-only offline mode); `static/**` → stale-while-revalidate; everything else → network only. `activate` deletes caches of other versions. Message `{type: "fathom:prefetch", urls}` → fetch + cache each (pages cache), reply via `event.source.postMessage({type: "fathom:prefetched", ok: n, failed: [urls]})`. `{type: "fathom:skip-waiting"}` → `skipWaiting()`.
 
@@ -1820,9 +1891,205 @@ Each frontend unit ships a harness page under `fathom/static/dev/` that works wh
 | --- | --- | --- |
 | `dev/patchview.html` | W3 | `patchview.js` (`?devices=150&cables=600` uses `fixture-gen.js`) |
 | `dev/floorplan.html`, `dev/rack.html`, `dev/schedules.html` | W4 | `floorplan.js` (with `samples/floorplans` images served from `/static/dev/plans/` copies), `rack.js`, `schedules.js` + `inventory.js` |
-| `dev/patchtable.html`, `dev/index.html` | W5 | `patchtable.js`; index links all harnesses |
+| `dev/patchtable.html`, `dev/index.html` | W5 | `patchtable.js`; index links all harnesses (with their query variants), the app, the viewer pages and `/login` |
+| `dev/datatable.html` + `datatable-harness.js` | TABLE | `createTable` bound to the hash query; `?rows=N` synthetic rows (default 240), `?cards=1` card mode at sm, `?readonly=1`, `?appdialog=1` drill-down through `app.js` `openDialog` |
+| `dev/explorer.html` + `explorer-harness.js` | EXPLORER | `mountExplorer` over the fixture devices; `?many=N` extra items, `?empty=1`, `?key=<k>` storage key (default `harness-devices`) |
+| `dev/entity.html` + `entity-harness.js` | ENTITY | `mountEntityHeader` + `entity-core` facts, tabs and summary cards; hash `#/<device\|room\|rack>/<id>[/<tab>]`; `?rows=N`; `window.__eh` |
+| `dev/drawer.html` + `drawer-harness.js` | DRAWER | `createDrawer` on a shell-shaped `#app-inspector`; state in the hash (`sel`, `sec`, `drawer=0`) written with `drawerHistory` |
+| `dev/search.html` + `search-harness.js` | SEARCH | `openSearch` against the server (`?project=`, default `campus-demo`) or the fixture offline (`?fixture=1`); `?role=viewer`, `?recent=`, `?q=&cat=`; navigations in `window.__sr` |
+| `dev/feedback.html` + `feedback-harness.js` | FEEDBACK | every `feedback.js` state side by side, notices and bell; `window.__fb` |
+| `dev/wizard.html` + `wizard-harness.js` | WIZARD | `openWizard` and `bulkAdd` with a `makeCtx` ctx; `?open=devices\|cables\|generic`, `&sample=1`, `&step=…`, `?readonly=1`; commits in `window.__wz` |
 
 `fathom/static/dev/fixture-gen.js` (W3): `export function makeFixture({devices = 150, cables = 600, seed = 1} = {})` → a valid v2 doc (single room `main`, mixed disciplines, 4–24 ports per device, cables only between compatible ports, deterministic for a seed). T2 tests validate it with `validateLocal` (0 errors).
+
+### 6.13 Shared UI components (UI uplift; `docs/ui-audit.md` B.2, D1–D11)
+
+Each component is a DOM module plus, where it has logic, a pure `*-core.js` (§6.1 rules: Node-importable, tested by `tests/js/<name>-core.test.mjs`, the DOM contract by `tests/js/<name>-contract.test.mjs` and the browser behaviour by `tests/test_ui_<name>.py`). Class prefixes per D11 (§6.1). Every view builds its lists, pages, drawers and states from these; a view does not re-implement one.
+
+#### 6.13.1 Router core — `js/router-core.js` (ROUTER)
+
+Pure (no DOM, timers or storage globals; storage is injected).
+
+```js
+export const BP = {md: 700, lg: 1100};
+export function layoutFor(width) {}          // 'sm' (< 700) | 'md' (700–1099) | 'lg' (>= 1100)
+export const DEFAULT_VIEW = 'home';
+export const VIEW_SHAPES = {devices: ['id','tab','sub'], rooms: ['id','tab'], racks: ['id','tab','sub'], plan: ['id'],
+  schedules: ['tab'], imports: ['tab'], settings: ['tab'], discovery: ['tab','sub'], history: ['id']};
+export const SECTIONS = [/* {key, label, glyph, views, nav: 'sm'|'all'} — table in §6.4 */];
+export const VIEW_ROLES = {};                // view -> minimum role (none today)
+export const TAB_ROLES = {settings: {users: 'admin', backups: 'admin', sharing: 'editor'}};
+export function canSee(view, role, tab) {}   // role rank viewer < editor < admin
+export function sectionOf(view) {}           // section key; unknown views -> 'data'
+export function sectionsFor(role) {}         // SECTIONS with only the permitted views; empty sections dropped
+export function sectionRoot(key, route, role) {} // Route of the section's first permitted view, or null
+export function parseRoute(hash) {}          // -> Route
+export function buildRoute(route) {}         // -> '#/…'; trailing empty segments dropped; query values keep : , | / unescaped
+export function withQuery(route, patch) {}   // merge query keys; null/undefined/'' deletes
+export function mergeRoute(route, partial) {}// a new view clears id/tab/sub/extra; a given query replaces the whole query
+export function sameRoute(a, b, ignoreKeys) {} // routes or hashes; empty view == DEFAULT_VIEW
+export function selToString(sel) {}          // §6.4 `sel` grammar
+export function selFromString(s) {}
+export function navMemory(storage) {}        // -> {remember(project, hash), target(project, key, route, role) -> hash|'', clear()}
+export function legacyHash(project, room, view, params) {} // app.js buildHash's algorithm; empty view -> DEFAULT_VIEW
+```
+
+**Route** = `{project, room, view, id, tab, sub, extra: string[], query: {key: string}}` (all strings; segments decoded; `__proto__` keys ignored). Grammar, query keys and history rules: §6.4 Router. Tests: `tests/js/router-core.test.mjs`, `router-contract.test.mjs`; `tests/test_ui_router.py` smoke-tests the shared Chrome helper `tests/_ui.py`.
+
+#### 6.13.2 Explorer — `js/explorer.js` + `js/explorer-core.js` (EXPLORER)
+
+A filterable, grouped list beside a page (entity pages, plan, racks). Side panel at md/lg, resizable 240–480 px (pointer drag on `.ex-resizer`, 12 px hit area, 20 px under coarse pointers; arrow keys step 16 px) and collapsible to a 56 px rail; at sm a slide-in drawer with `.ex-backdrop`, focus trap and Esc (D4 layer `explorer`). Width and collapse persist per `key` (§6.14).
+
+```js
+export function mountExplorer(el, opts) {} // -> handle
+// opts: key (storage key, required), title, glyph, items, chips, match(item, q), toolbar, footer(shown, total) | string,
+//   rail, selected, onSelect(item), mobileLabel, listId, contentLabel, storage, renderItem(item, base) -> Node,
+//   itemAttrs(item) -> {}, headSlot: Node, emptyText: string | (query, total) -> string
+// item: {id, label, sub, group, glyph, href, badge, depth}; chip: {key, label, test(item)} (OR within chips, AND with the query)
+// toolbar: [{key, label, glyph, title, pressed, run}]; rail: [{key, label, glyph, href, active}] or groups [{items: [...]}]
+// handle: {root, side, list, content, search, setItems(items), setRail(rail), setChips(chips), setHeadSlot(node),
+//   update(partial), setSelected(id), open(), close(), isOpen(), mode() -> 'side'|'drawer', isCollapsed(),
+//   width(), setCollapsed(bool), setWidth(px), relayout(), destroy()}
+```
+
+DOM: `div.ex-root` > `aside.ex-side` (`.ex-head` with `.ex-titlebar` (`.ex-title`, `.ex-close`), `input.ex-search`, `.ex-chips` of `button.ex-chip[aria-pressed]`, `.ex-toolbar` of `.ex-tool`; `.ex-slot` head slot; `ul.ex-list[role=listbox]` (id = `listId`) of `li.ex-item[role=option][data-id][aria-selected]` holding `a.ex-item-link` or a `div.ex-item-row`; group headers `.ex-group`; `.ex-foot`; `.ex-collapse`; `.ex-rail` when collapsed), `.ex-resizer`, `.ex-backdrop`, and `section.ex-content` > `div.ex-page` (= `handle.content`, where the page renders). Controls inside a row that must not pick the item carry `[data-ex-ignore]`. `open()`/`close()` act only at sm. `update(partial)` applies items, selected, chips, rail, headSlot, toolbar, footer, emptyText, match, renderItem, itemAttrs and mobileLabel without a remount (key, title and glyph are fixed).
+
+Core: `MIN_WIDTH` 240, `MAX_WIDTH` 480, `DEFAULT_WIDTH` 300, `RAIL_WIDTH` 56, `KEY_STEP` 16, `STORAGE_PREFIX` `'fathom.ui.explorer.'`, `storageKey(key)`, `clampWidth(w)`, `loadExplorer(storage, key)` / `saveExplorer(storage, key, state)` (`{w, c}`), `defaultMatch(item, q)` (label or sub contains q), `filterItems(items, q, activeChipKeys, chips, match)`, `groupItems(items)`, `flattenGroups(groups)`, `nextIndex(count, current, key)` (Arrow/Home/End/PageUp/PageDown), `resizeKey(width, key)`, `dragWidth(startWidth, startX, x)`, `explorerMode(width)` (`'drawer'` at sm, else `'side'`), `footerText(shown, total, footer)`, `openLabel(label, total)`. Harness `dev/explorer.html`. Tests: `test_ui_explorer.py`, `explorer-core.test.mjs`, `explorer-contract.test.mjs`.
+
+#### 6.13.3 Entity header — `js/entity-header.js` + `js/entity-core.js` (ENTITY, D5)
+
+Sticky page header for device, room and rack pages. The header and a sentinel are **prepended** to `host` (the page content must follow inside `host`, since `position: sticky` sticks within its parent). Compact (`.eh--compact`) once the sentinel leaves the scroller and always at sm; compact mode keeps badges and tabs.
+
+```js
+export function mountEntityHeader(host, options) {} // -> {el, update(partial), setTab(key), setTabs(tabs, activeTab), isCompact(), destroy()}
+// options: kind, id, glyph, title, subtitle, status, facts, badges,
+//   actions: [{key, label, primary?, danger?, href? | run}], overflow: [{key, label, danger?, run}] (⋯ menu),
+//   tabs: [{key, label, count?, href}], activeTab, thumb, onTab(key)
+// facts: [{key?, label, value, href?}]; badges: [{label, level, title?, onClick?}]
+```
+
+DOM: `.eh-sentinel`, then `header.eh` > `.eh-bar` (`.eh-main`: `.eh-glyph`, `.eh-titles` (`.eh-title`, `.eh-subtitle`), `.eh-status`, `.eh-badges`, `.eh-facts`; `.eh-actions` of `button.eh-action` or `a.eh-action` (with `href`; `.eh-primary` / danger look kept), `.eh-more-wrap` > `button.eh-more[aria-haspopup=menu]` + `.eh-menu` of `.eh-menu-item`), then `nav.eh-tabs[role=tablist]` of `a.eh-tab[role=tab][data-tab][href][aria-selected]` (with `.eh-count`); `.eh--stuck` while stuck. Tabs are real links (the URL is the state, FR-UX-10); Arrow keys move focus only, Enter follows. `setTabs` changes labels, counts and hrefs in place (a different tab set rebuilds only the strip); `update` with other keys re-renders and restores focus to the same tab, action, ⋯ or badge.
+
+Core: `TAB_LABELS` (`overview`, `ports`, `cables`, `network`, `dmx`, `channels`, `inventory`, `procedures`, `files`, `devices`, `racks`, `plans`, `elevation`), `tabLabel(key)`, `statusPill(status)`, `primaryAddress(device)`, `rackPosition(doc, device)`, `deviceFacts(doc, vocab, device, overlay, opts)`, `roomFacts(doc, room, opts)`, `rackFacts(doc, rack, opts)`, `deviceTabs(doc, device)` (`overview`, `ports`, `cables`, `network`, then `dmx` when the device has DMX and `channels` when it has console channels, then `inventory`, `procedures`, `files`), `roomTabs()` (`overview`, `devices`, `cables`, `racks`, `plans`, `procedures`), `rackTabs()` (`overview`, `elevation`, `devices`, `cables`), `resolveTab(tabs, requested)` → `{tab, redirect}` (missing, empty or unknown → `overview` with `redirect: true`, so the page replaces the URL), `summaryCards(kind, doc, entity, ctxInfo)` (overview drill-down cards; problem counts use problem reports `doc.problems`, never validation results). Pages: `page-device.js` (`pd-`), `page-room.js` (`pr-`), `page-rack.js` (`rp-`). Harness `dev/entity.html`. Tests: `test_ui_entity.py`, `test_ui_pdev.py`, `test_ui_proom.py`, `test_ui_rk.py`, `entity-core.test.mjs`, `entity-contract.test.mjs`.
+
+#### 6.13.4 DataTable — `js/datatable.js` + `js/datatable-core.js` (TABLE, D8, D9)
+
+Every read list of records renders through `createTable`; drill-down counts open `openTableDialog`. **Exemptions (D9)**: the patch table's blocks mode (`.pt-block table`), the label sheet (`.sch-labels`), Markdown tables in SOP pages (`.md-table`), inspector editor grids, picker dialogs and the map groups dialog, the search list `#app-palette-list`, explorer lists, the drag-source lists `#rk-unracked` and `#fp-unplaced`, the JSON view and the server-rendered viewer pages.
+
+```js
+export { PAGE_SIZES, EMPTY } from './datatable-core.js';
+export function createTable(host, opts) {} // -> handle
+// opts: key (required), scope, caption, columns, rows, rowId(row), onRow(row, ev), rowAttrs(row) -> {}, rowClass(row),
+//   groupBy, groupOrder, selectable (bool | fn(row)), bulkActions: [{label, danger?, run(rows)}], actions (toolbar nodes),
+//   ids: {root, table, search, csv, columns, selectAll, filters: {colKey: id}}, url: {get() -> query, set(patch, {replace})},
+//   urlFilters: 'authoritative', pageSizes, pageSize, sticky, density, empty: {title, text, action}, csvName, highlight,
+//   storage, persist (false = no localStorage), noun: {one, many}, bulkNoun: {one, many}, readOnly (bool | fn),
+//   tableClass, cards (card layout at sm, opt-in), search: false, csv: false, searchPlaceholder
+// column: {key, header, value(row), cell(row) -> Node|string, csv: fn | false, sortable, filterable, searchable,
+//   hideOnMobile, hidden, align: 'right'|'center', width, sticky}
+// handle: {root, setRows(rows), setLoading(bool), setError(err, retry), setHighlight(id, {scroll}), setCsvName(name),
+//   getState(), setState(partial), readUrl(), info() -> {total, filtered, page, pages, pageSize},
+//   getSelection(), clearSelection(), refresh(), destroy()}
+// events on root: 'dt:state' (state snapshot), 'dt:select' ({ids}), 'dt:row' ({id, row}; Enter or click, not from controls)
+export function openTableDialog(ctx, opts) {} // {title, columns, rows, onRow, key, rowId, noun, empty, csvName, pageSize,
+//   storage, rowAttrs, rowClass, tableClass}; persists only pageSize, hidden and density
+```
+
+DOM: `div.dt-root` > `.dt-toolbar` (`input.dt-search`, `.dt-filters` of `button.dt-filter` per visible filterable column opening a `.dt-pop` value list, `.dt-cols` column chooser + density, `a.dt-csv[role=button][download]` whose `href` is a Blob URL of the filtered rows as CSV (visible columns, `csv` overrides), `.dt-count`), `.dt-bulk` (`.dt-bulk-count`, `.dt-bulk-actions`) while rows are selected, `.dt-scroll` > `table.dt-table` (`thead` sticky, `th[scope=col]` with `.dt-sort`; `tr.dt-row[data-id]`, `.dt-hl` highlighted, `.dt-group` headers; `.dt-hide-sm` mobile-hidden cells; `.dt-cards` card mode), `.dt-pager` (page size `.dt-size`, `.dt-range`, `.dt-pager-nav`), `.dt-empty` / `.dt-error` (with `.dt-retry`) / `.dt-skel`. Row clicks ignore `input, button, a, select, textarea, label, summary, [contenteditable], [data-dt-ignore]`. Space toggles selection; select-all selects the whole filtered set across pages. `cell(row)` may return the same Node every call; the table re-parents it so its state survives re-renders.
+
+State: `{q, sort: {col, dir: 1|-1} | null, filters: {col: [values]}, page, pageSize, hidden: [col], density: 'normal'|'compact', extra: {}}`. URL (with `url`): `q`, `sort` (`col`, or `-col` descending), `f.<col>` (values joined with `|`; `\` escapes `\ | ~`; `~` = the `EMPTY` value `(empty)`), `pg` (only when > 1); every table write *replaces*. Storage: `fathom.ui.table.<scope>.<key>` keeps `{v, sort, filters, pageSize, hidden, density, extra}`; `q` and `page` are URL-only. Without `f.*` in the URL stored filters apply, unless `urlFilters: 'authoritative'` (then the URL alone decides). Core: `PAGE_SIZES` `[25, 50, 100, 200]`, `DEFAULT_PAGE_SIZE` 50, `STATE_VERSION` 1, `EMPTY` `'(empty)'`, `DENSITIES`, `textOf(v)`, `normalizeColumns(cols)`, `compareValues(a, b)` (numeric-aware; empty values sort last), `createIndex(rows, columns)`, `cleanFilters(filters, columns)`, `defaultState(columns, opts)`, `mergeState(state, partial, columns)`, `matchesQuery(row, columns, q, hidden)`, `applyState(rows, columns, state, opts)` → `{rows, total, filtered, pageRows, page, …}` (opts `index`, `groupBy`, `groupOrder`), `distinctValues(rows, column, index)`, `selectAllFiltered(rows, columns, state, rowId, canSelect)`, `toCsv(columns, rows)` (RFC 4180, `\r\n`), `isTableParam(key)` (`q`, `sort`, `pg`, `f.*`), `stateToParams(state)`, `paramsToState(query, columns)`, `urlPatch(query, state)`, `storageKey(scope, key)`, `loadState(storage, scope, key, columns, defaults)`, `saveState(storage, scope, key, state)`. Harness `dev/datatable.html`. Tests: `test_ui_datatable.py`, `datatable-core.test.mjs`, `datatable-contract.test.mjs`.
+
+#### 6.13.5 Drawer — `js/drawer.js` + `js/drawer-core.js` (DRAWER, D3, D4)
+
+Owns the inspector host `#app-inspector`: mode classes, roles, backdrop, focus trap, Esc and focus return; `inspector.js` renders its content (§6.8).
+
+```js
+export function createDrawer(host, {label, onClose(reason), layers}) {}
+// -> {el, open({focus = true}), close(), isOpen(), mode() -> 'docked'|'sheet'|'full', relayout(width?), destroy()}
+export function domLayers(doc, host) {} // -> {palette, dialog, trace, assistant, explorer}: which layers are open in the DOM
+// (dialog = any rendered [role=dialog][aria-modal=true] outside the host and the other layers)
+```
+
+Modes by width: **docked** ≥ 1100 px (beside `#app-main`, not modal; the parent gets `.dr-docked-open`), **sheet** 700–1099 px (right-hand sheet), **full** < 700 px (88dvh bottom sheet); sheet and full are modal (`role=dialog`, `aria-modal`, `.dr-backdrop`, focus trap). Classes on the host: `.dr-host`, `.dr-docked|.dr-sheet|.dr-full`, `.dr-open`. Esc (D4 order, topmost first: palette, dialog, trace, assistant, explorer, drawer): the drawer closes only when it is the top layer; inside a text field the first Esc blurs it and the second closes; a docked drawer closes on Esc only while focus is inside it. Motion respects `prefers-reduced-motion`.
+
+Core: `drawerMode(width)`, `isModal(mode)`, `parseDrawer(query)` → `{sel, section, open}` (only `drawer=0` keeps a selection with the drawer closed), `drawerParams(state)` (query patch: `sel`, `sec`, `drawer`), `drawerHistory(prev, next)` → `'push'` (opening from closed) \| `'replace'` (switching subject or section, closing) \| `null`, `LAYERS`, `topLayer(flags)`, `CANVAS_VIEWS` `['patch', 'plan', 'map']`, `isCanvas(view, route)` (canvas views, plus `racks` with no id or tab `elevation`), `selectionOpensDrawer(view, route, layout, intent)` (intent — list row, search, *Details* — always opens; a canvas selection opens only at lg), `trapIndex(count, current, back)`. In the shell a canvas selection below lg writes `drawer=0` and shows `#app-selbar` (*Details* opens, × clears). Harness `dev/drawer.html`. Tests: `test_ui_drawer.py`, `test_ui_ins.py`, `drawer-core.test.mjs`, `drawer-contract.test.mjs`.
+
+#### 6.13.6 Search — `js/search.js` + `js/search-core.js` (SEARCH, FR-SRCH)
+
+```js
+export function openSearch(ctx, {query, category}) {} // -> {root, input, close()}; one palette at a time
+export function closeSearch() {}
+```
+
+A dropdown anchored under `#app-search` at md/lg, a full-screen sheet at sm. Online it calls `api.search(project, q, {limit: 40, kinds})` (150 ms debounce) and merges network hits computed from the doc; offline, without `api` or on error it uses `augmentLocal` and the footer says *Offline search*. Hits without `status` get it from the doc; `roleFilter` hides draft pages from viewers. With an empty query it lists **Recent** (`recentHits`, from `ctx.recent`) and, in All, **Go to** (one entry per `ctx.sections`). Enter opens `targetFor(hit, route, doc)` through `ctx.navigateRoute` and pushes the target to recents. DOM: `div#app-palette.sr-root[role=dialog]`, `input#app-palette-input.sr-input[role=combobox][aria-expanded][aria-activedescendant]`, `select#app-search-cat.sr-cat`, `ul#app-palette-list.sr-list[role=listbox]` of `li.sr-group` headers and `li.sr-hit[role=option]#sr-hit-<n>[data-hit-kind][data-hit-id]`; the no-results row and `button.sr-all` (search all categories) sit outside the listbox.
+
+Core: `CATEGORIES` (`{key, label, glyph, kinds}`: `all`, `devices` [device], `inventory` [device], `rooms`, `racks`, `ports`, `cables`, `networks` [network, interface], `plans` [floorplan], `procedures` [page], `files` [attachment]), `KIND_ORDER` (= `fathom.search.KIND_ORDER`), `kindsFor(key)`, `categorize(hit)`, `groupHits(hits, cat)` (6 per group in All, 50 in one category), `augmentLocal(doc, q, limit)`, `mergeHits(a, b)`, `roleFilter(hits, role)`, `targetFor(hit, route, doc)` → partial route with `id`, `tab`, `sub` and `query` always set, or `null` (attachment without a device) — targets per FR-SRCH-02, `recentType(hit)`, `recentHits(doc, recent)`, `moveActive(count, index, delta)`, `noMatchText(q, cat)`. Harness `dev/search.html`. Tests: `test_ui_search.py`, `test_ui_shell.py::test_search_palette_keyboard`, `test_search_kinds.py`, `search-core.test.mjs`, `search-contract.test.mjs`.
+
+#### 6.13.7 Home — `js/home.js` + `js/home-core.js` (HOME, FR-UX-13)
+
+`mount(el, ctx)` → `{route(), refresh(), destroy()}`; the `home` view and `DEFAULT_VIEW`. Renders `div.hm-root`: `.hm-head` (`.hm-kicker`, `h1.hm-title` project title, `.hm-lede` counts), `section.hm-sections` > `.hm-grid` of `a.hm-card[data-section]` (one per `ctx.sections`, copy from `SECTION_COPY`), `section.hm-rooms` of `a.hm-room[data-room]` with `.hm-links` (`a.hm-link[data-link]`: `patch`, then `plan`, `racks`, `sop` when the room has them, and `room` (the room page)), `section.hm-recent` / `.hm-strip` of `a[data-type][data-id]` (recents, newest first), `section.hm-projects` of `a.hm-project`, and `.hm-start` for an empty project. Every card is a real `<a href>` from `ctx.routeHref`. It reads `fathom.ui.recent.<project>` directly (through `recentKey`) when `ctx.recent` is not given; the projects section shows a skeleton, then an inline error with Retry (`ctx.projectsStatus`, `ctx.reloadProjects`). Core: `SECTION_COPY`, `RECENT_TYPES` (`device`, `room`, `rack`, `page`), `RECENT_MAX` 8, `RECENT_LABELS`, `recentKey(project)`, `countsText(devices, cables)`, `projectTitle(doc, name)`, `sectionCards(sections)`, `recentInput(lists, stored)`, `recentStrip(doc, recent)`, `roomCards(doc, recent, pages)`, `projectCards(projects, current)`. Tests: `test_ui_home.py`, `home-core.test.mjs`, `home-contract.test.mjs`.
+
+#### 6.13.8 Feedback — `js/feedback.js` + `js/feedback-core.js` (FEEDBACK, FR-UX-14)
+
+```js
+export function skeleton(kind, n) {}        // kind table|cards|page|list -> div.fb-skeleton.fb-skeleton-<kind>[aria-busy=true]
+export function emptyState({title, text, action, secondary}) {} // action/secondary: Node | string | {label, href} | {label, run}
+export function inlineError(err, retry, {compact}) {} // div.fb-error[role=alert] (.fb-error-offline offline) + button.fb-retry
+export { inlineError as errorState };
+export function confirmScope(ctx, {verb, count, noun: {one, many}, scope, danger, detail, ok, title}) {} // -> Promise<bool>
+export function staleBadge({fetchedAt, fetchedRev, currentRev, onRefresh, label, always, now}) {}
+//   -> span.fb-stale (+ .fb-is-stale, data-reason age|revision) with update(patch), refresh(), destroy(); re-checks every 30 s
+export function reviewBadge({count, label, title, onClick}) {} // -> button.fb-review ('<count> <label>'), or null when count <= 0
+export function createNotices(storage, project, opts) {} // -> {key, add(n), list(), unread(), markRead(id), markAllRead(), clear(), subscribe(fn)}
+export function mountBell(button, countEl, notices, ctx) {}
+//   -> {open(), close(), toggle(), render(), isOpen(), destroy(), pop, menu}; the popover .fb-bell-pop is appended to body
+```
+
+Rules: loading shows a skeleton, never a blank pane; an empty list says what is missing and offers the next action; a failed load or write shows `inlineError` beside the content with Retry (a toast alone is not enough); bulk and destructive changes confirm with `confirmScope` naming verb, count, noun and scope (*Delete 3 devices from Main Auditorium?*); overlay-derived data carries a stale badge (stale after `STALE_AFTER_MS` = 15 min or when the project revision moved); review badges (duplicates, open problems) jump to their section. Notices (`{id, level, text, href, t, read}`, newest first, max `MAX_NOTICES` 50; the same text again within `NOTICE_DEDUPE_MS` 60 s is dropped) persist per project in sessionStorage; the shell posts restored offline edits, overlay refresh failures and finished or failed builds. Core: `STALE_AFTER_MS`, `NOTICE_DEDUPE_MS`, `MAX_NOTICES`, `NOTICES_PREFIX` `'fathom.ui.notices.'`, `relTime(ms, now)`, `freshText(fetchedAt, now, stale, label)`, `freshness(fetchedAt, now, fetchedRev, currentRev)` → `{stale, reason, text}`, `scopeText(o)`, `addNotice(list, n, now)`, `markRead(list, id)`, `markAllRead(list)`, `unreadCount(list)`, `noticesKey(project)`, `parseNotices(raw)`, `bellLabel(unread)`, `countText(unread)`, `errorInfo(err, online)` → `{kind: 'offline'|'server'|'error', title, message}`, `SKELETON_KINDS`, `skeletonSpec(kind, n)`. Harness `dev/feedback.html`. Tests: `test_ui_feedback.py`, `test_ui_states_*.py`, `feedback-core.test.mjs`, `feedback-contract.test.mjs`.
+
+#### 6.13.9 Wizard — `js/wizard.js` + `js/wizard-core.js` (WIZARD)
+
+```js
+export function openWizard(ctx, spec) {} // -> Promise (resolves with the submit result, or null when cancelled)
+// spec: {key, title, data, steps: [{key, label, render(body, data, api) -> leave?, validate(data) -> {field: message}}],
+//   review(data) -> Node, submit(data) -> Promise, result(res) -> {text, href, hrefLabel}, submitLabel, busyLabel,
+//   reviewLabel, resultLabel, discardText, onClose}
+// api passed to render: {data, body, box, revalidate(), rerender(), …}
+export function bulkAdd(ctx, {kind: 'devices'|'cables', room}) {} // paste -> map -> preview -> review -> result
+export function rememberForm(key, data) {}  // localStorage fathom.ui.form.<key>
+export function recallForm(key) {}
+```
+
+`div.wz-backdrop.app-dialog-backdrop` > `div.wz[role=dialog][aria-modal=true][data-wizard]` (`.wz-head`, `ol.wz-steps` of `li.wz-step[data-step]`, `.wz-body`, `.wz-foot` with `.wz-back`, `.wz-next`). Review and Result steps are appended automatically; Next stays disabled while `validate` returns errors, shown inline under their field via `aria-describedby`; Esc, × and the backdrop ask before discarding entered data; a read-only store opens nothing. `bulkAdd` writes one `ctx.commit(ops, label)` (one undo step through the change queue); its result link (`resultRoute`) opens the new device's page, the devices landing or `schedules/cables` with `hl` = the first new id and `f.id` = all of them (2–50 ids); the column mapping is remembered per kind (`fathom.ui.form.bulk-devices`, `bulk-cables`). Used by `#inv-bulk-add`, `#sch-bulk-add`, the devices landing and the room page's empty Devices tab. Core: `MAX_ROWS` 1000, `FORM_PREFIX` `'fathom.ui.form.'`, `DEVICE_FIELDS`, `CABLE_FIELDS`, `fieldsFor(kind)`, `splitRecords(text, delim)`, `detectDelimiter(text)`, `parsePasted(text, opts)`, `normHeader(text)`, `guessMapping(header, fields)`, `looksLikeHeader(header, fields)`, `mappingErrors(mapping, fields, header)`, `rowObject(cells, mapping)`, `resolveRoom(doc, text)`, `resolveStatus(text, vocab)`, `resolveKind(text, vocab)`, `resolveEndpoint(doc, value, portText)`, `validateDeviceRow(doc, row, opts)`, `deviceRowWarnings(doc, row)`, `validateCableRow(doc, row, opts)`, `cableRowWarnings(doc, row, opts)`, `validateRows(doc, kind, rows, opts)`, `bulkDeviceOps(doc, rows, opts)`, `bulkCableOps(doc, rows, opts)`, `replacedCables(ops)`, `canAdvance(step, errors)`, `plural(n, one, many)`, `reviewText(kind, count, roomName)`, `commitLabel(kind, count)`, `resultRoute(kind, ids)`, `loadForm(storage, key)`, `saveForm(storage, key, data)`, `applyRemembered(header, mapping, remembered, fields)`, `rememberMapping(header, mapping)`. Harness `dev/wizard.html`. Tests: `test_ui_wizard.py`, `wizard-core.test.mjs`, `wizard-contract.test.mjs`.
+
+#### 6.13.10 DOM helpers — `js/dom.js`
+
+```js
+export function h(tag, attrs, children) {} // element; attrs: class, text, html, on<event> (listener), style (string or object:
+//   camelCase, hyphenated and --custom keys; null values skipped), other keys as attributes (undefined/null/false skipped,
+//   true = ''); children: Node | string | number | array of them (null/undefined/false skipped)
+export function esc(s) {}                  // HTML-escape & < > " '
+export function on(target, type, fn, opts) {} // addEventListener -> idempotent off()
+```
+
+New modules import `h`/`esc`/`on` from `dom.js` (`app.js` re-exports `h` and `esc` for older callers). Tests: `tests/js/dom.test.mjs`.
+
+### 6.14 Client storage keys (D8)
+
+All UI state keys start with `fathom.ui.`; every read tolerates missing, full or throwing storage and corrupt JSON.
+
+| Key | Storage | Scope | Stores |
+| --- | --- | --- | --- |
+| `fathom.ui.nav` | session | tab | `{<project>: {<section>: '#/…'}}` last hash per section (nav memory, FR-UX-09) |
+| `fathom.ui.recent.<project>` | local | project | `{device, room, rack, page: [{id, t}]}`, newest first, 8 each (search recents, home) |
+| `fathom.ui.table.<scope>.<key>` (`fathom.ui.table.<key>` without a scope) | local | table | `{v: 1, sort, filters, pageSize, hidden, density, extra}` |
+| `fathom.ui.explorer.<key>` | local | explorer | `{w: width px, c: collapsed}` |
+| `fathom.ui.inspector` | local | browser | `{v: 1, open: {<kind>: {<section>: bool}}}` — only sections the user toggled |
+| `fathom.ui.notices.<project>` | session | tab, project | bell notices (max 50) |
+| `fathom.ui.seen.<project>` | local | project | ISO time of the newest open problem report already announced |
+| `fathom.ui.form.<key>` | local | form | remembered wizard input, e.g. `bulk-devices`, `bulk-cables` column mappings |
+
+Deliberately **not** persisted: DataTable search text (`q`) and page (`pg`) — URL only; the selection, drawer and section (`sel`, `sec`, `drawer`) — URL only; search palette text and category. Older keys outside the prefix stay as they were: `fathom.pending.<project>` (local, unsent ops, §6.3), `fathom.sop.tasks.*` and `fathom.sop.done.*` (session, SOP task ticks), `fathom.sop.draft.*` (local, SOP editor drafts), `fathom.addgear.tab` (local, add-gear dialog tab), `fathom:login-bounces` (session, login redirect loop guard).
 
 ---
 
@@ -2220,7 +2487,7 @@ def render_report(doc: Doc, *, project: str, sections: Dict[str, str]) -> str: .
 | G4 | JS unit tests | `node --test tests/js` (Node ≥ 18) | 0 failures |
 | G5 | Py 3.9 syntax | `/usr/bin/python3 -m compileall -q fathom tests` (or the uv/docker equivalents) | exit 0 |
 | G6 | JS syntax & ES2018 | `for f in fathom/static/js/*.js fathom/static/sw.js fathom/static/dev/*.js; do node --check "$f" \|\| exit 1; done` and `node --test tests/js/syntax.test.mjs` (T2: rejects `?.`, `??`, `\|\|=`, `&&=`, `??=`, class fields/`#private`, `static {`, numeric separators, top-level `await` outside functions, `import.meta` outside `*.mjs` tests; ignores strings/comments) | exit 0 |
-| G7 | Frontend smoke | `python3 -m unittest tests.test_frontend_smoke -v` | all pages `ready` with `errors == []`; perf budget met; skipped only if no Chrome |
+| G7 | Frontend smoke | `python3 -m unittest discover -s tests -p test_frontend_smoke.py -v` (the dotted `tests.test_frontend_smoke` form breaks when the `discovery` extra's `x690` installs a top-level `tests` package); the UI suites: `-p 'test_ui_*.py'` | all pages `ready` with `errors == []`; perf budget met; skipped only if no Chrome |
 | G8 | Frozen files untouched | `git diff --quiet -- tests/test_fathom.py fathom/samples/rrc-littleton/project.json fathom/samples/rrc-littleton/exports` | exit 0 |
 | G9 | Ownership | `git status --porcelain` — every new/modified path is listed in §7.2 (or `docs/notes/*.md`, `docs/QA-REPORT.md`) | QA confirms |
 | G10 | Demo builds | `python3 -m fathom demo` ; `FATHOM_DATA=$(mktemp -d) sh -c 'python3 -m fathom new cd --template campus-demo && python3 -m fathom build cd'` | exit 0; run folder contains every §5.9 file (QR only if a public URL is set: run once with `FATHOM_PUBLIC_URL=http://localhost:8080`) |
@@ -2397,9 +2664,9 @@ Legend: **A** = automated (file::test name prefix that MUST exist and pass), **M
 | 122 | FR-TRC-04 | A | `tests/test_fathom.py` (frozen) + `test_assistant.py::test_cli_trace_port` |
 | 123 | FR-TRC-05 | A | `patchview-core.test.mjs` "traceLocal downstream audio" (exact cable set) |
 | 124 | FR-SRCH-01 | A | `test_assistant.py::test_search_ip` |
-| 125 | FR-SRCH-02 | M | Palette keyboard |
-| 126 | FR-SRCH-03 | A | `model-core.test.mjs` "searchLocal" |
-| 127 | FR-SRCH-04 | A | `test_assistant.py::test_search_ranking` and `model-core.test.mjs` "searchLocal ranking" |
+| 125 | FR-SRCH-02 | A+M | `test_ui_search.py` (dropdown keyboard and recents at d, tablet network hit, phone full screen, categories and no results, viewer drafts, inventory target), `test_ui_shell.py::test_search_palette_keyboard`, `search-core.test.mjs`; M: palette keyboard |
+| 126 | FR-SRCH-03 | A | `model-core.test.mjs` "searchLocal"; `search-core.test.mjs` (`augmentLocal`); `test_ui_search.py::test_offline_fixture_and_inventory_target` |
+| 127 | FR-SRCH-04 | A | `test_assistant.py::test_search_ranking`, `model-core.test.mjs` "searchLocal ranking", `test_search_kinds.py` (network kind order, fields, `kinds=network`, `status` on every hit, ranking unchanged) |
 | 128 | FR-HIST-01 | A | `test_api.py::test_history_entries` |
 | 129 | FR-HIST-02 | A | `test_api.py::test_restore_revision` |
 | 130 | FR-HIST-03 | A | `test_api.py::test_put_requires_if_match` |
@@ -2418,7 +2685,7 @@ Legend: **A** = automated (file::test name prefix that MUST exist and pass), **M
 | 143 | FR-USER-08 | M | Admin users UI |
 | 144 | FR-USER-09 | A | `test_api.py::test_share_links` (P1) |
 | 145 | FR-USER-10 | A | `test_security.py::test_login_throttle` (P1) |
-| 146 | FR-MOB-01 | M | Three viewport sizes |
+| 146 | FR-MOB-01 | A+M | `tests/_ui.py` `SIZES` d 1280×900, t 820×1180 (touch), m 390×844 (touch); the `test_ui_*.py` suites check their layouts at these sizes; `test_ui_shell.py::test_sections_and_tab_bar`, `::test_no_page_hscroll_on_any_view`, `test_ui_drawer.py` (docked/sheet/full); M: three viewport sizes |
 | 147 | FR-MOB-02 | M | iPad editing walkthrough |
 | 148 | FR-MOB-03 | M | Phone viewer walkthrough |
 | 149 | FR-MOB-04 | A+M | `test_api.py::test_manifest`; M: DevTools manifest pane |
@@ -2471,6 +2738,13 @@ Legend: **A** = automated (file::test name prefix that MUST exist and pass), **M
 | 194 | FR-UX-07 | M | Admin views |
 | 195 | FR-UX-08 | M | Theme |
 | 196 | §2.3 compat | A | `tests/test_fathom.py` (frozen), `test_compat.py::test_public_v1_functions_exist`, `test_compat.py::test_py39_forbidden_syntax` (scans `fathom/**/*.py` with `ast` for `match`, PEP 604 unions in runtime positions, `zip(strict=)`, top-level `tomllib`) |
+| 197 | FR-UX-09 | A | `test_ui_shell.py::test_sections_and_tab_bar`, `::test_nav_memory`, `::test_section_menu_lists_views`, `::test_legacy_project_url_lands_on_home`, `::test_empty_view_canonicalizes_to_home_and_keeps_selection`; `router-core.test.mjs`, `router-contract.test.mjs` |
+| 198 | FR-UX-10 | A | `test_ui_entity.py` (sticky/compact header, tab links, arrow keys, overflow menu, unknown tab/id), `test_ui_pdev.py`, `test_ui_proom.py`, `test_ui_rk.py` (default tab replaced, tab click pushes, reload keeps the tab, explorer width persists, three sizes); `entity-core.test.mjs` |
+| 199 | FR-UX-11 | A | `test_ui_datatable.py` (URL state survives reload, storage restores sort/filters, pagination and `pg`, column chooser and density, CSV of filtered rows, select-all across pages, sticky `th[scope]`, phone columns and cards, 20 000 rows); `datatable-core.test.mjs`, `datatable-contract.test.mjs` |
+| 200 | FR-UX-12 | A | `test_ui_drawer.py` (modes at three sizes, Esc order, relayout, reduced motion, modal dialog above the drawer), `test_ui_ins.py` (`sec` round trip, index chips, collapse state per kind, port and cable drawer order), `test_ui_shell.py::test_deep_link_opens_drawer`, `::test_drawer_closed_shows_selection_bar`, `::test_canvas_selection_below_lg_keeps_drawer_closed`; `drawer-core.test.mjs` |
+| 201 | FR-UX-13 | A | `test_ui_home.py` (three sizes, room chips, every card link mounts its view, project cards, recents order, empty project); `home-core.test.mjs`, `home-contract.test.mjs` |
+| 202 | FR-UX-14 | A | `test_ui_feedback.py`, `test_ui_states_shell.py`, `test_ui_states_entity.py`, `test_ui_states_lists.py`, `test_ui_states_canvas.py`, `test_ui_states_admin.py`; `feedback-core.test.mjs`, `feedback-contract.test.mjs` |
+| 203 | FR-UX-09…14 | A | `tests/test_ui_acceptance.py` (written by QA in wave 4): end-to-end acceptance of FR-UX-09…14 |
 
 ---
 

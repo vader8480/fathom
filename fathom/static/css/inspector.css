@@ -1,0 +1,52 @@
+/* Inspector as drawer content (docs/ui-audit.md B.3 INS, D3, D11): header, section index,
+   port "Now connected" block and cable endpoints. Legacy .ins-* rules stay in app.css;
+   these add to or override them. Loaded at boot by the shell. */
+
+/* header: glyph, kind, badges, Open page, close; title; status + subtitle */
+.ins-head .ins-head-row{display:flex;align-items:center;gap:6px;min-width:0}
+.ins-head .ins-glyph{font-size:14px;line-height:1;flex:none}
+.ins-head .kind{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ins-head .ins-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;min-width:0}
+.ins-head .ins-badges:empty{display:none}
+.ins-head .ins-badges .fb-review{max-width:100%}
+.ins-dups-error.fb-error{margin:0}
+.ins-head h3{overflow-wrap:anywhere}
+.ins-head-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;min-width:0}
+.ins-head-meta .sub{min-width:0;overflow-wrap:anywhere}
+.ins-open-page{flex:none;min-height:40px;padding:0 12px;text-decoration:none;color:var(--text)}
+.ins-open-page:hover{border-color:var(--border-2)}
+.ins-close{flex:none;min-width:40px;min-height:40px}
+.ins-status{display:inline-flex;align-items:center;padding:0 6px;border-radius:4px;font-size:10px;line-height:16px;border:1px solid var(--border);color:var(--muted);white-space:nowrap}
+.ins-status[data-status=installed],.ins-status[data-status=patched]{border-color:var(--ok);color:var(--ok)}
+.ins-status[data-status=planned]{border-style:dashed;border-color:var(--warn);color:var(--warn)}
+
+/* sticky section index: one row of chips that scrolls inside itself */
+.ins-index{position:sticky;top:0;z-index:3;display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;padding:6px 12px;
+  background:var(--panel);border-bottom:1px solid var(--border);scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.ins-index::-webkit-scrollbar{display:none}
+.ins-index-chip{flex:none;display:inline-flex;align-items:center;min-height:40px;padding:0 12px;border-radius:999px;border:1px solid var(--border);
+  color:var(--muted);font-size:12px;text-decoration:none;white-space:nowrap}
+.ins-index-chip:hover{color:var(--text)}
+.ins-index-chip[aria-current=true]{color:var(--text);border-color:var(--accent);background:rgba(142,162,255,.14)}
+.ins-index-chip:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+/* port: "Now connected" */
+.ins-now-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:2px 0;min-width:0}
+.ins-now-dir{color:var(--muted);flex:none;width:14px;text-align:center}
+.ins-now-peer{flex:1 1 140px;min-width:0;min-height:40px;display:inline-flex;align-items:center;color:var(--text);overflow-wrap:anywhere}
+.ins-now-cable{flex:none;min-height:40px;padding:0 12px;text-decoration:none;color:var(--text)}
+.ins-now-tools{margin-top:6px}
+
+/* cable: endpoints */
+.ins-ep-row{margin:2px 0;flex-wrap:nowrap}
+.ins-ep-label{flex:none;width:40px}
+.ins-ep-text{flex:1;min-width:0;overflow-wrap:anywhere}
+.ins-ep-dev,.ins-ep-port{color:var(--text);display:inline-flex;align-items:center;min-height:40px}
+.ins-ep-row>button{flex:none}
+.ins-missing{color:var(--text)}
+
+@media (pointer:coarse){
+  .ins-open-page,.ins-index-chip,.ins-now-cable,.ins-now-peer,.ins-ep-dev,.ins-ep-port{min-height:44px}
+  .ins-close{min-width:44px;min-height:44px}
+}
+@media print{.ins-index,.ins-close,.ins-open-page{display:none!important}}

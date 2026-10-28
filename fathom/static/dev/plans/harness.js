@@ -113,7 +113,7 @@ function makeCtx(store, ui) {
     pickPort: function () { return Promise.resolve(null); },
     pickDevice: function (o) { const d = store.doc.devices.filter(function (x) { return !o || !o.room || x.room === o.room; })[0]; return Promise.resolve(d ? d.id : null); },
     toast: function (msg, level) { ui.toast(msg, level); },
-    confirm: function (msg) { ui.log('confirm: ' + msg + ' -> yes'); return Promise.resolve(true); },
+    confirm: function (msg) { ui.confirms.push(String(msg)); ui.log('confirm: ' + msg + ' -> yes'); return Promise.resolve(true); },
     openInspector: function (sel) { ui.log('inspector: ' + JSON.stringify(sel)); },
     env: {touch: matchMedia('(pointer: coarse)').matches, narrow: innerWidth < 700, platform: /iPad|iPhone/.test(navigator.userAgent) ? 'ios' : (/Mac/.test(navigator.platform) ? 'mac' : 'other'), online: navigator.onLine, secure: window.isSecureContext},
   };
@@ -125,6 +125,7 @@ function makeUi() {
   const toastLog = [];
   return {
     toasts: toastLog,
+    confirms: [],
     toast: function (msg, level) {
       toastLog.push({msg: msg, level: level || 'info'});
       if (!toasts) return;
@@ -325,8 +326,10 @@ async function walkSchedules(root, handles, store, ui) {
   const want = ['c-0001=A-006', 'c-0002=A-007', 'c-0007=A-008', 'c-0009=A-009', 'c-0010=A-010', 'c-0011=A-011', 'c-0012=V-001', 'c-0013=V-002', 'c-0014=V-003', 'c-0015=X-001'];
   out.previewOk = !!out.preview && out.preview.join() === want.join();
   const confirmBtn = sch.querySelector('[data-act="confirm"]');
+  const tagConfirms0 = ui.confirms.length;
   if (confirmBtn) confirmBtn.click();
   await wait(20);
+  out.tagConfirm = ui.confirms.length > tagConfirms0 ? ui.confirms[ui.confirms.length - 1].split('\n')[0] : '';
   out.tagsAssigned = store.doc.cables.filter(function (c) { return c.tag; }).length;
   out.undoSteps = store._undo ? store._undo.length : null;
   // inline edit a cable length (imperial fixture: feet -> meters)
@@ -349,35 +352,48 @@ async function walkSchedules(root, handles, store, ui) {
   rs.value = 'current';
   rs.dispatchEvent(new Event('change', {bubbles: true}));
   sch.querySelector('[data-kind="cables"]').click();
-  // inventory: bulk set 3 devices to spare = one undo step
+  // inventory: select 3 DataTable rows, bulk set them to spare (confirmScope, then one undo step)
   const inv = root.querySelector('.inv-root');
+  const invRows = function () { return inv.querySelectorAll('#inv-table tbody tr.dt-row[data-device]').length; };
   const undo0 = store._undo ? store._undo.length : 0;
+  let selectEvents = 0;
+  const onSel = function () { selectEvents++; };
+  inv.addEventListener('dt:select', onSel);
   ['wireless-mics', 'stage-box-1', 'restream'].forEach(function (id) {
-    const cb = inv.querySelector('[data-select="' + id + '"]');
+    const cb = inv.querySelector('tr[data-device="' + id + '"] .dt-row-check');
     cb.checked = true;
     cb.dispatchEvent(new Event('change', {bubbles: true}));
   });
-  const bs = inv.querySelector('#inv-bulk-status');
+  inv.removeEventListener('dt:select', onSel);
+  out.selectEvents = selectEvents;
+  out.bulkBarShown = !inv.querySelector('.dt-bulk').hidden && !!inv.querySelector('.dt-bulk #inv-bulk-status');
+  const confirms0 = ui.confirms.length;
+  const bs = inv.querySelector('.dt-bulk #inv-bulk-status');
   bs.value = 'spare';
   bs.dispatchEvent(new Event('change', {bubbles: true}));
+  await wait(20);
+  out.bulkConfirm = ui.confirms.length > confirms0 ? ui.confirms[ui.confirms.length - 1].split('\n')[0] : '';
   out.bulkSpare = store.doc.devices.filter(function (d) { return d.status === 'spare'; }).map(function (d) { return d.id; });
   out.bulkUndoSteps = (store._undo ? store._undo.length : 0) - undo0;
   store.undo();
   out.bulkUndone = store.doc.devices.filter(function (d) { return d.status === 'spare'; }).length === 1;
+  inv.querySelector('.dt-bulk-clear').click();
   // quick filter: warranty < 90 days excludes sound-board (no warranty)
   inv.querySelector('#inv-q-warranty').click();
-  out.warrantyRows = inv.querySelectorAll('#inv-table tbody tr[data-device]').length;
+  out.warrantyRows = invRows();
   inv.querySelector('#inv-q-warranty').click();
   inv.querySelector('#inv-q-serial').click();
   out.missingSerialHasSoundBoard = !!inv.querySelector('tr[data-device="sound-board"]');
   inv.querySelector('#inv-q-serial').click();
-  // system filter "Main video" -> 4 devices
-  const sys = inv.querySelector('#inv-system');
-  sys.value = 'main-video';
-  sys.dispatchEvent(new Event('change', {bubbles: true}));
-  out.mainVideoRows = inv.querySelectorAll('#inv-table tbody tr[data-device]').length;
-  sys.value = '';
-  sys.dispatchEvent(new Event('change', {bubbles: true}));
+  // system column filter "Main video" -> 4 devices; Clear empties the filter again
+  inv.querySelector('#inv-system').click();
+  await wait(10);
+  const sysBox = inv.querySelector('.dt-pop[data-col="system"] input[value="Main video"]');
+  if (sysBox) sysBox.click();
+  out.mainVideoRows = invRows();
+  const pop = inv.querySelector('.dt-pop[data-col="system"]');
+  if (pop) { pop.querySelector('.dt-pop-clear').click(); pop.querySelector('.dt-pop-close').click(); }
+  out.filterCleared = invRows();
   // inventory form edit round-trip
   handles.inventory._openForm('atem-mini', null);
   const f = inv.querySelector('.inv-form');
@@ -387,9 +403,13 @@ async function walkSchedules(root, handles, store, ui) {
   f.querySelector('button[type=submit]').click();
   const atem = store.doc.devices.filter(function (d) { return d.id === 'atem-mini'; })[0];
   out.formEdit = {serial: atem.inventory && atem.inventory.serial, warranty: atem.inventory && atem.inventory.warranty_until, ip: atem.interfaces[0].ip};
-  out.ok = out.cablesRows === 15 && out.previewOk && out.tagsAssigned === 15 && out.lengthM === 15.24 && tabRows.ip === 3 && tabRows.racks === 1
-    && /6498\.00 USD/.test(out.bomTotal) && out.bulkUndoSteps === 1 && out.bulkUndone && out.bulkSpare.length === 4 && out.warrantyRows === 0
-    && !out.missingSerialHasSoundBoard && out.mainVideoRows === 4 && out.formEdit.serial === 'ATEM-123' && out.formEdit.ip === '10.20.0.41';
+  out.schedulesOk = out.cablesRows === 15 && out.previewOk && out.tagConfirm === 'Assign tags to 10 untagged cables in Main Auditorium?' && out.tagsAssigned === 15 && out.lengthM === 15.24 && tabRows.ip === 3 && tabRows.racks === 1
+    && /6498\.00 USD/.test(out.bomTotal);
+  out.inventoryOk = out.selectEvents === 3 && out.bulkBarShown && /^Set status of 3 devices in Main Auditorium\?$/.test(out.bulkConfirm)
+    && out.bulkUndoSteps === 1 && out.bulkUndone && out.bulkSpare.length === 4 && out.warrantyRows === 0
+    && !out.missingSerialHasSoundBoard && out.mainVideoRows === 4 && out.filterCleared > 4
+    && out.formEdit.serial === 'ATEM-123' && out.formEdit.ip === '10.20.0.41';
+  out.ok = out.schedulesOk && out.inventoryOk;
   return out;
 }
 

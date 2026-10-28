@@ -1,0 +1,88 @@
+/* admin.css: Imports, History, Builds and Settings (docs/ui-audit.md B.3 ADM). Loaded after
+   datatable.css; colours, type and the base .adm/.adm-card rules stay in app.css. */
+
+.adm{min-width:0}
+.adm :is(button,select,a.btn,a.chip,input:not([type=checkbox]):not([type=radio]):not([type=file])){min-height:40px}
+.adm a.chip{display:inline-flex;align-items:center;text-decoration:none}
+
+/* ---- settings tabs: links into the URL (settings/<tab>) */
+.adm-tabs{align-items:stretch}
+.adm-tab{display:inline-flex;align-items:center;min-height:40px;padding:0 12px;border:1px solid var(--border);border-radius:8px;color:var(--text);text-decoration:none;white-space:nowrap;font-size:13px}
+.adm-tab:hover{border-color:var(--border-2)}
+.adm-tab[aria-selected=true]{background:rgba(142,162,255,.16);border-color:var(--border-2)}
+.adm-tab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.adm-panel{min-width:0}
+.adm-panel>h3:first-child{margin-top:4px}
+
+/* ---- settings card grid: two columns from md up, one at sm */
+.adm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start}
+.adm-grid>.adm-card[data-card=danger]{grid-column:1/-1}
+.adm-card h3{margin-top:0}
+.adm-form .field{grid-template-columns:132px minmax(0,1fr)}
+.adm-form textarea{resize:vertical}
+
+/* ---- tables */
+.adm-acts{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center}
+.adm .dt-table td[data-col=actions] .adm-acts{flex-wrap:nowrap;white-space:nowrap}
+.adm-kinds{font-size:11.5px;white-space:nowrap}
+.adm .dt-table td>input:not([type=checkbox]),.adm .dt-table td>select{width:100%;min-width:72px;padding:4px 6px}
+.adm .dt-table td[data-col=vlan]>input,.adm .dt-table td[data-col=order]>input{min-width:56px;max-width:90px}
+.adm-imp-errors{margin-top:8px}
+.adm-imp-errors .dt-root{--dt-max-h:320px}
+.adm-reg+.adm-inspect{margin-top:8px}
+.adm-diff{margin:0 0 10px;max-height:320px}
+.adm-addrow{margin-top:8px;gap:6px;flex-wrap:wrap}
+.adm-addrow input,.adm-addrow select{flex:1 1 140px;min-width:0}
+.adm-addrow button{flex:none}
+
+/* ---- imports overlay */
+.adm-sec-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:18px 0 8px}
+.adm-sec-head h3{margin:0}
+.adm-ovl-chips{margin-bottom:8px}
+.adm-ovl{margin-top:6px}
+.adm-ovl-dev{min-width:0}
+.adm-ovl .disc-actions{display:inline-flex;gap:4px}
+
+/* ---- states (B.5): skeleton / inline error above a list, error slots beside form buttons */
+.adm-state:empty,.adm-err:empty{display:none}
+.adm-state>.fb-skeleton{padding:4px 0}
+.adm-state>.fb-error{margin:0 0 8px;max-width:none}
+.adm-err>.fb-error{margin:8px 0 0;max-width:none}
+.adm-ovl .disc-actions{flex-wrap:wrap}
+.adm-row-err>.fb-error{margin:4px 0 0}
+.adm-diff>.fb-error{margin:0;max-width:none;white-space:normal}
+
+/* ---- share wizard */
+.adm-fieldset{border:0;padding:0;margin:12px 0 0;min-width:0}
+.adm-fieldset legend{padding:0;margin-bottom:6px;color:var(--muted);font-size:12px}
+.adm-radio{display:flex;align-items:flex-start;gap:8px;min-height:40px;padding:6px 0;cursor:pointer}
+.adm-radio input{margin-top:3px;flex:none}
+.adm-share-out{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.adm-share-row{gap:6px;flex-wrap:nowrap}
+.adm-share-url{flex:1 1 auto;min-width:0;width:100%}
+
+@media (max-width:699px){
+  .adm{padding-left:12px;padding-right:12px}
+  .adm-tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;padding-bottom:2px}
+  .adm-tab{flex:none}
+  .adm-grid,.adm-cards{grid-template-columns:minmax(0,1fr)}
+  .adm-form .field{grid-template-columns:minmax(0,1fr);gap:2px}
+  .adm-card.has-tpl{grid-column:auto}
+  .adm .dt-table td>input:not([type=checkbox]),.adm .dt-table td>select{min-width:120px}
+  .dt-cards[data-table="imports.overlay"] .dt-table td.dt-lead{display:block}
+  .dt-cards[data-table="imports.overlay"] .dt-table td[data-col=actions]{justify-content:flex-start;margin-top:4px}
+  .dt-cards[data-table="imports.overlay"] .dt-table td[data-col=actions]::before{display:none}
+}
+
+@media (pointer:coarse){
+  .adm :is(button,select,a.btn,a.chip,.adm-tab,input:not([type=checkbox]):not([type=radio]):not([type=file])){min-height:44px}
+  .adm-radio{min-height:44px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .adm *,.adm-share-out *{transition:none!important;animation:none!important}
+}
+
+@media print{
+  .adm-tabs,.adm-addrow,.adm-build-form{display:none!important}
+}

@@ -221,3 +221,64 @@ T('patchCellOps', () => {
   const rp = cable(d2, 'c-0005') || d2.cables.find((c) => c.to.device === 'audio-rack-1' && c.to.port === 'analog-in-1');
   assert.ok(rp && rp.from.port === 'analog-out-2', m('FR-PT-03', S, "field 'peer' on a patched port -> repatch"));
 });
+
+// ---- Rows mode helpers (docs/ui-audit.md B.3 PT)
+
+const B3 = 'ui-audit B.3 PT';
+
+T('pickMode: URL beats stored beats layout default', () => {
+  const pickMode = need(pt, 'pickMode', 'PT mode', B3);
+  assert.deepEqual(pickMode({ mode: 'rows' }, 'blocks', 'lg'), { mode: 'rows', source: 'url' });
+  assert.deepEqual(pickMode({ mode: 'blocks' }, 'rows', 'sm'), { mode: 'blocks', source: 'url' });
+  assert.deepEqual(pickMode({ mode: 'cards' }, 'rows', 'lg'), { mode: 'rows', source: 'stored' }, 'unknown URL mode ignored');
+  assert.deepEqual(pickMode({}, null, 'sm'), { mode: 'rows', source: 'default' });
+  assert.deepEqual(pickMode({}, undefined, 'md'), { mode: 'blocks', source: 'default' });
+  assert.deepEqual(pickMode(null, 'x', 'lg'), { mode: 'blocks', source: 'default' });
+});
+
+T('patchRows: one record per table row, stable unique ids', () => {
+  const patchRows = need(pt, 'patchRows', 'PT rows', B3);
+  const blockPortCount = need(pt, 'blockPortCount', 'FR-PT-01', S);
+  const d = fx();
+  const blocks = build(d, { room: '*' });
+  const rows = patchRows(blocks, d, vocab);
+  assert.equal(rows.length, blocks.reduce((n, b) => n + blockPortCount(b), 0), 'every block row becomes a record');
+  assert.equal(new Set(rows.map((r) => r.id)).size, rows.length, 'ids unique');
+  assert.deepEqual(patchRows(build(d, { room: '*' }), d, vocab).map((r) => r.id), rows.map((r) => r.id), 'ids stable across builds');
+  const c = d.cables.find((x) => x.from && x.from.port && x.to && x.to.port);
+  const from = rows.find((r) => r.cable === c.id && r.device === c.from.device);
+  assert.ok(from, 'cable row at the from end');
+  assert.equal(from.port, c.from.port);
+  assert.equal(from.peer_device, c.to.device);
+  assert.equal(from.source, 'cable');
+  assert.ok(['In', 'Out', 'I/O'].includes(from.dir));
+  assert.ok(from.medium_label && from.signal, 'medium and signal labels filled');
+  const free = rows.find((r) => r.port && !r.source);
+  assert.ok(free && free.cable === null && free.peer_name === '' && free.id.endsWith('|free'), 'unpatched port row');
+});
+
+T('patchRows: import rows get counters; rowCables dedupes doc cables', () => {
+  const patchRows = need(pt, 'patchRows', 'PT rows', B3);
+  const rowCables = need(pt, 'rowCables', 'PT bulk remove', B3);
+  const d = fx();
+  const dev = d.devices.find((x) => (x.ports || []).length);
+  const p = dev.ports[0];
+  const overlay = { routes: [
+    { kind: 'dante', from: { device: dev.id, port: p.id }, to: { device: 'x', channel: '1' } },
+    { kind: 'dante', from: { device: dev.id, port: p.id }, to: { device: 'x', channel: '2' } },
+  ] };
+  const rows = patchRows(build(d, { room: '*', includeOverlay: true }, overlay), d, vocab);
+  const imp = rows.filter((r) => r.device === dev.id && r.port === p.id && r.source === 'dante');
+  assert.deepEqual(imp.map((r) => r.id.split('|').pop()), ['s:dante:1', 's:dante:2']);
+  const both = rows.filter((r) => r.cable && r.source === 'cable');
+  const ids = rowCables(both.concat(imp));
+  assert.equal(ids.length, new Set(both.map((r) => r.cable)).size, 'one id per cable, import rows ignored');
+});
+
+T('peerPortText', () => {
+  const peerPortText = need(pt, 'peerPortText', 'PT rows', B3);
+  assert.equal(peerPortText({ peer_device: null }), '');
+  assert.equal(peerPortText({ peer_device: 'a', peer_label: 'Vox', peer_port_name: 'In 1' }), 'Vox');
+  assert.equal(peerPortText({ peer_device: 'a', peer_port_name: 'In 1' }), 'In 1');
+  assert.equal(peerPortText({ peer_device: 'a' }), 'device');
+});

@@ -1,8 +1,14 @@
 // Schedules view: cables (tag preview + assign), IP, DMX, BOM, patch, racks,
 // labels. Rows come from GET …/schedules/<kind> when ctx.api exists; in harness
 // mode (ctx.api === null) minimal rows are computed locally from the doc.
-// mount(el, ctx) (§6.4, §6.7).
+// mount(el, ctx) (§6.4, §6.7). Each kind is one DataTable under the routed tab
+// schedules/<kind> (docs/ui-audit.md B.3 SCH); labels stay a printable sheet.
 import {rackDevices, findRack, ruLabel} from './rack-core.js';
+import {h, on} from './dom.js';
+import {createTable, openTableDialog} from './datatable.js';
+import {applyState, normalizeColumns, storageKey, textOf} from './datatable-core.js';
+import {confirmScope, emptyState, inlineError, skeleton} from './feedback.js';
+import {selToString} from './router-core.js';
 
 const FT = 0.3048;
 
@@ -308,10 +314,11 @@ export function localSchedule(doc, kind, params, vocab, overlay) {
       const key = d.template ? 't:' + d.template : (d.manufacturer || d.model ? 'm:' + (d.manufacturer || '') + '|' + (d.model || '') : 'k:' + d.kind);
       if (!groups[key]) {
         groups[key] = {category: dd, manufacturer: d.manufacturer || '', model: d.model || (vocab && vocab.kinds && vocab.kinds[d.kind] ? vocab.kinds[d.kind].label : d.kind),
-          template: d.template || '', qty: 0, unit_cost: null, extended: 0, currency: '', planned: 0, installed: 0, spare: 0, retired: 0, length_total_m: '', _units: {}};
+          template: d.template || '', qty: 0, unit_cost: null, extended: 0, currency: '', planned: 0, installed: 0, spare: 0, retired: 0, length_total_m: '', devices: [], _units: {}};
         order.push(key);
       }
       const g = groups[key];
+      g.devices.push(d.id);
       const n = parseInt(d.count, 10) > 0 ? parseInt(d.count, 10) : 1;
       const t = tpls[d.template];
       const unit = d.inventory && d.inventory.cost != null ? Number(d.inventory.cost) : (t && t.cost != null ? Number(t.cost) : 0);
@@ -341,7 +348,7 @@ export function localSchedule(doc, kind, params, vocab, overlay) {
       const k = (c.medium || '') + '|' + (c.type || '');
       if (!cg[k]) {
         cg[k] = {category: 'cable', manufacturer: '', model: (c.medium || '') + (c.type ? ' \u00b7 ' + c.type : ''), template: '', qty: 0, unit_cost: null, extended: 0, currency: cur,
-          planned: 0, installed: 0, spare: 0, retired: 0, length_total_m: 0};
+          planned: 0, installed: 0, spare: 0, retired: 0, length_total_m: 0, medium: c.medium || '', type: c.type || ''};
         corder.push(k);
       }
       cg[k].qty += 1;
@@ -405,230 +412,195 @@ export function localLabels(doc, room) {
 
 // --------------------------------------------------------------- DOM view
 
-function h(tag, attrs, children) {
-  const n = document.createElement(tag);
-  if (attrs) {
-    Object.keys(attrs).forEach(function (k) {
-      const v = attrs[k];
-      if (v == null || v === false) return;
-      if (k === 'text') n.textContent = v;
-      else if (k === 'class') n.className = v;
-      else if (k === 'style') n.setAttribute('style', v);
-      else n.setAttribute(k, v === true ? '' : v);
-    });
-  }
-  (children || []).forEach(function (c) { if (c != null) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
-  return n;
+// Columns that stay on screen below 700px; the first is the sticky lead. Every
+// other column is hideOnMobile (still in the CSV and the column chooser).
+const MOBILE_COLS = {
+  cables: ['tag', 'from_device', 'from_port', 'to_device', 'to_port'],
+  ip: ['device', 'interface', 'ip'],
+  dmx: ['universe', 'address', 'device'],
+  bom: ['model', 'qty', 'extended'],
+  patch: ['device', 'port', 'peer_device', 'peer_port'],
+  racks: ['rack', 'u', 'device'],
+};
+const FILTER_COLS = {
+  cables: ['medium', 'status'],
+  ip: ['room', 'network'],
+  dmx: ['room', 'universe'],
+  bom: [],
+  patch: ['room', 'dir'],
+  racks: ['room', 'rack'],
+};
+const NUMERIC_COLS = ['length', 'channels', 'prefix', 'vlan', 'address', 'end', 'footprint', 'qty', 'unit_cost', 'extended',
+  'planned', 'installed', 'spare', 'retired', 'length_total_m', 'units', 'u', 'height'];
+const NOUNS = {
+  cables: {one: 'cable', many: 'cables'}, ip: {one: 'address', many: 'addresses'}, dmx: {one: 'patch', many: 'patches'},
+  bom: {one: 'line', many: 'lines'}, patch: {one: 'port', many: 'ports'}, racks: {one: 'placement', many: 'placements'},
+};
+// Empty schedule per kind: why it has no rows ({in} is " in <room>" or nothing) and
+// which view creates them.
+const EMPTY = {
+  cables: {title: 'No cables{in} yet.', text: 'Patch ports in the Patch view to create cables.', editorText: 'Patch ports in the Patch view, or bulk add cables from a spreadsheet.', view: 'patch', label: 'Open patch'},
+  ip: {title: 'No IP addresses recorded{in} yet.', text: 'Add interfaces in a device\u2019s Network tab.', view: 'devices', label: 'Open devices'},
+  dmx: {title: 'No DMX addresses{in} yet.', text: 'Set a universe/address on a lighting device.', view: 'devices', label: 'Open devices'},
+  bom: {title: 'Nothing to count{in} yet.', text: 'The bill of materials counts the devices and cables you add in Patch or Inventory.', view: 'inventory', label: 'Open inventory'},
+  patch: {title: 'No ports{in} yet.', text: 'Add gear in the Patch view; every port of every device gets a row here.', view: 'patch', label: 'Open patch'},
+  racks: {title: 'No racks{in} yet.', text: 'Add a rack in the Racks view, then place devices in it.', view: 'racks', label: 'Open racks'},
+};
+const STATE_HIDES = {planned: ['Planned + installed', 'spare and retired'], as_built: ['As built', 'planned, spare and retired']};
+const SECTIONS = {ip: 'net', dmx: 'dmx', bom: 'inventory'};
+const KEEP_ON_TAB = ['sel', 'sec', 'drawer'];
+
+function kindOf(k) {
+  for (let i = 0; i < KINDS.length; i++) if (KINDS[i].key === k) return k;
+  return null;
 }
+
+function kindLabel(k) {
+  const m = KINDS.filter(function (x) { return x.key === k; })[0];
+  return m ? m.label : k;
+}
+
+function rowKey(kind, r) {
+  if (kind === 'cables') return r.id || '';
+  if (kind === 'ip') return [r.device_id, r.interface_id || r.interface, r.role].join('|');
+  if (kind === 'dmx') return [r.device_id, r.universe, r.address].join('|');
+  if (kind === 'bom') return [r.category, r.manufacturer, r.model, r.template, r.medium || '', r.type || ''].join('|');
+  if (kind === 'patch') return [r.device_id, r.port_id, r.cable_id || ''].join('|');
+  if (kind === 'racks') return [r.rack_id, r.device_id, r.face, r.u].join('|');
+  return '';
+}
+
+function money(v) { return v === '' || v == null ? '' : Number(v).toFixed(2); }
 
 export function mount(el, ctx) {
   const store = ctx.store;
   const vocab = ctx.vocab || store.vocab || {};
-  const S = {kind: 'cables', room: 'current', state: 'all', disc: '', text: '', sort: null, data: {}, loading: false, preview: null, csvUrl: '', reqId: 0};
-  const listeners = [];
-  function on(target, type, fn, opts) {
-    target.addEventListener(type, fn, opts);
-    listeners.push([target, type, fn, opts]);
-  }
+  const r0 = ctx.route;
+  // Routed: the shell owns the URL (tab segment + table params). Otherwise (dev
+  // harness, hosts without a router) tabs switch in memory.
+  const ROUTED = !!(r0 && r0.view === 'schedules' && typeof ctx.navigateRoute === 'function' && typeof ctx.setParams === 'function');
+  const S = {kind: (ROUTED && kindOf(r0.tab)) || 'cables', room: 'current', state: 'all', data: {}, gen: 0, reqId: 0,
+    preview: null, rows: [], byId: {}, hl: null, pending: false};
+  const offs = [];
+  let table = null;
+  let lastPick = null;
+  let printSheet = null;
+  let reloadTimer = null;
+  let destroyed = false;
+  function listen(target, type, fn, opts) { if (target) offs.push(on(target, type, fn, opts)); }
 
   el.innerHTML = '';
-  const root = h('div', {class: 'sch-root'});
+  const root = h('div', {class: 'sch-root', 'data-routed': ROUTED ? 'true' : 'false'});
   const tabs = h('div', {class: 'sch-tabs', role: 'tablist', 'aria-label': 'Schedules'});
   KINDS.forEach(function (k) {
-    tabs.appendChild(h('button', {type: 'button', role: 'tab', id: 'sch-tab-' + k.key, 'data-kind': k.key, 'aria-controls': 'sch-panel', 'aria-selected': 'false', tabindex: '-1', text: k.label}));
+    tabs.appendChild(h('a', {role: 'tab', id: 'sch-tab-' + k.key, 'data-kind': k.key, 'aria-controls': 'sch-panel', 'aria-selected': 'false', tabindex: '-1', href: '#', text: k.label}));
   });
-  const roomSel = h('select', {id: 'sch-room', 'aria-label': 'Room filter'}, [h('option', {value: 'current', text: 'Current room'}), h('option', {value: '*', text: 'All rooms'})]);
-  const stateSel = h('select', {id: 'sch-state', 'aria-label': 'State filter'}, [
+  const stateSel = h('select', {id: 'sch-state', 'aria-label': 'State filter', title: 'Which devices and cables the schedule includes'}, [
     h('option', {value: 'all', text: 'All (no retired)'}), h('option', {value: 'planned', text: 'Planned + installed'}),
     h('option', {value: 'as_built', text: 'As built'}), h('option', {value: 'everything', text: 'Everything'})]);
-  const discSel = h('select', {id: 'sch-disc', 'aria-label': 'Discipline filter'}, [h('option', {value: '', text: 'All disciplines'})].concat(
-    Object.keys(vocab.disciplines || {}).map(function (k) { return h('option', {value: k, text: vocab.disciplines[k].label || k}); })));
-  const textIn = h('input', {id: 'sch-filter', type: 'search', placeholder: 'Filter rows', 'aria-label': 'Filter rows'});
+  // Routed views follow the header room picker; the harness has none, so it keeps its own.
+  const roomSel = ROUTED ? null : h('select', {id: 'sch-room', 'aria-label': 'Room filter'}, [h('option', {value: 'current', text: 'Current room'}), h('option', {value: '*', text: 'All rooms'})]);
   const btnTags = h('button', {id: 'sch-assign-tags', type: 'button', class: 'sch-btn', text: 'Assign tags\u2026'});
-  const csv = h('a', {id: 'sch-csv', class: 'sch-btn', role: 'button', text: 'CSV'});
+  const btnBulk = h('button', {id: 'sch-bulk-add', type: 'button', class: 'sch-btn', text: 'Bulk add cables\u2026'});
   const btnPrint = h('button', {id: 'sch-print', type: 'button', class: 'sch-btn', text: 'Print'});
-  const count = h('span', {class: 'sch-count', role: 'status'});
-  const toolbar = h('div', {class: 'sch-toolbar'}, [roomSel, stateSel, discSel, textIn, btnTags, csv, btnPrint, count]);
+  const csvAll = ctx.api && ctx.api.scheduleUrl ? h('a', {id: 'sch-csv-all', class: 'sch-btn', role: 'button', title: 'Server CSV of every row in this room and state', text: 'Full CSV'}) : null;
+  const labelsCsv = h('a', {id: 'sch-csv', class: 'sch-btn', role: 'button', 'aria-disabled': 'true', text: 'CSV'});
   const tagPanel = h('div', {class: 'sch-tagpanel', hidden: true, role: 'region', 'aria-label': 'Cable tag preview'});
+  const errorEl = h('div', {class: 'sch-error', hidden: true});
+  // Stands in for the table body while a server schedule loads or after it failed.
+  const stateBox = h('div', {class: 'sch-statebox', hidden: true});
   const problemsEl = h('ul', {class: 'sch-problems', 'aria-label': 'Schedule warnings'});
-  const panel = h('div', {class: 'sch-panel', id: 'sch-panel', role: 'tabpanel'});
+  const host = h('div', {class: 'sch-host'});
+  const totalsEl = h('p', {class: 'sch-totals', hidden: true});
+  const panel = h('div', {class: 'sch-panel', id: 'sch-panel', role: 'tabpanel'}, [tagPanel, errorEl, problemsEl, host, totalsEl]);
   root.appendChild(tabs);
-  root.appendChild(toolbar);
-  root.appendChild(tagPanel);
-  root.appendChild(problemsEl);
   root.appendChild(panel);
   el.appendChild(root);
 
   function doc() { return store.doc; }
-  function readOnly() { return !!store.readOnly; }
+  function readOnly() { return !!store.readOnly || ctx.role === 'viewer'; }
   function room() {
-    if (S.room === '*') return '*';
+    if (!ROUTED && S.room === '*') return '*';
     return store.room && store.room !== '*' ? store.room : '*';
   }
-  function params() {
-    const p = {room: room(), state: S.state};
-    if (S.disc) p.discipline = S.disc;
-    return p;
-  }
+  function params() { return {room: room(), state: S.state}; }
+  function paramKey() { return room() + '|' + S.state; }
   function units() { return (doc().settings && doc().settings.units) || 'metric'; }
-
-  // ------------------------------------------------------------ loading
-  function load() {
-    const kind = S.kind;
-    if (!ctx.api || kind === 'labels') {
-      S.data[kind] = kind === 'labels' ? null : localSchedule(doc(), kind, params(), vocab, store.overlay);
-      render();
-      return;
-    }
-    const id = ++S.reqId;
-    S.loading = true;
-    render();
-    Promise.resolve(ctx.api.schedule(ctx.project, kind, params())).then(function (res) {
-      if (id !== S.reqId) return;
-      S.loading = false;
-      S.data[kind] = res || {columns: cols(kind), rows: []};
-      render();
-    }, function (err) {
-      if (id !== S.reqId) return;
-      S.loading = false;
-      S.data[kind] = localSchedule(doc(), kind, params(), vocab, store.overlay);
-      S.data[kind].error = (err && err.message) || 'Could not load the schedule; showing local rows.';
-      render();
-    });
+  function query() {
+    const r = ROUTED ? ctx.route : null;
+    return (r && r.view === 'schedules' && r.query) || {};
   }
 
-  let reloadTimer = null;
-  function reloadSoon() {
-    if (reloadTimer) clearTimeout(reloadTimer);
-    reloadTimer = setTimeout(function () { reloadTimer = null; load(); }, ctx.api ? 300 : 0);
+  // ------------------------------------------------------------- tabs
+  function tabHref(k) {
+    if (!ROUTED || typeof ctx.routeHref !== 'function') return '#';
+    try { return ctx.routeHref({tab: k, query: {}}) || '#'; } catch (e) { return '#'; }
   }
 
-  // ---------------------------------------------------------- rendering
-  function render() {
-    Array.prototype.forEach.call(tabs.children, function (b) {
-      const sel = b.getAttribute('data-kind') === S.kind;
-      b.setAttribute('aria-selected', sel ? 'true' : 'false');
-      b.tabIndex = sel ? 0 : -1;
+  function refreshTabs() {
+    Array.prototype.forEach.call(tabs.children, function (a) {
+      const k = a.getAttribute('data-kind');
+      const cur = k === S.kind;
+      a.setAttribute('aria-selected', cur ? 'true' : 'false');
+      a.tabIndex = cur ? 0 : -1;
+      a.setAttribute('href', tabHref(k));
     });
     panel.setAttribute('aria-labelledby', 'sch-tab-' + S.kind);
-    btnTags.hidden = S.kind !== 'cables';
-    btnTags.disabled = readOnly();
-    if (S.kind !== 'cables') tagPanel.hidden = true;
-    renderCsv();
-    if (S.kind === 'labels') { renderLabels(); return; }
-    const data = S.data[S.kind];
-    panel.innerHTML = '';
-    problemsEl.innerHTML = '';
-    if (!data) { panel.appendChild(h('p', {class: 'sch-hint', text: 'Loading\u2026'})); count.textContent = ''; return; }
-    if (data.error) panel.appendChild(h('p', {class: 'sch-error', text: data.error}));
-    list(data.problems).forEach(function (p) { problemsEl.appendChild(h('li', {class: 'sch-' + (p.level || 'warning'), text: p.message || p.code})); });
-    const columns = list(data.columns).length ? data.columns : cols(S.kind);
-    const rows = filteredRows(data.rows, columns);
-    count.textContent = (S.loading ? 'Refreshing\u2026 ' : '') + rows.length + ' row' + (rows.length === 1 ? '' : 's');
-    panel.appendChild(renderTable(columns, rows));
-    if (data.totals && Object.keys(data.totals).length) {
-      panel.appendChild(h('p', {class: 'sch-totals', text: 'Total: ' + Object.keys(data.totals).map(function (c) {
-        return Number(data.totals[c]).toFixed(2) + ' ' + c;
-      }).join(' \u00b7 ')}));
-    }
   }
 
-  function filteredRows(rows, columns) {
-    let out = list(rows).slice();
-    const t = S.text.trim().toLowerCase();
-    if (t) {
-      out = out.filter(function (r) {
-        return columns.some(function (c) { const v = r[c.key]; return v != null && String(v).toLowerCase().indexOf(t) >= 0; });
-      });
-    }
-    if (S.sort) {
-      const k = S.sort.key;
-      const dir = S.sort.dir;
-      out.sort(function (a, b) {
-        const x = a[k];
-        const y = b[k];
-        const nx = parseFloat(x);
-        const ny = parseFloat(y);
-        let c;
-        if (!isNaN(nx) && !isNaN(ny) && String(nx) === String(x).trim() && String(ny) === String(y).trim()) c = nx - ny;
-        else c = String(x == null ? '' : x).localeCompare(String(y == null ? '' : y), undefined, {numeric: true});
-        return c * dir;
-      });
-    }
-    return out;
+  function goTab(k) {
+    if (!ROUTED) { if (k !== S.kind) activate(k); return; }
+    const r = ctx.route;
+    if (k === S.kind && r.tab === k) return;
+    const q = r.query || {};
+    const keep = {};
+    KEEP_ON_TAB.forEach(function (n) { if (q[n]) keep[n] = q[n]; });
+    ctx.navigateRoute({tab: k, query: keep});
   }
 
-  function rowDiscipline(r) {
-    if (r.discipline) return r.discipline;
-    const d = doc();
-    if (S.kind === 'cables' || S.kind === 'patch') {
-      const c = (d.cables || []).filter(function (x) { return x.id === (r.id || r.cable_id); })[0];
-      if (c) return mediumInfo(c.medium, vocab).discipline || 'other';
-      if (r.medium) return mediumInfo(r.medium, vocab).discipline || 'other';
-    }
-    if (S.kind === 'bom') return r.category === 'cable' ? '' : r.category;
-    const dev = (d.devices || []).filter(function (x) { return x.id === r.device_id; })[0];
-    return dev ? deviceDiscipline(dev, vocab) : '';
+  function activate(k) {
+    S.kind = k;
+    refreshTabs();
+    if (k !== 'cables') tagPanel.hidden = true;
+    if (typeof ctx.setTitle === 'function') ctx.setTitle(kindLabel(k) + ' schedule');
+    buildTable();
+    load();
   }
 
-  function chip(disc) {
-    if (!disc) return h('span', {class: 'sch-chip sch-chip-none', text: S.kind === 'bom' ? 'Cable' : ''});
+  // ------------------------------------------------------------ table
+  function discLabel(kind, d) {
+    if (!d) return kind === 'bom' ? 'Cable' : '';
+    const info = vocab.disciplines && vocab.disciplines[d];
+    return (info && info.label) || d;
+  }
+
+  function chip(kind, disc) {
+    if (!disc) return h('span', {class: 'sch-chip sch-chip-none', text: kind === 'bom' ? 'Cable' : ''});
     const info = vocab.disciplines && vocab.disciplines[disc];
     return h('span', {class: 'sch-chip', style: '--sch-color:' + ((info && info.color) || '#9aa3b5'), text: (info && info.label) || disc});
   }
 
-  function rowEditable(r) {
+  function rowDiscipline(kind, r, devs, cabs) {
+    if (r.discipline) return r.discipline;
+    if (kind === 'cables' || kind === 'patch') {
+      const c = cabs[r.id || r.cable_id];
+      if (c) return mediumInfo(c.medium, vocab).discipline || 'other';
+      if (r.medium) return mediumInfo(r.medium, vocab).discipline || 'other';
+    }
+    if (kind === 'bom') return r.category === 'cable' ? '' : r.category;
+    const dev = devs[r.device_id];
+    return dev ? deviceDiscipline(dev, vocab) : '';
+  }
+
+  function rowEditable(kind, r) {
     if (readOnly()) return false;
-    if (S.kind === 'cables') return !!r.id;
-    if (S.kind === 'ip' || S.kind === 'dmx') return !!r.device_id && (!r.source || r.source === 'manual');
+    if (kind === 'cables') return !!r.id;
+    if (kind === 'ip' || kind === 'dmx') return !!r.device_id && (!r.source || r.source === 'manual');
     return false;
   }
 
-  function renderTable(columns, rows) {
-    const table = h('table', {class: 'sch-table', 'data-kind': S.kind});
-    const caption = h('caption', {class: 'sch-sr', text: (KINDS.filter(function (k) { return k.key === S.kind; })[0] || {}).label + ' schedule'});
-    table.appendChild(caption);
-    const trh = h('tr');
-    trh.appendChild(h('th', {scope: 'col', class: 'sch-chipcol', text: 'Discipline'}));
-    columns.forEach(function (c) {
-      const sorted = S.sort && S.sort.key === c.key;
-      trh.appendChild(h('th', {scope: 'col', 'aria-sort': sorted ? (S.sort.dir > 0 ? 'ascending' : 'descending') : 'none'}, [
-        h('button', {type: 'button', class: 'sch-sort', 'data-sort': c.key, text: c.label + (sorted ? (S.sort.dir > 0 ? ' \u25b2' : ' \u25bc') : '')}),
-      ]));
-    });
-    table.appendChild(h('thead', null, [trh]));
-    const tbody = h('tbody');
-    const editCols = EDITABLE[S.kind] || [];
-    rows.forEach(function (r, ri) {
-      const tr = h('tr', {'data-row': String(ri), 'data-id': r.id || r.device_id || '',
-        class: (r.status === 'planned' ? 'sch-planned' : '') + (S.kind === 'cables' && !r.tag ? ' sch-untagged' : '')});
-      tr.appendChild(h('td', {class: 'sch-chipcol'}, [chip(rowDiscipline(r)), r.status === 'planned' ? h('span', {class: 'sch-chip sch-chip-planned', text: 'planned'}) : null]));
-      const editable = rowEditable(r);
-      columns.forEach(function (c) {
-        const v = r[c.key];
-        if (editable && editCols.indexOf(c.key) >= 0) {
-          tr.appendChild(h('td', {class: 'sch-edit'}, [editor(r, c, v)]));
-        } else if (c.key === 'medium' && v) {
-          const m = mediumInfo(v, vocab);
-          tr.appendChild(h('td', null, [h('span', {class: 'sch-mdot', style: 'background:' + (m.color || '#9aa3b5'), 'aria-hidden': 'true'}), String(v)]));
-        } else if ((c.key === 'unit_cost' || c.key === 'extended') && v !== '' && v != null) {
-          tr.appendChild(h('td', {class: 'sch-num', text: Number(v).toFixed(2)}));
-        } else if (c.key === 'unit_cost' && v == null && r.qty) {
-          tr.appendChild(h('td', {class: 'sch-num sch-muted', text: r.category === 'cable' ? '' : 'varies'}));
-        } else {
-          tr.appendChild(h('td', {class: typeof v === 'number' ? 'sch-num' : null, text: v == null ? '' : String(v)}));
-        }
-      });
-      tbody.appendChild(tr);
-    });
-    if (!rows.length) tbody.appendChild(h('tr', null, [h('td', {colspan: String(columns.length + 1), class: 'sch-hint', text: 'No rows for this filter.'})]));
-    table.appendChild(tbody);
-    S.rows = rows;
-    return h('div', {class: 'sch-scroll'}, [table]);
-  }
-
-  function editor(r, c, v) {
-    const label = c.label + ' for ' + (S.kind === 'cables' ? 'cable ' + (r.tag || r.id) : r.device + (r.interface ? ' ' + r.interface : ''));
+  function editor(kind, r, c, v) {
+    const label = c.label + ' for ' + (kind === 'cables' ? 'cable ' + (r.tag || r.id) : r.device + (r.interface ? ' ' + r.interface : ''));
     if (c.key === 'status') {
       return h('select', {'data-edit': c.key, 'aria-label': label}, STATUSES.map(function (s) {
         return h('option', {value: s, text: s, selected: (v || 'installed') === s});
@@ -638,43 +610,501 @@ export function mount(el, ctx) {
       inputmode: NUMERIC_EDIT[c.key] || null, size: c.key === 'note' ? '18' : (c.key === 'tag' || c.key === 'length' || c.key === 'vlan' || c.key === 'universe' || c.key === 'address' || c.key === 'footprint') ? '6' : '12'});
   }
 
-  function renderCsv() {
-    if (S.csvUrl && typeof URL !== 'undefined' && URL.revokeObjectURL) { URL.revokeObjectURL(S.csvUrl); S.csvUrl = ''; }
-    if (S.kind === 'labels') { csv.removeAttribute('href'); csv.setAttribute('aria-disabled', 'true'); return; }
-    csv.removeAttribute('aria-disabled');
-    const name = (ctx.project || 'project') + '-' + S.kind + '.csv';
-    csv.setAttribute('download', name);
-    if (ctx.api && ctx.api.scheduleUrl) {
-      csv.setAttribute('href', ctx.api.scheduleUrl(ctx.project, S.kind, Object.assign({format: 'csv'}, params())));
-      return;
-    }
-    const data = S.data[S.kind];
-    if (!data || typeof Blob === 'undefined') { csv.removeAttribute('href'); return; }
-    const columns = list(data.columns).length ? data.columns : cols(S.kind);
-    S.csvUrl = URL.createObjectURL(new Blob([csvString(columns, data.rows)], {type: 'text/csv;charset=utf-8'}));
-    csv.setAttribute('href', S.csvUrl);
+  function columnsFor(kind) {
+    const mob = MOBILE_COLS[kind];
+    const fil = FILTER_COLS[kind];
+    const edit = EDITABLE[kind] || [];
+    const out = [{
+      key: 'disc', header: 'Discipline', csv: false, filterable: true, hideOnMobile: true,
+      value: function (r) { return r._discLabel; },
+      cell: function (r) {
+        return h('span', {class: 'sch-chips'}, [chip(kind, r._disc), r.status === 'planned' ? h('span', {class: 'sch-chip sch-chip-planned', text: 'planned'}) : null]);
+      },
+    }];
+    COLUMNS[kind].forEach(function (pair) {
+      const key = pair[0];
+      const c = {key: key, label: pair[1]};
+      const col = {
+        key: key, header: pair[1], hideOnMobile: mob.indexOf(key) < 0, sticky: key === mob[0],
+        filterable: fil.indexOf(key) >= 0, align: NUMERIC_COLS.indexOf(key) >= 0 ? 'right' : 'left',
+      };
+      if (edit.indexOf(key) >= 0) {
+        col.cell = function (r) {
+          return rowEditable(kind, r) ? h('span', {class: 'sch-edit'}, editor(kind, r, c, r[key])) : textOf(r[key]);
+        };
+      } else if (key === 'medium') {
+        col.cell = function (r) {
+          if (!r.medium) return '';
+          const m = mediumInfo(r.medium, vocab);
+          return h('span', null, [h('span', {class: 'sch-mdot', style: 'background:' + (m.color || '#9aa3b5'), 'aria-hidden': 'true'}), String(r.medium)]);
+        };
+      } else if (key === 'unit_cost' || key === 'extended') {
+        col.cell = function (r) {
+          const v = r[key];
+          if (v !== '' && v != null) return money(v);
+          if (key === 'unit_cost' && r.qty && r.category !== 'cable') return h('span', {class: 'sch-muted', text: 'varies'});
+          return '';
+        };
+      }
+      out.push(col);
+    });
+    return out;
   }
 
-  function renderLabels() {
-    panel.innerHTML = '';
+  function filterIds(kind) {
+    const ids = {disc: 'sch-disc'};
+    if (ROUTED && FILTER_COLS[kind].indexOf('room') >= 0) ids.room = 'sch-room';
+    return ids;
+  }
+
+  function actionsFor(kind) {
+    const write = kind === 'cables' && !readOnly();
+    return [stateSel, roomSel, write ? btnTags : null, write ? btnBulk : null, btnPrint, csvAll]
+      .filter(function (n) { return !!n; });
+  }
+
+  // ------------------------------------------------------------ states
+  function roomLabel() {
+    const r = room();
+    if (r === '*') return '';
+    const rm = byId(doc().rooms)[r];
+    return rm ? rm.name : r;
+  }
+
+  function viewAction(view, label) {
+    if (ROUTED && typeof ctx.routeHref === 'function') {
+      try {
+        const href = ctx.routeHref({view: view});
+        if (href) return {label: label, href: href};
+      } catch (e) { /* fall back to navigate */ }
+    }
+    if (typeof ctx.navigate !== 'function') return null;
+    return {label: label, run: function () { ctx.navigate(view); }};
+  }
+
+  function setStateFilter(state) {
+    S.state = state;
+    stateSel.value = state;
+    S.gen++;
+    load();
+  }
+
+  function emptyFor(kind) {
+    return function (st, info) {
+      if (info && info.total > 0) {
+        return h('div', {class: 'sch-empty'}, [
+          h('p', {class: 'dt-empty-text', text: 'No rows match these filters.'}),
+          h('button', {type: 'button', class: 'dt-clear', onclick: function () {
+            if (!table) return;
+            table.setState({q: '', filters: {}});
+            const s = table.root.querySelector('.dt-search');
+            if (s) { s.value = ''; s.focus(); }
+          }}, 'Clear filters'),
+        ]);
+      }
+      const what = NOUNS[kind].many;
+      const hides = STATE_HIDES[S.state];
+      if (hides && localSchedule(doc(), kind, {room: room(), state: 'everything'}, vocab, store.overlay).rows.length) {
+        return emptyState({
+          title: 'No ' + what + ' match the state filter.',
+          text: 'State \u201c' + hides[0] + '\u201d hides ' + hides[1] + ' items.',
+          action: {label: 'Show everything', run: function () { setStateFilter('everything'); }},
+        });
+      }
+      const e = EMPTY[kind];
+      const where = roomLabel();
+      const bulk = kind === 'cables' && !readOnly();
+      const nav = viewAction(e.view, e.label);
+      return emptyState({
+        title: e.title.replace('{in}', where ? ' in ' + where : ''),
+        text: bulk ? e.editorText : e.text,
+        action: bulk ? {label: 'Bulk add cables\u2026', run: startBulkAdd} : nav,
+        secondary: bulk ? nav : null,
+      });
+    };
+  }
+
+  function setBox(node, mode) {
+    stateBox.innerHTML = '';
+    host.classList.remove('sch-busy', 'sch-failed');
+    stateBox.hidden = !node;
+    if (!node) return;
+    stateBox.appendChild(node);
+    host.classList.add(mode === 'error' ? 'sch-failed' : 'sch-busy');
+  }
+
+  function showBusy() {
+    errorEl.hidden = true;
+    errorEl.innerHTML = '';
     problemsEl.innerHTML = '';
+    totalsEl.hidden = true;
+    if (table) table.setLoading(true);
+    setBox(skeleton('table'), 'busy');
+  }
+
+  function showFailure(kind, err, stale) {
+    const retry = function () { return load(); };
+    if (stale) {
+      errorEl.innerHTML = '';
+      errorEl.appendChild(inlineError(err, retry, {compact: true}));
+      errorEl.hidden = false;
+      return;
+    }
+    if (table) table.setError(err);
+    const useLocal = h('button', {type: 'button', class: 'sch-btn sch-local', onclick: function () {
+      const res = localSchedule(doc(), kind, params(), vocab, store.overlay);
+      res.error = 'The server schedule could not be loaded. These rows are computed in the browser and may miss imported data.';
+      S.data[kind] = {key: paramKey(), gen: S.gen, res: res};
+      if (S.kind === kind) showData();
+    }}, 'Show local rows');
+    setBox(h('div', {class: 'sch-loadfail'}, [inlineError(err, retry), useLocal]), 'error');
+  }
+
+  function startBulkAdd() {
+    if (readOnly()) return;
+    import('./wizard.js').then(function (m) { return m.bulkAdd(ctx, {kind: 'cables', room: store.room}); }).catch(function (err) {
+      if (typeof ctx.toast === 'function') ctx.toast((err && err.message) || 'Bulk add is not available.', 'err');
+    });
+  }
+
+  // A bulk-add result link filters by f.id; once the URL drops it the stored
+  // filter must go too, or it would hide every other cable on the next visit.
+  function scrubStaleId(scope, key) {
+    if (query()['f.id']) return;
+    try {
+      const ls = window.localStorage;
+      const k = storageKey(scope, key);
+      const raw = ls.getItem(k);
+      if (!raw) return;
+      const j = JSON.parse(raw);
+      if (j && j.filters && j.filters.id) { delete j.filters.id; ls.setItem(k, JSON.stringify(j)); }
+    } catch (e) { /* storage unavailable: nothing persisted */ }
+  }
+
+  function dropStaleId() {
+    if (!table || query()['f.id']) return;
+    const st = table.getState();
+    if (!st.filters || !st.filters.id) return;
+    const f = Object.assign({}, st.filters);
+    delete f.id;
+    table.setState({filters: f});
+  }
+
+  const urlBinding = {
+    get: query,
+    set: function (patch) { if (!destroyed && ctx.route && ctx.route.view === 'schedules') ctx.setParams(patch); },
+  };
+
+  function buildTable() {
+    dropPrintSheet();
+    if (table) { table.destroy(); table = null; }
+    setBox(null);
+    host.innerHTML = '';
+    errorEl.hidden = true;
+    errorEl.innerHTML = '';
+    problemsEl.innerHTML = '';
+    totalsEl.hidden = true;
+    S.rows = [];
+    S.byId = {};
+    S.hl = null;
+    S.pending = false;
+    const kind = S.kind;
+    if (kind === 'labels') return;
+    const scope = (ROUTED ? '' : 'dev.') + (ctx.project || '');
+    scrubStaleId(scope, 'schedules.' + kind);
+    S.hl = wantHl();
+    table = createTable(host, {
+      key: 'schedules.' + kind,
+      scope: scope,
+      caption: kindLabel(kind) + ' schedule',
+      columns: columnsFor(kind),
+      rows: [],
+      rowId: function (r) { return r._id; },
+      onRow: function (r) { pick(kind, r); },
+      rowAttrs: function (r) { return {'data-row': String(r._i)}; },
+      rowClass: function (r) { return (r.status === 'planned' ? 'sch-planned' : '') + (kind === 'cables' && !r.tag ? ' sch-untagged' : ''); },
+      actions: actionsFor(kind),
+      ids: {root: 'sch-dt', search: 'sch-filter', csv: 'sch-csv', filters: filterIds(kind)},
+      url: ROUTED ? urlBinding : null,
+      csvName: (ctx.project || 'project') + '-' + kind + '.csv',
+      highlight: S.hl,
+      noun: NOUNS[kind],
+      empty: emptyFor(kind),
+      searchPlaceholder: 'Filter rows',
+    });
+    table.root.insertBefore(stateBox, table.root.querySelector('.dt-scroll'));
+    const t = table.root.querySelector('.dt-table');
+    t.classList.add('sch-table');
+    t.setAttribute('data-kind', kind);
+    btnTags.disabled = readOnly();
+    if (readOnly()) tagPanel.hidden = true;
+  }
+
+  function decorate(kind, rows) {
+    const devs = byId(doc().devices);
+    const cabs = byId(doc().cables);
+    const seen = {};
+    return list(rows).map(function (r, i) {
+      r._i = i;
+      r._disc = rowDiscipline(kind, r, devs, cabs);
+      r._discLabel = discLabel(kind, r._disc);
+      let id = String(rowKey(kind, r));
+      if (seen[id]) id += '#' + i;
+      seen[id] = true;
+      r._id = id;
+      return r;
+    });
+  }
+
+  function editing() {
+    const a = document.activeElement;
+    return !!(a && a.hasAttribute && a.hasAttribute('data-edit') && host.contains(a));
+  }
+
+  function showData() {
+    const kind = S.kind;
+    const entry = S.data[kind];
+    if (!table || !entry) return;
+    if (editing()) { S.pending = true; return; }
+    S.pending = false;
+    setBox(null);
+    const res = entry.res;
+    S.rows = decorate(kind, res.rows);
+    S.byId = {};
+    S.rows.forEach(function (r) { S.byId[r._id] = r; });
+    errorEl.hidden = !res.error;
+    errorEl.innerHTML = '';
+    if (res.error) errorEl.appendChild(h('p', {class: 'sch-error-note', role: 'status', text: res.error}));
+    problemsEl.innerHTML = '';
+    list(res.problems).forEach(function (p) { problemsEl.appendChild(h('li', {class: 'sch-' + (p.level || 'warning'), text: p.message || p.code})); });
+    const tot = res.totals && Object.keys(res.totals).length ? res.totals : null;
+    totalsEl.hidden = !tot;
+    totalsEl.textContent = tot ? 'Total: ' + Object.keys(tot).map(function (c) { return Number(tot[c]).toFixed(2) + ' ' + c; }).join(' \u00b7 ') : '';
+    table.setRows(S.rows);
+    syncHl(false);
+    if (csvAll) {
+      csvAll.setAttribute('href', ctx.api.scheduleUrl(ctx.project, kind, Object.assign({format: 'csv'}, params())));
+      csvAll.setAttribute('download', (ctx.project || 'project') + '-' + kind + '-all.csv');
+    }
+  }
+
+  // ------------------------------------------------------------ loading
+  function load() {
+    const kind = S.kind;
+    if (kind === 'labels') { renderLabels(); return; }
+    const key = paramKey();
+    const entry = S.data[kind];
+    if (entry && entry.key === key && entry.gen === S.gen) { showData(); return; }
+    if (!ctx.api) {
+      S.data[kind] = {key: key, gen: S.gen, res: localSchedule(doc(), kind, params(), vocab, store.overlay)};
+      showData();
+      return;
+    }
+    const id = ++S.reqId;
+    const gen = S.gen;
+    const stale = !!entry && entry.key === key;
+    if (stale) showData();
+    else showBusy();
+    const p = params();
+    return new Promise(function (resolve) { resolve(ctx.api.schedule(ctx.project, kind, p)); }).then(function (res) {
+      if (destroyed || id !== S.reqId) return;
+      S.data[kind] = {key: key, gen: gen, res: res || {columns: [], rows: []}};
+      if (S.kind === kind) showData();
+    }, function (err) {
+      if (destroyed || id !== S.reqId || S.kind !== kind) return;
+      showFailure(kind, err, stale);
+    });
+  }
+
+  function reloadSoon() {
+    S.gen++;
+    if (reloadTimer) clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(function () { reloadTimer = null; if (!destroyed) load(); }, ctx.api ? 300 : 0);
+  }
+
+  // ------------------------------------------------------- highlight
+  function matchSel(kind, sel) {
+    if (kind === 'cables') return sel.type === 'cable' ? sel.id : null;
+    const dev = sel.type === 'device' || sel.type === 'port' || sel.type === 'channel' || sel.type === 'marker' ? (sel.device || sel.id) : null;
+    for (let i = 0; i < S.rows.length; i++) {
+      const r = S.rows[i];
+      let hit = false;
+      if (kind === 'patch') {
+        if (sel.type === 'port') hit = r.device_id === dev && r.port_id === sel.port;
+        else if (sel.type === 'cable') hit = r.cable_id === sel.id;
+        else if (dev) hit = r.device_id === dev;
+      } else if (kind === 'racks') {
+        hit = sel.type === 'rack' ? r.rack_id === sel.id : (!!dev && r.device_id === dev);
+      } else if (kind === 'bom') {
+        hit = !!dev && list(r.devices).indexOf(dev) >= 0;
+      } else if (dev) {
+        hit = r.device_id === dev;
+      }
+      if (hit) return r._id;
+    }
+    return null;
+  }
+
+  function wantHl() {
+    const kind = S.kind;
+    const sel = store.selection;
+    const s = sel ? selToString(sel) : '';
+    if (s && lastPick && lastPick.kind === kind && lastPick.sel === s && S.byId[lastPick.id]) return lastPick.id;
+    const m = sel ? matchSel(kind, sel) : null;
+    if (m) return m;
+    return query().hl || null;
+  }
+
+  // DataTable.setHighlight always scrolls the row to the centre; after a click on
+  // a row that is already on screen, put the scroll positions back.
+  function setHl(id, keepScroll) {
+    const next = id == null || id === '' ? null : String(id);
+    if (!table || next === S.hl) return;
+    S.hl = next;
+    if (!keepScroll) { table.setHighlight(next); return; }
+    const sc = table.root.querySelector('.dt-scroll');
+    const pos = [sc ? sc.scrollTop : 0, sc ? sc.scrollLeft : 0, el.scrollTop, panel.scrollTop];
+    table.setHighlight(next);
+    setTimeout(function () {
+      if (sc) { sc.scrollTop = pos[0]; sc.scrollLeft = pos[1]; }
+      el.scrollTop = pos[2];
+      panel.scrollTop = pos[3];
+    }, 0);
+  }
+
+  function syncHl(keepScroll) { setHl(wantHl(), keepScroll); }
+
+  // --------------------------------------------------------- row → drawer
+  function openSel(sel, section) {
+    if (!sel) return;
+    if (typeof ctx.openDrawer === 'function') ctx.openDrawer(sel, section ? {section: section} : undefined);
+    else if (typeof ctx.select === 'function') ctx.select(sel);
+  }
+
+  function selFor(kind, r) {
+    if (kind === 'cables') return r.id ? {type: 'cable', id: r.id} : null;
+    if (kind === 'patch') {
+      if (!r.device_id) return null;
+      return r.port_id ? {type: 'port', id: r.device_id, device: r.device_id, port: r.port_id} : {type: 'device', id: r.device_id, device: r.device_id};
+    }
+    if (kind === 'racks') return r.rack_id ? {type: 'rack', id: r.rack_id} : null;
+    return r.device_id ? {type: 'device', id: r.device_id, device: r.device_id} : null;
+  }
+
+  function pick(kind, r) {
+    if (kind === 'bom') { pickBom(r); return; }
+    const sel = selFor(kind, r);
+    if (!sel) return;
+    lastPick = {kind: kind, sel: selToString(sel), id: r._id};
+    setHl(r._id, true);
+    openSel(sel, SECTIONS[kind] || '');
+  }
+
+  function bomCables(r) {
+    const devs = byId(doc().devices);
+    const rm = room();
+    return list(doc().cables).filter(function (c) {
+      if (c.auto || (c.medium || '') !== (r.medium || '') || (c.type || '') !== (r.type || '') || !stateOk(c.status, S.state)) return false;
+      const a = devs[c.from && c.from.device];
+      const b = devs[c.to && c.to.device];
+      return inRoom(a, rm) || inRoom(b, rm);
+    });
+  }
+
+  function pickBom(r) {
+    const rooms = byId(doc().rooms);
+    if (r.category === 'cable') {
+      const devs = byId(doc().devices);
+      const cabs = bomCables(r);
+      if (cabs.length === 1) { openSel({type: 'cable', id: cabs[0].id}, ''); return; }
+      if (!cabs.length) return;
+      const end = function (e) { const d = devs[e && e.device]; return (d ? d.name : (e && e.device) || '') + (e && e.port ? ' \u00b7 ' + portName(d, e.port) : ''); };
+      openTableDialog(ctx, {
+        title: r.model + ' (' + cabs.length + ')', key: 'schedules.bom.cables', rows: cabs,
+        columns: [
+          {key: 'tag', header: 'Tag', value: function (c) { return c.tag || ''; }},
+          {key: 'from', header: 'From', value: function (c) { return end(c.from); }},
+          {key: 'to', header: 'To', value: function (c) { return end(c.to); }, hideOnMobile: true},
+          {key: 'length_m', header: 'Length (m)', align: 'right'},
+          {key: 'status', header: 'Status', value: function (c) { return c.status || 'installed'; }, hideOnMobile: true},
+        ],
+        onRow: function (c) { openSel({type: 'cable', id: c.id}, ''); },
+      });
+      return;
+    }
+    const ids = list(r.devices);
+    if (ids.length === 1) { openSel({type: 'device', id: ids[0], device: ids[0]}, 'inventory'); return; }
+    if (!ids.length) return;
+    const all = byId(doc().devices);
+    const devRows = ids.map(function (id) { return all[id] || {id: id, name: id}; });
+    openTableDialog(ctx, {
+      title: (r.model || r.template || 'Devices') + ' (' + devRows.length + ')', key: 'schedules.bom.devices', rows: devRows,
+      columns: [
+        {key: 'name', header: 'Device', value: function (d) { return d.name || d.id; }},
+        {key: 'room', header: 'Room', value: function (d) { return roomName(rooms, d.room); }},
+        {key: 'status', header: 'Status', value: function (d) { return d.status || 'installed'; }},
+        {key: 'serial', header: 'Serial', value: function (d) { return (d.inventory && d.inventory.serial) || ''; }, hideOnMobile: true},
+      ],
+      onRow: function (d) { openSel({type: 'device', id: d.id, device: d.id}, 'inventory'); },
+    });
+  }
+
+  // ------------------------------------------------------------ labels
+  function renderLabels() {
+    host.innerHTML = '';
+    errorEl.hidden = true;
+    problemsEl.innerHTML = '';
+    totalsEl.hidden = true;
+    const count = h('span', {class: 'sch-count', role: 'status'});
+    host.appendChild(h('div', {class: 'sch-toolbar sch-labelbar'}, [stateSel, roomSel, btnPrint, labelsCsv, count]));
+    const body = h('div', {class: 'sch-labelbody'});
+    host.appendChild(body);
     if (ctx.api && ctx.api.scheduleUrl) {
       const url = ctx.api.scheduleUrl(ctx.project, 'labels', Object.assign({format: 'html'}, params()));
-      count.textContent = '';
-      panel.appendChild(h('p', null, [h('a', {href: url, target: '_blank', rel: 'noopener', class: 'sch-btn', text: 'Open printable label sheet'})]));
-      panel.appendChild(h('iframe', {class: 'sch-labels-frame', src: url, title: 'Cable label sheet'}));
+      body.appendChild(h('p', null, [h('a', {href: url, target: '_blank', rel: 'noopener', class: 'sch-btn', text: 'Open printable label sheet'})]));
+      body.appendChild(h('iframe', {class: 'sch-labels-frame', src: url, title: 'Cable label sheet'}));
       return;
     }
     const labels = localLabels(doc(), room());
     count.textContent = labels.length + ' labels';
-    if (!labels.length) { panel.appendChild(h('p', {class: 'sch-hint', text: 'No tagged cables yet. Use "Assign tags" on the Cables tab.'})); return; }
+    if (!labels.length) { body.appendChild(h('p', {class: 'sch-hint', text: 'No tagged cables yet. Use "Assign tags" on the Cables tab.'})); return; }
     const grid = h('div', {class: 'sch-labels', role: 'list', 'aria-label': 'Cable labels'});
     labels.forEach(function (l) {
       grid.appendChild(h('div', {class: 'sch-label', role: 'listitem'}, [
         h('div', {class: 'sch-label-tag', text: l.tag}), h('div', {class: 'sch-label-line', text: l.line}), h('div', {class: 'sch-label-end', text: l.end}),
       ]));
     });
-    panel.appendChild(grid);
+    body.appendChild(grid);
+  }
+
+  // ------------------------------------------------------------- print
+  // The DataTable prints only its current page; print every filtered row instead.
+  function buildPrintSheet() {
+    dropPrintSheet();
+    if (!table || S.kind === 'labels') return;
+    const st = table.getState();
+    const cols = normalizeColumns(columnsFor(S.kind));
+    const vis = cols.filter(function (c) { return st.hidden.indexOf(c.key) < 0; });
+    const rows = applyState(S.rows, cols, st).rows;
+    const tb = h('tbody');
+    rows.forEach(function (r) {
+      tb.appendChild(h('tr', {class: r.status === 'planned' ? 'sch-planned' : null}, vis.map(function (c) {
+        const v = c.key === 'unit_cost' || c.key === 'extended' ? money(r[c.key]) : textOf(c.value(r));
+        return h('td', {class: c.align === 'right' ? 'sch-num' : null, text: v});
+      })));
+    });
+    printSheet = h('table', {class: 'sch-table sch-printsheet', hidden: true, 'data-rows': String(rows.length)}, [
+      h('caption', {class: 'sch-sr', text: kindLabel(S.kind) + ' schedule'}),
+      h('thead', null, [h('tr', null, vis.map(function (c) { return h('th', {scope: 'col', class: c.align === 'right' ? 'sch-num' : null, text: c.header}); }))]),
+      tb,
+    ]);
+    host.appendChild(printSheet);
+    host.classList.add('sch-printing');
+  }
+
+  function dropPrintSheet() {
+    if (printSheet) { printSheet.remove(); printSheet = null; }
+    host.classList.remove('sch-printing');
   }
 
   // ---------------------------------------------------------- tag panel
@@ -709,7 +1139,8 @@ export function mount(el, ctx) {
       S.preview = {ops: ops, base: res ? res.base_revision : null, scope: scope, pattern: pattern};
       showPreview(out, ops, res && res.local);
     }, function (err) {
-      out.textContent = (err && err.message) || 'Tag preview failed.';
+      out.innerHTML = '';
+      out.appendChild(inlineError(err || new Error('Tag preview failed.'), function () { preview(); }, {compact: true}));
     });
   }
 
@@ -719,9 +1150,9 @@ export function mount(el, ctx) {
     const cabs = {};
     (doc().cables || []).forEach(function (c) { cabs[c.id] = c; });
     const devs = byId(doc().devices);
-    const table = h('table', {class: 'sch-table sch-preview'});
-    table.appendChild(h('caption', {class: 'sch-sr', text: 'Proposed cable tags'}));
-    table.appendChild(h('thead', null, [h('tr', null, ['Cable', 'From', 'To', 'Current tag', 'New tag'].map(function (t) { return h('th', {scope: 'col', text: t}); }))]));
+    const table2 = h('table', {class: 'sch-table sch-preview'});
+    table2.appendChild(h('caption', {class: 'sch-sr', text: 'Proposed cable tags'}));
+    table2.appendChild(h('thead', null, [h('tr', null, ['Cable', 'From', 'To', 'Current tag', 'New tag'].map(function (t) { return h('th', {scope: 'col', text: t}); }))]));
     const tb = h('tbody');
     ops.forEach(function (o) {
       const c = cabs[o.id] || {from: {}, to: {}};
@@ -735,26 +1166,61 @@ export function mount(el, ctx) {
         h('td', {class: 'sch-newtag', text: o.value && o.value.tag}),
       ]));
     });
-    table.appendChild(tb);
-    out.appendChild(h('div', {class: 'sch-scroll sch-preview-scroll'}, [table]));
+    table2.appendChild(tb);
+    out.appendChild(h('div', {class: 'sch-scroll sch-preview-scroll'}, [table2]));
     out.appendChild(h('div', {class: 'sch-tagform'}, [
       h('button', {type: 'button', class: 'sch-btn sch-primary', 'data-act': 'confirm', disabled: readOnly(), text: 'Assign ' + ops.length + ' tag' + (ops.length === 1 ? '' : 's')}),
       local ? h('span', {class: 'sch-hint', text: 'Local preview (harness mode).'}) : null,
     ]));
   }
 
+  // Where the cables a tag preview touches live: one room's name, or "N rooms".
+  function tagScope(ops) {
+    const d = doc();
+    const cabs = byId(d.cables);
+    const devs = byId(d.devices);
+    const seen = {};
+    ops.forEach(function (o) {
+      const c = cabs[o.id];
+      if (!c) return;
+      [c.from, c.to].forEach(function (e) {
+        const dev = devs[e && e.device];
+        if (dev) seen[dev.room || ''] = true;
+      });
+    });
+    const keys = Object.keys(seen);
+    if (keys.length === 1) return keys[0] ? roomName(byId(d.rooms), keys[0]) : 'shared inventory';
+    return keys.length ? keys.length + ' rooms' : '';
+  }
+
+  function stalePreview(pv) {
+    if (!(ctx.api && pv.base != null && store.revision != null && pv.base !== store.revision)) return false;
+    ctx.toast('The project changed since the preview. Showing a fresh preview.', 'warn');
+    preview();
+    return true;
+  }
+
   function confirmTags() {
     const pv = S.preview;
-    if (!pv || !pv.ops.length) return;
-    if (ctx.api && pv.base != null && store.revision != null && pv.base !== store.revision) {
-      ctx.toast('The project changed since the preview. Showing a fresh preview.', 'warn');
-      preview();
-      return;
-    }
-    ctx.commit(pv.ops, 'Assigned ' + pv.ops.length + ' cable tag' + (pv.ops.length === 1 ? '' : 's'));
-    S.preview = null;
-    tagPanel.hidden = true;
-    btnTags.focus();
+    if (!pv || !pv.ops.length || readOnly()) return;
+    if (stalePreview(pv)) return;
+    const cableOps = pv.ops.filter(function (o) { return !o.coll || o.coll === 'cables'; });
+    const others = pv.ops.length - cableOps.length;
+    const renumber = pv.scope === 'all';
+    const ask = pv.ops.length > 1 ? confirmScope(ctx, {
+      verb: renumber ? 'Renumber' : 'Assign tags to',
+      count: cableOps.length || pv.ops.length,
+      noun: !cableOps.length ? {one: 'bundle', many: 'bundles'} : (renumber ? {one: 'cable', many: 'cables'} : {one: 'untagged cable', many: 'untagged cables'}),
+      scope: tagScope(cableOps),
+      detail: cableOps.length && others ? 'Also tags ' + others + ' bundle' + (others === 1 ? '' : 's') + '. One undo step reverts it.' : 'One undo step reverts it.',
+    }) : Promise.resolve(true);
+    ask.then(function (ok) {
+      if (!ok || destroyed || S.preview !== pv || stalePreview(pv)) return;
+      ctx.commit(pv.ops, 'Assigned ' + pv.ops.length + ' cable tag' + (pv.ops.length === 1 ? '' : 's'));
+      S.preview = null;
+      tagPanel.hidden = true;
+      btnTags.focus();
+    });
   }
 
   // -------------------------------------------------------------- edits
@@ -820,11 +1286,15 @@ export function mount(el, ctx) {
     return [];
   }
 
+  function editRow(inp) {
+    const tr = inp.closest('tr[data-id]');
+    return tr ? S.byId[tr.getAttribute('data-id')] : null;
+  }
+
   function onEdit(e) {
-    const inp = e.target.closest('[data-edit]');
-    if (!inp) return;
-    const tr = inp.closest('tr');
-    const r = S.rows && S.rows[parseInt(tr.getAttribute('data-row'), 10)];
+    const inp = e.target.closest ? e.target.closest('[data-edit]') : null;
+    if (!inp || !host.contains(inp)) return;
+    const r = editRow(inp);
     if (!r) return;
     const key = inp.getAttribute('data-edit');
     const ops = cellOps(r, key, inp.value);
@@ -836,29 +1306,31 @@ export function mount(el, ctx) {
   }
 
   // ------------------------------------------------------------- events
-  on(tabs, 'click', function (e) {
-    const b = e.target.closest('[data-kind]');
-    if (!b) return;
-    S.kind = b.getAttribute('data-kind');
-    S.sort = null;
-    load();
+  listen(tabs, 'click', function (e) {
+    const a = e.target.closest('[data-kind]');
+    if (!a) return;
+    if (ROUTED && (e.button > 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) return;
+    e.preventDefault();
+    goTab(a.getAttribute('data-kind'));
   });
-  on(tabs, 'keydown', function (e) {
-    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-    const i = KINDS.map(function (k) { return k.key; }).indexOf(S.kind);
-    const n = KINDS[(i + (e.key === 'ArrowRight' ? 1 : KINDS.length - 1)) % KINDS.length].key;
-    S.kind = n;
-    S.sort = null;
-    load();
-    const t = tabs.querySelector('[data-kind="' + n + '"]');
+  listen(tabs, 'keydown', function (e) {
+    const order = KINDS.map(function (k) { return k.key; });
+    let i = order.indexOf(S.kind);
+    if (e.key === 'ArrowRight') i = (i + 1) % order.length;
+    else if (e.key === 'ArrowLeft') i = (i + order.length - 1) % order.length;
+    else if (e.key === 'Home') i = 0;
+    else if (e.key === 'End') i = order.length - 1;
+    else return;
+    e.preventDefault();
+    goTab(order[i]);
+    const t = tabs.querySelector('[data-kind="' + order[i] + '"]');
     if (t) t.focus();
   });
-  on(roomSel, 'change', function () { S.room = roomSel.value; load(); });
-  on(stateSel, 'change', function () { S.state = stateSel.value; load(); });
-  on(discSel, 'change', function () { S.disc = discSel.value; load(); });
-  on(textIn, 'input', function () { S.text = textIn.value; render(); });
-  on(btnTags, 'click', function () { if (tagPanel.hidden) openTags(); else { tagPanel.hidden = true; } });
-  on(tagPanel, 'click', function (e) {
+  if (roomSel) listen(roomSel, 'change', function () { S.room = roomSel.value; S.gen++; load(); });
+  listen(stateSel, 'change', function () { S.state = stateSel.value; S.gen++; load(); });
+  listen(btnTags, 'click', function () { if (tagPanel.hidden) openTags(); else tagPanel.hidden = true; });
+  listen(btnBulk, 'click', startBulkAdd);
+  listen(tagPanel, 'click', function (e) {
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.getAttribute('data-act');
@@ -866,66 +1338,89 @@ export function mount(el, ctx) {
     else if (act === 'confirm') confirmTags();
     else if (act === 'close') { tagPanel.hidden = true; btnTags.focus(); }
   });
-  on(tagPanel, 'keydown', function (e) { if (e.key === 'Escape') { tagPanel.hidden = true; btnTags.focus(); } });
-  on(btnPrint, 'click', function () { if (typeof window.print === 'function') window.print(); });
-  on(csv, 'click', function (e) { if (!csv.getAttribute('href')) e.preventDefault(); });
-  on(panel, 'click', function (e) {
-    const s = e.target.closest('[data-sort]');
-    if (s) {
-      const k = s.getAttribute('data-sort');
-      S.sort = S.sort && S.sort.key === k ? (S.sort.dir > 0 ? {key: k, dir: -1} : null) : {key: k, dir: 1};
-      render();
-      const again = panel.querySelector('[data-sort="' + k + '"]');
-      if (again) again.focus();
-      return;
-    }
-    if (e.target.closest('input,select,a,button')) return;
-    const tr = e.target.closest('tr[data-row]');
-    const r = tr && S.rows && S.rows[parseInt(tr.getAttribute('data-row'), 10)];
-    if (!r) return;
-    if (S.kind === 'cables' && r.id) ctx.select({type: 'cable', id: r.id});
-    else if (r.device_id) ctx.select({type: 'device', id: r.device_id});
-  });
-  on(panel, 'change', onEdit);
-  on(panel, 'keydown', function (e) {
-    const inp = e.target.closest('input[data-edit]');
+  listen(tagPanel, 'keydown', function (e) { if (e.key === 'Escape') { tagPanel.hidden = true; btnTags.focus(); } });
+  listen(btnPrint, 'click', function () { if (typeof window.print === 'function') window.print(); });
+  listen(labelsCsv, 'click', function (e) { e.preventDefault(); });
+  listen(window, 'beforeprint', buildPrintSheet);
+  listen(window, 'afterprint', dropPrintSheet);
+  listen(host, 'change', onEdit);
+  listen(host, 'keydown', function (e) {
+    const inp = e.target.closest ? e.target.closest('input[data-edit]') : null;
     if (!inp) return;
     if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
     if (e.key === 'Escape') {
-      const tr = inp.closest('tr');
-      const r = S.rows && S.rows[parseInt(tr.getAttribute('data-row'), 10)];
-      if (r) inp.value = r[inp.getAttribute('data-edit')] == null ? '' : String(r[inp.getAttribute('data-edit')]);
+      e.stopPropagation();
+      const r = editRow(inp);
+      const k = inp.getAttribute('data-edit');
+      if (r) inp.value = r[k] == null ? '' : String(r[k]);
       inp.blur();
     }
   });
-  on(store, 'doc', function (e) {
+  listen(host, 'focusout', function () {
+    setTimeout(function () { if (!destroyed && S.pending && !editing()) showData(); }, 0);
+  });
+  listen(store, 'doc', function (e) {
     const src = e.detail && e.detail.source;
     if (!ctx.api || src === 'load' || src === 'remote') reloadSoon();
   });
-  on(store, 'revision', function () { if (ctx.api) reloadSoon(); });
-  on(store, 'room', function () { load(); });
-  on(store, 'overlay', function () { if (!ctx.api) reloadSoon(); });
-  on(store, 'mode', render);
+  listen(store, 'revision', function () { if (ctx.api) reloadSoon(); });
+  listen(store, 'room', function () { S.gen++; load(); });
+  listen(store, 'overlay', function () { if (!ctx.api) reloadSoon(); });
+  listen(store, 'selection', function () { syncHl(false); });
+  listen(store, 'mode', function () { buildTable(); load(); });
+  if (ROUTED && typeof ctx.subscribe === 'function') {
+    const off = ctx.subscribe('route', function () { if (!destroyed) refreshTabs(); });
+    if (typeof off === 'function') offs.push(off);
+  }
 
-  load();
+  activate(S.kind);
+
+  // schedules (no tab, no params) and unknown tabs canonicalise to schedules/cables.
+  // A tab-less URL with params (a legacy ?sel=, a remembered ?q=) is left as written.
+  if (ROUTED && ((r0.tab && !kindOf(r0.tab)) || (!r0.tab && !Object.keys(r0.query || {}).length))) {
+    setTimeout(function () {
+      const r = ctx.route;
+      if (!destroyed && r && r.view === 'schedules' && !kindOf(r.tab)) ctx.navigateRoute({tab: 'cables'}, {replace: true});
+    }, 0);
+  }
 
   return {
     destroy: function () {
-      listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], l[3]); });
+      destroyed = true;
+      offs.forEach(function (f) { f(); });
       if (reloadTimer) clearTimeout(reloadTimer);
-      if (S.csvUrl && URL.revokeObjectURL) URL.revokeObjectURL(S.csvUrl);
+      dropPrintSheet();
+      if (table) { table.destroy(); table = null; }
       el.innerHTML = '';
+    },
+    route: function (r) {
+      if (destroyed || !r || r.view !== 'schedules') return;
+      const k = kindOf(r.tab);
+      if (r.tab && !k) {
+        setTimeout(function () { if (!destroyed && ctx.route.view === 'schedules') ctx.navigateRoute({tab: 'cables'}, {replace: true}); }, 0);
+        return;
+      }
+      const kind = k || 'cables';
+      if (kind !== S.kind) { activate(kind); return; }
+      refreshTabs();
+      if (table) { table.readUrl(); dropStaleId(); }
+      syncHl(false);
     },
     focus: function (sel) {
       if (!sel) return;
-      if (sel.type === 'cable') { S.kind = 'cables'; load(); }
+      if (!ROUTED && sel.type === 'cable' && S.kind !== 'cables') activate('cables');
+      syncHl(false);
     },
-    getState: function () { return {kind: S.kind, room: S.room, state: S.state, disc: S.disc}; },
+    getState: function () { return {kind: S.kind, room: S.room, state: S.state}; },
     setState: function (s) {
       if (!s) return;
-      S.kind = s.kind || S.kind; S.room = s.room || S.room; S.state = s.state || S.state; S.disc = s.disc || '';
-      roomSel.value = S.room; stateSel.value = S.state; discSel.value = S.disc;
-      load();
+      let changed = false;
+      if (s.state && s.state !== S.state) { S.state = s.state; stateSel.value = s.state; changed = true; }
+      if (!ROUTED && s.room && s.room !== S.room) { S.room = s.room; roomSel.value = s.room; changed = true; }
+      const k = ROUTED ? null : kindOf(s.kind);
+      if (changed) S.gen++;
+      if (k && k !== S.kind) activate(k);
+      else if (changed) load();
     },
     _state: S,
   };

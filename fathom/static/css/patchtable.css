@@ -1,0 +1,51 @@
+/* Patch table: Blocks/Rows toggle, Rows mode on the shared DataTable and the Blocks layout
+   fixes (docs/ui-audit.md B.3 PT). Legacy .pt-* rules stay in app.css (D11); these override. */
+
+/* ---- head: layout toggle (#pt-mode) and 40px actions */
+.pt-mode{display:inline-flex;align-items:stretch;flex:none;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.pt-mode>button{min-height:40px;padding:0 12px;border:0;border-radius:0;background:transparent;color:var(--muted)}
+.pt-mode>button+button{border-left:1px solid var(--border)}
+.pt-mode>button[aria-pressed=true]{color:var(--text);background:rgba(142,162,255,.14)}
+.pt-head>button{min-height:40px}
+
+/* ---- Blocks: the remove column fits its 44px touch target (it was clipped at 30px) */
+@media (pointer:coarse){
+  .pt-table th.x,.pt-table .x{width:46px}
+}
+
+/* ---- Rows: the table fills the view below the filters and scrolls inside (sticky header) */
+.pt-scroll.pt-scroll--rows{display:flex;flex-direction:column;overflow:hidden;padding:8px 12px calc(8px + var(--sab))}
+.pt-rows{--dt-max-h:none;flex:1 1 auto;min-height:0;min-width:0;display:flex;flex-direction:column}
+.pt-rows .dt-root{flex:1 1 auto;min-height:0}
+.pt-rows .dt-scroll{flex:1 1 auto;min-height:160px}
+.pt-rows .dt-table td{white-space:nowrap}
+.pt-rows .dt-table td[data-col=remove]{padding:0 4px}
+.pt-rows .pt-remove{min-width:40px;min-height:40px;font-size:15px}
+.pt-rows .pt-patch{white-space:nowrap}
+.pt-rows .pt-ovl-row td{color:var(--muted)}
+.pt-rows .ovl{font-style:italic;color:var(--muted)}
+.pt-dot-text{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.pt-dot-text .dot{width:7px;height:7px}
+
+/* ---- sm: the whole view scrolls as one page (head and filters scroll away, leaving the screen to
+   the rows); discipline chips stay on one row and scroll inside it */
+@media (max-width:699px){
+  .pt-root{flex:none;display:block}
+  .pt-head{position:static}
+  .pt-live-more{display:none}
+  .pt-scroll,.pt-scroll.pt-scroll--rows{display:block;flex:none;overflow:visible}
+  .pt-scroll.pt-scroll--rows{padding:8px 8px calc(16px + var(--sab))}
+  .pt-filters>#pt-filter-disc{flex:1 1 100%;min-width:0;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .pt-filters>#pt-filter-disc::-webkit-scrollbar{display:none}
+  .pt-filters>#pt-filter-disc>.chip{flex:none}
+  .pt-filters input[type=search]{flex:1 1 160px;width:auto;min-width:0}
+  .pt-rows{display:block}
+  .pt-rows .dt-scroll{min-height:0}
+}
+
+@media print{
+  .pt-mode{display:none!important}
+  .pt-scroll--rows,.pt-rows,.pt-rows .dt-root,.pt-rows .dt-scroll{display:block!important;overflow:visible!important;max-height:none!important;height:auto!important}
+  .pt-rows .dt-toolbar,.pt-rows .dt-bulk,.pt-rows .dt-pager,.pt-rows .dt-check,.pt-rows [data-col=remove],.pt-rows .pt-patch{display:none!important}
+  .pt-rows .dt-table th,.pt-rows .dt-table td{color:#000;background:#fff;border-color:#ddd}
+}

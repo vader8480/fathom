@@ -3,7 +3,7 @@
  * stale-while-revalidate for /static/, network only for everything else. */
 'use strict';
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 const SHELL_CACHE = 'fathom-shell-' + VERSION;
 const PAGES_CACHE = 'fathom-pages-' + VERSION;
 const NETWORK_TIMEOUT_MS = 3000;
@@ -15,7 +15,19 @@ const PRECACHE = [
   'static/js/floorplan.js', 'static/js/floorplan-core.js', 'static/js/rack.js', 'static/js/rack-core.js',
   'static/js/schedules.js', 'static/js/inventory.js', 'static/js/views-admin.js', 'static/js/presets-core.js', 'static/js/suggest-ui.js',
   'static/js/views-sop.js', 'static/css/sop.css', 'static/js/console-core.js', 'static/js/trace-ui.js', 'static/css/trace.css',
-  'static/icons/icon-192.png', 'manifest.webmanifest'
+  'static/icons/icon-192.png', 'manifest.webmanifest',
+  // UI uplift (docs/ui-audit.md B.2 SHELL item 8); install tolerates files that are not there yet (page-rack.js).
+  'static/js/router-core.js', 'static/js/dom.js', 'static/js/explorer.js', 'static/js/explorer-core.js',
+  'static/js/entity-header.js', 'static/js/entity-core.js', 'static/js/datatable.js', 'static/js/datatable-core.js',
+  'static/js/drawer.js', 'static/js/drawer-core.js', 'static/js/search.js', 'static/js/search-core.js',
+  'static/js/home.js', 'static/js/home-core.js', 'static/js/feedback.js', 'static/js/feedback-core.js',
+  'static/js/wizard.js', 'static/js/wizard-core.js', 'static/js/page-device.js', 'static/js/page-room.js',
+  'static/js/page-rack.js', 'static/js/views-discovery.js', 'static/js/merge-ui.js',
+  'static/css/explorer.css', 'static/css/entity-header.css', 'static/css/datatable.css', 'static/css/drawer.css',
+  'static/css/search.css', 'static/css/home.css', 'static/css/feedback.css', 'static/css/wizard.css',
+  'static/css/page-device.css', 'static/css/page-room.css', 'static/css/rack.css', 'static/css/inventory.css',
+  'static/css/schedules.css', 'static/css/admin.css', 'static/css/discovery.css', 'static/css/inspector.css',
+  'static/css/patchtable.css'
 ];
 
 const SCOPE = new URL(self.registration ? self.registration.scope : self.location.href);

@@ -4,8 +4,11 @@
 import * as core from './patchview-core.js';
 import {
   canConnect, connectOps, disconnectOps, repatchOps, deleteDeviceOps, duplicateDeviceOps, renameOps,
-  addDeviceFromTemplateOps, setPortsOps,
+  addDeviceFromTemplateOps, setPortsOps, applyOps,
 } from './model-core.js';
+import { esc, on } from './dom.js';
+import { layoutFor } from './router-core.js';
+import { emptyState, confirmScope, staleBadge } from './feedback.js';
 
 const DISC_ORDER = ['audio', 'video', 'lighting', 'network', 'control', 'power', 'other'];
 const STATUS_ORDER = ['installed', 'planned', 'spare', 'retired'];
@@ -13,12 +16,26 @@ const LONG_PRESS_MS = 500;
 const MOVE_SLOP = 4;
 const TOUCH_SLOP = 8;
 const SVG_NS = 'http://www.w3.org/2000/svg';
+// Query keys this view owns while it is the routed view (docs/ui-audit.md D1, B.3 PV).
+const URL_KEYS = ['filter', 'q', 'status'];
 let uidSeq = 0;
 
-function esc(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-    return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+function splitList(s, allowed) {
+  return String(s || '').split(',').map(function (x) { return x.trim(); }).filter(function (x, i, a) {
+    return x && a.indexOf(x) === i && (!allowed || allowed.indexOf(x) >= 0);
   });
+}
+
+// Store filter subset carried by the URL: `filter` (disciplines), `q` (text) and `status`.
+function filterFromQuery(q) {
+  q = q || {};
+  return {disciplines: splitList(q.filter), statuses: splitList(q.status, STATUS_ORDER), query: String(q.q || '')};
+}
+
+function queryFromFilter(f) {
+  f = f || {};
+  const d = (f.disciplines || []).join(','), s = (f.statuses || []).join(','), t = String(f.query || '');
+  return {filter: d || null, q: t || null, status: s || null};
 }
 
 function hexA(hex, a) {
@@ -44,42 +61,70 @@ export function mount(el, ctx) {
     gesture: null, pointers: {}, nPointers: 0, space: false, menu: null, rename: null, kb: null, cardHtml: {}, wireSig: {},
     cardEls: {}, wireEls: {}, rendered: false, raf: 0, hoverRaf: 0, hoverWire: null, lastTap: null, destroyed: false,
     geom: coarse ? {rowH: core.COARSE_ROW_H} : null, longTimer: 0, gs: null, filterTimer: 0, lastHover: null,
+    pop: null, layout: '', emptyKey: null,
   };
   const stats = {renderMs: 0, cards: 0, wires: 0, lastDragFrameMs: 0};
   const vocab = function () { return store.vocab || ctx.vocab || {}; };
-  const ro = function () { return !!store.readOnly; };
+  const ro = function () { return !!store.readOnly || ctx.role === 'viewer'; };
 
   // ------------------------------------------------------------ DOM skeleton
+  // One toolbar row: primary actions, zoom, undo, the text filter, then the View and Arrange
+  // popovers. Below 700 px (layoutFor 'sm') zoom, undo and both popover panes move into the
+  // "More" popover (placeControls), so every #pv-* control stays in the DOM exactly once.
   el.innerHTML = '';
   const root = doc0.createElement('div');
   root.className = 'pv-root';
+  const popTrigger = function (menu, cls, label, text, aria) {
+    return '<div class="pv-pop-wrap pv-pop-' + menu + '" data-menu="' + menu + '">' +
+      '<button type="button" class="pv-btn ' + cls + '" aria-haspopup="true" aria-expanded="false" aria-controls="' +
+        uid + '-' + menu + '"' + (aria ? ' aria-label="' + aria + '"' : '') + '>' + text +
+        '<span class="pv-menu-n" hidden></span></button>' +
+      '<div class="pv-pop" id="' + uid + '-' + menu + '" role="group" aria-label="' + label + '" hidden>';
+  };
   root.innerHTML =
     '<div class="pv-toolbar" role="toolbar" aria-label="Patch view tools">' +
-      '<div class="pv-tgroup">' +
+      '<div class="pv-tgroup pv-tmain">' +
         '<button type="button" id="pv-add" class="pv-btn pv-primary" aria-label="Add gear"><span aria-hidden="true">+</span><span class="pv-btxt">Add gear</span></button>' +
-        '<button type="button" id="pv-arrange" class="pv-btn" aria-label="Auto-arrange"><span aria-hidden="true">\u2637</span><span class="pv-btxt">Auto-arrange</span></button>' +
-        '<button type="button" id="pv-save-arrangement" class="pv-btn" hidden>Save arrangement</button>' +
+        '<button type="button" id="pv-fit" class="pv-btn pv-icon" aria-label="Fit to screen" title="Fit (F)">\u2922</button>' +
       '</div>' +
-      '<div class="pv-tgroup">' +
-        '<button type="button" id="pv-undo" class="pv-btn pv-icon" aria-label="Undo" title="Undo (\u2318Z)">\u21b6</button>' +
-        '<button type="button" id="pv-redo" class="pv-btn pv-icon" aria-label="Redo" title="Redo (\u21e7\u2318Z)">\u21b7</button>' +
+      '<div class="pv-tgroup pv-tzoom">' +
         '<button type="button" id="pv-zoom-out" class="pv-btn pv-icon" aria-label="Zoom out" title="Zoom out (-)">\u2212</button>' +
         '<span class="pv-zoomlabel" aria-hidden="true">100%</span>' +
         '<button type="button" id="pv-zoom-in" class="pv-btn pv-icon" aria-label="Zoom in" title="Zoom in (+)">+</button>' +
-        '<button type="button" id="pv-fit" class="pv-btn pv-icon" aria-label="Fit to screen" title="Fit (F)">\u2922</button>' +
       '</div>' +
-      '<div id="pv-filter-disc" class="pv-chips" role="group" aria-label="Discipline filter"></div>' +
-      '<div id="pv-filter-status" class="pv-chips" role="group" aria-label="Status filter"></div>' +
-      '<div class="pv-tgroup pv-search">' +
+      '<div class="pv-tgroup pv-tundo">' +
+        '<button type="button" id="pv-undo" class="pv-btn pv-icon" aria-label="Undo" title="Undo (\u2318Z)">\u21b6</button>' +
+        '<button type="button" id="pv-redo" class="pv-btn pv-icon" aria-label="Redo" title="Redo (\u21e7\u2318Z)">\u21b7</button>' +
+      '</div>' +
+      '<div class="pv-search">' +
+        '<button type="button" class="pv-btn pv-icon pv-search-toggle" aria-label="Filter devices" aria-expanded="false" ' +
+          'aria-controls="pv-filter-text"><span aria-hidden="true">\u26B2</span></button>' +
         '<label class="pv-sr" for="pv-filter-text">Filter devices</label>' +
         '<input id="pv-filter-text" type="search" placeholder="Filter\u2026" autocomplete="off" spellcheck="false">' +
       '</div>' +
-      '<div class="pv-tgroup">' +
-        '<button type="button" id="pv-show-unconnected" class="pv-btn pv-toggle" aria-pressed="true">Unconnected ports</button>' +
-        '<button type="button" id="pv-show-routes" class="pv-btn pv-toggle" aria-pressed="false">Network routes</button>' +
-        '<button type="button" id="pv-all-rooms" class="pv-btn pv-toggle" aria-pressed="false">All rooms</button>' +
-        '<button type="button" id="pv-snap" class="pv-btn pv-toggle" aria-pressed="true" title="Snap to 8 px grid">Snap</button>' +
-      '</div>' +
+      popTrigger('view', 'pv-menu-view', 'View options', 'View <span aria-hidden="true">\u25BE</span>') +
+        '<div class="pv-pane pv-pane-view">' +
+          '<div class="pv-pop-h" aria-hidden="true">Show</div>' +
+          '<div class="pv-tgroup pv-pop-toggles">' +
+            '<button type="button" id="pv-show-unconnected" class="pv-btn pv-toggle" aria-pressed="true">Unconnected ports</button>' +
+            '<button type="button" id="pv-show-routes" class="pv-btn pv-toggle" aria-pressed="false">Network routes</button>' +
+            '<button type="button" id="pv-all-rooms" class="pv-btn pv-toggle" aria-pressed="false">All rooms</button>' +
+            '<button type="button" id="pv-snap" class="pv-btn pv-toggle" aria-pressed="true" title="Snap to 8 px grid">Snap</button>' +
+          '</div>' +
+          '<div class="pv-pop-h" aria-hidden="true">Discipline</div>' +
+          '<div id="pv-filter-disc" class="pv-chips" role="group" aria-label="Discipline filter"></div>' +
+          '<div class="pv-pop-h" aria-hidden="true">Status</div>' +
+          '<div id="pv-filter-status" class="pv-chips" role="group" aria-label="Status filter"></div>' +
+        '</div>' +
+      '</div></div>' +
+      popTrigger('arrange', 'pv-menu-arrange', 'Arrange', 'Arrange <span aria-hidden="true">\u25BE</span>') +
+        '<div class="pv-pane pv-pane-arrange">' +
+          '<button type="button" id="pv-arrange" class="pv-btn" aria-label="Auto-arrange"><span aria-hidden="true">\u2637</span><span>Auto-arrange</span></button>' +
+          '<button type="button" id="pv-save-arrangement" class="pv-btn" hidden>Save arrangement</button>' +
+        '</div>' +
+      '</div></div>' +
+      popTrigger('more', 'pv-icon pv-menu-more', 'More tools', '<span aria-hidden="true">\u22EF</span>', 'More tools') +
+      '</div></div>' +
     '</div>' +
     '<div class="pv-viewport" role="application" aria-label="Patch view" tabindex="0" aria-describedby="' + uid + '-help">' +
       '<div class="pv-world">' +
@@ -91,6 +136,7 @@ export function mount(el, ctx) {
       '<div class="pv-badge" aria-hidden="true"><span class="pv-badge-dot"></span>Patch view</div>' +
       '<div class="pv-hint" aria-hidden="true">Drag gear \u00b7 re-patch wires \u00b7 rename anything</div>' +
       '<div class="pv-empty" hidden></div>' +
+      '<div class="pv-stale-host" hidden></div>' +
       '<div class="pv-box" hidden></div>' +
     '</div>' +
     '<p class="pv-sr" id="' + uid + '-help">Tab moves between devices. Arrow keys move the selected device; hold Shift for larger steps. ' +
@@ -109,10 +155,21 @@ export function mount(el, ctx) {
   const tempPath = $('.pv-temp');
   const cardsEl = $('.pv-cards');
   const emptyEl = $('.pv-empty');
+  const staleHost = $('.pv-stale-host');
   const boxEl = $('.pv-box');
   const menuEl = $('.pv-menu');
   const zoomLabel = $('.pv-zoomlabel');
   const textInput = $('#pv-filter-text');
+  const searchBox = $('.pv-search');
+  const searchToggle = $('.pv-search-toggle');
+  const morePop = $('.pv-pop-more .pv-pop');
+  const homes = {
+    zoom: {node: $('.pv-tzoom'), parent: toolbar, before: $('.pv-tundo')},
+    undo: {node: $('.pv-tundo'), parent: toolbar, before: searchBox},
+    arrange: {node: $('.pv-pane-arrange'), parent: $('.pv-pop-arrange .pv-pop'), before: null},
+    view: {node: $('.pv-pane-view'), parent: $('.pv-pop-view .pv-pop'), before: null},
+  };
+  const offs = [];
   // Row CSS always follows the layout geometry so wire anchors and row boxes cannot disagree.
   root.style.setProperty('--pv-row', (S.geom ? S.geom.rowH : core.GEOM.rowH) + 'px');
 
@@ -172,6 +229,98 @@ export function mount(el, ctx) {
       system: f.system || '', state: f.state || 'all', showUnconnected: f.showUnconnected !== false};
   }
   function editable(card) { return !ro() && card && !card.auto; }
+  function roomLabel() {
+    const r = currentRoom();
+    if (r === '*') return 'this project';
+    if (!r) return 'Shared inventory';
+    const m = (store.doc.rooms || []).filter(function (x) { return x.id === r; })[0];
+    return m ? (m.name || m.id) : r;
+  }
+
+  // ------------------------------------------------------------ URL state (filter, q, status)
+  // Only the routed patch view owns these keys; an embedded copy (patch table split) leaves the URL alone.
+  function routed() {
+    const r = ctx.route;
+    return !!(r && r.view === 'patch' && typeof ctx.setParams === 'function');
+  }
+  function urlFromStore() {
+    if (S.destroyed || !routed()) return;
+    const want = queryFromFilter(store.filter);
+    const q = ctx.route.query || {};
+    const same = URL_KEYS.every(function (k) { return (q[k] || null) === want[k]; });
+    if (!same) ctx.setParams(want, {replace: true});
+  }
+  function storeFromQuery(q) {
+    const want = filterFromQuery(q);
+    const f = store.filter || {};
+    const same = (f.query || '') === want.query && (f.disciplines || []).join(',') === want.disciplines.join(',') &&
+      (f.statuses || []).join(',') === want.statuses.join(',');
+    if (!same) store.setFilter(want);
+    return !same;
+  }
+
+  // ------------------------------------------------------------ toolbar layout and popovers
+  function placeControls(layout) {
+    const compact = layout === 'sm';
+    if (S.layout && (S.layout === 'sm') === compact) { S.layout = layout; return; }
+    S.layout = layout;
+    closePop(false);
+    root.classList.toggle('pv-compact', compact);
+    if (compact) {
+      ['zoom', 'undo', 'arrange', 'view'].forEach(function (k) { morePop.appendChild(homes[k].node); });
+    } else {
+      ['view', 'arrange', 'undo', 'zoom'].forEach(function (k) {
+        const h0 = homes[k];
+        h0.parent.insertBefore(h0.node, h0.before && h0.before.parentNode === h0.parent ? h0.before : null);
+      });
+    }
+    syncSearch();
+  }
+  function onResize() { placeControls(layoutFor(win.innerWidth)); }
+  function openPop(wrap) {
+    if (S.pop && S.pop.wrap === wrap) return;
+    closePop(false);
+    const btn = wrap.querySelector('[aria-haspopup]');
+    const pop = wrap.querySelector('.pv-pop');
+    pop.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    wrap.classList.add('pv-open');
+    S.pop = {wrap: wrap, btn: btn, pop: pop};
+    const first = pop.querySelector('button:not([disabled]):not([hidden])');
+    if (first) first.focus({preventScroll: true});
+  }
+  function closePop(restore) {
+    const p = S.pop;
+    if (!p) return;
+    S.pop = null;
+    p.pop.hidden = true;
+    p.btn.setAttribute('aria-expanded', 'false');
+    p.wrap.classList.remove('pv-open');
+    if (restore) p.btn.focus({preventScroll: true});
+  }
+  function onToolbarKey(e) {
+    if (e.key !== 'Escape' || !S.pop) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closePop(true);
+  }
+  function onToolbarFocusOut(e) {
+    const p = S.pop;
+    if (p && e.relatedTarget && !p.wrap.contains(e.relatedTarget)) closePop(false);
+  }
+  function syncSearch() {
+    const open = S.layout !== 'sm' || searchBox.classList.contains('pv-search-open') || !!textInput.value;
+    searchBox.classList.toggle('pv-search-open', S.layout === 'sm' && open);
+    searchToggle.setAttribute('aria-expanded', String(open));
+  }
+  function openSearch() {
+    searchBox.classList.add('pv-search-open');
+    syncSearch();
+    textInput.focus();
+  }
+  function onSearchBlur() {
+    if (S.layout === 'sm' && !textInput.value) { searchBox.classList.remove('pv-search-open'); syncSearch(); }
+  }
 
   // ------------------------------------------------------------ view transform
   function applyView() {
@@ -406,8 +555,8 @@ export function mount(el, ctx) {
     S.rendered = true;
     renderRoutes();
     const n = S.scene.cards.length;
-    emptyEl.hidden = n > 0;
-    if (!n) emptyEl.textContent = (store.doc.devices || []).length ? 'No devices match the filters.' : 'No gear yet. Use Add gear to start.';
+    renderEmpty(n);
+    renderStale();
     const nAuto = S.scene.cards.filter(function (c) { return !c.placed && !c.auto; }).length;
     $('#pv-save-arrangement').hidden = !nAuto || ro();
     stats.cards = n;
@@ -416,6 +565,57 @@ export function mount(el, ctx) {
     applyHighlight();
     if (S.kb) markTargets(S.kb.targets, S.kb.list[S.kb.i]);
     updateToolbar();
+  }
+
+  // Filters that remove cards from the scene; the text query only dims them.
+  function hasFilters() {
+    const f = store.filter || {};
+    return !!((f.disciplines || []).length || (f.statuses || []).length || f.system);
+  }
+  function clearFilters() {
+    textInput.value = '';
+    store.setFilter({disciplines: [], statuses: [], query: '', system: ''});
+  }
+  function renderEmpty(n) {
+    emptyEl.hidden = n > 0;
+    if (n) { S.emptyKey = null; return; }
+    const filtered = hasFilters();
+    const title = filtered ? 'No devices match the filters.' : 'No devices in ' + roomLabel() + ' yet.';
+    const key = title + '|' + ro();
+    if (S.emptyKey === key) return;
+    S.emptyKey = key;
+    emptyEl.innerHTML = '';
+    emptyEl.appendChild(filtered
+      ? emptyState({title: title, text: 'Clear the filters to see every device in ' + roomLabel() + '.',
+        action: {label: 'Clear filters', run: clearFilters}})
+      : emptyState({title: title, text: ro() ? '' : 'Add gear to start patching.',
+        action: ro() ? null : {label: 'Add gear', run: addGear}}));
+  }
+
+  // Imported cards and network routes come from the server overlay; once the project moves on
+  // (another revision) or it ages, the badge offers a refetch. Hidden while fresh.
+  let stale = null;
+  function overlayShown() {
+    return S.scene.cards.some(function (c) { return c.auto; }) || (S.showRoutes && S.scene.routes.length > 0);
+  }
+  function renderStale() {
+    if (typeof ctx.overlayInfo !== 'function') return;
+    const shown = overlayShown();
+    if (shown && !stale) {
+      stale = staleBadge({
+        fetchedAt: function () { return ctx.overlayInfo().fetchedAt; },
+        fetchedRev: function () { return ctx.overlayInfo().revision; },
+        currentRev: function () { return store.revision; },
+        onRefresh: typeof ctx.refreshOverlay === 'function' ? function () {
+          return Promise.resolve(ctx.refreshOverlay()).then(function () { if (stale) stale.refresh(); }, function (err) {
+            toast('Could not refresh the import overlay: ' + ((err && err.message) || 'error'), 'err');
+          });
+        } : null,
+      });
+      staleHost.appendChild(stale);
+    }
+    staleHost.hidden = !shown;
+    if (stale) stale.refresh();
   }
 
   // ------------------------------------------------------------ selection & highlight
@@ -513,10 +713,24 @@ export function mount(el, ctx) {
     });
     $('#pv-filter-status').innerHTML = hs;
     if (doc0.activeElement !== textInput) textInput.value = f.query || '';
+    syncSearch();
+    const nf = (f.disciplines || []).length + st.length;
+    root.querySelectorAll('.pv-menu-view .pv-menu-n, .pv-menu-more .pv-menu-n').forEach(function (s) {
+      s.hidden = !nf;
+      s.textContent = nf ? String(nf) : '';
+    });
+    $('.pv-menu-view').setAttribute('aria-label', nf ? 'View, ' + nf + ' filter' + (nf === 1 ? '' : 's') + ' on' : 'View');
+    $('.pv-menu-more').setAttribute('aria-label', nf ? 'More tools, ' + nf + ' filter' + (nf === 1 ? '' : 's') + ' on' : 'More tools');
   }
   function updateToolbar() {
     const r = ro();
     root.classList.toggle('pv-ro', r);
+    // Write actions are not rendered for viewers (D2); the ids stay in the DOM.
+    $('#pv-add').hidden = r;
+    $('.pv-pop-arrange').hidden = r;
+    homes.arrange.node.hidden = r;
+    homes.undo.node.hidden = r;
+    $('.pv-hint').textContent = r ? 'Select gear to see its connections' : 'Drag gear \u00b7 re-patch wires \u00b7 rename anything';
     $('#pv-add').disabled = r;
     $('#pv-arrange').disabled = r;
     const u = $('#pv-undo'), re = $('#pv-redo');
@@ -539,6 +753,13 @@ export function mount(el, ctx) {
     if (!b || !toolbar.contains(b) || b.disabled) return;
     const id = b.id;
     const f = store.filter || {};
+    if (b.hasAttribute('aria-haspopup')) {
+      const wrap = b.closest('.pv-pop-wrap');
+      if (S.pop && S.pop.wrap === wrap) closePop(true); else openPop(wrap);
+      return;
+    }
+    if (b === searchToggle) { openSearch(); return; }
+    if (id === 'pv-arrange' || id === 'pv-save-arrangement') closePop(true);
     if (b.hasAttribute('data-disc')) {
       const k = b.getAttribute('data-disc');
       const list = (f.disciplines || []).slice();
@@ -561,7 +782,7 @@ export function mount(el, ctx) {
     else if (id === 'pv-fit') fit();
     else if (id === 'pv-show-unconnected') store.setFilter({showUnconnected: f.showUnconnected === false});
     else if (id === 'pv-show-routes') { S.showRoutes = !S.showRoutes; renderRoutes(); updateToolbar(); }
-    else if (id === 'pv-all-rooms') { S.allRooms = !S.allRooms; render(true); fit(); }
+    else if (id === 'pv-all-rooms') { S.allRooms = !S.allRooms; S.emptyKey = null; render(true); fit(); }
     else if (id === 'pv-snap') { S.snapOn = !S.snapOn; updateToolbar(); }
   }
   function onFilterInput() {
@@ -613,19 +834,33 @@ export function mount(el, ctx) {
     ids = ids.filter(function (id) { return (store.doc.devices || []).some(function (d) { return d.id === id; }); });
     if (!ids.length || ro()) return;
     const names = ids.map(function (id) { return endName({device: id}); });
-    const msg = ids.length === 1 ? 'Delete ' + names[0] + ' and its cables?' : 'Delete ' + ids.length + ' devices and their cables?';
-    Promise.resolve(ctx.confirm ? ctx.confirm(msg, {danger: true}) : true).then(function (ok) {
+    const one = ids.length === 1;
+    const doomed = {};
+    ids.forEach(function (id) {
+      deleteDeviceOps(store.doc, id).forEach(function (op) { if (op.op === 'del' && op.coll === 'cables') doomed[op.id] = true; });
+    });
+    const nc = Object.keys(doomed).length;
+    const who = one ? 'it' : 'them';
+    const detail = nc ? nc + (nc === 1 ? ' cable is' : ' cables are') + ' deleted with ' + who + '.' : 'No cables are connected to ' + who + '.';
+    const asked = typeof ctx.confirm === 'function'
+      ? confirmScope(ctx, {verb: 'Delete', count: one ? undefined : ids.length, noun: one ? names[0] : {one: 'device', many: 'devices'},
+        scope: one ? '' : roomLabel(), danger: true, ok: one ? 'Delete' : undefined, detail: detail})
+      : Promise.resolve(true);
+    asked.then(function (ok) {
       if (!ok || S.destroyed) return;
       let doc = store.doc;
       const ops = [];
       const seen = {};
+      // Each device's ops see the previous deletions, so marker and extra-card merges stack.
       ids.forEach(function (id) {
-        deleteDeviceOps(doc, id).forEach(function (op) {
+        const devOps = deleteDeviceOps(doc, id);
+        devOps.forEach(function (op) {
           const key = op.op + op.coll + op.id;
           if (op.op === 'del' && seen[key]) return;
           seen[key] = true;
           ops.push(op);
         });
+        doc = applyOps(doc, devOps).doc;
       });
       commit(ops, 'Deleted ' + (ids.length === 1 ? names[0] : ids.length + ' devices'));
       clearSelection();
@@ -808,12 +1043,42 @@ export function mount(el, ctx) {
   }
 
   // ------------------------------------------------------------ context menu (FR-PV-18)
+  function openDetails(sel) {
+    if (typeof ctx.openDrawer === 'function') ctx.openDrawer(sel);
+    else if (ctx.openInspector) ctx.openInspector(sel);
+  }
+  function go(partial, legacyView, legacyParams) {
+    if (typeof ctx.navigateRoute === 'function') ctx.navigateRoute(partial);
+    else if (ctx.navigate) ctx.navigate(legacyView, legacyParams);
+  }
+  function inDoc(id) {
+    return (store.doc.devices || []).some(function (d) { return d.id === id; });
+  }
+  function showInRack(id) {
+    const d = findDevice(id);
+    const rid = d && d.rack && d.rack.id;
+    const rack = rid ? (store.doc.racks || []).filter(function (r) { return r.id === rid; })[0] : null;
+    if (!rack) { go({view: 'racks', query: {sel: 'device:' + id}}, 'racks', {sel: 'device:' + id}); return; }
+    const p = {view: 'racks', id: rid, tab: 'elevation', query: {sel: 'device:' + id}};
+    if (rack.room) p.room = rack.room;
+    go(p, 'racks', {sel: 'device:' + id});
+  }
+  function showOnPlan(id) {
+    const d = findDevice(id);
+    const has = function (fp) { return (fp.markers || []).some(function (m) { return m.device === id; }); };
+    const fps = (store.doc.floorplans || []).filter(has);
+    const fp = fps.filter(function (x) { return d && x.room === d.room; })[0] || fps[0];
+    if (!fp) { go({view: 'plan', query: {sel: 'device:' + id}}, 'plan', {sel: 'device:' + id}); return; }
+    const p = {view: 'plan', id: fp.id, query: {sel: 'marker:' + fp.id + ':' + id}};
+    if (fp.room) p.room = fp.room;
+    go(p, 'plan', {sel: 'marker:' + fp.id + ':' + id});
+  }
   function menuItems(t) {
     const items = [];
     const card = t.device ? S.scene.cardById[t.device] : null;
     const canEdit = card ? editable(card) : !ro();
     if (t.type === 'cable') {
-      items.push(['Open details', function () { if (ctx.openInspector) ctx.openInspector({type: 'cable', id: t.cable}); }]);
+      items.push(['Open details', function () { openDetails({type: 'cable', id: t.cable}); }]);
       const w = S.scene.wireById[t.cable];
       if (w) items.push(['Trace from here', function () { trace(w.from, 'down', null); }]);
       if (!ro()) items.push(['Delete', function () { deleteWire(t.cable); }, true]);
@@ -826,10 +1091,13 @@ export function mount(el, ctx) {
     if (canEdit) items.push(['Add port\u2026', function () { showAddPort(t.device); }, false, true]);
     if (canEdit && t.port) items.push(['Connect\u2026', function () { kbStart(t.device, t.port); }]);
     items.push(['Open details', function () {
-      if (ctx.openInspector) ctx.openInspector(t.port ? {type: 'port', id: t.device + ':' + t.port, device: t.device, port: t.port} : devSel);
+      openDetails(t.port ? {type: 'port', id: t.device + ':' + t.port, device: t.device, port: t.port} : devSel);
     }]);
-    items.push(['Show in rack', function () { if (ctx.navigate) ctx.navigate('racks', {sel: 'device:' + t.device}); }]);
-    items.push(['Show on plan', function () { if (ctx.navigate) ctx.navigate('plan', {sel: 'device:' + t.device}); }]);
+    if (inDoc(t.device)) {
+      items.push(['Open device page', function () { go({view: 'devices', id: t.device}, 'devices', {sel: 'device:' + t.device}); }]);
+    }
+    items.push(['Show in rack', function () { showInRack(t.device); }]);
+    items.push(['Show on plan', function () { showOnPlan(t.device); }]);
     const start = {device: t.device, port: t.port || null};
     items.push(['Trace from here', function () { trace(start, 'down', traceDiscipline(t.device, t.port)); }]);
     items.push(['Trace upstream', function () { trace(start, 'up', traceDiscipline(t.device, t.port)); }]);
@@ -930,7 +1198,7 @@ export function mount(el, ctx) {
   function onPointerDown(e) {
     if (S.destroyed) return;
     if (S.rename && e.target !== S.rename.input) endRename(true);
-    if (e.target.closest && e.target.closest('.pv-more')) return;
+    if (e.target.closest && e.target.closest('.pv-more, .pv-empty, .pv-stale-host')) return;
     if (S.menu) closeMenu(false);
     if (S.kb) kbCancel(true);
     if (e.pointerType === 'mouse' && e.button === 2) return;
@@ -1397,6 +1665,7 @@ export function mount(el, ctx) {
     if (mod && (key === 'z' || key === 'Z')) { e.preventDefault(); if (e.shiftKey) doRedo(); else doUndo(); return; }
     if (mod && (key === 'y' || key === 'Y')) { e.preventDefault(); doRedo(); return; }
     if (toolbar.contains(t)) return;
+    if (t && t.closest && t.closest('.pv-empty, .pv-stale-host')) return;
     if (S.kb) {
       e.preventDefault();
       if (key === 'Escape') kbCancel(false);
@@ -1498,6 +1767,7 @@ export function mount(el, ctx) {
   }
   function onDocPointerDown(e) {
     if (S.menu && !menuEl.contains(e.target)) closeMenu(false);
+    if (S.pop && !S.pop.wrap.contains(e.target)) closePop(false);
   }
 
   // ------------------------------------------------------------ store events
@@ -1512,19 +1782,25 @@ export function mount(el, ctx) {
     render(full);
     if (d.source === 'load') { renderChips(); fit(); }
   }
-  function onFilter() { renderChips(); render(false); }
-  function onRoom() { S.autoPos = {}; render(true); fit(); }
+  function onFilter() { renderChips(); render(false); urlFromStore(); }
+  function onRoom() { S.autoPos = {}; S.emptyKey = null; render(true); fit(); }
   function onHighlight() { applyHighlight(); }
   function onOverlay() { render(true); }
   function onMode() { cancelGesture(); endRename(false); kbCancel(true); render(false); }
   function onSelection() { syncSelFromStore(); applySelection(); }
+  function onRevision() { if (stale) stale.refresh(); }
 
-  const storeListeners = {doc: onDoc, filter: onFilter, room: onRoom, highlight: onHighlight, overlay: onOverlay, mode: onMode, selection: onSelection};
+  const storeListeners = {doc: onDoc, filter: onFilter, room: onRoom, highlight: onHighlight, overlay: onOverlay, mode: onMode, selection: onSelection,
+    revision: onRevision};
   Object.keys(storeListeners).forEach(function (k) { store.addEventListener(k, storeListeners[k]); });
 
   const opt = {passive: false};
   toolbar.addEventListener('click', onToolbarClick);
+  toolbar.addEventListener('keydown', onToolbarKey);
+  toolbar.addEventListener('focusout', onToolbarFocusOut);
   textInput.addEventListener('input', onFilterInput);
+  textInput.addEventListener('blur', onSearchBlur);
+  offs.push(on(win, 'resize', onResize));
   viewportEl.addEventListener('pointerdown', onPointerDown);
   viewportEl.addEventListener('pointermove', onPointerMove);
   viewportEl.addEventListener('pointerup', onPointerUp);
@@ -1546,6 +1822,12 @@ export function mount(el, ctx) {
   doc0.addEventListener('pointerdown', onDocPointerDown, true);
 
   // ------------------------------------------------------------ first render
+  // A routed URL carrying any of filter / q / status is authoritative; otherwise the store's filter
+  // (kept across views in this session) is written into the URL after the first render.
+  const q0 = routed() ? (ctx.route.query || {}) : null;
+  const urlHasFilter = !!q0 && URL_KEYS.some(function (k) { return q0[k] != null && q0[k] !== ''; });
+  if (urlHasFilter) storeFromQuery(q0);
+  placeControls(layoutFor(win.innerWidth));
   syncSelFromStore();
   renderChips();
   render(true);
@@ -1553,8 +1835,9 @@ export function mount(el, ctx) {
   void root.offsetHeight;
   stats.renderMs = Math.round((perf.now() - t0) * 10) / 10;
   win.__pvStats = stats;
+  if (!urlHasFilter) urlFromStore();
 
-  return {
+  const handle = {
     destroy: function () {
       S.destroyed = true;
       cancelGesture();
@@ -1564,7 +1847,20 @@ export function mount(el, ctx) {
       Object.keys(storeListeners).forEach(function (k) { store.removeEventListener(k, storeListeners[k]); });
       win.removeEventListener('blur', onBlur);
       doc0.removeEventListener('pointerdown', onDocPointerDown, true);
+      offs.forEach(function (off) { off(); });
+      if (stale) stale.destroy();
       if (root.parentNode) root.parentNode.removeChild(root);
+    },
+    // Same-view URL change (D1): the query is authoritative, then the selection is focused as the
+    // shell would do for a view without route().
+    route: function (r) {
+      if (S.destroyed || !r) return;
+      const q = r.query || {};
+      win.clearTimeout(S.filterTimer);
+      storeFromQuery(q);
+      if (doc0.activeElement !== textInput) textInput.value = q.q || '';
+      syncSearch();
+      if (store.selection) handle.focus(store.selection);
     },
     focus: function (sel) {
       if (!sel || !S.scene) return;
@@ -1606,4 +1902,5 @@ export function mount(el, ctx) {
       applyView();
     },
   };
+  return handle;
 }

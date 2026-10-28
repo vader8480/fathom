@@ -1,0 +1,66 @@
+/* Room landing and room page (docs/ui-audit.md B.3 PROOM, D3, D11). Prefix pr-. Colours come from
+   app.css variables; the explorer, entity header and DataTable bring their own styles. */
+
+.pr-root{display:flex;flex-direction:column;flex:1 1 auto;min-width:0}
+.pr-root.pr-is-page{flex-direction:row;min-height:0;height:100%;overflow:hidden}
+.pr-is-page>.ex-root{height:auto;align-self:stretch}
+
+/* landing */
+.pr-landing{display:flex;flex-direction:column;gap:12px;min-width:0;padding:16px}
+.pr-landing-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px;min-width:0}
+.pr-title{display:flex;align-items:center;gap:8px;margin:0;font-size:18px;font-weight:700}
+.pr-glyph{color:var(--accent);font-size:18px;line-height:1}
+.pr-lede{margin:0;color:var(--muted);font-size:12.5px}
+.pr-landing-table{min-width:0}
+a.pr-room-link{display:inline-flex;align-items:center;min-height:32px;font-weight:600;text-decoration:none}
+a.pr-room-link:hover{text-decoration:underline}
+
+/* page body below the sticky header */
+.pr-body{flex:1 0 auto;min-width:0;padding:14px 16px 24px}
+.pr-panel{display:flex;flex-direction:column;gap:14px;min-width:0}
+.pr-panel .dt-table td[data-col=tag],.pr-panel .dt-table td[data-col=length],.pr-panel .dt-table td[data-col=ports]{white-space:nowrap}
+.pr-h2{margin:0 0 6px;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+
+/* overview cards */
+.pr-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;min-width:0}
+.pr-card{display:flex;flex-direction:column;min-width:0;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+button.pr-card-main{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:84px;padding:10px 12px;
+  background:transparent;border:0;border-radius:0;text-align:left}
+button.pr-card-main:hover:not(:disabled){background:rgba(142,162,255,.08)}
+button.pr-card-main:disabled{opacity:1;cursor:default}
+button.pr-card-main:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.pr-card-label{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.pr-card-n{font-size:24px;font-weight:700;line-height:1.2;color:var(--text)}
+.pr-card-zero .pr-card-n{color:var(--muted)}
+.pr-card-sub{color:var(--muted);font-size:12px}
+a.pr-card-tab{display:flex;align-items:center;min-height:40px;padding:0 12px;border-top:1px solid var(--border);font-size:12.5px;text-decoration:none}
+a.pr-card-tab:hover{background:rgba(142,162,255,.08)}
+.pr-notes-text{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* unknown room */
+.pr-notfound{display:flex;flex-direction:column;gap:8px;padding:16px;min-width:0}
+.pr-notfound p{margin:0}
+a.pr-back{display:inline-flex;align-items:center;min-height:40px}
+.pr-notfound .fb-error{margin:0;max-width:640px}
+
+/* states (B.5 ST-ENTITY): skeleton, per-tab empty copy inside the DataTable's .dt-empty */
+.pr-skeleton{flex:1 1 auto}
+.pr-empty.fb-empty{margin:8px auto}
+.pr-empty .fb-empty-text{overflow-wrap:anywhere}
+
+/* md: let the room links wrap under the title instead of pushing past the content edge */
+@media (min-width:700px) and (max-width:1099px){
+  .pr-is-page .eh:not(.eh--compact) .eh-bar{flex-wrap:wrap}
+  .pr-is-page .eh:not(.eh--compact) .eh-actions{flex-wrap:wrap}
+}
+
+@media (max-width:699px){
+  .pr-landing{padding:12px 10px}
+  .pr-body{padding:10px 10px 20px}
+  .pr-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  button.pr-card-main{min-height:76px}
+}
+
+@media (pointer:coarse){
+  a.pr-room-link,a.pr-card-tab,a.pr-back{min-height:44px}
+}

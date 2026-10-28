@@ -106,7 +106,15 @@
 .fp-crosshair::before, .fp-crosshair::after { content: ""; position: absolute; background: var(--warn, #ff9548); }
 .fp-crosshair::before { left: 11px; top: 0; width: 2px; height: 24px; }
 .fp-crosshair::after { top: 11px; left: 0; height: 2px; width: 24px; }
-.fp-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--muted, #8e97ab); }
+.fp-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--muted, #8e97ab); cursor: default; }
+.fp-empty .fb-empty { max-width: 100%; }
+.fp-img.fp-img-pending { visibility: hidden; }
+.fp-imgload { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; pointer-events: none; }
+.fp-imgload .fb-skeleton { width: min(520px, 100%); }
+.fp-imgload .fb-skel-cards { grid-template-columns: 1fr; }
+.fp-imgload .fb-skel-card { min-height: 220px; }
+.fp-imgerror { position: absolute; left: 12px; right: 12px; top: 12px; display: flex; justify-content: center; pointer-events: none; }
+.fp-imgerror .fb-error { margin: 0; pointer-events: auto; cursor: default; }
 .fp-pop {
   position: absolute; z-index: 5; background: var(--panel, #111828); border: 1px solid var(--border, rgba(255,255,255,.12));
   border-radius: 8px; padding: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5); cursor: default;
@@ -129,6 +137,47 @@
 }
 .fp-ghost.fp-ok { border-color: var(--ok, #2fd4b4); }
 .fp-rename { width: 200px; }
+
+/* one-row toolbar: plan, view, then the tools inline (lg, when they fit) or in the ⋯ menu */
+.fp-root > .fp-toolbar { flex: none; flex-wrap: nowrap; gap: 6px; padding: 5px 8px; min-width: 0; position: relative; z-index: 6; }
+.fp-toolbar > .fp-group { flex: none; flex-wrap: nowrap; }
+.fp-toolbar > .fp-group-plan { flex: 0 1 auto; min-width: 0; }
+.fp-group-plan > #fp-select, .fp-group-plan > .fp-rename { min-width: 0; max-width: 100%; flex: 0 1 auto; text-overflow: ellipsis; }
+.fp-toolbar.fp-measuring > * { flex-shrink: 0 !important; }
+.fp-toolbar > .fp-tools { gap: 4px; }
+.fp-tools > .fp-group { flex-wrap: nowrap; }
+.fp-menu-wrap { position: relative; flex: none; margin-left: auto; display: inline-flex; }
+.fp-menu-more { font-size: 16px; line-height: 1; }
+.fp-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 220px; max-width: calc(100vw - 16px);
+  max-height: min(70vh, 560px); overflow: auto; padding: 8px; background: var(--panel, #111828);
+  border: 1px solid var(--border, rgba(255,255,255,.12)); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+}
+.fp-menu .fp-tools, .fp-menu .fp-tools > .fp-group { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.fp-menu .fp-planedit { flex-direction: row !important; flex-wrap: wrap !important; }
+.fp-menu .fp-planedit > .fp-btn:not(.fp-icon) { flex: 1 1 auto; }
+.fp-menu .fp-btn { justify-content: flex-start; }
+.fp-menu .fp-planedit > .fp-btn { justify-content: center; }
+.fp-menu .fp-layers-wrap { display: flex; flex-direction: column; gap: 6px; }
+.fp-menu .fp-layers-wrap > .fp-btn { width: 100%; }
+.fp-menu .fp-layers-pop { position: static; min-width: 0; box-shadow: none; padding: 6px 8px; }
+.fp-menu .fp-devplans select { min-width: 0; }
+
+/* status readout floats over the canvas */
+.fp-viewport > .fp-readout {
+  position: absolute; left: 8px; top: 8px; z-index: 3; margin: 0; width: auto; max-width: calc(100% - 16px);
+  padding: 2px 9px; border-radius: 999px; background: rgba(11,16,32,.82); border: 1px solid var(--border, rgba(255,255,255,.09));
+  pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fp-viewport > .fp-readout:empty { display: none; }
+
+/* devices explorer (#fp-unplaced): canvas fills the explorer page */
+.fp-main { position: relative; display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; }
+.fp-main .ex-page > .fp-viewport { flex: 1 1 auto; min-height: 0; }
+.fp-exhint { margin: 0; }
+.fp-exitem > a { gap: 6px; }
+.fp-exitem .fp-grip { width: 22px; min-height: 30px; }
+.fp-exitem.fp-placed .ex-item-label { color: var(--muted, #8e97ab); }
 
 /* ----------------------------------------------------------------- racks */
 .rk-subhead { margin: 10px 0 2px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted, #8e97ab); }
@@ -195,23 +244,24 @@
 .sch-table td { white-space: nowrap; }
 .sch-edit select { min-width: 104px; }
 .sch-edit input[size="18"] { min-width: 160px; }
-.sch-table th, .inv-table thead th {
+/* The Schedules DataTable also carries .sch-table; its cells are styled by datatable.css
+   and schedules.css, so the cell rules here are for the tag preview and print sheet only. */
+.sch-table:not(.dt-table) th, .inv-table thead th {
   position: sticky; top: 0; z-index: 1; background: var(--panel, #111828); text-align: left; color: var(--muted, #8e97ab);
   font-weight: 600; font-size: 11px; letter-spacing: .6px; text-transform: uppercase; padding: 0; border-bottom: 1px solid var(--border, rgba(255,255,255,.12));
 }
-.sch-table th.sch-chipcol { padding: 6px 8px; }
+.sch-table:not(.dt-table) th.sch-chipcol { padding: 6px 8px; }
 .sch-sort, .inv-sort {
   font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; background: transparent; border: 0; padding: 7px 8px;
   cursor: pointer; text-align: left; width: 100%; white-space: nowrap; min-height: 30px;
 }
 .sch-sort:hover, .inv-sort:hover { color: var(--text, #e6eaf4); }
-.sch-table td, .inv-table td, .inv-table tbody th { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,.05); vertical-align: middle; }
-.sch-table tbody tr:hover td, .inv-table tbody tr:hover td, .inv-table tbody tr:hover th { background: rgba(255,255,255,.025); }
+.sch-table:not(.dt-table) td, .inv-table td, .inv-table tbody th { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,.05); vertical-align: middle; }
+.sch-table:not(.dt-table) tbody tr:hover td, .inv-table tbody tr:hover td, .inv-table tbody tr:hover th { background: rgba(255,255,255,.025); }
 .sch-num, .inv-num { text-align: right; font-variant-numeric: tabular-nums; }
 .sch-muted { color: var(--muted, #8e97ab); }
 .sch-edit input, .sch-edit select { min-height: 28px; padding: 3px 6px; width: 100%; min-width: 60px; background: rgba(255,255,255,.03); }
 .sch-edit input:not(:focus) { border-color: transparent; }
-.sch-untagged td.sch-edit:first-of-type input { border-color: rgba(255,149,72,.35); }
 .sch-chip {
   display: inline-block; padding: 0 7px; border-radius: 999px; font-size: 10.5px; line-height: 17px; font-weight: 700;
   letter-spacing: .4px; text-transform: uppercase; color: #0b1020; background: var(--sch-color, #9aa3b5); margin-right: 4px;
@@ -292,7 +342,11 @@ span.inv-planned { color: var(--accent, #8ea2ff); border-style: dashed; }
    Desktop / mouse sizes above are unchanged. */
 @media (pointer: coarse) {
   :is(.fp-root, .rk-root, .sch-root, .inv-root) :is(button, select, input, textarea, summary, a[href], [role=tab], label.fp-btn, label.inv-btn, .fp-grip, .rk-grip) {
-    min-height: 44px !important; min-width: 44px !important;
+    min-height: 44px !important;
+  }
+  /* Inline cell editors keep their own min-width (a forced 44px wins over width: 100%). */
+  :is(.fp-root, .rk-root, .sch-root, .inv-root) :is(button, select, input, textarea, summary, a[href], [role=tab], label.fp-btn, label.inv-btn, .fp-grip, .rk-grip):not(.sch-edit *) {
+    min-width: 44px !important;
   }
   :is(.fp-root, .rk-root, .sch-root, .inv-root) :is(input, select, textarea) { font-size: 16px; }
   :is(.fp-root, .rk-root, .sch-root, .inv-root) input[type=checkbox] {
@@ -322,8 +376,6 @@ span.inv-planned { color: var(--accent, #8ea2ff); border-style: dashed; }
   .fp-grip, .rk-grip { color: var(--text, #e6eaf4); background: rgba(255,255,255,.05); }
 }
 @media (max-width: 699px) {
-  .fp-body { flex-direction: column-reverse; }
-  .fp-side { width: auto; max-height: 34%; border-right: 0; border-top: 1px solid var(--border, rgba(255,255,255,.09)); }
   .rk-body { flex-direction: column; }
   .rk-side { width: auto; max-height: 30%; border-right: 0; border-bottom: 1px solid var(--border, rgba(255,255,255,.09)); }
   .fp-readout, .rk-readout, .sch-count { margin-left: 0; width: 100%; }
@@ -333,6 +385,9 @@ span.inv-planned { color: var(--accent, #8ea2ff); border-style: dashed; }
 }
 
 /* ----------------------------------------------------------------- print */
+@media print {
+  .fp-root .ex-side, .fp-root .ex-resizer, .fp-root .ex-open, .fp-menu-wrap { display: none !important; }
+}
 @media print {
   .fp-toolbar, .fp-side, .rk-toolbar, .rk-side, .rk-form, .sch-tabs, .sch-toolbar, .sch-tagpanel, .inv-toolbar, .inv-bulk, .inv-actcol, .inv-cbcol { display: none !important; }
   .fp-root, .rk-root, .sch-root, .inv-root { color: #000; height: auto; }
