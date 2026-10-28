@@ -18,7 +18,7 @@ except ImportError:  # pragma: no cover
 
 P = "#/campus-demo/main/"
 SIZES3 = ("d", "t", "m")
-ALL_TABS = ["project", "rooms", "systems", "locations", "networks", "templates", "users", "invites", "backups", "sharing", "suggestions", "offline", "trash"]
+ALL_TABS = ["project", "rooms", "systems", "locations", "networks", "templates", "users", "invites", "backups", "sharing", "suggestions", "assistant", "offline", "trash"]
 TRASH_ITEMS = {"items": [
     {"name": "chapel-2024", "trashed_at": "2026-10-27T09:12:00Z", "trashed_by": "admin", "rooms": 1, "devices": 18},
     {"name": "old-broadcast", "trashed_at": "2026-10-21T16:40:00Z", "trashed_by": "jordan", "rooms": 2, "devices": 41},
@@ -40,6 +40,29 @@ SUGGESTIONS_ALL = {"items": [
     {"project": "campus-demo", "id": "pr-0000a001", "kind": "suggestion", "text": "Add a Dante name column to the patch table", "by": "jordan",
      "created": "2026-10-27T09:12:00Z", "status": "open", "device": "foh-cl5", "device_name": "FOH CL5"},
 ]}
+
+
+# P4C: the language-model endpoints belong to the P4A backend; Settings › Assistant is exercised against stubs.
+LLM_PROVIDERS = {"providers": [
+    {"id": "openai", "label": "OpenAI", "default_base_url": "https://api.openai.com/v1", "needs_key": True, "lists_models": True},
+    {"id": "anthropic", "label": "Anthropic", "default_base_url": "https://api.anthropic.com", "needs_key": True, "lists_models": False},
+    {"id": "xai", "label": "xAI Grok", "default_base_url": "https://api.x.ai/v1", "needs_key": True, "lists_models": True},
+    {"id": "openai_compat", "label": "Local / OpenAI-compatible server", "default_base_url": "http://localhost:11434/v1", "needs_key": False, "lists_models": True,
+     "presets": {"ollama": "http://localhost:11434/v1", "lmstudio": "http://localhost:1234/v1", "vllm": "http://localhost:8000/v1", "llamacpp": "http://localhost:8080/v1"}},
+]}
+LLM_SETTINGS = {"provider": "openai", "base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini", "api": "chat", "temperature": 0.2, "max_tokens": 700,
+                "web_lookup": False, "daily_cap": 200, "api_key_set": True,
+                "source": {"provider": "file", "base_url": "file", "model": "file", "api_key": "file", "api": "default", "temperature": "default"}}
+# Records JSON request bodies (the harness intercept sees URLs, not bodies): window.__bodies = [{method, url, body}].
+CAPTURE_BODIES = """(function () {
+  var real = window.fetch;
+  window.__bodies = [];
+  window.fetch = function (u, o) {
+    var s = String(u && u.url || u);
+    if (s.indexOf('/api/') >= 0 && o && o.body && typeof o.body === 'string') window.__bodies.push({method: (o.method || 'GET').toUpperCase(), url: s, body: o.body});
+    return real.apply(this, arguments);
+  };
+})();"""
 
 
 def api_get(base: str, path: str) -> dict:
@@ -220,7 +243,7 @@ class AdmUi(UiCase):
                 pg.wait_for("!document.querySelector('#app-main [aria-busy=true]')")
                 self.assertEqual(pg.js("document.querySelectorAll('#app-main table:not(.dt-table)').length"), 0)
                 self.assertEqual(pg.js("document.querySelectorAll('#app-main .adm-table').length"), 0)
-                if path not in ("settings/project", "settings/offline"):
+                if path not in ("settings/project", "settings/offline", "settings/assistant"):
                     self.assertGreaterEqual(pg.js("document.querySelectorAll('#app-main .dt-table').length"), 1)
                 self.assertEqual(pg.smoke["errors"], [])
 
@@ -462,6 +485,153 @@ class AdmUi(UiCase):
                 self.assertEqual(pg.js("document.querySelectorAll('.adm-panel tr.dt-row').length"), 2)
                 self.assertEqual(pg.js("document.querySelector('.adm-panel tr.dt-row[data-project=sunday-demo] td[data-col=project]').textContent"), "sunday-demo")
                 self.assertEqual(pg.smoke["errors"], [])
+
+    # ------------------------------------------------- Settings › Assistant (P4C)
+
+    def llm_page(self, size: str, settings: dict = None, providers: dict = None, capture: bool = False):
+        """Settings › Assistant against stubbed P4A endpoints; ``capture`` records request bodies in window.__bodies."""
+        cm = self.open("/healthz", size, ready=False)
+        pg = cm.__enter__()
+        self.addCleanup(cm.__exit__, None, None, None)
+        if capture:
+            pg.command("Page.addScriptToEvaluateOnNewDocument", {"source": CAPTURE_BODIES})
+        pg.intercept("/api/v2/llm/providers*", 200, providers or LLM_PROVIDERS, "GET")
+        pg.intercept("/api/v2/llm/settings*", 200, settings or LLM_SETTINGS, "GET")
+        pg.goto("/" + P + "settings/assistant")
+        self.view(pg, "adm-settings")
+        pg.wait_for("!!document.querySelector('#adm-llm-provider')")
+        return pg
+
+    def test_assistant_tab_renders_providers_and_prefills_the_base_url(self):
+        for size in ("d", "m"):
+            with self.subTest(size=size):
+                pg = self.llm_page(size)
+                self.assertEqual(selected_tab(pg), "assistant")
+                self.assertEqual(pg.js("Array.prototype.map.call(document.querySelectorAll('#adm-llm-provider option'), function (o) { return o.textContent; })"),
+                                 ["OpenAI", "Anthropic", "xAI Grok", "Local / OpenAI-compatible server"])
+                self.assertEqual(pg.js("document.querySelector('#adm-llm-provider').value"), "openai")
+                self.assertEqual(pg.js("document.querySelector('#adm-llm-url').value"), "https://api.openai.com/v1")
+                self.assertEqual(pg.js("document.querySelector('#adm-llm-key').placeholder"), "Stored")
+                self.assertFalse(pg.js("document.querySelector('#adm-llm-api').closest('.field').hidden"), "the API select shows for OpenAI")
+                self.assertTrue(pg.js("document.querySelector('.adm-llm-presets').hidden"))
+                # switching the provider replaces a base URL that still equals the previous default
+                set_value(pg, "#adm-llm-provider", "anthropic", "change")
+                self.assertEqual(pg.js("document.querySelector('#adm-llm-url').value"), "https://api.anthropic.com")
+                self.assertTrue(pg.js("document.querySelector('#adm-llm-api').closest('.field').hidden"), "the API select is OpenAI only")
+                self.assertTrue(pg.js("document.querySelector('[data-act=fetch-models]').disabled"), "Fetch models is off when the provider does not list models")
+                # an edited URL is kept
+                set_value(pg, "#adm-llm-url", "https://proxy.example.org/v1")
+                set_value(pg, "#adm-llm-provider", "xai", "change")
+                self.assertEqual(pg.js("document.querySelector('#adm-llm-url').value"), "https://proxy.example.org/v1")
+                # the local provider shows preset chips that fill the URL
+                set_value(pg, "#adm-llm-provider", "openai_compat", "change")
+                self.assertFalse(pg.js("document.querySelector('.adm-llm-presets').hidden"))
+                self.assertEqual(pg.js("Array.prototype.map.call(document.querySelectorAll('.adm-llm-preset'), function (b) { return b.textContent; })"), ["Ollama", "LM Studio", "vLLM", "llama.cpp"])
+                pg.click(".adm-llm-preset[data-preset=lmstudio]")
+                self.assertEqual(pg.js("document.querySelector('#adm-llm-url').value"), "http://localhost:1234/v1")
+                self.assertFalse(pg.js("document.querySelector('[data-act=fetch-models]').disabled"))
+                if size == "m":
+                    self.assertLessEqual(pg.page_hscroll(), 0)
+                    self.assertGreaterEqual(pg.rect(".adm-llm-preset[data-preset=lmstudio]")["height"], 44)
+                    self.assertGreaterEqual(pg.rect("[data-act=save]")["height"], 44)
+                pg.shot("settings-assistant-" + size)
+                self.assertEqual(pg.js("window.__fathomErrors"), [])
+
+    def test_assistant_fetch_models_fills_the_datalist(self):
+        pg = self.llm_page("d")
+        models = pg.intercept("/api/v2/llm/models", 200, {"models": ["gpt-4o-mini", "gpt-4.1", "o4-mini"]}, "POST")
+        pg.click("[data-act=fetch-models]")
+        pg.wait_for("document.querySelectorAll('#adm-llm-models option').length === 3")
+        self.assertEqual(models["hits"], 1)
+        self.assertEqual(pg.js("Array.prototype.map.call(document.querySelectorAll('#adm-llm-models option'), function (o) { return o.value; })"), ["gpt-4o-mini", "gpt-4.1", "o4-mini"])
+        self.assertEqual(pg.js("document.querySelector('#adm-llm-model').value"), "gpt-4o-mini", "the stored model stays")
+        pg.clear_intercepts()
+        pg.intercept("/api/v2/llm/models", 502, {"error": "upstream: 401 Unauthorized", "code": "upstream"}, "POST")
+        pg.click("[data-act=fetch-models]")
+        pg.wait_for("!!document.querySelector('.adm-llm-models-err .fb-error')")
+        self.assertIn("401 Unauthorized", pg.js("document.querySelector('.adm-llm-models-err').textContent"))
+        self.assertEqual(pg.js("window.__fathomErrors"), [])
+
+    def test_assistant_test_connection_shows_ok_and_errors(self):
+        pg = self.llm_page("d")
+        pg.intercept("/api/v2/llm/test", 200, {"ok": True, "model": "gpt-4o-mini", "latency_ms": 420, "detail": ""}, "POST")
+        pg.click("[data-act=test]")
+        pg.wait_for("document.querySelector('.adm-llm-test-out').getAttribute('data-ok') === 'true'")
+        self.assertEqual(pg.js("document.querySelector('.adm-llm-test-out').textContent"), "OK \u00b7 gpt-4o-mini \u00b7 420 ms")
+        self.assertFalse(pg.js("document.querySelector('[data-act=test]').disabled"))
+        pg.clear_intercepts()
+        pg.intercept("/api/v2/llm/test", 200, {"ok": False, "model": "gpt-4o-mini", "latency_ms": 12, "detail": "401 Unauthorized (key sk-***)"}, "POST")
+        pg.click("[data-act=test]")
+        pg.wait_for("document.querySelector('.adm-llm-test-out').getAttribute('data-ok') === 'false'")
+        self.assertEqual(pg.js("document.querySelector('.adm-llm-test-out').textContent"), "Failed \u00b7 401 Unauthorized (key sk-***)")
+        pg.clear_intercepts()
+        pg.intercept("/api/v2/llm/test", 502, {"error": "upstream: connection refused", "code": "upstream"}, "POST")
+        pg.click("[data-act=test]")
+        pg.wait_for("document.querySelector('.adm-llm-test-out').textContent.indexOf('connection refused') > 0")
+        self.assertTrue(pg.js("document.querySelector('.adm-llm-test-out').classList.contains('warn')"))
+        self.assertEqual(pg.js("window.__fathomErrors"), [])
+
+    def test_assistant_save_sends_the_key_only_when_typed(self):
+        pg = self.llm_page("d", capture=True)
+        saved = pg.intercept("/api/v2/llm/settings", 200, dict(LLM_SETTINGS, model="gpt-4.1"), "PUT")
+        set_value(pg, "#adm-llm-model", "gpt-4.1")
+        set_value(pg, "#adm-llm-max", "900")
+        pg.click("#adm-llm-web", force=True)
+        pg.click("[data-act=save]")
+        pg.wait_for("document.querySelector('.adm-llm-saved').textContent === 'Saved'")
+        self.assertEqual(saved["hits"], 1)
+        body = pg.js("JSON.parse(window.__bodies.filter(function (b) { return b.method === 'PUT'; }).pop().body)")
+        self.assertNotIn("api_key", body, "an untouched key field sends no api_key")
+        self.assertNotIn("clear_api_key", body)
+        self.assertEqual(body["model"], "gpt-4.1")
+        self.assertEqual(body["max_tokens"], 900)
+        self.assertEqual(body["web_lookup"], True)
+        self.assertEqual(body["api"], "chat")
+        self.assertEqual(body["provider"], "openai")
+        # a typed key travels once and the field empties again
+        set_value(pg, "#adm-llm-key", "sk-new-secret")
+        pg.click("[data-act=save]")
+        pg.wait_for("window.__bodies.filter(function (b) { return b.method === 'PUT'; }).length === 2")
+        body = pg.js("JSON.parse(window.__bodies.filter(function (b) { return b.method === 'PUT'; }).pop().body)")
+        self.assertEqual(body["api_key"], "sk-new-secret")
+        pg.wait_for("document.querySelector('#adm-llm-key').value === ''")
+        # Clear key removes the stored key
+        pg.click("[data-act=clear-key]")
+        self.assertEqual(pg.js("document.querySelector('#adm-llm-key').placeholder"), "Paste the API key")
+        pg.click("[data-act=save]")
+        pg.wait_for("window.__bodies.filter(function (b) { return b.method === 'PUT'; }).length === 3")
+        body = pg.js("JSON.parse(window.__bodies.filter(function (b) { return b.method === 'PUT'; }).pop().body)")
+        self.assertEqual(body.get("clear_api_key"), True)
+        self.assertNotIn("api_key", body)
+        self.assertEqual(pg.js("window.__fathomErrors"), [])
+
+    def test_assistant_env_sourced_fields_are_disabled(self):
+        env = dict(LLM_SETTINGS, source={"provider": "env", "base_url": "env", "api_key": "env", "model": "file"})
+        pg = self.llm_page("m", settings=env, capture=True)
+        for sel in ("#adm-llm-provider", "#adm-llm-url", "#adm-llm-key"):
+            self.assertTrue(pg.js("document.querySelector(%s).disabled" % json.dumps(sel)), sel)
+        self.assertFalse(pg.js("document.querySelector('#adm-llm-model').disabled"))
+        self.assertEqual(pg.js("document.querySelector('.adm-llm-env[data-env=base_url]').textContent"), "Set by environment (FATHOM_LLM_URL)")
+        self.assertEqual(pg.js("document.querySelector('.adm-llm-env[data-env=api_key]').textContent"), "Set by environment (FATHOM_LLM_KEY)")
+        self.assertTrue(pg.js("document.querySelector('[data-act=clear-key]').hidden"), "no Clear key for an env key")
+        pg.intercept("/api/v2/llm/settings", 200, env, "PUT")
+        pg.click("[data-act=save]")
+        pg.wait_for("window.__bodies.filter(function (b) { return b.method === 'PUT'; }).length === 1")
+        body = pg.js("JSON.parse(window.__bodies.filter(function (b) { return b.method === 'PUT'; }).pop().body)")
+        for k in ("provider", "base_url", "api_key", "clear_api_key"):
+            self.assertNotIn(k, body, "env-sourced fields are not sent")
+        self.assertEqual(body["model"], "gpt-4o-mini")
+        self.assertLessEqual(pg.page_hscroll(), 0)
+        pg.shot("settings-assistant-env-m")
+
+    def test_assistant_tab_without_the_endpoints_shows_a_note(self):
+        with self.open(P + "settings/assistant", "d", intercepts=[("/api/v2/llm/providers*", 404, {"error": "not found"}, "GET"),
+                                                                 ("/api/v2/llm/settings*", 404, {"error": "not found"}, "GET")]) as pg:
+            self.view(pg, "adm-settings")
+            pg.wait_for("!!document.querySelector('[data-card=llm-missing]')")
+            self.assertIn("no language-model settings", pg.js("document.querySelector('.adm-llm-missing').textContent"))
+            self.assertFalse(pg.js("!!document.querySelector('#adm-llm-provider')"))
+            self.assertEqual(pg.smoke["errors"], [])
 
     # ------------------------------------------------------------------- history
 

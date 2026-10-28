@@ -161,7 +161,17 @@ export function createApi(opts) {
     tagPreview: function (name, scope, pattern) { return get(proj(name) + '/cables/tag-preview', { scope: scope, pattern: pattern }); },
     trace: function (name, params) { return get(proj(name) + '/trace', params); },
     search: function (name, q, o) { o = o || {}; return get(proj(name) + '/search', { q: q, limit: o.limit, kinds: o.kinds }); },
+    // Assistant (§5.10, P4B): payload {question, room, use_llm, history[{role, text, attachments?}],
+    // attachments?, manual_text?} is sent as given; the answer may carry llm, used_tools, proposal.
     ask: function (name, payload) { return send('POST', proj(name) + '/assistant', payload); },
+    // Applies a proposal the assistant returned: body {proposal | id, base_revision} -> {revision, applied, summary}; 423 when locked.
+    applyProposal: function (name, body) { return send('POST', proj(name) + '/assistant/apply', body || {}); },
+    // Language-model settings (P4A, admin): providers catalogue, saved settings, model list and a connection test.
+    llmProviders: function () { return get('api/v2/llm/providers'); },
+    llmSettings: function () { return get('api/v2/llm/settings'); },
+    saveLlmSettings: function (body) { return send('PUT', 'api/v2/llm/settings', body || {}); },
+    llmModels: function (body) { return send('POST', 'api/v2/llm/models', body || {}); },
+    llmTest: function (body) { return send('POST', 'api/v2/llm/test', body || {}); },
     qrUrl: function (name, device) { return url(proj(name) + '/qr/' + enc(device) + '.svg'); },
     rackSvgUrl: function (name, rack, face) { return url(proj(name) + '/racks/' + enc(rack) + '.svg', { face: face }); },
     floorplanImageUrl: function (name, fp, hide) { return url(proj(name) + '/floorplans/' + enc(fp) + '/image', { hide: hide }); },

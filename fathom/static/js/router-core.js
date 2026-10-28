@@ -41,7 +41,7 @@ export const SECTIONS = [
 export const VIEW_ROLES = {};
 SECTIONS.forEach(function (s) { s.views.forEach(function (v) { VIEW_ROLES[v] = 'viewer'; }); });
 
-export const TAB_ROLES = { settings: { users: 'admin', invites: 'admin', backups: 'admin', sharing: 'editor', suggestions: 'admin', trash: 'admin' } };
+export const TAB_ROLES = { settings: { users: 'admin', invites: 'admin', backups: 'admin', sharing: 'editor', suggestions: 'admin', assistant: 'admin', trash: 'admin' } };
 
 const RANK = { viewer: 0, editor: 1, admin: 2 };
 const NAV_KEY = 'fathom.ui.nav';
