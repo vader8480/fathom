@@ -988,6 +988,57 @@ def cmd_discovery_doctor(a: argparse.Namespace) -> None:
     sys.exit(1 if rep["advice"] else 0)
 
 
+def cmd_llm(a: argparse.Namespace) -> None:
+    """``fathom llm show|models|test``: the assistant's LLM provider (settings file + FATHOM_LLM_* env; the key is never printed)."""
+    from .llm import LLMError
+    from .llm import config as lcfg
+    from .llm.providers import make
+
+    overrides = {k: v for k, v in (("provider", a.provider), ("base_url", a.url), ("model", a.model), ("api", a.api)) if v}
+    if a.action == "show":
+        pub = lcfg.public()
+        if a.json:
+            print(json.dumps(pub, indent=2, sort_keys=True))
+            return
+        src = pub.get("source") or {}
+        for k in ("provider", "effective_base_url", "model", "api", "temperature", "max_tokens", "web_lookup", "daily_cap", "timeout"):
+            print(f"{k:19} {pub.get(k)!s:40} ({src.get('base_url' if k == 'effective_base_url' else k, 'default')})")
+        print(f"{'api_key':19} {'set' if pub.get('api_key_set') else 'not set':40} ({src.get('api_key', 'default')})")
+        print(f"{'configured':19} {'yes' if pub.get('configured') else 'no'}")
+        print(f"files: {lcfg.settings_path()} (+ llm-secrets.json)")
+        return
+    try:
+        cfg = lcfg.probe_config(overrides)
+    except lcfg.ConfigError as exc:
+        _die(str(exc))
+    if not cfg.get("provider"):
+        _die("no provider configured (Settings › Assistant, FATHOM_LLM_PROVIDER / FATHOM_LLM_URL, or --provider)")
+    if not lcfg.resolved_base_url(cfg):
+        _die("this provider needs a base URL (--url or FATHOM_LLM_URL)")
+    prov = make(cfg)
+    if a.action == "models":
+        try:
+            models = prov.list_models()
+        except LLMError as exc:
+            _die(str(exc), 2)
+        if a.json:
+            print(json.dumps({"provider": prov.id, "models": models}, indent=2))
+        else:
+            for m in models:
+                print(m)
+            if not models:
+                print(f"no models listed by {prov.label}", file=sys.stderr)
+        return
+    res = prov.test_connection(model=cfg.get("model") or "", timeout=cfg.get("timeout"))
+    res["provider"] = prov.id
+    if a.json:
+        print(json.dumps(res, indent=2))
+    else:
+        print(("ok" if res["ok"] else "FAILED") + f": {prov.label} · {res.get('model') or '(no model)'} · {res.get('latency_ms')} ms · {res.get('detail')}")
+    if not res["ok"]:
+        sys.exit(2)
+
+
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="fathom", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--version", action="version", version=f"fathom {__version__}")
@@ -1208,6 +1259,15 @@ def main(argv=None) -> None:
     d.add_argument("--interface", default="", help="listen on one interface only")
     d.add_argument("--json", action="store_true")
     d.set_defaults(func=cmd_discovery_doctor)
+
+    s = sub.add_parser("llm", help="assistant LLM provider (FATHOM_DATA/llm.json + FATHOM_LLM_* env)")
+    s.add_argument("action", choices=["show", "models", "test"])
+    s.add_argument("--provider", choices=["openai", "anthropic", "xai", "openai_compat"], help="models/test: override the configured provider")
+    s.add_argument("--url", help="models/test: override the base URL")
+    s.add_argument("--model", help="test: override the model")
+    s.add_argument("--api", choices=["chat", "responses"], help="models/test: OpenAI API flavour")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(func=cmd_llm)
 
     a = p.parse_args(argv)
     a.func(a)

@@ -1,0 +1,45 @@
+{
+  "request": {
+    "model": "gpt-4.1",
+    "instructions": "You are Fathom's AV/lighting troubleshooting assistant.",
+    "input": [
+      {
+        "role": "user",
+        "content": "What feeds the ATEM Mini?"
+      }
+    ],
+    "max_output_tokens": 700,
+    "stream": false,
+    "temperature": 0.2
+  },
+  "status": 200,
+  "response": {
+    "id": "resp_p4a_1",
+    "object": "response",
+    "created_at": 1761670000,
+    "model": "gpt-4.1",
+    "status": "completed",
+    "error": null,
+    "incomplete_details": null,
+    "output": [
+      {
+        "type": "message",
+        "id": "msg_p4a_1",
+        "status": "completed",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "The ATEM Mini is fed by Audio Rack 1 on its Stream input.",
+            "annotations": []
+          }
+        ]
+      }
+    ],
+    "usage": {
+      "input_tokens": 31,
+      "output_tokens": 14,
+      "total_tokens": 45
+    }
+  }
+}

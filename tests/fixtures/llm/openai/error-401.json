@@ -1,0 +1,14 @@
+{
+  "request": {
+    "model": "gpt-4o-mini"
+  },
+  "status": 401,
+  "response": {
+    "error": {
+      "message": "Incorrect API key provided: sk-test-SECRET-KEY-91c2. You can find your API key at the dashboard.",
+      "type": "invalid_request_error",
+      "param": null,
+      "code": "invalid_api_key"
+    }
+  }
+}

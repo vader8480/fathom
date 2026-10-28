@@ -1,0 +1,77 @@
+{
+  "request": {
+    "model": "grok-4",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are Fathom's AV/lighting troubleshooting assistant."
+      },
+      {
+        "role": "user",
+        "content": "What feeds the ATEM Mini?"
+      },
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "call_p4a_1",
+            "type": "function",
+            "function": {
+              "name": "trace_device",
+              "arguments": "{\"device\": \"atem-mini\"}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_p4a_1",
+        "content": "{\"paths\": [\"Audio Rack 1 \\u00b7 Stream \\u2192 ATEM Mini \\u00b7 Stream\"]}"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "trace_device",
+          "description": "Trace the signal paths that end at a device.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "device": {
+                "type": "string",
+                "description": "device id"
+              }
+            },
+            "required": [
+              "device"
+            ]
+          }
+        }
+      }
+    ],
+    "stream": false
+  },
+  "status": 200,
+  "response": {
+    "id": "chatcmpl-p4a-1",
+    "object": "chat.completion",
+    "created": 1761670000,
+    "model": "grok-4",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "Audio Rack 1 feeds the ATEM Mini's Stream input."
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 90,
+      "completion_tokens": 12,
+      "total_tokens": 102
+    }
+  }
+}

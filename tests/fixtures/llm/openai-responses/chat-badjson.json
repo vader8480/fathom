@@ -1,0 +1,44 @@
+{
+  "request": {
+    "model": "gpt-4.1",
+    "tools": [
+      {
+        "type": "function",
+        "name": "trace_device",
+        "description": "Trace the signal paths that end at a device.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "device": {
+              "type": "string",
+              "description": "device id"
+            }
+          },
+          "required": [
+            "device"
+          ]
+        }
+      }
+    ]
+  },
+  "status": 200,
+  "response": {
+    "id": "resp_p4a_1",
+    "object": "response",
+    "created_at": 1761670000,
+    "model": "gpt-4.1",
+    "status": "completed",
+    "error": null,
+    "incomplete_details": null,
+    "output": [
+      {
+        "type": "function_call",
+        "id": "fc_p4a_1",
+        "call_id": "call_p4a_bad",
+        "name": "trace_device",
+        "arguments": "{\"device\": atem-mini",
+        "status": "completed"
+      }
+    ]
+  }
+}

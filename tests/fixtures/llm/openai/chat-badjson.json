@@ -1,0 +1,53 @@
+{
+  "request": {
+    "model": "gpt-4o-mini",
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "trace_device",
+          "description": "Trace the signal paths that end at a device.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "device": {
+                "type": "string",
+                "description": "device id"
+              }
+            },
+            "required": [
+              "device"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "status": 200,
+  "response": {
+    "id": "chatcmpl-p4a-1",
+    "object": "chat.completion",
+    "created": 1761670000,
+    "model": "gpt-4o-mini",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "tool_calls": [
+            {
+              "id": "call_p4a_bad",
+              "type": "function",
+              "function": {
+                "name": "trace_device",
+                "arguments": "{\"device\": atem-mini"
+              }
+            }
+          ]
+        },
+        "finish_reason": "tool_calls"
+      }
+    ]
+  }
+}
