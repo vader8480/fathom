@@ -134,6 +134,8 @@ Format: `ID · Priority · Requirement — **AC:** acceptance criterion · Owner
 | FR-ROOM-06 | P1 | Locations (booth, stage, rack room, storage, catwalk) per venue/room; `device.location`; racks reference a location. | Inventory view groups by location. | W4 |
 | FR-ROOM-07 | P0 | Each room has its own signal-flow map configuration (`room.flow`: columns, groups, spine, options, extra cards). | `/p/campus-demo/r/<room>` renders a different map for each of the 3 rooms. | W1, W5 |
 | FR-ROOM-08 | P1 | Systems: devices may reference a system; inventory and patch view can filter by system. | Filter "Main video" on the fixture shows exactly the 4 devices with `system: main-video`. | W4, W3 |
+| FR-ROOM-09 | P1 | Five church room starters ship as samples (`fathom/samples/church-{sanctuary,youth-room,chapel,portable,broadcast}`): schema v2, one room each, every id prefixed with the room id, cable tags from the project's `cable_tag_pattern`, networks with VLANs, one "Sunday power-up" SOP page, `meta.org` "Your church", no `short_code`, `inventory.condition` filled; the portable starter uses `container` devices. They are also `fathom new --template` / `POST /api/v2/projects` templates and are listed by `GET /api/v2/starters`. | `validate_doc` on each starter returns no errors; `fathom new x --template church-sanctuary` builds. | P3C |
+| FR-ROOM-10 | P1 | **Add room from starter…** in the Rooms view (editors): a dialog (bottom sheet below 700 px) lists the starters as cards (label, blurb, counts, tags) with a name field prefilled with the starter label; **Add room** calls `POST /api/v2/projects/<n>/rooms/from-starter`, which merges the starter as a new room (ids and page slugs re-prefixed with the new room id, cable tags re-coded, networks shared by id) in one history revision (source `starter`, summary "Added room X from starter Y"), then the doc reloads and the UI navigates to `rooms/<id>`. | Adding `church-chapel` twice to campus-demo yields two rooms with distinct ids, zero validation errors and unique cable tags; a locked project answers 423; at 390 px the cards stack and targets are ≥ 44 px. | P3C |
 
 ### 3.2 FR-VOC — AVL vocabulary & color coding
 
@@ -1292,6 +1294,13 @@ Username regex `^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$`. Session cookie payload `{"u
 | POST | `/api/v2/projects/<n>/scenes/<sid>/save` | editor | — | `{"scene", "revision"}` — overwrites the scene's stored data with the live state (summary *Saved current state into scene X*); 404 |
 | GET | `/api/v2/projects/<n>/scenes/<sid>/diff?against=<sid\|base>` | viewer | — | the full `scenes.diff(against, sid)` dict + `{"scene", "against", "revision"}` (default `against=base`); 404 when either is unknown |
 | GET | `/api/v2/projects/<n>/scenes/<sid>/doc` | viewer | — | `{"doc": <doc as it would be with that scene active>, "scene", "revision"}` — read-only preview, nothing is written; 404 |
+
+**Starters** (FR-ROOM-09/10)
+
+| Method | Path | Role | Request | Response / codes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/v2/starters` | viewer | — | `{"starters": [{"id", "label", "blurb", "tags", "room", "room_name", "room_kind", "devices", "cables", "racks", "pages", "description"}]}` in `fathom.starters.STARTERS` order (sanctuary, youth room, chapel, portable, broadcast) |
+| POST | `/api/v2/projects/<n>/rooms/from-starter` | editor | `{"starter", "name?"}` (`Starter`; `name` defaults to the starter's room name) | 201 `{"room", "info": {"room", "name", "code", "starter", "networks", "devices", "cables", "racks", "pages"}, "revision", "problems"}` + `ETag` — one revision (source `starter`, summary "Added room <name> from starter <label>"); the new room id is the slug of `name` (deduped `-2`, `-3`…), every copied id and page slug is re-prefixed, `[[device:…]]` / `[[room:…]]` / `[[page:…]]` refs rewritten, cable and bundle tags re-coded to the new room code, networks shared by id, IPs already used in the project dropped, `short_code` never copied; 400 `bad_enum` unknown starter; 404 unknown project; 423 `locked` |
 
 ### 5.7 Imports, files, floor plans
 
