@@ -43,6 +43,28 @@
 .sch-host .sch-edit select { width: 116px; }
 .sch-untagged td[data-col=tag] .sch-edit input { border-color: rgba(255,149,72,.35); }
 
+/* ---- device labels (Brady M511) under the cable-label sheet */
+.sch-devlabels { margin: 6px 0 14px; padding: 12px 0 10px; border-top: 1px solid var(--border, rgba(255,255,255,.12)); border-bottom: 1px solid var(--border, rgba(255,255,255,.12)); }
+.sch-devlabels h3, .sch-dl-caption { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.sch-dl-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 8px; min-width: 0; }
+.sch-dl-row select, .sch-dl-row .sch-btn, .sch-dl-row .search-input { min-height: 40px; box-sizing: border-box; }
+.sch-dl-row select { max-width: 100%; }
+.sch-dl-row .search-input { flex: 1 1 160px; width: auto; min-width: 0; }
+.sch-dl-pick { margin: 0 0 8px; max-width: 520px; }
+.sch-dl-pick .pick-list { margin-top: 0; max-height: 240px; }
+.sch-dl-list li .sch-dl-check { display: inline-block; width: 16px; flex: 0 0 16px; text-align: center; color: var(--accent, #8ea2ff); }
+.sch-dl-list li .sch-dl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sch-dl-note { margin: 0; max-width: 64ch; }
+.sch-devlabels .sch-btn[aria-disabled=true] { opacity: .45; cursor: default; pointer-events: none; }
+@media (max-width: 699px) {
+  .sch-dl-row { flex-direction: column; align-items: stretch; }
+  .sch-dl-row select, .sch-dl-row .sch-btn, .sch-dl-row .search-input { width: 100%; justify-content: center; }
+  .sch-dl-pick { max-width: none; }
+}
+@media (pointer: coarse) {
+  .sch-dl-row select, .sch-dl-row .sch-btn, .sch-dl-row .search-input, .sch-dl-list li[role=option] { min-height: 44px; }
+}
+
 /* ---- loading and load failure: the state box stands in for the table body; the toolbar stays */
 .sch-statebox { margin: 8px 0 0; min-width: 0; }
 .sch-host.sch-busy > .dt-root > .dt-scroll, .sch-host.sch-busy > .dt-root > .dt-empty, .sch-host.sch-busy > .dt-root > .dt-pager,
