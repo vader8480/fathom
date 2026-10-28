@@ -130,10 +130,17 @@ export function startTour(steps, opts) {
       }
     }
     if (sheet()) {
+      // The sheet docks away from the target: at the top when the target sits in
+      // the lower half (the tab bar), else at the bottom.
+      const mid = el ? (el.getBoundingClientRect().top + el.getBoundingClientRect().bottom) / 2 : 0;
+      const atTop = !!el && mid > H / 2;
       card.classList.add('tour-card--sheet');
+      card.classList.toggle('tour-card--sheet-top', atTop);
       card.style.top = '';
       card.style.left = '';
-      card.setAttribute('data-side', 'sheet');
+      card.setAttribute('data-side', atTop ? 'sheet-top' : 'sheet');
+    } else {
+      card.classList.remove('tour-card--sheet-top');
     }
   }
 

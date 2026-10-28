@@ -14,5 +14,6 @@
 .tour-skip:hover{color:var(--text)}
 /* sm: the card docks to the bottom as a sheet */
 .tour-card--sheet{top:auto;left:0;right:0;bottom:0;width:auto;border-radius:14px 14px 0 0;padding-bottom:calc(12px + var(--sab))}
+.tour-card--sheet-top{top:0;bottom:auto;border-radius:0 0 14px 14px;padding-top:calc(12px + var(--sat));padding-bottom:12px}
 @media (pointer:coarse){.tour-foot button,.tour-close{min-height:44px;min-width:44px}}
 @media (prefers-reduced-motion:reduce){.tour-hl{transition:none}}
