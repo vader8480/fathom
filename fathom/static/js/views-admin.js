@@ -153,7 +153,7 @@ function overridesText(projects) {
 // is the whole map (rows without a project are skipped); `valid()` marks duplicate projects.
 function projectRolesEditor(ctx, initial, opts) {
   opts = opts || {};
-  const live = (ctx.projects || []).map(function (p) { return { name: p.name, title: p.title || p.name }; });
+  const live = (ctx.projects || []).map(function (p) { return { name: p.name, title: p.title && p.title !== p.name ? p.name + ' \u00b7 ' + p.title : p.name }; });
   if (ctx.project && !live.some(function (p) { return p.name === ctx.project; })) live.unshift({ name: ctx.project, title: ctx.project });
   const rows = [];
   const list = h('div', { class: 'adm-pr-rows' });
@@ -1080,13 +1080,13 @@ export function mountSettings(el, ctx) {
   function lockCard() {
     const s = store.doc.settings || {};
     const locked = s.locked === true;
-    const who = s.locked_by ? 'Locked by ' + s.locked_by : 'Locked';
+    const who = locked && (s.locked_by || s.locked_at) ? (s.locked_by ? 'by ' + s.locked_by : '') + (s.locked_at ? (s.locked_by ? ' \u00b7 ' : '') + fmtTime(s.locked_at) : '') : '';
     const status = h('div', { class: 'adm-lock-status', 'data-locked': locked ? 'true' : 'false' }, [
       h('span', { class: 'chip' + (locked ? ' on' : '') }, locked ? 'Locked' : 'Unlocked'),
-      locked ? h('span', { class: 'adm-lock-who' }, who + (s.locked_at ? ' \u00b7 ' + fmtTime(s.locked_at) : '')) : null,
+      who ? h('span', { class: 'adm-lock-who' }, who) : null,
     ]);
     const mayToggle = role !== 'viewer' && (!store.readOnly || locked) && !(ctx.isTimeTravel && ctx.isTimeTravel());
-    const toggle = mayToggle ? h('button', { type: 'button', class: locked ? 'primary' : 'danger', 'data-act': 'lock-toggle', 'aria-pressed': locked ? 'true' : 'false', onclick: function () {
+    const toggle = mayToggle ? h('button', { type: 'button', class: locked ? 'primary' : '', 'data-act': 'lock-toggle', 'aria-pressed': locked ? 'true' : 'false', onclick: function () {
       ctx.commit([{ op: 'root', key: 'settings', value: { locked: !locked } }], locked ? 'Unlock editing' : 'Lock editing');
       ctx.toast(locked ? 'Editing unlocked' : 'Editing locked', 'ok');
     } }, locked ? 'Unlock editing' : 'Lock editing') : null;
