@@ -3,6 +3,8 @@
 // answers {templates} and resolves attachments to a static image).
 // window.__rx = {ctx, open(opts), results, last}. Query: ?smoke=1 sets
 // data-smoke; ?api=0 drops ctx.api; ?open=1 opens the dialog on load.
+// window.__rx.calls records every ctx.api.library query (project templates in
+// doc.templates are served without one).
 window.__fathomErrors = window.__fathomErrors || [];
 (function () {
   const errs = window.__fathomErrors;
@@ -24,7 +26,11 @@ async function main() {
     library: function (q) {
       calls.push(q);
       const ids = String(q.ids || '').split(',');
-      const all = [{id: 'demo-sw8', name: '8-port switch', kind: 'switch', ru: 1, rack_category: 'network', image_front: 'missing/demo-sw8.front.webp'}];
+      const all = [
+        {id: 'demo-sw8', name: '8-port switch (library copy)', kind: 'switch', ru: 1, rack_category: 'network', image_front: 'missing/demo-sw8.front.webp'},
+        {id: 'netgear-gs108pp', name: 'GS108PP', manufacturer: 'Netgear', model: 'GS108PP', kind: 'switch', ru: 1, rack_category: 'network', source: 'catalog',
+          image_front: 'netgear/netgear-gs108pp.front.webp', image_rear: 'netgear/netgear-gs108pp.rear.webp'},
+      ];
       return Promise.resolve({templates: all.filter(function (t) { return ids.indexOf(t.id) >= 0; })});
     },
     fileUrl: function (project, att) { return root + 'static/icons/' + encodeURIComponent(att.name); },

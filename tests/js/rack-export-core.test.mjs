@@ -246,6 +246,9 @@ test('block colour: opts.blockColor wins and its categories enter the legend; ra
   assert.ok(svg.indexOf('fill="#123456"') > 0);
   const keys = X.legendEntries(d, ['rk-a', 'rk-b'], {face: 'both', vocab, info, blockColor}).map((e) => e.key);
   assert.deepEqual(keys, ['cat:network', 'disc:audio']);
+  d.devices.push({id: 'sw2', name: 'Plain switch', kind: 'switch', rack: {id: 'rk-b', u: 6, height: 1, face: 'front'}});
+  const labels = X.legendEntries(d, ['rk-a', 'rk-b'], {face: 'front', vocab, info, blockColor}).map((e) => e.label);
+  assert.deepEqual(labels, ['Network', 'Audio', 'Network (discipline)'], 'a discipline sharing a category label is marked');
   const fallback = X.buildRackSvg(d, ['rk-b'], {face: 'front', vocab, info});
   assert.ok(fallback.indexOf('fill="' + vocab.disciplines.network.color + '"') > 0, 'discipline colour without blockColor');
 });

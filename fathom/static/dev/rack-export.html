@@ -21,7 +21,7 @@
 <body>
   <main class="rxh">
     <h1>Rack export harness</h1>
-    <p>The export dialog on a small inline project (<code>harness-demo</code>): a 12 U audio rack with accessories, a shelf and an attachment panel image, and a 10&Prime; 6 U video rack without items. The stub ctx has no store writes; <code>?api=0</code> drops the stub library API (no template info or images).</p>
+    <p>The export dialog on a small inline project (<code>harness-demo</code>): a 12 U audio rack with accessories, a shelf holding two devices and an attachment panel image, and a 10&Prime; 6 U video rack without items, holding a project-template switch (<code>demo-sw8</code>, served from the doc) and a library-only catalog switch (<code>netgear-gs108pp</code>, fetched through the stub library with its panel images). The stub ctx has no store writes; <code>?api=0</code> drops the stub library API (no template info or images).</p>
     <div class="rxh-actions">
       <button type="button" id="rx-h-open" class="primary">Export racks…</button>
       <button type="button" id="rx-h-open-one">Export the audio rack (rear)</button>
@@ -56,12 +56,16 @@
      "rack": {"id": "rk-audio", "u": 8, "height": 1, "face": "front", "side": "full"}},
     {"id": "amp", "name": "Amplifier", "kind": "amp", "room": "main", "manufacturer": "Powersoft", "model": "Quattrocanali",
      "rack": {"id": "rk-audio", "u": 1, "height": 2, "face": "rear", "side": "full", "depth": "half"}},
+    {"id": "iem-pack", "name": "IEM spare packs", "kind": "iem", "room": "main", "manufacturer": "Sennheiser", "model": "EK IEM G4",
+     "rack": {"id": "rk-audio", "u": 5, "height": 1, "face": "front", "side": "full", "shelf": "ri-3", "slot": 0}},
     {"id": "mini", "name": "Playback Mac", "kind": "computer", "room": "main", "manufacturer": "Apple", "model": "Mac mini",
      "rack": {"id": "rk-audio", "u": 5, "height": 1, "face": "front", "side": "full", "shelf": "ri-3", "slot": 1}},
     {"id": "pdu", "name": "PDU", "kind": "power", "room": "main", "manufacturer": "Furman", "model": "M-8x2",
      "rack": {"id": "rk-audio", "u": 12, "height": 1, "face": "front", "side": "full"}},
     {"id": "switch", "name": "Booth switch", "kind": "switch", "room": "main", "template": "demo-sw8", "manufacturer": "Netgear", "model": "GS308",
      "rack": {"id": "rk-video", "u": 6, "height": 1, "face": "front", "side": "full"}},
+    {"id": "poe", "name": "Camera PoE switch", "kind": "switch", "room": "main", "template": "netgear-gs108pp", "manufacturer": "Netgear", "model": "GS108PP",
+     "rack": {"id": "rk-video", "u": 5, "height": 1, "face": "front", "side": "full"}},
     {"id": "atem", "name": "ATEM Mini Extreme", "kind": "video_switcher", "room": "main", "manufacturer": "Blackmagic", "model": "ATEM Mini Extreme",
      "rack": {"id": "rk-video", "u": 3, "height": 2, "face": "front", "side": "left"}},
     {"id": "loose-mic", "name": "Spare mic", "kind": "mic", "room": "main"}

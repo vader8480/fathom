@@ -112,6 +112,10 @@ class RackExportUi(UiCase):
               return {err: !!x.querySelector('parsererror'), ns: root.namespaceURI, w: root.getAttribute('width'),
                       vb: root.getAttribute('viewBox'), faces: x.querySelectorAll('g.rx-face').length,
                       images: x.querySelectorAll('image').length, legend: !!x.querySelector('g.rx-legend'),
+                      webp: Array.prototype.filter.call(x.querySelectorAll('g.rx-device[data-device=poe] image'), function (i) {
+                        return (i.getAttribute('href') || '').indexOf('data:image/webp') === 0; }).length,
+                      items: Array.prototype.map.call(x.querySelectorAll('g.rx-face[data-face=front] g.rx-item'), function (g) { return g.getAttribute('data-type'); }),
+                      shelfKids: ['iem-pack', 'mini'].map(function (id) { return x.querySelectorAll('g.rx-face[data-face=front] g.rx-device[data-device=' + id + ']').length; }),
                       footer: (x.querySelector('g.rx-footer') || {}).textContent || ''};
             })""")
             self.assertFalse(check["err"], "the SVG parses as XML")
@@ -119,13 +123,20 @@ class RackExportUi(UiCase):
             self.assertEqual(check["vb"].split()[:3], ["0", "0", check["w"]])
             self.assertEqual(check["faces"], 4, "two racks x front + rear")
             self.assertGreaterEqual(check["images"], 1, "the attachment panel image is embedded")
+            self.assertEqual(check["webp"], 2, "the library template's front and rear panel images are embedded")
+            for t in ("blank", "vent", "shelf", "drawer", "cable_manager"):
+                self.assertIn(t, check["items"])
+            self.assertEqual(check["shelfKids"], [1, 1], "both shelf children drawn once on the front")
             self.assertTrue(check["legend"])
             self.assertIn("Harness Chapel & Hall", check["footer"])
             self.assertTrue(pg.js("document.activeElement && document.activeElement.id === 'rx-h-open'"), "focus returns to the opener")
             self.assertEqual(pg.js("window.__rx.results[window.__rx.results.length - 1].filename"), "harness-demo-racks-both.svg")
             self.assertEqual(self._prefs(pg), {"v": 1, "face": "both", "format": "svg", "legend": True, "annotate": "model"})
             calls = pg.js("window.__rx.calls")
-            self.assertTrue(calls and calls[0]["ids"] == "demo-sw8" and calls[0]["project"] == "harness-demo", calls)
+            asked = [i for c in calls for i in str(c.get("ids", "")).split(",") if i]
+            self.assertIn("netgear-gs108pp", asked, "a library-only template is requested from the library")
+            self.assertTrue(all(c.get("project") == "harness-demo" for c in calls), calls)
+            self.assertNotIn("demo-sw8", asked, "a project template (doc.templates) triggers no request")
 
     def test_choices_are_remembered_and_single_rack_filename(self):
         with self.open(HARNESS, "d") as pg:

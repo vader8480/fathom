@@ -385,11 +385,12 @@ function drawItem(b, x, y, w, hh, st, C) {
   if (b.type !== 'lacing_bar') {
     out.push(el('rect', {x: x, y: y, width: w, height: hh, fill: st.color, 'fill-opacity': dim, stroke: '#1d2230', 'stroke-opacity': 0.35, 'stroke-width': 1}));
   }
+  let labelX = cx;
+  let labelY = cy + 3.5;
   if (b.type === 'vent') {
-    for (let i = 0; i < 6; i++) {
-      const sx = x + w * 0.2 + i * (w * 0.6 / 6);
-      out.push(el('rect', {x: sx, y: y + hh * 0.3, width: w * 0.6 / 6 - 4, height: hh * 0.4, rx: 2, fill: '#000', 'fill-opacity': 0.35}));
-    }
+    [0.08, 0.17, 0.26, 0.66, 0.75, 0.84].forEach(function (f) {
+      out.push(el('rect', {x: x + w * f, y: y + hh * 0.3, width: w * 0.07, height: hh * 0.4, rx: 2, fill: '#000', 'fill-opacity': 0.35}));
+    });
   } else if (b.type === 'shelf') {
     const slots = Math.max(1, Math.min(4, parseInt(b.slots, 10) || 2));
     out.push(el('rect', {x: x, y: y + hh - 4, width: w, height: 4, fill: '#000', 'fill-opacity': 0.35}));
@@ -397,12 +398,15 @@ function drawItem(b, x, y, w, hh, st, C) {
       out.push(el('line', {x1: x + i * w / slots, y1: y + 2, x2: x + i * w / slots, y2: y + hh - 4, stroke: fg, 'stroke-opacity': 0.4, 'stroke-dasharray': '3 3'}));
     }
   } else if (b.type === 'drawer') {
-    out.push(el('rect', {x: cx - 22, y: cy - 3, width: 44, height: 6, rx: 3, fill: fg, 'fill-opacity': 0.55}));
+    const tall = hh >= 30;
+    const hx = tall ? cx : x + w * 0.75;
+    out.push(el('rect', {x: hx - 22, y: tall ? y + hh - 13 : cy - 3, width: 44, height: 6, rx: 3, fill: fg, 'fill-opacity': 0.55}));
+    if (tall) labelY = y + 15;
+    else labelX = x + w * 0.35;
   } else if (b.type === 'cable_manager') {
-    for (let i = 0; i < 5; i++) {
-      const rx = x + w * 0.1 + i * (w * 0.8 / 4);
-      out.push(el('rect', {x: rx - 5, y: y + 3, width: 10, height: hh - 6, rx: 4, fill: 'none', stroke: fg, 'stroke-opacity': 0.6, 'stroke-width': 1.5}));
-    }
+    [0.05, 0.16, 0.27, 0.73, 0.84, 0.95].forEach(function (f) {
+      out.push(el('rect', {x: x + w * f - 5, y: y + 3, width: 10, height: hh - 6, rx: 4, fill: 'none', stroke: fg, 'stroke-opacity': 0.6, 'stroke-width': 1.5}));
+    });
   } else if (b.type === 'brush') {
     out.push(el('rect', {x: x + w * 0.08, y: cy - 2, width: w * 0.84, height: 4, fill: '#000', 'fill-opacity': 0.5}));
   } else if (b.type === 'lacing_bar') {
@@ -410,8 +414,8 @@ function drawItem(b, x, y, w, hh, st, C) {
   }
   const label = b.type === 'lacing_bar' || b.type === 'brush' ? '' : str(b.label) || (b.type === 'shelf' ? '' : st.label);
   if (label && hh >= 12) {
-    const tx = b.type === 'shelf' ? x + 6 : cx;
-    out.push(text(tx, b.type === 'shelf' ? y + Math.min(hh - 7, 12) : cy + 3.5, fitText(label, w - 12, 10),
+    const room = b.type === 'shelf' ? w - 12 : b.type === 'vent' || b.type === 'cable_manager' ? w * 0.36 : b.type === 'drawer' && hh < 30 ? w * 0.5 : w - 12;
+    out.push(text(b.type === 'shelf' ? x + 6 : labelX, b.type === 'shelf' ? y + Math.min(hh - 7, 12) : labelY, fitText(label, room, 10),
       {fill: fg, 'font-size': 10, 'text-anchor': b.type === 'shelf' ? 'start' : 'middle', 'fill-opacity': 0.85}));
   }
   return '<g class="rx-item" data-item="' + xmlEsc(b.item || b.id) + '" data-type="' + xmlEsc(b.type) + '">' + out.join('') + '</g>';
@@ -557,9 +561,15 @@ export function legendEntries(doc, rackIds, opts) {
   return sortLegend(legend.entries);
 }
 
+// Categories, then disciplines, then accessories; a discipline sharing a
+// category's label (both "Network") is marked so the two swatches read apart.
 function sortLegend(entries) {
   const rank = function (k) { return k.indexOf('item:') === 0 ? 2 : k.indexOf('cat:') === 0 ? 0 : 1; };
-  return entries.slice().sort(function (a, b) { return rank(a.key) - rank(b.key) || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0); });
+  const cats = {};
+  entries.forEach(function (e) { if (rank(e.key) === 0) cats[e.label.toLowerCase()] = true; });
+  return entries.map(function (e) {
+    return rank(e.key) === 1 && cats[e.label.toLowerCase()] ? Object.assign({}, e, {label: e.label + ' (discipline)'}) : Object.assign({}, e);
+  }).sort(function (a, b) { return rank(a.key) - rank(b.key) || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0); });
 }
 
 function groupsOf(C, racks) {
