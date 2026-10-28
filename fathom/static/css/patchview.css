@@ -51,7 +51,9 @@
 .pv-search-toggle { display: none !important; }
 .pv-pop-wrap { position: relative; flex: none; }
 .pv-pop-view { margin-left: auto; }
-.pv-pop-more { display: none; margin-left: auto; }
+/* More (⋯) carries Export at every width and, below 700 px, the zoom / undo / Arrange / View panes too. */
+.pv-pop-more { display: block; }
+.pv-compact .pv-pop-more { margin-left: auto; }
 .pv-btn[aria-expanded="true"] { border-color: rgba(142, 162, 255, .55); background: rgba(142, 162, 255, .14); }
 .pv-menu-n {
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--pv-accent); color: #0b1020;
@@ -70,6 +72,12 @@
 .pv-pop .pv-tgroup + .pv-tgroup, .pv-pop .pv-tgroup + .pv-pane, .pv-pop .pv-pane + .pv-pane {
   border-top: 1px solid var(--pv-border); padding-top: 8px;
 }
+/* Export group (FR-EXP-06): anchors styled as buttons; PNG/PDF grey out when the server has no Chrome. */
+.pv-pane-export .pv-btn { justify-content: flex-start; text-decoration: none; }
+.pv-pane-export .pv-btn.pv-export::before { content: "\2913"; color: var(--pv-muted); font-size: 13px; }
+.pv-pane-export .pv-export.pv-disabled { opacity: .4; cursor: default; pointer-events: auto; }
+.pv-pane-export .pv-export.pv-disabled:hover { background: rgba(255, 255, 255, .04); }
+.pv-pane-export a.pv-btn:focus-visible { outline: 2px solid var(--pv-accent); outline-offset: 2px; }
 
 /* compact toolbar (layoutFor 'sm', set by patchview.js): Add, Fit, search toggle, More */
 .pv-compact .pv-pop-view, .pv-compact .pv-pop-arrange { display: none; }
@@ -287,4 +295,21 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .pv-root *, .pv-root *::before, .pv-root *::after { transition: none !important; animation: none !important; }
+}
+
+/* ---------------------------------------------------------------- print (FR-EXP-06 "Print…")
+   Toolbars and overlays go; the canvas keeps its colours and is fitted by patchview.js (printFit) into a
+   960 x 640 px box on a landscape page. */
+@media print {
+  @page { size: landscape; margin: 10mm; }
+  .pv-root { height: auto; min-height: 0; display: block; background: var(--pv-bg); }
+  .pv-toolbar, .pv-badge, .pv-hint, .pv-menu, .pv-pop, .pv-box, .pv-stale-host, .pv-empty, .pv-sr, .pv-temp,
+  .pv-rename, .pv-addport { display: none !important; }
+  .pv-viewport {
+    width: 960px; height: 640px; max-width: 100%; margin: 0 auto; overflow: hidden; break-inside: avoid; page-break-inside: avoid;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .pv-viewport:focus-visible { box-shadow: none; }
+  .pv-card { box-shadow: none; }
+  .pv-card.pv-sel, .pv-card:focus { outline: none; }
 }

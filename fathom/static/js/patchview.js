@@ -18,6 +18,11 @@ const TOUCH_SLOP = 8;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 // Query keys this view owns while it is the routed view (docs/ui-audit.md D1, B.3 PV).
 const URL_KEYS = ['filter', 'q', 'status'];
+// sessionStorage key for the PNG/PDF availability probe ('ok' | 'missing'), FR-EXP-06.
+const RASTER_KEY = 'fathom.pv.raster';
+// Printable area the canvas is fitted into while printing (landscape A4/letter at 96 dpi less margins).
+const PRINT_W = 960;
+const PRINT_H = 640;
 let uidSeq = 0;
 
 function splitList(s, allowed) {
@@ -61,7 +66,7 @@ export function mount(el, ctx) {
     gesture: null, pointers: {}, nPointers: 0, space: false, menu: null, rename: null, kb: null, cardHtml: {}, wireSig: {},
     cardEls: {}, wireEls: {}, rendered: false, raf: 0, hoverRaf: 0, hoverWire: null, lastTap: null, destroyed: false,
     geom: coarse ? {rowH: core.COARSE_ROW_H} : null, longTimer: 0, gs: null, filterTimer: 0, lastHover: null,
-    pop: null, layout: '', emptyKey: null,
+    pop: null, layout: '', emptyKey: null, probe: false, printSaved: null,
   };
   const stats = {renderMs: 0, cards: 0, wires: 0, lastDragFrameMs: 0};
   const vocab = function () { return store.vocab || ctx.vocab || {}; };
@@ -124,6 +129,14 @@ export function mount(el, ctx) {
         '</div>' +
       '</div></div>' +
       popTrigger('more', 'pv-icon pv-menu-more', 'More tools', '<span aria-hidden="true">\u22EF</span>', 'More tools') +
+        // Export (FR-EXP-06): plain anchors so a tap downloads on iOS too; PNG/PDF grey out without Chrome (syncExport).
+        '<div class="pv-pane pv-pane-export">' +
+          '<div class="pv-pop-h" aria-hidden="true">Export</div>' +
+          '<a id="pv-export-svg" class="pv-btn pv-export" data-ext="svg" href="#" download>Patch SVG</a>' +
+          '<a id="pv-export-png" class="pv-btn pv-export" data-ext="png" href="#" download>Patch PNG</a>' +
+          '<a id="pv-export-pdf" class="pv-btn pv-export" data-ext="pdf" href="#" download>Patch PDF</a>' +
+          '<button type="button" id="pv-print" class="pv-btn">Print\u2026</button>' +
+        '</div>' +
       '</div></div>' +
     '</div>' +
     '<div class="pv-viewport" role="application" aria-label="Patch view" tabindex="0" aria-describedby="' + uid + '-help">' +
@@ -163,6 +176,7 @@ export function mount(el, ctx) {
   const searchBox = $('.pv-search');
   const searchToggle = $('.pv-search-toggle');
   const morePop = $('.pv-pop-more .pv-pop');
+  const exportPane = $('.pv-pane-export');
   const homes = {
     zoom: {node: $('.pv-tzoom'), parent: toolbar, before: $('.pv-tundo')},
     undo: {node: $('.pv-tundo'), parent: toolbar, before: searchBox},
@@ -267,7 +281,7 @@ export function mount(el, ctx) {
     closePop(false);
     root.classList.toggle('pv-compact', compact);
     if (compact) {
-      ['zoom', 'undo', 'arrange', 'view'].forEach(function (k) { morePop.appendChild(homes[k].node); });
+      ['zoom', 'undo', 'arrange', 'view'].forEach(function (k) { morePop.insertBefore(homes[k].node, exportPane); });
     } else {
       ['view', 'arrange', 'undo', 'zoom'].forEach(function (k) {
         const h0 = homes[k];
@@ -286,7 +300,8 @@ export function mount(el, ctx) {
     btn.setAttribute('aria-expanded', 'true');
     wrap.classList.add('pv-open');
     S.pop = {wrap: wrap, btn: btn, pop: pop};
-    const first = pop.querySelector('button:not([disabled]):not([hidden])');
+    if (wrap === exportPane.closest('.pv-pop-wrap')) syncExport();
+    const first = pop.querySelector('button:not([disabled]):not([hidden]), a[href]:not([aria-disabled="true"])');
     if (first) first.focus({preventScroll: true});
   }
   function closePop(restore) {
@@ -320,6 +335,96 @@ export function mount(el, ctx) {
   }
   function onSearchBlur() {
     if (S.layout === 'sm' && !textInput.value) { searchBox.classList.remove('pv-search-open'); syncSearch(); }
+  }
+
+  // ------------------------------------------------------------ export (FR-EXP-06, §5.9)
+  // Patch SVG / PNG / PDF are the server routes for the room on screen (?scene= while a scene is active or
+  // previewed). PNG and PDF need Chrome on the server: one HEAD probe per browser session (400 chrome_missing
+  // greys them out), remembered in sessionStorage so the next mount does not ask again.
+  function exportRoom() {
+    const r = currentRoom();
+    return r && r !== '*' ? r : defaultRoom();
+  }
+  function exportScene() {
+    const pv = ctx.preview;
+    if (pv && pv.scene) return String(pv.scene);
+    const st = store.doc.settings || {};
+    return st.scene ? String(st.scene) : '';
+  }
+  function exportHref(ext) {
+    const room = exportRoom();
+    if (!ctx.project || !room || room === '*') return '';
+    const scene = exportScene();
+    return ((ctx.api && ctx.api.base) || '') + 'api/v2/projects/' + encodeURIComponent(ctx.project) + '/rooms/' +
+      encodeURIComponent(room) + '/patch.' + ext + (scene ? '?scene=' + encodeURIComponent(scene) : '');
+  }
+  function rasterState(set) {
+    let ss = null;
+    try { ss = win.sessionStorage; } catch (err) { ss = null; }
+    if (set !== undefined) {
+      rasterState.value = set;
+      try { if (ss) ss.setItem(RASTER_KEY, set); } catch (err) { /* private mode: keep the in-memory copy */ }
+      return set;
+    }
+    if (rasterState.value) return rasterState.value;
+    try { return (ss && ss.getItem(RASTER_KEY)) || ''; } catch (err) { return ''; }
+  }
+  function syncExport() {
+    const missing = rasterState() === 'missing';
+    const proj = ctx.project || '';
+    exportPane.hidden = !proj;
+    root.querySelectorAll('.pv-export').forEach(function (a) {
+      const ext = a.getAttribute('data-ext');
+      const href = exportHref(ext);
+      const off = !href || (ext !== 'svg' && missing);
+      if (off) {
+        a.removeAttribute('href');
+        a.removeAttribute('download');
+        a.setAttribute('aria-disabled', 'true');
+        a.classList.add('pv-disabled');
+        a.title = href ? 'Needs Chrome on the server' : '';
+      } else {
+        a.setAttribute('href', href);
+        a.setAttribute('download', proj + '-' + exportRoom() + '-patch.' + ext);
+        a.removeAttribute('aria-disabled');
+        a.classList.remove('pv-disabled');
+        a.title = '';
+      }
+    });
+    if (proj && !rasterState() && !S.probe) probeRaster();
+  }
+  function probeRaster() {
+    const href = exportHref('png');
+    if (!href || typeof win.fetch !== 'function') return;
+    S.probe = true;
+    win.fetch(href, {method: 'HEAD', credentials: 'same-origin'}).then(function (res) {
+      if (res.status === 400) rasterState('missing');
+      else if (res.ok) rasterState('ok');
+    }).catch(function () { /* offline or blocked: leave the items enabled */ }).then(function () {
+      S.probe = false;
+      if (!S.destroyed) syncExport();
+    });
+  }
+  // Print (FR-EXP-06): the canvas is fitted to a landscape page while the dialog is up; beforeprint / afterprint
+  // cover Cmd+P as well, and the view is put back afterwards.
+  function printFit() {
+    if (!S.scene || S.printSaved) return;
+    S.printSaved = {x: S.view.x, y: S.view.y, k: S.view.k};
+    root.classList.add('pv-printing');
+    S.view = core.fitView(S.scene.bounds, {w: PRINT_W, h: PRINT_H}, 24, 0.05, 1);
+    applyView();
+  }
+  function printRestore() {
+    if (!S.printSaved) return;
+    root.classList.remove('pv-printing');
+    S.view = S.printSaved;
+    S.printSaved = null;
+    applyView();
+  }
+  function printCanvas() {
+    closePop(false);
+    printFit();
+    if (typeof win.print === 'function') win.print();
   }
 
   // ------------------------------------------------------------ view transform
@@ -743,12 +848,20 @@ export function mount(el, ctx) {
     $('#pv-show-routes').setAttribute('aria-pressed', String(S.showRoutes));
     $('#pv-all-rooms').setAttribute('aria-pressed', String(S.allRooms));
     $('#pv-snap').setAttribute('aria-pressed', String(S.snapOn));
+    syncExport();
   }
   // The shell announces undo/redo from the store's doc events (source 'undo' | 'redo').
   function doUndo() { if (!ro() && store.canUndo) store.undo(); }
   function doRedo() { if (!ro() && store.canRedo) store.redo(); }
 
   function onToolbarClick(e) {
+    const a = e.target.closest ? e.target.closest('a.pv-export') : null;
+    if (a) {
+      // a greyed-out export does nothing; a live one downloads natively and the popover folds away
+      if (a.getAttribute('aria-disabled') === 'true' || !a.getAttribute('href')) e.preventDefault();
+      else closePop(false);
+      return;
+    }
     const b = e.target.closest ? e.target.closest('button') : null;
     if (!b || !toolbar.contains(b) || b.disabled) return;
     const id = b.id;
@@ -759,6 +872,7 @@ export function mount(el, ctx) {
       return;
     }
     if (b === searchToggle) { openSearch(); return; }
+    if (id === 'pv-print') { printCanvas(); return; }
     if (id === 'pv-arrange' || id === 'pv-save-arrangement') closePop(true);
     if (b.hasAttribute('data-disc')) {
       const k = b.getAttribute('data-disc');
@@ -1801,6 +1915,8 @@ export function mount(el, ctx) {
   textInput.addEventListener('input', onFilterInput);
   textInput.addEventListener('blur', onSearchBlur);
   offs.push(on(win, 'resize', onResize));
+  offs.push(on(win, 'beforeprint', printFit));
+  offs.push(on(win, 'afterprint', printRestore));
   viewportEl.addEventListener('pointerdown', onPointerDown);
   viewportEl.addEventListener('pointermove', onPointerMove);
   viewportEl.addEventListener('pointerup', onPointerUp);
