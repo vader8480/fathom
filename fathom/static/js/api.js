@@ -68,7 +68,7 @@ export function createApi(opts) {
       return p.then(function (data) {
         if (!res.ok) {
           const d = isJson && data ? data : {};
-          throw new ApiError(d.error || (typeof data === 'string' && data ? data.slice(0, 200) : 'HTTP ' + res.status), res.status, d.code || '', d.details || {});
+          throw new ApiError(d.error || (typeof data === 'string' && data ? data.slice(0, 200) : 'HTTP ' + res.status), res.status, d.code || '', d.details || (typeof d.detail === 'string' && d.detail ? { detail: d.detail } : {}));
         }
         return { data: data, res: res };
       });
