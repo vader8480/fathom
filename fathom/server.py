@@ -3454,8 +3454,48 @@ def r_assistant(req: Request) -> Response:
     room = body.get("room") or None
     use_llm = bool(body.get("use_llm", True)) and bool(((doc.get("settings") or {}).get("assistant") or {}).get("llm", True))
     hist = body.get("history") if isinstance(body.get("history"), list) else None
-    res = answer(doc, q, room=room, overlay=_overlay(doc, pdir, strict=False), use_llm=use_llm, history=hist, base_revision=_rev(doc))
+    manual = body.get("manual_text")
+    if manual is not None and not isinstance(manual, str):
+        raise ApiError(400, "manual_text must be a string")
+    if manual and len(manual) > 20 * 1024:
+        raise ApiError(400, "manual_text is limited to 20 kB")
+    atts = body.get("attachments")
+    if atts is not None and (not isinstance(atts, list) or not all(isinstance(a, str) for a in atts)):
+        raise ApiError(400, "attachments must be a list of attachment ids")
+    known = {a.get("id") for a in doc.get("attachments") or [] if isinstance(a, dict)}
+    if atts and any(a not in known for a in atts):
+        raise ApiError(404, "attachment not in this project", "not_found", {"attachments": [a for a in atts if a not in known]})
+    ctx = {"pdir": pdir, "project": pdir.name, "username": req.username, "role": req.role_for(pdir.name),
+           "attachments": [a for a in atts or [] if a in known][:10], "manual_text": manual or ""}
+    res = answer(doc, q, room=room, overlay=_overlay(doc, pdir, strict=False), use_llm=use_llm, history=hist, base_revision=_rev(doc), ctx=ctx)
     return Response.json(res)
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/assistant/apply", role="editor", summary="Apply an assistant proposal (confirmed edits)", tags=["analysis"], body="ProposalApply")
+def r_assistant_apply(req: Request) -> Response:
+    """Commit a proposal from ``POST …/assistant`` (by ``id`` while cached, or the full ``proposal`` object) as one
+    normal revision (history source ``assistant``), so undo works like any other change. 423 while the project is locked."""
+    from .assistant_edits import check_proposal, get_proposal
+
+    pdir = _project_dir(req.params["name"])
+    body = req.json()
+    raw = body.get("proposal")
+    if raw is None and body.get("id"):
+        raw = get_proposal(str(body.get("id")))
+        if raw is None:
+            raise ApiError(404, "proposal not found or expired; ask again", "not_found")
+    prop, why = check_proposal(raw)
+    if prop is None:
+        raise ApiError(400, why or "proposal is required")
+    doc, _ = _load(pdir)
+    base = body.get("base_revision")
+    base = _rev(doc) if base is None else _int(base, -1)
+    ops = _lock_guard_ops(req, doc, prop["ops"])
+    note = prop.get("note") or (prop["summary"][0] if prop.get("summary") else f"{len(ops)} change{'s' if len(ops) != 1 else ''}")
+    res = _changes(req, pdir, ops, base, f"Assistant: {note}", "assistant")
+    return Response.json({"revision": res["revision"], "applied": len(ops), "summary": list(prop.get("summary") or []),
+                          "rebased": res["rebased"], "problems": res["problems"], "id": prop.get("id") or None},
+                         headers={"ETag": f'"r{res["revision"]}"'})
 
 
 # ---- builds

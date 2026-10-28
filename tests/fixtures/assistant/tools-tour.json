@@ -1,0 +1,22 @@
+{
+  "name": "scripted: one call per read-only tool, then a grounded answer (campus fixture)",
+  "model": "fake-tools",
+  "config": {"web_lookup": false, "daily_cap": 50},
+  "steps": [
+    {"tool_calls": [
+      {"id": "c1", "name": "search", "arguments": {"query": "Chapel wireless"}},
+      {"id": "c2", "name": "trace", "arguments": {"device": "Chapel wireless", "port": "Analog Out 1", "direction": "down"}}
+    ]},
+    {"tool_calls": [
+      {"id": "c3", "name": "device", "arguments": {"id_or_name": "ch-wireless"}},
+      {"id": "c4", "name": "schedule", "arguments": {"kind": "patch", "room": "chapel"}},
+      {"id": "c5", "name": "list_rooms", "arguments": {}},
+      {"id": "c6", "name": "list_scenes", "arguments": {}}
+    ]},
+    {"tool_calls": [
+      {"id": "c7", "name": "sop_page", "arguments": {"slug": "chapel-pre-service"}},
+      {"id": "c8", "name": "web_lookup", "arguments": {"query": "Shure ULXD4D manual"}}
+    ]},
+    {"text": "**Chapel wireless · Analog Out 1** feeds **Chapel mixer · Analog In 3** (cable A-025).", "finish": "stop"}
+  ]
+}

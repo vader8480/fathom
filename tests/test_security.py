@@ -85,6 +85,8 @@ SPEC_ROLES = {
     # phase1 P1B
     ("GET", "/api/v2/labels/presets"): "viewer", ("GET", "/api/v2/projects/{}/labels/devices"): "viewer",
     ("GET", "/api/v2/projects/{}/search"): "viewer", ("POST", "/api/v2/projects/{}/assistant"): "viewer",
+    # phase4 P4B
+    ("POST", "/api/v2/projects/{}/assistant/apply"): "editor",
     ("GET", "/api/v2/projects/{}/pages"): "viewer", ("POST", "/api/v2/projects/{}/pages/preview"): "editor",
     ("GET", "/api/v2/projects/{}/pages/{}"): "viewer", ("PUT", "/api/v2/projects/{}/pages/{}"): "editor",
     ("DELETE", "/api/v2/projects/{}/pages/{}"): "editor", ("POST", "/api/v2/projects/{}/pages/{}/move"): "editor",
