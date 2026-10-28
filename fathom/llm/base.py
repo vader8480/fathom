@@ -8,6 +8,7 @@ Completions, OpenAI Responses, Anthropic Messages) live in
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Sequence
@@ -200,12 +201,16 @@ class Provider:
         return {"ok": True, "model": use_model, "latency_ms": int((time.monotonic() - t0) * 1000), "detail": detail[:200]}
 
 
+_KEY_SHAPES = re.compile(r"\b(?:sk|xai|key|token)-[A-Za-z0-9_\-]{8,}|\bBearer\s+[A-Za-z0-9_\-.]{8,}")
+
+
 def redact(text: str, secrets: Sequence[str]) -> str:
+    """Mask the known secrets and anything shaped like an API key (upstream errors sometimes echo the key)."""
     out = text or ""
     for s in secrets:
         if s and len(s) >= 4 and s in out:
             out = out.replace(s, "••••")
-    return out
+    return _KEY_SHAPES.sub("••••", out)
 
 
 def norm_finish(value: str) -> str:
