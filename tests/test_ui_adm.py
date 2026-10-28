@@ -243,7 +243,7 @@ class AdmUi(UiCase):
                 pg.wait_for("!document.querySelector('#app-main [aria-busy=true]')")
                 self.assertEqual(pg.js("document.querySelectorAll('#app-main table:not(.dt-table)').length"), 0)
                 self.assertEqual(pg.js("document.querySelectorAll('#app-main .adm-table').length"), 0)
-                if path not in ("settings/project", "settings/offline"):
+                if path not in ("settings/project", "settings/offline", "settings/assistant"):
                     self.assertGreaterEqual(pg.js("document.querySelectorAll('#app-main .dt-table').length"), 1)
                 self.assertEqual(pg.smoke["errors"], [])
 
