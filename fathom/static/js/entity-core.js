@@ -361,7 +361,7 @@ function limitCard(key, label, l, unit, limitWord) {
   const c = countCard(key, label, l.value, null, l.limit === null ? unit : unit + ' of ' + num1(l.limit) + ' ' + limitWord);
   c.limit = l.limit;
   c.level = l.over ? 'warn' : '';
-  c.title = l.over ? num1(l.value - l.limit) + ' ' + unit + ' over the ' + num1(l.limit) + ' ' + unit + ' ' + limitWord : '';
+  c.title = l.over ? num1(l.value - l.limit) + ' ' + unit + ' over the ' + limitWord : '';
   return c;
 }
 

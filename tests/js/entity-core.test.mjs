@@ -229,7 +229,7 @@ T('summaryCards rack: totals with template info, items and the over-limit warnin
   assert.equal(w.limit, 30);
   assert.equal(w.level, 'warn');
   assert.equal(w.sub, 'kg of 30 max');
-  assert.equal(w.title, '2.8 kg over the 30 kg max');
+  assert.equal(w.title, '2.8 kg over the max');
   const p = byKey(cards, 'power');
   assert.equal(p.count, 120, 'device power_w overrides the template');
   assert.equal(p.level, '', '120 W is within the 500 W limit');

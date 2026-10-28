@@ -1,0 +1,66 @@
+/* Rack page additions (rp-, page-rack.js): load warnings on the overview cards,
+   the elevation display controls, the accessories tab and the QR / duplicate
+   dialogs. The base rack page layout stays in rack.css. Colours come from
+   css/app.css variables. */
+
+@media (min-width: 1100px) { .rp-cards { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); } }
+.rp-card--warn { border-color: var(--warn); background: rgba(255,149,72,.08); }
+.rp-card--warn .rp-card-n { color: var(--warn); }
+.rp-card-warn { font-size: 12px; color: var(--warn); }
+
+.rp-seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.rp-display-opt {
+  min-height: 40px; min-width: 64px; padding: 0 12px; border: 0; border-radius: 0; background: none;
+  color: var(--muted); font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.rp-display-opt + .rp-display-opt { border-left: 1px solid var(--border); }
+.rp-seg .rp-display-opt:hover { color: var(--text); background: none; }
+.rp-seg .rp-display-opt[aria-pressed=true] { background: rgba(142,162,255,.18); color: var(--text); }
+.rp-ann { display: inline-flex; align-items: center; gap: 6px; }
+.rp-ann-label { font-size: 12px; color: var(--muted); }
+.rp-annotate, .rp-acc-type { min-height: 40px; max-width: 100%; }
+
+.rp-acc-bar { margin-bottom: 8px; }
+.rp-acc-add { min-height: 40px; }
+.rp-accessories .rp-acc-u { width: 5.5em; }
+.rp-accessories .rp-acc-label { width: 100%; min-width: 9em; }
+.rp-acc-del { min-width: 36px; min-height: 36px; padding: 0 8px; }
+
+.rp-qr { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.rp-qr-frame { display: flex; align-items: center; justify-content: center; min-width: 240px; min-height: 240px; max-width: 100%; }
+.rp-qr-img { width: 240px; height: 240px; max-width: 100%; background: #fff; padding: 8px; border-radius: var(--radius); box-sizing: content-box; }
+.rp-qr-msg { margin: 0; color: var(--muted); max-width: 34em; }
+.rp-qr-err { color: var(--warn); }
+.rp-qr-name { margin: 0; font-weight: 600; }
+.rp-qr-url { margin: 0; font-size: 12px; word-break: break-all; }
+.rp-qr-tools { display: flex; gap: 8px; }
+.rp-qr-print { min-height: 40px; }
+
+.rp-dup p { margin: 0 0 10px; }
+.rp-check { display: inline-flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+.rp-check input { margin-top: 3px; }
+
+@media (max-width: 699px) {
+  .rp-bar { gap: 6px; }
+  .rp-faces, .rp-seg { flex: 1 1 100%; }
+  .rp-face, .rp-display-opt { flex: 1 1 0; min-width: 0; }
+  .rp-ann { flex: 1 1 auto; }
+  .rp-annotate { flex: 1 1 auto; }
+  .rp-acc-bar .rp-acc-type { flex: 1 1 auto; min-width: 0; }
+  .rp-accessories .rp-acc-u { width: 4em; }
+  .rp-accessories .rp-acc-label { min-width: 6em; }
+}
+@media (pointer: coarse) {
+  .rp-display-opt, .rp-annotate, .rp-acc-type, .rp-acc-add, .rp-acc-del, .rp-qr-print,
+  .rp-accessories .rp-acc-u, .rp-accessories .rp-acc-label { min-height: 44px; }
+  .rp-acc-del { min-width: 44px; }
+}
+
+@media print {
+  html.rp-qr-printing body > :not(#app-dialog) { display: none !important; }
+  html.rp-qr-printing .app-dialog-backdrop { position: static; background: none; padding: 0; display: block; }
+  html.rp-qr-printing .app-dialog { border: 0; box-shadow: none; background: none; width: auto; color: #000; }
+  html.rp-qr-printing .app-dialog header, html.rp-qr-printing .app-dialog footer, html.rp-qr-printing .rp-qr-tools { display: none !important; }
+  html.rp-qr-printing .rp-qr-img { width: 70mm; height: 70mm; }
+  html.rp-qr-printing .rp-qr-url a { color: #000; text-decoration: none; }
+}
