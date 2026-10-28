@@ -341,7 +341,7 @@ class Proposals(unittest.TestCase):
             self.assertEqual(cable["from"], {"device": "chapel-wireless-2", "port": "analog-out-1"}, "first free analog output allocated")
             self.assertEqual(cable["to"], {"device": "ch-mixer", "port": "analog-in-5"}, "'input 5' resolves to Analog In 5")
             self.assertEqual(cable["medium"], "analog")
-            self.assertEqual(cable["tag"], "A-053", "§4.8 pattern continues the existing numbering")
+            self.assertEqual(cable["tag"], "A-034", "§4.8 pattern continues the existing numbering (highest tag + 1; untagged cables are not reserved)")
             self.assertEqual(len(r["summary"]), 2)
             self.assertIn("Chapel wireless 2", r["summary"][0])
             self.assertIn("Analog In 5", r["summary"][1])
@@ -465,7 +465,7 @@ class Proposals(unittest.TestCase):
             self.assertEqual(devs["chapel-wireless-2"]["room"], "chapel")
             cab = [c for c in after["doc"]["cables"] if c["id"] == "c-0110"]
             self.assertEqual(cab[0]["to"], {"device": "ch-mixer", "port": "analog-in-5"})
-            self.assertEqual(cab[0]["tag"], "A-053")
+            self.assertEqual(cab[0]["tag"], "A-034")
             st, _, b = call(self.app, "GET", "/api/v2/projects/campus/history")
             entries = jbody(b)
             entries = entries.get("revisions") if isinstance(entries, dict) else entries
