@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import mini_yaml
 
-__all__ = ["to_template", "from_template", "port_kind", "port_groups", "kind_from_keywords", "AIRFLOWS"]
+__all__ = ["to_template", "from_template", "port_kind", "port_groups", "kind_from_keywords", "AIRFLOWS", "SIGNAL_MEDIUM"]
 
 AIRFLOWS = ("front-to-rear", "rear-to-front", "left-to-right", "right-to-left", "side-to-rear", "passive", "mixed")
 _EXTENSION_KEYS = ("full_depth", "airflow", "part_number", "rack_category")
@@ -81,7 +81,7 @@ _AV_TYPES = {
     "aes3": ("aes3", "XLR3"), "avb": ("avb", "etherCON"), "dante": ("dante", "RJ45"), "console": ("rs232", "RJ45"),
     "management": ("network", "RJ45"), "other": ("other", ""),
 }
-_SIGNAL_MEDIUM = {
+SIGNAL_MEDIUM = {
     "analog-audio-mic": "analog", "analog-audio-line": "analog", "analog-audio-speaker": "speaker",
     "digital-audio-aes3": "aes3", "digital-audio-dante": "dante", "digital-audio-avb": "avb",
     "digital-video-hdmi": "hdmi", "digital-video-sdi": "sdi", "clock-word": "sync", "control-midi": "midi",
@@ -216,7 +216,10 @@ def port_groups(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         section, prefix, medium, dir_, connector, channels = r["key"]
         g: Dict[str, Any] = {}
         nums = r["nums"]
-        if nums[0] is None:
+        if len(nums) == 1 and nums[0] is not None:
+            g["group"] = r["name"] if prefix else f"{_SECTION_GROUP.get(section, 'Port')} {nums[0]}"
+            nums = [None]
+        elif nums[0] is None:
             g["group"] = r["name"] or _SECTION_GROUP.get(section, "Port")
         else:
             g["group"] = prefix or _SECTION_GROUP.get(section, "Port")
