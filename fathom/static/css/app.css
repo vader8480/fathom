@@ -40,8 +40,6 @@ html[data-theme="light"] .ast-a{background:#eef1f7}
 html[data-theme="light"] .ast-q{background:#1f2a5a;color:#fff}
 html[data-theme="light"] .ast-suggest button.yes{background:#1f2a5a;color:#fff;border-color:#1f2a5a}
 html[data-theme="light"] :is(.app-menu,.app-sec-menu,.app-dialog){box-shadow:0 18px 40px rgba(15,23,42,.18)}
-/* shim: plan.css:16 hard-codes #161d2e on these fields; drop once it uses var(--panel-2) */
-html[data-theme="light"] :is(.fp-btn,.rk-btn,.sch-btn,.inv-btn,:is(.fp-root,.rk-root,.sch-root,.inv-root) :is(select,input:not([type=checkbox]):not([type=radio]),textarea)){background:var(--panel-2)}
 @media (prefers-color-scheme:light){
   html[data-theme="system"] .app-banner{background:#ece8fa}
   html[data-theme="system"] .app-banner.warn{background:#fdebd8;color:#7a3e0c}

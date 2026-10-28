@@ -2203,7 +2203,7 @@ JSON_SCHEMA: Dict[str, Any] = {
         "problems": _arr(_obj({
             "id": _ID, "text": _STR, "device": _STR, "room": _STR, "page": _STR, "status": {"type": "string", "enum": list(PROBLEM_STATUSES)},
             "created": _STR, "by": _STR, "via": {"type": "string", "enum": ["app", "public", "share"]}, "attachment": _STR,
-            "resolved": _STR, "resolved_by": _STR, "note": _STR,
+            "resolved": _STR, "resolved_by": _STR, "note": _STR, "kind": {"type": "string", "enum": ["problem", "suggestion"]},
         }, ("id", "text"))),
     },
 }
