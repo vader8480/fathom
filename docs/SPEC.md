@@ -503,6 +503,21 @@ Format: `ID · Priority · Requirement — **AC:** acceptance criterion · Owner
 | FR-UX-17 | P1 | Editing lock: when `doc.settings.locked === true` (`model-core.isLocked`), `#app-lock` (`role=status`, under the top bar) says *Editing is locked by <locked_by> · <relative time>* with an *Unlock* button for editors and admins; the store goes read-only, `ctx.role` reads `viewer` for every view except `settings`, `#app-save` shows *Locked · r<rev>*, and *Lock editing* in the user menu (editors and admins, unlocked projects) locks it. Lock and unlock are a single `{op: 'root', key: 'settings', value: {locked}}` through the change queue. A `/changes` flush that fails with `isLockedError` (HTTP 423 or `code: 'locked'`) drops every queued op, toasts *Someone locked editing — your last change was not saved* and reloads the doc. | `test_ui_shell.py::test_locked_project_shows_banner_and_viewer_mode`, `::test_locked_change_flush_drops_ops_and_reloads`; `api.test.mjs`, `model-core.test.mjs`. | SHELL, API |
 | FR-UX-18 | P1 | *Suggest an improvement…* (every role; `js/improve-ui.js`): a dialog with a required description (`#imv-text`, ≤ 2000 chars with a counter), an optional name (`#imv-name`, prefilled with the session user) and a read-only *About: <project> · <view> · <room>* line; Send calls `api.reportSuggestion(project, {text, name, kind: 'suggestion', url})` (`POST /api/v2/projects/<n>/problems`) and toasts *Thanks — your suggestion was saved* (plus *and forwarded* when the response has `forwarded: true`); failures toast the error. Usable at 390 px. | `test_ui_shell.py::test_suggest_improvement_dialog_posts`; `api.test.mjs`. | SHELL, API |
 
+### 3.29 FR-SCN — Scenes
+
+Knox AV keeps whole copies of a map per event; Fathom keeps one shared model and lets a **scene** vary only what changes between events: the *patch* (`cables`, `bundles`) and the *gear placement* (device `room` / `location` / `rack` / `patch` position, floor-plan markers). Devices, networks, pages and everything else stay shared. Exactly one scene is active at a time; the untouched starting point is the implicit **Base** (`fathom/scenes.py`, §4.3.18, §5.6 *Scenes*).
+
+| ID | Pri | Requirement | Acceptance criterion | Owner |
+| --- | --- | --- | --- | --- |
+| FR-SCN-01 | P1 | A scene is a `scenes[]` entry whose `data` is a `SceneData` snapshot (`scenes.capture(doc)`): deep copies of `cables`, `bundles`, every floor plan's `markers` keyed by floor plan id, and per device only the placement fields present. `scenes.apply(doc, data)` returns a new doc with cables / bundles replaced, markers replaced for the floor plans named in `data.markers` (others keep theirs) and each named device's placement set exactly to its entry (absent keys removed; unnamed devices untouched). `capture → apply` is the identity; refs to devices deleted since the capture are dropped on apply. `normalize` keeps `data` verbatim (empty lists and `{}` inside it are meaningful); a doc with scenes is v2-only. | `test_scenes.py::CaptureApply`. | P3A |
+| FR-SCN-02 | P1 | `scenes.diff(a, b)` reports the change from `a` to `b`: cables / bundles added, removed and changed (`{id, before, after, fields}`), devices moved (`{id, before, after, fields}`), markers added / removed / moved per `(fp, device)`, a numeric `summary` and a human `text` such as `+3 cables · −1 cable · 2 devices moved` (zero parts omitted, `No differences` when equal). | `test_scenes.py::Diff`. | P3A |
+| FR-SCN-03 | P1 | Switching (`scenes.activate`) captures the live state into the scene being left — on the first switch away from Base it creates the `base: true` entry named *Base* — applies the target's data and sets `settings.scene` (`""` for Base). It is one ordinary revision (source `scene`, summary *Switched to scene X (+1 cable)*), so it rebases, conflicts and restores like any other change; `POST …/history/<rev>/restore` undoes it. The active scene is always compared live: its stored `data` may be stale until the next switch or *Save*. | `test_scenes.py::Activate`, `::Routes::test_scene_flow_over_http`. | P3A |
+| FR-SCN-04 | P1 | Create (optionally `copy_from` another scene, optionally `activate`), rename / note, *Save current state into scene*, delete (the active scene is left for Base first; Base cannot be deleted) — each one revision through the same commit path, refused with 423 `locked` while `settings.locked` (FR-USER-12). | `test_scenes.py::Routes`. | P3A |
+| FR-SCN-05 | P1 | Validation never blocks a save because of history: duplicate scene names, a `settings.scene` naming no scene and scene-data cables / markers / device entries pointing at devices or ports that no longer exist are warnings (`duplicate_name`, `dangling_link`); two `base` entries (`bad_enum`), a name over 80 chars (`bad_enum`) and mistyped `data` (`bad_type`) are errors. | `test_scenes.py::Validation`. | P3A |
+| FR-SCN-06 | P1 | `GET …/scenes` lists Base first (synthesised as `{id: "base"}` when no entry exists yet) with `active`, created / by / updated and each scene's `diff` summary and `text` against Base (Base carries what switching back would change); summaries never carry `data`. | `test_scenes.py::Routes::test_scene_flow_over_http`. | P3A |
+| FR-SCN-07 | P1 | Viewers look without switching: `GET …/scenes/<sid>/doc` returns the doc as it would be with that scene active, `…/diff?against=` compares any two, and `?scene=<sid|base>` on `/p/<n>…` pages renders that scene read-only with a *Scene: <name>* caption in the org eyebrow; unknown scene → 404. Nothing is written. | `test_scenes.py::Routes::test_viewer_pages_render_a_scene`. | P3A |
+| FR-SCN-08 | P1 | Scene bar and dialogs in the app (switch, create, save, rename, delete, compare) built on these routes. | P3B tests. | P3B |
+
 ---
 
 ## 4. Data model v2
@@ -563,6 +578,7 @@ Types: `str`, `int`, `num` (float), `bool`, `obj`, `[T]` array of T. "Req" = req
 | `locked` | bool | absent (`false`) | Editing lock (FR-USER-12): while `true`, `/changes` and `PUT` answer 423 unless they only change `locked*`. Error `bad_type` when not a bool. |
 | `locked_by`, `locked_at` | str | absent | Stamped by the server when `locked` flips to `true` (login or `local`, UTC `YYYY-MM-DDTHH:MM:SSZ`); removed when it flips back. Values clients send are overridden. |
 | `suggest_url` | str | `""` | http(s) URL that receives a JSON copy of every improvement suggestion (§5.16); `FATHOM_SUGGEST_URL` is the server-wide fallback. Error `bad_enum` when not `http(s)://…`. |
+| `scene` | str | absent (`""`) | Id of the active scene (§4.3.18, FR-SCN); absent or `""` = Base. Set by the server on every switch (`""` when switching back to Base). Error `bad_type` when not a string; warning `dangling_link` when no scene has that id. |
 
 #### 4.3.4 `venues[]`
 
@@ -775,6 +791,23 @@ A mixing console is more than its connectors: the signal enters on a Dante recei
 | `dca`, `mute` | input channel / bus → DCA / mute group (control only — a trace reports them as *via*, never as an audio hop unless asked) | `CH 12 → DCA 1` |
 
 Validation (`schema._channel_problems`): errors `bad_type`, `missing_field` (channel `id`/`kind`, link `from`/`to`/`kind`), `bad_id`, `duplicate_channel`, `dangling_channel` (endpoint channel not in `channels[]`), `bad_enum` for a non-positive `ch` or an `insert` other than 1/2; warnings `unknown_channel_kind`, `unknown_link_kind`, `bad_enum` (source), `dangling_port`. A link whose two endpoints are both ports is allowed (console-internal port-to-port patch). Links are unordered; `console.sort_channels` orders channels by kind, rack, index, side.
+
+#### 4.3.18 `scenes[]` — named patch + placement variants (`fathom/scenes.py`, FR-SCN)
+
+A scene is a named snapshot of the parts of the model that change between events (§3.29). The collection is the last one in §4.1 order, optional on disk (`normalize` adds it), and makes a doc v2-only. `settings.scene` (§4.3.3) names the active one; the implicit **Base** has no entry until the first switch away from it, when the server stores Base's state in an entry flagged `base: true` so it can be restored. The API always exposes Base under the id `base`.
+
+| Field | Type | Req | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | str | yes | — | Generated `sc-` + 8 hex (`scenes.new_id`). |
+| `name` | str | yes | — | ≤ 80 chars (error `bad_enum` beyond; `missing_field` when empty). Duplicate names (case-insensitive) are a warning `duplicate_name`. |
+| `note` | str | no | — | Free text. |
+| `base` | bool | no | `false` | The entry holding Base while another scene is active (named *Base*, created automatically). At most one (error `bad_enum` on the others). Cannot be deleted. |
+| `created`, `by`, `updated` | str | no | — | UTC `YYYY-MM-DDTHH:MM:SSZ`, login of the creator; `updated` is stamped on every capture into / activation of the entry. |
+| `data` | `SceneData` | no | — | The snapshot (below). Kept verbatim by `normalize`. For the **active** scene it is only as fresh as the last switch or *Save*; readers compare the active scene live (`scenes.capture(doc)`). |
+
+**`SceneData`** = `{"cables": [cable…], "bundles": [bundle…], "markers": {<floorplan id>: [marker…]}, "devices": {<device id>: {"room"?, "location"?, "rack"?, "patch"?}}}` — full cable / bundle / marker objects (§4.3.10, §4.3.11); per device only the four placement fields, each present only when the device had it (an empty object means *no placement*). Validation: `data` and its four members must have these types (error `bad_type`); cables, markers and device entries that point at devices or ports that no longer exist are warnings `dangling_link` (`scenes.apply` drops such cables and markers), so deleting a device never makes a scene unsaveable.
+
+Functions (pure): `capture(doc) -> SceneData`, `apply(doc, data) -> doc`, `diff(a, b) -> {cables: {added, removed, changed}, bundles: {…}, devices: {moved}, markers: {added, removed, moved}, summary: {cables_added, cables_removed, cables_changed, bundles_changed, devices_moved, markers_changed}, text}`, `summarize(doc) -> [{id, name, note, base, active, created, by, updated, diff: <summary>, text}]` (Base first), `scene_data(doc, sid)`, `activate(doc, sid, by="") -> (doc, {from, to, diff})` (`sid` may be `base`; no-op when already active; `KeyError` unknown), `create(doc, name, note="", by="", copy_from=None) -> (doc, scene)`, `save_current(doc, sid)`, `delete(doc, sid)` (`ValueError` for Base; the active scene is left for Base first), `rename(doc, sid, name=None, note=None)`.
 
 ### 4.4 Semantics
 
@@ -1247,6 +1280,19 @@ Username regex `^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$`. Session cookie payload `{"u
 | GET | `/api/v2/projects/<n>/offline-manifest` | viewer | — | `{"urls": ["p/<n>", "p/<n>/rooms", "p/<n>/r/<room>", "p/<n>/r/<room>/patch", "p/<n>/d/<device>", …, "api/v2/projects/<n>", "api/v2/meta", <app shell assets>]}` (relative) |
 | GET/POST/DELETE | `/api/v2/projects/<n>/shares[/<token>]` | editor | POST `{"label?", "expires?", "scope?": "all"\|"sop"}` | P1 `{"shares": [{"token", "label", "created", "expires", "by", "scope"}]}` / 201 `{"share": …, "url": "s/<token>/"}` / 204. `scope: "sop"` (400 `bad_enum` otherwise) limits the mirror to `/s/<token>/sop[/…]` and `/s/<token>/files/…`; other paths → 403 `share_scope`, the bare token opens the procedures index. |
 
+**Scenes** (FR-SCN, §4.3.18; tag `scenes`; `<sid>` = `sc-xxxxxxxx` or the literal `base`). Every mutation is one revision with source `scene` through the ordinary commit path under the project lock, and answers 423 `locked` while `settings.locked` (§5.3). `scene` objects in responses are `scenes.summarize` entries (never the data).
+
+| Method | Path | Role | Request | Response / codes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/v2/projects/<n>/scenes` | viewer | — | `{"scenes": [{id, name, note, base, active, created, by, updated, diff: <summary>, text}…], "active": <sid>\|"base", "revision"}` — Base first (synthesised with `id: "base"` when no entry exists); each scene's `diff` / `text` is against Base, Base's is what switching back from the active scene would change |
+| POST | `/api/v2/projects/<n>/scenes` | editor | `{"name", "note?", "copy_from?": <sid>, "activate?": bool}` | 201 `{"scene", "revision"}` — data = the live state, or a copy of `copy_from` (the active scene always means the live state); `activate: true` also switches to it. Summary *Created scene X*. 400 `missing_field` / `bad_enum` (name empty / > 80); 404 unknown `copy_from` |
+| PATCH | `/api/v2/projects/<n>/scenes/<sid>` | editor | `{"name?", "note?"}` (`note: ""` clears) | `{"scene", "revision"}`; 400 empty name; 404 |
+| DELETE | `/api/v2/projects/<n>/scenes/<sid>` | editor | — | `{"ok": true, "revision", "active"}` — deleting the active scene first switches to Base; 400 for `base`; 404 |
+| POST | `/api/v2/projects/<n>/scenes/<sid>/activate` | editor | — | `{"active", "from", "diff", "revision"}` (summary *Switched to scene X (<text>)*); re-activating the active scene writes nothing and answers the current revision with an empty diff; 404 |
+| POST | `/api/v2/projects/<n>/scenes/<sid>/save` | editor | — | `{"scene", "revision"}` — overwrites the scene's stored data with the live state (summary *Saved current state into scene X*); 404 |
+| GET | `/api/v2/projects/<n>/scenes/<sid>/diff?against=<sid\|base>` | viewer | — | the full `scenes.diff(against, sid)` dict + `{"scene", "against", "revision"}` (default `against=base`); 404 when either is unknown |
+| GET | `/api/v2/projects/<n>/scenes/<sid>/doc` | viewer | — | `{"doc": <doc as it would be with that scene active>, "scene", "revision"}` — read-only preview, nothing is written; 404 |
+
 ### 5.7 Imports, files, floor plans
 
 | Method | Path | Role | Request | Response / codes |
@@ -1455,6 +1501,8 @@ For ports `id` = `<device>:<port>`; cables `id` = cable id; interfaces `id` = `<
 | GET | `/favicon.ico`, `/apple-touch-icon.png` | public | icons from `fathom/static/icons/` |
 | GET | `/api/openapi.json` | public | OpenAPI 3.1 |
 | GET | `/api/docs` | public | HTML endpoint reference |
+
+`?scene=<sid|base>` on `/p/<n>`, `/p/<n>/r/<room>`, `…/diagram.svg`, `…/patch` and `/p/<n>/d/<device>` (and through `/s/<token>/…`) renders that scene read-only (`scenes.apply`, FR-SCN-07): the org eyebrow and `<title>` carry a *Scene: <name>* caption; nothing is written; an unknown scene answers 404.
 
 ### 5.14 OpenAPI
 
