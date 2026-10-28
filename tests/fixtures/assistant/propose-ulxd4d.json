@@ -1,0 +1,24 @@
+{
+  "name": "scripted: add a second ULXD4D in the chapel and patch it to input 5 (campus fixture)",
+  "model": "fake-tools",
+  "scripts": [
+    {
+      "match": "ULXD4D",
+      "steps": [
+        {"tool_calls": [{"id": "call_1", "name": "search", "arguments": {"query": "ULXD4D", "kinds": ["device"]}}]},
+        {"tool_calls": [{"id": "call_2", "name": "device", "arguments": {"id_or_name": "Chapel mixer"}}]},
+        {"tool_calls": [{"id": "call_3", "name": "propose_changes", "arguments": {
+          "note": "Second ULXD4D in the Chapel, patched to mixer input 5",
+          "changes": [
+            {"action": "add_device", "template": "shure-ulxd4d", "name": "Chapel wireless 2", "room": "chapel"},
+            {"action": "connect", "from": {"device": "Chapel wireless 2", "port": "Analog Out 1"}, "to": {"device": "Chapel mixer", "port": "input 5"}}
+          ]}}]},
+        {"text": "I prepared a proposal: add **Chapel wireless 2** (Shure ULXD4D) in the Chapel and patch its **Analog Out 1** to **Chapel mixer · Analog In 5**. Confirm it to update the map.", "finish": "stop"}
+      ]
+    }
+  ],
+  "steps": [
+    {"tool_calls": [{"id": "call_1", "name": "search", "arguments": {"query": "chapel"}}]},
+    {"text": "I looked that up but the project data does not say.", "finish": "stop"}
+  ]
+}
