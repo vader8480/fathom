@@ -2810,8 +2810,13 @@ def r_rack_import(req: Request) -> Response:
     payload = {k: body[k] for k in ("text", "zip_b64", "url") if isinstance(body.get(k), str) and body[k].strip()}
     if not payload:
         raise ApiError(400, "send text, zip_b64 or url")
+    room = body.get("room")
+    if room is not None and not isinstance(room, str):
+        raise ApiError(400, "room must be a string")
     preview = _engine("parsers.rackula", "preview")
     doc, _ = _load(pdir)
+    if room:
+        payload["room"] = _room_or_404(doc, room)
     try:
         res = preview(doc, payload)
     except ValueError as exc:

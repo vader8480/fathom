@@ -289,6 +289,100 @@ class RackImport(Base):
         self.assertEqual(self.post("/api/v2/projects/nope/racks/import", {"text": "x"})[0], 404)
 
 
+class RackImportRoom(Base):
+    FIXTURE = Path(__file__).parent / "fixtures" / "rackula" / "media-server.rackula.yaml"
+
+    def setUp(self):
+        super().setUp()
+        st, _, b = self.post(P + "/changes", {"base_revision": self.rev(), "ops": [{"op": "put", "coll": "rooms", "id": "annex", "value": {"id": "annex", "venue": "hillside", "name": "Annex"}}]})
+        self.assertEqual(st, 200, b)
+
+    def test_room_forwarded(self):
+        fake = Recorder({"racks": [], "devices": [], "items": [], "warnings": [], "ops": []})
+        with engines(parsers__rackula=fake_module("fathom.parsers.rackula", preview=fake)):
+            self.assertEqual(self.post(P + "/racks/import", {"text": "x", "room": "annex"})[0], 200)
+            self.assertEqual(fake.calls[-1][0][1], {"text": "x", "room": "annex"})
+            self.assertEqual(self.post(P + "/racks/import", {"text": "x"})[0], 200)
+            self.assertEqual(fake.calls[-1][0][1], {"text": "x"}, "no room -> the parser's default")
+            st, _, b = self.post(P + "/racks/import", {"text": "x", "room": "attic"})
+            self.assertEqual(st, 404, b)
+            self.assertIn("attic", jbody(b)["error"])
+            self.assertEqual(self.post(P + "/racks/import", {"text": "x", "room": 3})[0], 400)
+            self.assertEqual(len(fake.calls), 2, "the parser is not called for a bad room")
+
+    def test_real_parser_room(self):
+        if not _has("parsers.rackula", "preview"):
+            self.skipTest("awaiting parsers.rackula")
+        text = self.FIXTURE.read_text(encoding="utf-8")
+        rev = self.rev()
+        st, _, b = self.post(P + "/racks/import", {"text": text, "room": "annex", "apply": True, "base_revision": rev})
+        self.assertEqual(st, 200, b[:300])
+        self.assertGreater(jbody(b)["applied"], 0)
+        doc = jbody(self.get(P)[2])["doc"]
+        new_racks = [r for r in doc["racks"] if r["id"] != "rk-foh"]
+        self.assertTrue(new_racks)
+        self.assertEqual({r.get("room") for r in new_racks}, {"annex"})
+        rack_ids = {r["id"] for r in new_racks}
+        new_devs = [d for d in doc["devices"] if (d.get("rack") or {}).get("id") in rack_ids]
+        self.assertTrue(new_devs)
+        self.assertEqual({d.get("room") for d in new_devs}, {"annex"})
+        st, _, b = self.post(P + "/racks/import", {"text": text})
+        self.assertEqual(st, 200, b[:300])
+        puts = [o["value"] for o in jbody(b)["ops"] if o.get("op") == "put" and o.get("coll") in ("racks", "devices")]
+        self.assertTrue(puts)
+        self.assertEqual({v.get("room") for v in puts}, {"main"}, "without room: the first room")
+        self.assertEqual(self.post(P + "/racks/import", {"text": text, "room": "attic"})[0], 404)
+
+
+class OpenApi(Base):
+    def spec(self):
+        st, _, b = self.get("/api/openapi.json")
+        self.assertEqual(st, 200)
+        return jbody(b)
+
+    def test_rack_schemas_and_responses(self):
+        spec = self.spec()
+        schemas, paths = spec["components"]["schemas"], spec["paths"]
+        for name in ("RackImport", "RackFromTemplate", "NetboxImport", "RackCreated", "RackTotals", "RackImportPreview", "RackImportApplied"):
+            self.assertIn(name, schemas)
+        self.assertIn("room", schemas["RackImport"]["properties"])
+        self.assertEqual(schemas["RackFromTemplate"]["required"], ["template", "base_revision"])
+        self.assertEqual(schemas["NetboxImport"]["required"], ["text"])
+        bodies = {"/api/v2/projects/{name}/racks/import": "RackImport", "/api/v2/projects/{name}/racks/from-template": "RackFromTemplate",
+                  "/api/v2/library/import/netbox": "NetboxImport"}
+        for path, name in bodies.items():
+            ref = paths[path]["post"]["requestBody"]["content"]["application/json"]["schema"]
+            self.assertEqual(ref, {"$ref": "#/components/schemas/" + name}, path)
+        for path, created in (("/api/v2/projects/{name}/racks/from-template", "RackCreated"), ("/api/v2/library/import/netbox", "Template")):
+            r = paths[path]["post"]["responses"]
+            self.assertEqual(r["201"]["content"]["application/json"]["schema"], {"$ref": "#/components/schemas/" + created}, path)
+            self.assertNotIn("200", r, path)
+        rack_ops = {("get", "/p/{name}/rk/{rack}"): ["name", "rack", "share"],
+                    ("get", "/api/v2/projects/{name}/racks/{rack}.svg"): ["name", "rack", "face", "images", "annotate"],
+                    ("get", "/api/v2/projects/{name}/qr/rack/{rack}.svg"): ["name", "rack", "share", "ecl", "scale"],
+                    ("get", "/api/v2/projects/{name}/racks/{rack}/totals"): ["name", "rack"],
+                    ("post", "/api/v2/projects/{name}/racks/import"): ["name"],
+                    ("get", "/api/v2/rack-templates"): [],
+                    ("post", "/api/v2/projects/{name}/racks/from-template"): ["name"],
+                    ("post", "/api/v2/library/import/netbox"): [],
+                    ("get", "/api/v2/library/{tid}/netbox.yaml"): ["tid", "project"],
+                    ("get", "/api/v2/library"): ["q", "discipline", "kind", "project", "source", "ids", "rack"]}
+        for (method, path), params in rack_ops.items():
+            op = paths[path][method]
+            self.assertEqual([p["name"] for p in op.get("parameters", [])], params, path)
+            self.assertIn("404", op["responses"], path)
+            if path != "/api/v2/library" and "/qr/" not in path:
+                self.assertEqual(op["responses"]["501"]["content"]["application/json"]["schema"], {"$ref": "#/components/schemas/Error"}, path)
+        self.assertNotIn("501", paths["/api/v2/projects/{name}/qr/rack/{rack}.svg"]["get"]["responses"], "the QR encoder is built in")
+        self.assertIn("image/svg+xml", paths["/api/v2/projects/{name}/racks/{rack}.svg"]["get"]["responses"]["200"]["content"])
+        self.assertIn("text/html", paths["/p/{name}/rk/{rack}"]["get"]["responses"]["200"]["content"])
+        self.assertIn("application/yaml", paths["/api/v2/library/{tid}/netbox.yaml"]["get"]["responses"]["200"]["content"])
+        self.assertEqual(paths["/api/v2/projects/{name}/racks/{rack}/totals"]["get"]["responses"]["200"]["content"]["application/json"]["schema"],
+                         {"$ref": "#/components/schemas/RackTotals"})
+        self.assertIn("201", paths["/api/v2/projects/{name}/changes"]["post"]["responses"], "other POSTs keep the generic 201")
+        self.assertNotIn("501", paths["/api/v2/projects/{name}/changes"]["post"]["responses"])
+
+
 class RackTemplates(Base):
     def fakes(self, exc=None):
         listing = Recorder([{"id": "church-audio-12u", "name": "Church audio", "description": "", "units": 12, "width_in": 19, "form_factor": "cabinet"}])
