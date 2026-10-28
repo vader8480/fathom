@@ -163,6 +163,22 @@ shows what changes.
   The same presets are `Generic` templates in the library (`generic-ups`,
   `generic-switch-24`, …) and work as a `kind` in device CSV imports
   (`ups`, `pdu`, `network switch`, `access point` …). `GET /api/v2/presets`.
+- **Racks**: front and rear elevations in 10, 19, 21 or 23 inch widths with
+  a form factor, a starting unit, a row, an empty weight and load and power
+  limits. Accessories (blank and vent panels, shelves with up to four cells,
+  drawers, cable managers, brush panels, lacing bars) take rack units and
+  collide like devices; devices can stand on a shelf cell. Each rack totals
+  its U used and free, weight against the max load and power against the
+  circuit limit, and warns when it is over. A catalog of 711 rack-mountable
+  device types with front and rear images (`?source=catalog` on the library,
+  never mixed into the default list), five starter rack templates, a public
+  rack page with a QR code (`/p/<project>/rk/<rack>`), SVG/PNG/print export,
+  and import of Rackula layouts and NetBox device-type YAML. The editor's
+  rack toolbar, palette and rack-page wiring for these is still being built;
+  the API, viewer page and builds have them now. These features
+  are adapted from [Rackula](https://github.com/RackulaLives/Rackula) (MIT),
+  whose device data comes from the NetBox devicetype-library (CC0) and whose
+  images mostly come from vastoholic/draw-io; see `THIRD_PARTY_NOTICES.md`.
 
 ## Inputs
 
@@ -176,6 +192,8 @@ shows what changes.
 | **Blackmagic Videohub** | text captured from the router on TCP 9990 (`nc <ip> 9990 > dump.txt`) | input/output labels and routing |
 | **ATEM settings** | ATEM Software Control `File › Save As` (`.xml`) | input names as port labels |
 | **Device / cable CSV** | any spreadsheet (headers like `name, kind, model, room, serial, ip` or `from_device, from_port, to_device, to_port, tag, type, length`) | one-shot: previewed as changes, then applied; the cable schedule CSV re-imports the same way. The Imports view offers **Devices / Cables templates** to download, fill in and re-upload; every row is validated (kind, status, medium, IP, MAC, VLAN, DMX range, dates, rooms, duplicates) and bad rows are listed by row and column and skipped. `kind` takes a vocabulary kind or a device type preset (`ups`, `pdu`, `network switch`, `copper patch panel`, `router`, `access point`, `server`, `nas`, `kvm`, `stagebox`, `dsp` …), which also brings the preset's ports |
+| **Rackula layouts** | a saved Rackula layout (`.Rackula.zip`, YAML or JSON) or a count.racku.la share link, sent to `POST /api/v2/projects/<name>/racks/import` (preview, then `apply`) | racks with width, form factor, numbering, start unit, row; devices with position, face, depth, colour, weight and power; blanks, shelves and cable managers as accessories, shelf contents in their cells; an unracked device with the same name is reused |
+| **NetBox device types** | a devicetype-library YAML file (`POST /api/v2/library/import/netbox`) | a global custom template: RU, depth, airflow, weight, power draw, part number, ports grouped from interfaces, console, power and front/rear ports; any template exports back as `GET /api/v2/library/<id>/netbox.yaml` |
 | **Floor plans** | PNG, JPG, SVG, PDF, Draw.io (`.drawio`, compressed or not), DXF (ASCII) | DXF layers and units, Draw.io shapes and edges; DWG needs DXF/PDF/SVG export or `FATHOM_ODA` |
 
 Imports never overwrite what you typed: their results form an **overlay**
@@ -295,7 +313,8 @@ A build folder holds `index.html` + `diagram.svg` + `patch-sheet.csv` (the
 `devices/<device>.html`, `patch-table.csv`, `cable-schedule.csv`,
 `cable-labels.html`, `ip-schedule.csv`, `dmx-schedule.csv`, `bom.csv`,
 `inventory.csv`, `console-channels.csv` (when a console has channels),
-`racks/<rack>-{front,rear}.svg`, `floorplans/<plan>.svg`,
+`racks/<rack>-{front,rear}.svg`, `racks/<rack>.svg` (both faces with device
+images), `racks/<rack>.html` (the rack page), `floorplans/<plan>.svg`,
 `qr/<device>.svg` (when a public URL is known), `report.html`, optional
 `report.pdf` / `diagram.png`, and `<run>.zip`. Every link is relative, so the
 folder works from `file://`.
@@ -355,18 +374,26 @@ Module map: `vocab.py` (kinds, media, disciplines), `schema.py` (model v2,
 migration, ops, validation), `project.py` / `history.py` / `users.py`
 (storage, revisions, logins), `plugins.py` + `parsers/` (importers),
 `merge.py` (0.2 merge + import overlay), `dedupe.py` (duplicate-device
-suggestions and merge plans), `library/` (templates),
+suggestions and merge plans), `library/` (templates; `library/rackula/catalog.json`
+is the Rackula catalog tier),
 `presets.py` (generic device type presets), `jobs.py` (in-process job
 runner), `discovery/` (network discovery: probes, correlation, topology,
 settings), `floorplan.py` (DXF / Draw.io / PDF / SVG), `cables.py`, `network.py`,
-`bom.py`, `qr.py`, `racks.py`, `dmx.py`, `patch.py`, `trace.py`, `search.py`,
+`bom.py`, `qr.py`, `racks.py` (occupancy, collisions, accessories and
+shelves, totals, annotations, validation, rack SVG with images),
+`rack_templates.py` (starter rack templates), `render_rack.py` (public rack
+page), `parsers/rackula.py` (Rackula layouts and share links),
+`parsers/netbox_devicetype.py` (NetBox device-type YAML both ways),
+`parsers/mini_yaml.py` (stdlib YAML subset), `dmx.py`, `patch.py`, `trace.py`, `search.py`,
 `markdown.py` (SOP wiki renderer + sanitizer),
 `assistant.py` / `llm.py`, `layout.py` / `render_html.py` / `render_svg.py`
 (maps, viewer pages, public SOP pages with the "Report a problem" sheet, QR sheets, report sections),
 `export.py` (builds, offline SOP bundle), `server.py` (WSGI app),
 `static/` (app). Samples: `samples/rrc-littleton` (0.2 project),
 `samples/campus-demo` (three rooms, audio/video/lighting, every importer),
-`samples/floorplans` (one file per supported format).
+`samples/floorplans` (one file per supported format). `tools/rackula_catalog.py
+--src <Rackula checkout>` regenerates the catalog and `static/rack-images/`
+from the pinned Rackula commit (not shipped in the package).
 
 Frontend module map (`fathom/static/`, contract in `docs/SPEC.md` §6; each
 `*-core.js` is pure and runs in Node):
@@ -386,12 +413,15 @@ Frontend module map (`fathom/static/`, contract in `docs/SPEC.md` §6; each
 | `js/wizard.js`, `js/wizard-core.js`, `css/wizard.css` | step dialogs and bulk add from pasted rows |
 | `js/page-device.js`, `js/page-room.js`, `js/page-rack.js`, `css/page-device.css`, `css/page-room.css`, `css/rack.css` | device, room and rack pages |
 | `js/patchview*.js`, `js/patchtable*.js`, `css/patchview.css`, `css/patchtable.css` | patch view and patch table |
-| `js/floorplan*.js`, `js/rack*.js`, `css/plan.css` | floor plans and rack elevations |
+| `js/floorplan*.js`, `js/rack.js`, `js/rack-core.js`, `js/rack-elevation.js`, `css/plan.css` | floor plans; rack landing, rack geometry, accessories, shelves, totals and ops; the rack elevation |
+| `js/rack-display.js`, `js/rack-display-core.js` | rack block colours, device images, annotations, airflow glyphs; template info from the library |
+| `js/rack-palette.js`, `js/rack-palette-core.js`, `css/rack-palette.css` | rack library palette (search, categories, favourites, recents; prefix `rpal-`) |
+| `js/rack-export.js`, `js/rack-export-core.js`, `css/rack-export.css` | rack export dialog: SVG, PNG 2×, print (prefix `rx-`) |
 | `js/schedules.js`, `js/inventory.js`, `css/schedules.css`, `css/inventory.css` | schedules and inventory (DataTables) |
 | `js/inspector.js`, `css/inspector.css`, `js/console-core.js`, `js/trace-ui.js`, `css/trace.css` | drawer content, console channels, trace drawer |
 | `js/views-admin.js`, `css/admin.css`, `js/views-discovery.js`, `css/discovery.css`, `js/views-sop.js`, `css/sop.css` | Imports / History / Builds / Settings, Discovery, SOPs |
 | `js/model-core.js`, `js/api.js`, `js/merge-ui.js`, `js/presets-core.js`, `js/suggest-ui.js`, `js/assistant-ui.js` | doc store and ops, API client, duplicate merge, presets, suggestions, assistant |
-| `dev/*.html`, `dev/*-harness.js`, `dev/fixture-gen.js`, `dev/fixture-v2.json` | harnesses (index at `/static/dev/index.html`): patchview, patchtable, floorplan, rack, schedules, datatable, explorer, entity, drawer, search, feedback, wizard |
+| `dev/*.html`, `dev/*-harness.js`, `dev/fixture-gen.js`, `dev/fixture-v2.json` | harnesses (index at `/static/dev/index.html`): patchview, patchtable, floorplan, rack, schedules, datatable, explorer, entity, drawer, search, feedback, wizard, rack-palette, rack-export |
 
 Tests: `tests/test_*.py` (backend, `unittest`), `tests/js/*.test.mjs`
 (`<name>-core.test.mjs` for the pure cores, `<name>-contract.test.mjs` for
@@ -401,7 +431,8 @@ Chrome), `tests/test_search_kinds.py` (network hits, `status`), and the UI
 suites `tests/test_ui_*.py` on the shared helper `tests/_ui.py`: `shell`,
 `router` (the helper itself), `explorer`, `entity`, `datatable`, `drawer`,
 `search`, `home`, `feedback`, `wizard`, the views (`pv`, `pt`, `fp`, `rk`,
-`sch`, `inv`, `pdev`, `proom`, `ins`, `adm`, `disc`, `sop`) and the
+`sch`, `inv`, `pdev`, `proom`, `ins`, `adm`, `disc`, `sop`, `rack_palette`,
+`rack_export`, `rk_regress`) and the
 loading / empty / error states (`states_shell`, `states_entity`,
 `states_lists`, `states_canvas`, `states_admin`). UI suites skip without
 Chrome (`FATHOM_CHROME`); `FATHOM_UI_SHOTS=<dir>` saves screenshots.
