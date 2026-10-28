@@ -3441,6 +3441,88 @@ def r_search(req: Request) -> Response:
     return Response.json({"hits": hits})
 
 
+# ---- LLM providers and assistant settings (phase4 P4A; SPEC §5.10 "Assistant settings", §6.9.6a)
+
+
+def _llm_upstream(detail: str, extra: Optional[Dict[str, Any]] = None) -> Response:
+    body: Dict[str, Any] = {"error": "upstream", "code": "upstream", "detail": str(detail or "")[:500]}
+    if extra:
+        body.update(extra)
+    return Response.json(body, 502)
+
+
+def _llm_probe(req: Request) -> Any:
+    """Provider instance for the models/test routes: effective config overlaid with unsaved form values (never the key back)."""
+    from .llm import config as lcfg
+    from .llm.providers import make
+
+    body = req.json()
+    try:
+        cfg = lcfg.probe_config(body)
+    except lcfg.ConfigError as exc:
+        raise ApiError(400, str(exc), exc.code)
+    if not cfg.get("provider"):
+        raise ApiError(400, "choose a provider first", "not_configured")
+    if not lcfg.resolved_base_url(cfg):
+        raise ApiError(400, "this provider needs a base URL", "bad_url")
+    return make(cfg), cfg, body
+
+
+@route("GET", r"/api/v2/llm/providers", role="viewer", summary="LLM provider catalog (ids, labels, default base URLs, presets)", tags=["assistant"])
+def r_llm_providers(req: Request) -> Response:
+    from .llm.providers import catalog
+
+    return Response.json({"providers": catalog()})
+
+
+@route("GET", r"/api/v2/llm/settings", role="admin", summary="Assistant LLM settings (the key is reported as api_key_set only)", tags=["assistant"],
+       response="LlmSettings")
+def r_llm_settings(req: Request) -> Response:
+    from .llm import config as lcfg
+
+    return Response.json(lcfg.public())
+
+
+@route("PUT", r"/api/v2/llm/settings", role="admin", summary="Update assistant LLM settings (key goes to llm-secrets.json, never into responses)",
+       tags=["assistant"], body="LlmSettings", response="LlmSettings")
+def r_llm_settings_put(req: Request) -> Response:
+    from .llm import config as lcfg
+
+    body = req.json()
+    try:
+        out = lcfg.save(body, by=req.username)
+    except lcfg.ConfigError as exc:
+        raise ApiError(400, str(exc), exc.code)
+    return Response.json(out)
+
+
+@route("POST", r"/api/v2/llm/models", role="admin", summary="List the models a provider offers (unsaved form values allowed; empty key = stored key)",
+       tags=["assistant"], body="LlmProbe")
+def r_llm_models(req: Request) -> Response:
+    from .llm import LLMError
+
+    prov, cfg, _ = _llm_probe(req)
+    try:
+        models = prov.list_models()
+    except LLMError as exc:
+        if exc.code == "not_supported":
+            raise ApiError(400, str(exc), "not_supported")
+        return _llm_upstream(str(exc), {"status": exc.status})
+    return Response.json({"provider": prov.id, "models": models})
+
+
+@route("POST", r"/api/v2/llm/test", role="admin", summary="Test the LLM connection with a one-token chat (502 with detail on upstream failure)",
+       tags=["assistant"], body="LlmProbe")
+def r_llm_test(req: Request) -> Response:
+    prov, cfg, body = _llm_probe(req)
+    model = str(body.get("model") or cfg.get("model") or "")
+    result = prov.test_connection(model=model, timeout=cfg.get("timeout"))
+    result["provider"] = prov.id
+    if not result.get("ok"):
+        return _llm_upstream(str(result.get("detail") or "connection failed"), result)
+    return Response.json(result)
+
+
 @route("POST", r"/api/v2/projects/" + _NAME + "/assistant", role="viewer", summary="Troubleshooting assistant", tags=["analysis"], body="Question", response="Answer")
 def r_assistant(req: Request) -> Response:
     from .assistant import answer
