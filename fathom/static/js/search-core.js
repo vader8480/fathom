@@ -30,6 +30,57 @@ const CAT_OF_KIND = {
 const RECENT_TYPES = ['device', 'room', 'rack', 'page'];
 const ALL_CAP = 6;
 const ONE_CAP = 50;
+const SHORT_CODE_RE = /^[A-Za-z0-9]{4}-?[A-Za-z0-9]{4}$/;
+
+// ------------------------------------------------------------ short codes (FR-INV-13)
+
+// Device short codes are assigned server-side (8 chars of 23456789ABCDEFGHJKLMNPQRSTUVWXYZ)
+// and shown as XXXX-XXXX; the client only formats, parses and matches them.
+export function formatShortCode(code) {
+  const s = str(code).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  return s.length === 8 ? s.slice(0, 4) + '-' + s.slice(4) : s;
+}
+
+// The 8-char upper-case code of `text` (with or without the dash), or ''.
+export function parseShortCode(text) {
+  const s = str(text).trim();
+  return SHORT_CODE_RE.test(s) ? s.replace('-', '').toUpperCase() : '';
+}
+
+export function isShortCodeQuery(text) {
+  return SHORT_CODE_RE.test(str(text).trim());
+}
+
+function roomLabel(doc, rid) {
+  const rm = byId(doc && doc.rooms, rid);
+  return rm ? (str(rm.name) || str(rid)) : str(rid);
+}
+
+// The device hit for a code match (§5.11 shape, score 100): title = device name,
+// subtitle "Code XXXX-XXXX · <room>". `res` is a GET /api/v2/codes/<code> body
+// ({device, name, room, kind}) or a device record from the doc.
+export function codeHit(doc, res, code) {
+  if (!res) return null;
+  const id = str(res.device || res.id);
+  if (!id) return null;
+  const dev = byId(doc && doc.devices, id);
+  const room = str(res.room || (dev && dev.room));
+  return {
+    kind: 'device', id: id, device: id, port: null, title: str(res.name || (dev && dev.name)) || id,
+    subtitle: join(['Code ' + formatShortCode(code || res.short_code || (dev && dev.short_code)), room ? roomLabel(doc, room) : '']),
+    room: room, score: 100, match: 'code', status: dev ? str(dev.status) : str(res.status),
+  };
+}
+
+function localCodeHits(doc, q) {
+  const code = parseShortCode(q);
+  if (!code) return [];
+  const out = [];
+  (Array.isArray(doc.devices) ? doc.devices : []).forEach(function (d) {
+    if (d && d.id && parseShortCode(d.short_code) === code) out.push(codeHit(doc, d, code));
+  });
+  return out;
+}
 
 function own(o, k) {
   return !!o && Object.prototype.hasOwnProperty.call(o, k);
@@ -135,7 +186,8 @@ function networkHits(doc, q) {
 }
 
 // Offline search: model-core searchLocal plus network hits (fields as
-// fathom/search.py) and `status` on every hit (device.status for devices).
+// fathom/search.py) and `status` on every hit (device.status for devices). An
+// exact short-code query (XXXX-XXXX) leads with the device carrying that code.
 export function augmentLocal(doc, q, limit) {
   const query = str(q).trim();
   if (!doc || !query) return [];
@@ -147,7 +199,7 @@ export function augmentLocal(doc, q, limit) {
     return Object.assign({}, h, { status: d ? str(d.status) : str(h.status) });
   }).concat(networkHits(doc, query));
   hits.sort(compareHits);
-  return hits.slice(0, lim);
+  return mergeHits(localCodeHits(doc, query), hits).slice(0, lim);
 }
 
 // a, then the hits of b whose kind:id is not already present.

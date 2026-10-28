@@ -180,3 +180,61 @@ T('campus-demo vectors: foh, chapel, A-001, RC-0001, IP and VLAN', () => {
   assert.equal(rc.buildRoute(rc.mergeRoute(route, sc.targetFor(vlan, route, campus))), '#/campus-demo/main/settings/networks?hl=av-dante');
   assert.equal(key(top('atem')), 'device:switcher', 'campus-demo ranks the switcher (code ATEM) first');
 });
+
+// ---- P1C: device short codes (FR-INV-13, FR-SRCH-05)
+
+T('formatShortCode / parseShortCode / isShortCodeQuery', () => {
+  assert.equal(sc.formatShortCode('ABCD2345'), 'ABCD-2345');
+  assert.equal(sc.formatShortCode('abcd-2345'), 'ABCD-2345', 'upper-cased, one dash after four chars');
+  assert.equal(sc.formatShortCode(''), '');
+  assert.equal(sc.formatShortCode(null), '');
+  assert.equal(sc.formatShortCode('ABC'), 'ABC', 'anything but 8 chars is left alone');
+  assert.equal(sc.parseShortCode('ABCD-2345'), 'ABCD2345');
+  assert.equal(sc.parseShortCode(' abcd2345 '), 'ABCD2345', 'trimmed and upper-cased');
+  assert.equal(sc.parseShortCode('ABCD-234'), '');
+  assert.equal(sc.parseShortCode('ABCD--2345'), '');
+  assert.equal(sc.parseShortCode('FOH CL5'), '');
+  assert.equal(sc.parseShortCode(undefined), '');
+  for (const q of ['ABCD-2345', 'abcd2345', '2345ABCD']) assert.equal(sc.isShortCodeQuery(q), true, q);
+  for (const q of ['ABCD-234', 'ABCD 2345', 'foh', '', 'ABCD-23456', 'ABC-D2345']) assert.equal(sc.isShortCodeQuery(q), false, JSON.stringify(q));
+});
+
+T('codeHit builds the §5.11 device hit from a lookup body or a doc device', () => {
+  const doc = clone(campus);
+  doc.devices.find((d) => d.id === 'foh-cl5').status = 'installed';
+  const res = { project: 'campus-demo', device: 'foh-cl5', name: 'FOH CL5', room: 'main', kind: 'console' };
+  const h = sc.codeHit(doc, res, 'abcd-2345');
+  assert.equal(key(h), 'device:foh-cl5');
+  assert.equal(h.device, 'foh-cl5');
+  assert.equal(h.title, 'FOH CL5');
+  assert.equal(h.subtitle, 'Code ABCD-2345 \u00b7 Main Auditorium', 'the room id resolves to its name');
+  assert.equal(h.score, 100);
+  assert.equal(h.match, 'code');
+  assert.equal(h.status, 'installed', 'status from the doc device');
+  assert.equal(sc.categorize(h), 'devices', 'a code hit opens the device page, not the inventory drawer');
+  assert.equal(sc.codeHit(doc, null, 'ABCD2345'), null);
+  assert.equal(sc.codeHit(doc, {}, 'ABCD2345'), null);
+  const unknown = sc.codeHit(doc, { device: 'ghost', name: 'Ghost', room: 'nowhere' }, 'ABCD2345');
+  assert.equal(unknown.subtitle, 'Code ABCD-2345 \u00b7 nowhere', 'an unknown room is shown as given');
+  assert.equal(unknown.status, '');
+});
+
+T('augmentLocal: an exact code query leads with the device carrying that short_code', () => {
+  const doc = clone(campus);
+  doc.devices.find((d) => d.id === 'foh-cl5').short_code = 'ABCD2345';
+  doc.devices.find((d) => d.id === 'rio-sl').short_code = 'RIOS2345';
+  for (const q of ['ABCD-2345', 'abcd2345', ' ABCD-2345 ']) {
+    const hits = sc.augmentLocal(doc, q, 20);
+    assert.ok(hits.length >= 1, q);
+    assert.equal(key(hits[0]), 'device:foh-cl5', q);
+    assert.equal(hits[0].subtitle, 'Code ABCD-2345 \u00b7 Main Auditorium');
+    assert.equal(hits[0].score, 100);
+    assert.equal(hits.filter((h) => key(h) === 'device:foh-cl5').length, 1, 'deduped against the normal hits');
+  }
+  assert.equal(sc.augmentLocal(doc, 'ZZZZ-9999', 20).length, 0, 'no device with that code -> nothing added');
+  assert.equal(sc.augmentLocal(doc, 'ABCD-234', 20).some((h) => h.match === 'code'), false, 'not a code query');
+  const before = sc.augmentLocal(campus, 'foh', 20).map(key);
+  assert.deepEqual(sc.augmentLocal(doc, 'foh', 20).map(key), before, 'ordinary queries are unchanged');
+  assert.equal(sc.augmentLocal(doc, 'RIOS-2345', 1).length, 1, 'the limit still applies');
+  assert.equal(key(sc.augmentLocal(doc, 'RIOS-2345', 1)[0]), 'device:rio-sl');
+});

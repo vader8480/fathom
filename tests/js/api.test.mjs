@@ -168,3 +168,45 @@ T('importTemplateUrl builds the import template download path', () => {
   const a = api.createApi({ base: '/', fetchImpl: fakeFetch(() => jsonResponse(200, {})) });
   assert.equal(a.importTemplateUrl('my show', 'csv', 'devices'), '/api/v2/projects/my%20show/imports/templates/csv/devices.csv');
 });
+
+// ---- P1C: trash, short codes and label sheets (SPEC §6.3)
+
+T('trash and project delete URLs', async () => {
+  const f = fakeFetch(() => jsonResponse(200, { items: [], retention_days: 30 }));
+  const a = api.createApi({ base: '/', fetchImpl: f });
+  await a.listTrash();
+  assert.equal(f.calls[0].method, 'GET'); assert.equal(f.calls[0].url, '/api/v2/trash');
+  await a.restoreTrash('my show');
+  assert.equal(f.calls[1].method, 'POST'); assert.equal(f.calls[1].url, '/api/v2/trash/my%20show/restore');
+  assert.equal(f.calls[1].headers.get('X-Fathom'), '1');
+  await a.purgeTrash('my show');
+  assert.equal(f.calls[2].method, 'DELETE'); assert.equal(f.calls[2].url, '/api/v2/trash/my%20show');
+  await a.deleteProject('my show');
+  assert.equal(f.calls[3].method, 'DELETE');
+  assert.equal(f.calls[3].url, '/api/v2/projects/my%20show?confirm=my%20show', 'without purge the project moves to the trash');
+  await a.deleteProject('my show', { purge: true });
+  assert.equal(f.calls[4].url, '/api/v2/projects/my%20show?confirm=my%20show&purge=1');
+  await a.deleteProject('my show', { purge: false });
+  assert.equal(f.calls[5].url, '/api/v2/projects/my%20show?confirm=my%20show');
+});
+
+T('lookupCode normalises the code; codeLink and label URLs are pure', async () => {
+  const f = fakeFetch(() => jsonResponse(200, { project: 'campus-demo', device: 'foh-cl5', name: 'FOH CL5', room: 'main', kind: 'console' }));
+  const a = api.createApi({ base: '/', fetchImpl: f });
+  const r = await a.lookupCode('abcd-2345');
+  assert.equal(r.device, 'foh-cl5');
+  assert.equal(f.calls[0].method, 'GET');
+  assert.equal(f.calls[0].url, '/api/v2/codes/ABCD2345', 'dash stripped, upper-cased');
+  await a.lookupCode('ABCD2345');
+  assert.equal(f.calls[1].url, '/api/v2/codes/ABCD2345');
+  await a.lookupCode('not a code');
+  assert.equal(f.calls[2].url, '/api/v2/codes/not%20a%20code', 'anything else is passed through for the server to reject');
+  assert.equal(a.codeLink('ABCD2345'), '/c/ABCD-2345', 'no location in Node: a root-relative link');
+  assert.equal(api.createApi({ base: '', fetchImpl: f }).codeLink('abcd-2345'), '/c/ABCD-2345');
+  assert.equal(a.deviceLabelsUrl('my show', { preset: 'avery-5160', room: 'main', ids: ['a', 'b'] }),
+    '/api/v2/projects/my%20show/labels/devices?preset=avery-5160&room=main&ids=a%2Cb');
+  assert.equal(a.deviceLabelsUrl('my show'), '/api/v2/projects/my%20show/labels/devices');
+  assert.equal(f.calls.length, 3, 'deviceLabelsUrl and codeLink do not fetch');
+  await a.labelPresets();
+  assert.equal(f.calls[3].url, '/api/v2/labels/presets');
+});

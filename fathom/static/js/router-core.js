@@ -31,7 +31,7 @@ export const SECTIONS = [
   { key: 'home', label: 'Home', glyph: '\u2302', views: ['home'], nav: 'sm' },
   { key: 'patch', label: 'Patch', glyph: '\u2B95', views: ['patch', 'table', 'map'], nav: 'all' },
   { key: 'rooms', label: 'Rooms', glyph: '\u25A3', views: ['rooms', 'plan', 'racks'], nav: 'all' },
-  { key: 'devices', label: 'Devices', glyph: '\u25EB', views: ['devices', 'inventory'], nav: 'all' },
+  { key: 'devices', label: 'Devices', glyph: '\u25EB', views: ['devices', 'inventory', 'files'], nav: 'all' },
   { key: 'schedules', label: 'Schedules', glyph: '\u2630', views: ['schedules', 'builds'], nav: 'all' },
   { key: 'sop', label: 'SOPs', glyph: '\u2611', views: ['sop'], nav: 'all' },
   { key: 'data', label: 'Data', glyph: '\u21C5', views: ['imports', 'discovery', 'history', 'json'], nav: 'all' },
@@ -41,7 +41,7 @@ export const SECTIONS = [
 export const VIEW_ROLES = {};
 SECTIONS.forEach(function (s) { s.views.forEach(function (v) { VIEW_ROLES[v] = 'viewer'; }); });
 
-export const TAB_ROLES = { settings: { users: 'admin', backups: 'admin', sharing: 'editor' } };
+export const TAB_ROLES = { settings: { users: 'admin', backups: 'admin', sharing: 'editor', trash: 'admin' } };
 
 const RANK = { viewer: 0, editor: 1, admin: 2 };
 const NAV_KEY = 'fathom.ui.nav';
