@@ -37,8 +37,8 @@ packages = ["fathom", "fathom.parsers", "fathom.library", "fathom.discovery", "f
 include-package-data = true
 
 [tool.setuptools.package-data]
-fathom = ["static/**/*", "samples/**/*", "library/templates/*.json", "checklists/*.json"]
-"fathom.library" = ["templates/*.json"]
+fathom = ["static/**/*", "samples/**/*", "library/templates/*.json", "library/rackula/*.json", "checklists/*.json"]
+"fathom.library" = ["templates/*.json", "rackula/*.json"]
 "fathom.discovery" = ["oui.csv"]
 
 [tool.setuptools.dynamic]
