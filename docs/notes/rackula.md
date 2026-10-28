@@ -537,3 +537,46 @@ Owns: `fathom/selftest.py`, `fathom/static/sw.js`, `tests/test_ui_rk_regress.py`
   - History lists a rack edit, and restore works.
   - The rack harness walkthrough (`dev/rack.html?walk=1`, `walkRack` in `fathom/static/dev/plans/harness.js`) runs clean.
 
+
+## Docs worker: where the merged code differs from these notes (wave 1 + REG, CATFIX, CATGENERIC)
+
+`docs/SPEC.md` follows the code; these are the places where these notes said something else.
+
+- **Contract (B–D):**
+  - Out-of-range integers report `bad_type`, not `bad_range`.
+  - Top-down numbering reverses only the labels.
+  - The Python `racks.py` has no `fits`/`item_fits`. The contract's `fits` cases run only in JS, and 6 Python subtests skip.
+  - Python and JS totals differ: Python counts `auto` devices, and the two languages round exact ties differently. Python `rack_items` keeps `label: ''`, while JS fills in the type label.
+- **Catalog:**
+  - The catalog tier sits below presets, and `_builtin_ids` leaves it out.
+  - Summaries add `part_number` and `tags`.
+  - Images live under `rack-images/generic/` (static segments can't start with `_`).
+  - `rack-images/README.md` lists tp-link, but no tp-link images ship.
+- **Templates:**
+  - Shelf children use side `left`/`right` with `depth: "full"`.
+  - The desk template is `open_frame`.
+  - `from-template` takes `location` and answers 404 for an unknown room.
+- **Import:**
+  - The preview also returns `layout`.
+  - An applied import is not capped at 2000 ops (`/changes` is).
+  - `POST …/racks/import` drops the body `room`, so racks land in the default room.
+  - NetBox import accepts `?override=1`.
+- **Viewer and share:**
+  - The rack page draws two per-face SVGs, not `face=both`.
+  - Share pages inline the QR and link through `/s/<token>/`, and the device page rack link carries `?share=`.
+  - The rack page QR (viewer, share and build) is omitted unless `settings.public_url` or `FATHOM_PUBLIC_URL` is set. The QR API falls back to the request host.
+  - The QR route also answers `share_missing` and `share_scope`.
+  - Builds write rack pages only when `rack_pages` is set.
+- **JS:**
+  - Palette `onPick(entry, template)`, and the mount returns `root`.
+  - `deviceFromTemplate` takes `vocab`.
+  - `openRackExport` resolves with the export made.
+  - `templateInfo` reads `info` before `doc.templates`, the reverse of `rackTotals`.
+  - `peekTemplateInfo` returns `undefined` while unknown.
+  - `rack-elevation` `pct()` still uses `RACK_W`.
+- **REG:**
+  - `sw.js` is `0.5.0` and keeps a separate `fathom-images-1` cache for rack images.
+  - `rack-toolbar.css` and `page-rack.css` are precached but not yet present, so 2 regression subtests skip.
+  - Selftest checks only the front image of the 104 templates that have both faces.
+- **OpenAPI:** `RackImport`, `RackFromTemplate` and `NetboxImport` have no component schemas, and the 201 routes are documented as 200.
+
