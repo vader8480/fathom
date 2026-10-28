@@ -110,16 +110,21 @@ def _strip_prolog(svg: str) -> str:
 
 
 class _RackLinks:
-    """Hrefs from a rack page: viewer tree ``{base}p/<n>/…`` (``?share=`` carried) or build ``racks/<rack>.html``."""
+    """Hrefs from a rack page: viewer tree ``{base}p/<n>/…``, share mirror ``{base}s/<token>/…`` or build ``racks/<rack>.html``.
+
+    ``/p/`` routes need a viewer login and ignore ``?share=``, so share pages link through the mirror only.
+    """
 
     def __init__(self, style: str, base: str, project: str, share: str) -> None:
         self.build = style == "build"
         self.base = base or ""
         self.project = project
-        self.tail = f"?share={_q(share)}" if share and not self.build else ""
+        self.share = share if not self.build else ""
 
     def _p(self, rest: str) -> str:
-        return f"{self.base}p/{_q(self.project)}/{rest}{self.tail}"
+        if self.share:
+            return f"{self.base}s/{_q(self.share)}/{rest}"
+        return f"{self.base}p/{_q(self.project)}/{rest}"
 
     def device(self, dev: str) -> str:
         return f"../devices/{_q(dev)}.html" if self.build else self._p(f"d/{_q(dev)}")
@@ -135,7 +140,7 @@ class _RackLinks:
 
 
 def _abs_base(doc: Dict[str, Any], base: str) -> str:
-    """Absolute public root for a build QR: ``base`` when absolute, else ``settings.public_url`` / ``FATHOM_PUBLIC_URL``."""
+    """Absolute public root for an inline QR (builds, share pages): ``base`` when absolute, else ``settings.public_url`` / ``FATHOM_PUBLIC_URL``."""
     if re.match(r"^https?://", base or "", re.I):
         return base.rstrip("/")
     s = (doc.get("settings") or {}).get("public_url") or os.environ.get("FATHOM_PUBLIC_URL") or ""
@@ -145,10 +150,11 @@ def _abs_base(doc: Dict[str, Any], base: str) -> str:
 
 def _qr_html(doc: Dict[str, Any], project: str, rack_id: str, rack_name: str, base: str, share: str, build: bool) -> str:
     alt = f"QR code for rack {rack_name}"
-    if not build:
-        src = f"{base}api/v2/projects/{_q(project)}/qr/rack/{_q(rack_id)}.svg" + (f"?share={_q(share)}" if share else "")
+    if not build and not share:
+        src = f"{base}api/v2/projects/{_q(project)}/qr/rack/{_q(rack_id)}.svg"
         inner = f'<img src="{esc(src)}" alt="{esc(alt)}" width="150" height="150">'
     else:
+        # The QR API needs the viewer role, so share pages (anonymous visitors) get the QR inline, like builds.
         root = _abs_base(doc, base)
         if not root:
             return ""
