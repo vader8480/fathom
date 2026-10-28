@@ -1,0 +1,236 @@
+# Hand-written for Fathom: Rackula layout edge cases (positions in 1/6 U, U1 = 6).
+metadata:
+  id: 7d0c5a52-0e7f-4a37-9d1a-3b0f6f1d9c11
+  name: Edge Cases
+  schema_version: "1.1"
+version: 26.9.2
+name: Edge Cases
+racks:
+  - id: foh
+    name: FOH Rack
+    height: 12
+    width: 19
+    desc_units: false
+    form_factor: wall-mount
+    starting_unit: 1
+    position: 0
+    devices:
+      - id: f-router
+        device_type: edge-router
+        position: 66
+        face: front
+      - id: f-sw1
+        device_type: switch-8
+        name: Switch
+        position: 60
+        face: front
+      - id: f-sw2
+        device_type: switch-8
+        name: Switch
+        position: 54
+        face: rear
+      - id: f-srv
+        device_type: mini-server
+        position: 6
+        face: both
+  - id: sl
+    name: Stage Left
+    height: 64
+    width: 21
+    depth_mm: 600
+    base_weight: 12.5
+    desc_units: true
+    form_factor: 2-post
+    starting_unit: 0
+    position: 1
+    notes: Left of stage
+    devices:
+      - id: s-shelf
+        device_type: shelf-6
+        name: Six-up shelf
+        position: 60
+        face: front
+        colour_override: "#abc"
+      - id: s-c1
+        device_type: mini-box
+        name: Box A
+        position: 0
+        face: front
+        container_id: s-shelf
+        slot_id: c-a
+      - id: s-c2
+        device_type: mini-box
+        name: Box F
+        position: 0
+        face: front
+        container_id: s-shelf
+        slot_id: c-f
+      - id: s-c3
+        device_type: mini-box
+        name: Box B1
+        position: 0
+        face: front
+        container_id: s-shelf
+        slot_id: c-b
+      - id: s-c4
+        device_type: mini-box
+        name: Box B2
+        position: 0
+        face: front
+        container_id: s-shelf
+        slot_id: c-b
+      - id: s-orphan
+        device_type: mini-box
+        name: Lost Box
+        position: 0
+        face: front
+        container_id: nope
+        slot_id: c-a
+      - id: s-vent
+        device_type: vent-1u
+        position: 54
+        face: front
+      - id: s-lace
+        device_type: lacing-1u
+        position: 54
+        face: rear
+      - id: s-drawer
+        device_type: drawer-2u
+        position: 12
+        face: front
+      - id: s-amp
+        device_type: pa-4
+        name: Amp One
+        position: 30
+        face: front
+        notes: |
+          Feeds the
+          side fills
+      - id: s-amp2
+        device_type: pa-4
+        name: Amp Two
+        position: 36
+        face: front
+      - id: s-console
+        device_type: cl5
+        name: FOH CL5
+        position: 72
+        face: front
+        colour_override: "#123456"
+      - id: s-high
+        device_type: cl5
+        name: High Console
+        position: 400
+        face: front
+      - id: s-ghost
+        device_type: ghost-box
+        name: Ghost
+        position: 120
+        face: front
+      - id: s-half
+        device_type: half-depth-box
+        position: 102
+        face: rear
+        slot_position: left
+device_types:
+  - slug: edge-router
+    manufacturer: Acme
+    model: Edge Router X
+    u_height: 1
+    colour: "#7B6BA8"
+    category: network
+    interfaces:
+      - name: wan0
+        type: 1000base-t
+      - name: lan1
+        type: 1000base-t
+      - name: lan2
+        type: 1000base-t
+      - name: sfp1
+        type: 10gbase-x-sfpp
+  - slug: switch-8
+    manufacturer: Acme
+    model: Switch 8
+    u_height: 1
+    is_full_depth: false
+    colour: "#7B6BA8"
+    category: network
+  - slug: mini-server
+    manufacturer: Acme
+    model: Mini Server
+    u_height: 1
+    colour: "#4A7A8A"
+    category: server
+  - slug: shelf-6
+    model: Shelf 6-up
+    u_height: 1
+    colour: "#6272A4"
+    category: shelf
+    slots:
+      - {id: c-f, position: {row: 0, col: 5}}
+      - {id: c-b, position: {row: 0, col: 1}}
+      - {id: c-a, position: {row: 0, col: 0}}
+      - {id: c-c, position: {row: 0, col: 2}}
+      - {id: c-d, position: {row: 0, col: 3}}
+      - {id: c-e, position: {row: 0, col: 4}}
+  - slug: mini-box
+    model: Mini Box
+    u_height: 1
+    slot_width: 1
+    colour: "#4A7A8A"
+    category: other
+  - slug: vent-1u
+    model: Vent Panel 1U
+    u_height: 1
+    colour: "#44475A"
+    category: blank
+  - slug: lacing-1u
+    model: Rear Lacing Bar
+    u_height: 1
+    colour: "#6272A4"
+    category: cable-management
+  - slug: drawer-2u
+    model: Rack Drawer 2U
+    u_height: 2
+    colour: "#6272A4"
+    category: shelf
+    weight: 22
+    weight_unit: lb
+  - slug: pa-4
+    manufacturer: Acme Audio
+    model: Power Amplifier PA-4
+    u_height: 2
+    weight: 10
+    weight_unit: lb
+    colour: "#A85A7A"
+    category: av-media
+    interfaces:
+      - {name: Input 1, type: xlr-3, direction: input}
+      - {name: Input 2, type: xlr-3, direction: input}
+      - {name: Input 3, type: xlr-3, direction: input}
+      - {name: Input 4, type: xlr-3, direction: input}
+      - {name: Out A, type: speakon, direction: output, signal_type: analog-audio-speaker}
+      - {name: Dante, type: 1000base-t, signal_type: digital-audio-dante}
+    power_ports:
+      - {name: PSU, type: iec-60320-c14, allocated_draw: 120}
+  - slug: cl5
+    manufacturer: Yamaha
+    model: CL5
+    u_height: 1.5
+    colour: "#A85A7A"
+    category: av-media
+  - slug: half-depth-box
+    model: Half Box
+    u_height: 1
+    is_full_depth: false
+    colour: "#6272A4"
+    category: other
+settings:
+  display_mode: label
+  show_labels_on_images: false
+rack_groups:
+  - id: g1
+    name: Stage
+    rack_ids: [sl]
+  - id: g2
+    rack_ids: [foh]

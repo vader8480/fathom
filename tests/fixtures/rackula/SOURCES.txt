@@ -1,0 +1,17 @@
+Fixtures for tests/test_import_rackula.py and tests/test_netbox_devicetype.py.
+
+Rackula (MIT, https://github.com/RackulaLives/Rackula, commit 9c7af6dd28209a776aebdb92080bcf2916cd29e6):
+  *.rackula.yaml, legacy-layout-v0.6.yaml  copied from src/tests/fixtures/upgrade-corpus/,
+                                           e2e/fixtures/ and static/templates/ (each starts
+                                           with a "# Source:" comment)
+  carlton-5123home.Rackula.zip             e2e/fixtures/carlton-5123home.Rackula.zip
+  legacy-test-layout.Rackula.zip           e2e/fixtures/Legacy Test Layout.Rackula.zip
+  share-vectors.json                       a small layout encoded with lz-string 1.5.0 and pako 2,
+                                           the libraries Rackula's share links use
+
+NetBox devicetype-library (CC0, https://github.com/netbox-community/devicetype-library):
+  netbox/*.yaml                            copied from device-types/ (each starts with a
+                                           "# Source:" comment)
+
+Hand-written for Fathom:
+  hand-edge-cases.rackula.yaml, hand-edge-cases.json
