@@ -207,6 +207,15 @@ export function createApi(opts) {
     // "Suggest an improvement" (FR-UX-18): a problem report with kind "suggestion"; body {text, name?, url?, device?, page?}
     reportSuggestion: function (name, body) { return send('POST', proj(name) + '/problems', Object.assign({}, body || {}, { kind: 'suggestion' })); },
     patchProblem: function (name, id, patch) { return send('PATCH', proj(name) + '/problems/' + enc(id), patch); },
+    // Scenes (FR-SCN, §5.6 "Scenes"): `sid` may be the literal 'base' where the server allows it.
+    scenes: function (name) { return get(proj(name) + '/scenes'); },
+    createScene: function (name, body) { return send('POST', proj(name) + '/scenes', body || {}); },
+    patchScene: function (name, sid, body) { return send('PATCH', proj(name) + '/scenes/' + enc(sid), body || {}); },
+    deleteScene: function (name, sid) { return send('DELETE', proj(name) + '/scenes/' + enc(sid)); },
+    activateScene: function (name, sid) { return send('POST', proj(name) + '/scenes/' + enc(sid || 'base') + '/activate', {}); },
+    saveScene: function (name, sid) { return send('POST', proj(name) + '/scenes/' + enc(sid) + '/save', {}); },
+    sceneDiff: function (name, sid, against) { return get(proj(name) + '/scenes/' + enc(sid) + '/diff', { against: against || 'base' }); },
+    sceneDoc: function (name, sid) { return get(proj(name) + '/scenes/' + enc(sid || 'base') + '/doc'); },
     shares: function (name) { return get(proj(name) + '/shares'); },
     createShare: function (name, o) { return send('POST', proj(name) + '/shares', o || {}); },
     deleteShare: function (name, token) { return send('DELETE', proj(name) + '/shares/' + enc(token)); },

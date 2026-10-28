@@ -1,0 +1,67 @@
+/* Scene bar (#app-scenes, js/scenes.js, SPEC §6.15) and the preview banner (#app-preview, shell).
+   Variables and the .app-menu / .app-dialog / .field components come from app.css. */
+
+/* ---- bar: one 36 px row under the sub-nav; scrolls sideways instead of widening the page */
+.app-scenes{display:flex;align-items:center;gap:8px;height:36px;padding:0 calc(10px + var(--sar)) 0 calc(10px + var(--sal));border-bottom:1px solid var(--border);background:var(--panel-2);font-size:12.5px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;white-space:nowrap}
+.app-scenes::-webkit-scrollbar{display:none}
+.app-scenes[hidden]{display:none}
+.app-scenes>*{flex:none}
+.app-scenes>.grow{flex:1 1 0;min-width:4px}
+.app-scenes-label{color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.2px}
+.app-scenes select{min-height:30px;max-width:min(360px,60vw);padding:3px 8px;font-size:12.5px;text-overflow:ellipsis}
+/* the actions button stays in view while the bar scrolls sideways */
+.app-scenes button.app-scenes-more{position:sticky;right:0;min-width:32px;min-height:30px;font-size:16px;line-height:1;background:var(--panel-2);box-shadow:-8px 0 8px -4px var(--panel-2)}
+.app-scenes-status{font-size:12px}
+.app-scenes-status[hidden]{display:none}
+
+/* the chip warns that edits land in a named scene, not in Base */
+.app-scene-chip{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;color:var(--text);border:1px solid rgba(142,162,255,.5);background:rgba(142,162,255,.18);max-width:40vw;overflow:hidden;text-overflow:ellipsis}
+.app-scene-chip::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}
+.app-scene-chip[hidden]{display:none}
+.app-scenes--active{background:rgba(142,162,255,.08);border-bottom-color:rgba(142,162,255,.35)}
+.app-scenes--preview{background:rgba(47,212,180,.08);border-bottom-color:rgba(47,212,180,.35)}
+.app-scenes-menu button.danger{color:var(--err)}
+
+/* ---- preview banner: read-only, like the lock banner but teal */
+.app-preview{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px calc(12px + var(--sar)) 6px calc(12px + var(--sal));font-size:12.5px;border-bottom:1px solid var(--border);background:rgba(47,212,180,.14);color:var(--text)}
+.app-preview[hidden]{display:none}
+.app-preview-text{flex:1 1 auto;min-width:0}
+.app-preview-text b{font-weight:600}
+.app-preview button{flex:none;min-height:32px}
+
+/* ---- dialogs */
+.scn-form .field{grid-template-columns:96px minmax(0,1fr)}
+.scn-check{margin:8px 0 2px;gap:8px;min-height:32px;cursor:pointer}
+.scn-hint{margin:8px 0 0;font-size:12px}
+.scn-diff-text{margin:0 0 10px;font-weight:600}
+.scn-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+.scn-col{min-width:0}
+.scn-sec h4{margin:8px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.scn-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.scn-row{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:4px 8px;border-radius:6px;border-left:3px solid var(--border-2);background:var(--panel-2);font-size:12.5px}
+.scn-row.add{border-left-color:var(--ok)}
+.scn-row.del{border-left-color:var(--err);text-decoration:line-through;text-decoration-color:rgba(240,106,168,.6)}
+.scn-row.chg{border-left-color:var(--warn)}
+.scn-tag{font-family:var(--mono);font-size:12px;font-weight:600}
+.scn-ends{min-width:0;overflow-wrap:anywhere}
+.scn-extra{font-size:12px;flex-basis:100%}
+.scn-error{color:var(--err);margin:0}
+.scn-loading{margin:0}
+
+/* ---- phones: taller targets, stacked compare columns */
+@media (max-width:699px){
+  .scn-cols{grid-template-columns:minmax(0,1fr)}
+  .app-scenes-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .app-scenes select{max-width:min(300px,56vw)}
+  .app-scene-chip{max-width:34vw}
+}
+@media (pointer:coarse){
+  .app-scenes{height:44px}
+  .app-scenes select{min-height:44px}
+  .app-scenes button.app-scenes-more{min-width:44px;min-height:44px}
+  .app-preview button{min-height:44px;min-width:44px}
+  .scn-check{min-height:44px}
+}
+@media print{
+  .app-scenes,.app-preview{display:none!important}
+}
