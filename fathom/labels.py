@@ -289,7 +289,8 @@ def label_sheet_html(doc: Doc, devices: Sequence[Dict[str, Any]], preset: str = 
     org = (doc.get("meta") or {}).get("org") or ""
     title = title or " · ".join(s for s in ("Device labels", org) if s)
     head = f"Print at 100 % — {p['label']} ({preset_size_text(p)})"
-    labels = [f'<div class="label" data-device="{_esc(d.get("id"))}">{_svg(doc, d, preset, base_url, project, "mm")}</div>' for d in devices]
+    labels = [f'<div class="label" data-device="{_esc(d.get("id"))}" data-url="{_esc(label_fields(doc, d, base_url, project=project)["url"])}">'
+              f'{_svg(doc, d, preset, base_url, project, "mm")}</div>' for d in devices]
     css = """
 @page { margin: 10mm; }
 * { box-sizing: border-box; }
