@@ -175,6 +175,17 @@ export function createApi(opts) {
     qrUrl: function (name, device) { return url(proj(name) + '/qr/' + enc(device) + '.svg'); },
     rackSvgUrl: function (name, rack, face) { return url(proj(name) + '/racks/' + enc(rack) + '.svg', { face: face }); },
     floorplanImageUrl: function (name, fp, hide) { return url(proj(name) + '/floorplans/' + enc(fp) + '/image', { hide: hide }); },
+    // Cable runs on a plan (P5A, §5.7): paths, runs with lengths, totals and half-placed cables; `scene` optional.
+    planRuns: function (name, fp, scene) { return get(proj(name) + '/floorplans/' + enc(fp) + '/runs', { scene: scene }); },
+    // Nearest shared path to a normalised point within `max` (normalised units) -> {path, point} | {path: null}.
+    planSnap: function (name, fp, point, max) { return send('POST', proj(name) + '/floorplans/' + enc(fp) + '/runs/snap', { point: point, max: max }); },
+    // body {cables: [ids] | all: true, base_revision, round_to} -> {revision, updated [{cable, from_m, to_m}], skipped}; 409 stale, 423 locked.
+    planEstimate: function (name, fp, body) { return send('POST', proj(name) + '/floorplans/' + enc(fp) + '/runs/estimate', body || {}); },
+    // Plan export (P5C): fmt svg|png|pdf; opts {runs: bool, scene}.
+    floorplanExportUrl: function (name, fp, fmt, opts) {
+      opts = opts || {};
+      return url(proj(name) + '/floorplans/' + enc(fp) + '.' + (fmt || 'svg'), { runs: opts.runs ? 1 : '', scene: opts.scene });
+    },
     fileUrl: function (name, att) { return url(proj(name) + '/files/' + enc(att.id) + '/' + enc(att.name || 'file')); },
     deleteFile: function (name, attId) { return send('DELETE', proj(name) + '/files/' + enc(attId)); },
     builds: function (name) { return get(proj(name) + '/builds'); },
