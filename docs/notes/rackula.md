@@ -424,3 +424,116 @@ Owns: `fathom/static/js/rack-display-core.js`, `fathom/static/js/rack-display.js
 - Also export `textColorOn(hex)`: `#000` or `#fff` by WCAG contrast. Category colours are dark, so labels must stay readable.
 - Pure tests cover every field and edge (missing interfaces, a primary ip, power/weight formatting, a rear without an image, the attachment override, unknown categories).
 
+## Wave 2: what wave 1 delivered (merged on `cursor/rackula`; use these directly, no feature detection needed)
+
+- **`rack-core.js` (RJS):** `ITEM_TYPES`, `rackItems`, `itemBlocks(doc, rackId, face)` (ids `item:<id>`), `shelfCells`, `shelfChildBlocks(doc, rackId, face)`, `itemFits`, `rackTotals(doc, rackId, info)`, `racksByRow`, `rackWidthPx`, `ruLabel` (honours `start_u`), `addItemOps(doc, rackId, spec)` → `{ops, id}`, `moveItemOps`, `updateItemOps`, `delItemOps`, `placeOnShelfOps(doc, deviceId, rackId, itemId, slot)`, `duplicateDeviceOps(doc, deviceId, opts)` → `{ops, id}`, `duplicateRackOps(doc, rackId, {devices})` → `{ops, id}`. `collisions` includes items; `faceBlocks` leaves out shelf children; `sideX`/`sideW` take an optional `rack`.
+- **`rack-display-core.js` (DSP):** `DISPLAY_MODES`, `ANNOTATION_FIELDS`, `CATEGORY_COLORS`, `STORAGE` (`fathom.ui.rack.display`, `fathom.ui.rack.annotate`, `fathom.ui.rack.face`), `blockColor(device, vocab, info)`, `deviceImage(device, info, face, {base, attachmentUrl})`, `annotationValue(doc, device, field, info)`, `airflowGlyph(airflow, face)`, `textColorOn(hex)`. **`rack-display.js`:** `loadTemplateInfo(ctx, ids)` → Promise `{id: summary}`, plus `peekTemplateInfo(ctx, id)`.
+- **`rack-elevation.js` (SPLIT):** the `createElevation(el, ctx, opts)` API is described in the module header. Options: `rack`, `racks()`, `face`, `root`, `list`, `empty()`, `onChange(state, api)`. Methods: `render`, `destroy`, `setFace`, `getState`, `setState`, `setOptions`, `focus`, `route`, `startDrag`, `print`, `addToRack(deviceId, rackId?)`, `addDevice`, `templateInfo`. It exports `roomRacks`, `deviceById`, `disciplineOf`, `discColor`, `modelLine`; `rack.js` imports all five.
+- **`rack-palette.js` (PAL):** `mountRackPalette(el, ctx, {onPick(entry, template), onDragStart(entry, event), presets})` → `{root, destroy, focus, refresh}`. **`rack-palette-core.js`:** `deviceFromTemplate(doc, template, {room, name, vocab})` → `{ops, id}`, which never sets `rack`.
+- **`rack-export.js` (XPT):** `openRackExport(ctx, {racks, face})` → Promise.
+- **Server (SRV):**
+  - `GET /api/v2/rack-templates` → `{templates}`.
+  - `POST /api/v2/projects/<n>/racks/from-template` `{template, name?, room?, base_revision}` → 201 `{revision, rack}`.
+  - `POST /api/v2/projects/<n>/racks/import` `{text|zip_b64|url}` → preview `{racks, devices, items, warnings, ops}`; with `apply: true` + `base_revision` → `{revision, applied, warnings}`.
+  - `GET /api/v2/projects/<n>/racks/<rack>/totals`.
+  - `GET /api/v2/projects/<n>/qr/rack/<rack>.svg`.
+  - Viewer page `GET /p/<n>/rk/<rack>`.
+  - `GET racks/<rack>.svg?face=both&images=1&annotate=<field>`.
+  - `GET /api/v2/library?source=all&rack=1&ids=`.
+- **Python:**
+  - `racks.rack_totals`, `racks.collisions`, `racks.rack_items`, `racks.shelf_contents`, `racks.annotation_value`, `racks.ru_label`.
+  - `rack_templates.list_templates()` / `apply_ops`.
+  - `parsers.rackula.preview`; `library.catalog_templates()` (711 catalog templates).
+  - Images live under `static/rack-images/<vendor>/<file>.webp`; only 155 templates have a front image.
+- **Fixtures:** Rackula layouts in `tests/fixtures/rackula/*.rackula.yaml` (e.g. `media-server.rackula.yaml`).
+
+## Wave 2 unit specs
+
+### CATFIX: catalog kind rule
+Owns: `tools/rackula_catalog.py`, `fathom/library/rackula/catalog.json`, `tests/test_rack_catalog.py`.
+- **The bug:** Rackula files `ubiquiti-uacc-rack-panel-patch-blank-24` ("24-Port Blank Keystone Patch Panel") under category `network`, so `kind_for` gives `switch`. That breaks `tests/test_import_rackula.py::RackulaFiles::test_legacy_zip_and_rack_field`.
+- **The fix:** in `kind_for`, a model matching `/patch\s*panel|keystone/i` → `patch_panel` before the category mapping. Audit for similar model-keyword mismatches (PDU or UPS under network, KVM, shelf); list what changed.
+- Regenerate with the pinned Rackula commit (`git clone https://github.com/RackulaLives/Rackula /tmp/rackula && git -C /tmp/rackula checkout 9c7af6dd28209a776aebdb92080bcf2916cd29e6`), keep `generated` 2026-10-28 and leave the images unchanged. The determinism test must pass, and the import test above must pass.
+
+### ELEV: elevation rendering and interaction
+Owns: `fathom/static/js/rack-elevation.js`, `fathom/static/css/rack.css`, `tests/test_ui_rk_elev.py`.
+- **Keep every export.** `rack.js` imports `createElevation`, `roomRacks`, `deviceById`, `disciplineOf`, `discColor` and `modelLine`. `page-rack.js` uses `createElevation` and `addDevice`. You may reimplement `discColor` over `blockColor`, but keep the signatures.
+- **Carry-over fixes:**
+  - `pct()` divides by `RACK_W`; use `rackWidthPx(rack)` per rack. 10/21/23″ racks draw at their width, scaled to the viewport like today.
+  - `devName` prints raw `item:<id>` in warnings; show the item label, else the type label.
+  - Block colour comes from `blockColor` and its text colour from `textColorOn`.
+- **Display options** via `setOptions({face, display, annotate})`:
+  - `face` is `front|rear|both`. Both draws the faces side by side at md/lg; at sm it falls back to the stored single face, with a toggle.
+  - `display` is `label|image|both`. Images come from `deviceImage` (base = `ctx.appRoot` or `''`) with `loadTemplateInfo`, and the attachment override from `ctx.api.fileUrl` if present. In `both` mode, the label sits over the image with the airflow glyph.
+  - `annotate` adds a column right of each face with `annotationValue`.
+  - RU labels come from `ruLabel` (`start_u`).
+- **Items** (`itemBlocks`): `div.rk-item[data-item][data-rack]`.
+  - Draggable like devices (`moveItemOps`); ↑/↓ moves, Delete removes (`delItemOps`; confirm for a shelf holding devices), Enter opens the item menu.
+  - Each type looks distinct (blank, vent, shelf, drawer, cable manager, brush, lacing bar).
+- **Shelves:** cells are drawn inside (`shelfChildBlocks` → `div.rk-block.rk-onshelf[data-device][data-shelf][data-slot]`). Dropping a device on a free cell → `placeOnShelfOps`. Dragging it out onto the rails gives a normal placement.
+- **Block menu:** opens on right-click, a 500 ms long-press, or the ⋯ button on focus. Reuse an existing menu pattern (search `app-menu`, `pv-ctx`), else a small `rk-menu` popover, shown as a bottom sheet at sm.
+  - Devices: face, side, depth, colour (category swatches + clear → `rack.color`), move to rack, move to shelf (free cells), duplicate (`duplicateDeviceOps`), unrack, open.
+  - Items: label, colour, slots (shelf), height, face, depth, delete.
+- **Keys on a focused block:** Ctrl/Cmd+D duplicates; `r` flips front ↔ rear; `[` / `]` moves to the previous/next rack at the same U if it fits; Shift+↑/↓ moves 5 U.
+- **Highlights:** selecting a racked device highlights the devices it shares cables with (`doc.cables` endpoints), using `rk-hl`/`rk-dim`.
+- **External drop API** (LAND calls it): `api.beginExternalDrag(payload, pointerEvent)`.
+  - `payload` is `{kind: 'template', entry, template}` (ghost height = `template.ru`) or `{kind: 'item', type}`.
+  - On drop it calls `opts.onExternalDrop(payload, {rackId, u, face, shelf?, slot?})`, and the host creates it. Esc or a drop outside cancels.
+- **Viewer** (`ctx.store.readOnly`): no drag, no edits; focus and Enter still work.
+- **Tests at d and m:** image mode shows images, the annotate column, adding/moving/deleting a blank by keyboard, placing a device on a shelf cell, menu duplicate, the `r` flip, the 10″ width, both faces at d and a single face at m, and the external drop via the API. `tests/test_ui_rk.py` must pass unchanged.
+
+### LAND: racks landing, toolbar and workflows
+Owns: `fathom/static/js/rack.js`, new `fathom/static/css/rack-toolbar.css` (prefix `rkt-`, loaded with `ctx.ensureCss` or a link the way `rack.css` is loaded), `tests/test_ui_rk_landing.py`.
+- **ELEV runs in parallel.** Call `elevation.setOptions({face, display, annotate})` (unknown keys are harmless today) and `elevation.beginExternalDrag` only if it is a function. Otherwise palette drag falls back to Add.
+- **Toolbar** (keep the existing ids):
+  - `#rk-face` becomes a front|rear|both segmented control, keeping its aria and test compatibility.
+  - `#rk-display` is label|image|both, key `i`. `#rk-annotate` is a select, key `a`. All three persist under the `STORAGE` keys.
+  - `#rk-library` toggles `mountRackPalette`: a right panel at lg, an overlay at md, a bottom sheet at sm.
+    - `onPick` places the device at the first fit in the selected rack, or asks which rack when all racks are shown.
+    - Creating a device is one commit of `deviceFromTemplate` ops + `placeOps`, labelled "Add <name> to <rack>".
+  - `#rk-accessory` is a menu that adds an item by type (`addItemOps`) to the selected rack.
+  - `#rk-export` opens `openRackExport(ctx, {racks: shown ids, face})`.
+  - The ⋯ menu holds:
+    - "New rack from template…": a dialog over `GET /api/v2/rack-templates`. It POSTs `…/racks/from-template` with `X-Fathom: 1` and `base_revision`, then reloads the doc the way imports do.
+    - "Import from Rackula…": a file (.yaml/.yml/.json/.zip, the zip sent as `zip_b64`) or a pasted share link → preview → Apply (`apply: true`).
+    - "Duplicate rack" (`duplicateRackOps`, with an include-devices option) and Print.
+- **Rack form** (`#rk-f-*`) adds `width_in`, `form_factor`, `start_u`, `weight_kg`, `max_load_kg`, `power_limit_w`, and `row` (a datalist of existing rows).
+- **Layout:**
+  - Racks are grouped by `racksByRow`, one horizontally scrolling strip per row with a title.
+  - Each rack has a totals chip (U free, W/limit, kg/max) with a warning style.
+  - At sm, one rack at a time: prev/next buttons plus a horizontal swipe (pointer events, 60 px, no conflict with block drag).
+- **`?` popover** lists the rack shortcuts.
+- **Viewer:** Library, accessory, import, template and duplicate are hidden; export stays.
+- **Tests at d and m:** controls persist across reload, Library Add places a catalog device, accessory add, New rack from template (real server), Rackula import preview + apply on `tests/fixtures/rackula/media-server.rackula.yaml`, row grouping, prev/next at m. `tests/test_ui_rk.py` must pass unchanged.
+
+### PAGE: rack entity page
+Owns: `fathom/static/js/page-rack.js`, the rack functions in `fathom/static/js/entity-core.js` (`rackFacts`, `rackTabs`, the rack branch of `summaryCards`; nothing else in that file), new `fathom/static/css/page-rack.css` (prefix `rp-`), `tests/js/entity-core.test.mjs`, `tests/test_ui_rk_page.py`.
+- **Overview cards:** U used/free, weight vs max load, power vs limit (warning when over), devices, accessories (`rackTotals` + `loadTemplateInfo`). Facts add width, form factor and row.
+- **New `accessories` tab** after `devices`: a DataTable (`datatable.js`) of `rack.items` (type, U, face, depth, label, slots, weight). Inline edit of label and U (`updateItemOps`/`moveItemOps`), delete, Add accessory. The URL tab works.
+- **Elevation tab:** face front|rear|both (`sub` accepts `both`), plus display/annotate controls on the same `STORAGE` keys, passed via `setOptions`. ELEV is adding these in parallel, so passing them is enough.
+- **Header ⋯ actions:**
+  - Export (`openRackExport`).
+  - Open viewer page (`<appRoot>p/<n>/rk/<rack>`).
+  - QR: a dialog with `<img src=api/v2/projects/<n>/qr/rack/<rack>.svg>` and Print. On 409 `no_public_url`, show the message.
+  - Duplicate rack.
+- **Tests:** entity-core unit tests. UI at d and m: cards show totals and the over-limit warning, accessories tab edit, the viewer link href, the QR img src, the `elevation/both` route.
+
+### REG: selftest, precache, share fix, regression suite
+Owns: `fathom/selftest.py`, `fathom/static/sw.js`, `tests/test_ui_rk_regress.py`, and in `fathom/server.py` only `r_view_device`'s call to `render_device_page` (pass `share=` the valid `?share=` token or the `/s/<token>/` path token, as `r_view_rack` does).
+- **Selftest:**
+  - The catalog loads (≥ 600 templates, ids resolve via `get_template`).
+  - A rack with items and a shelf renders `rack_svg(face="both", images=True)` and parses.
+  - `rack_totals` is sane, the Rackula fixture previews, and every rack template applies cleanly.
+- **`sw.js` precache:**
+  - Add every new module and stylesheet: `rack-elevation.js`, `rack-display.js`, `rack-display-core.js`, `rack-palette.js`, `rack-palette-core.js`, `rack-export.js`, `rack-export-core.js`, `rack-toolbar.css`, `rack-palette.css`, `rack-export.css`, `page-rack.css`.
+  - Files that don't exist yet (LAND and PAGE are creating the two CSS files in parallel) are fine; the test checks after merge.
+  - Images are not precached; use the runtime cache if a pattern exists. Bump the cache version.
+- **Regression UI suite at d and m:**
+  - Drag port-to-port patching in the patch view, and trace from a port.
+  - The QR device page `/p/<n>/d/<id>` renders.
+  - Racks are read-only in the viewer.
+  - The service worker registers and every precache entry returns 200.
+  - A CSV import still works, and a build produces the rack files.
+  - History lists a rack edit, and restore works.
+  - The rack harness walkthrough (`dev/rack.html?walk=1`, `walkRack` in `fathom/static/dev/plans/harness.js`) runs clean.
+
