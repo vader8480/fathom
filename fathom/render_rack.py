@@ -194,13 +194,18 @@ def _items(R: Any, doc: Dict[str, Any], rack: Dict[str, Any], types: Dict[str, D
     for it in raw:
         if not isinstance(it, dict) or not it.get("id"):
             continue
+        # rack_items entries are {id: "item:<id>", item: <raw id>, ...}; raw rack.items carry the id itself.
+        ref = it.get("item")
+        raw_id = ref.get("id") if isinstance(ref, dict) else ref if isinstance(ref, str) and ref else str(it["id"])
+        if raw_id.startswith("item:") and not isinstance(ref, (str, dict)):
+            raw_id = raw_id[5:]
         spec = types.get(str(it.get("type") or "")) or types["other"]
         u = it.get("u")
         h = it.get("height")
-        out.append(dict(it, u=u if isinstance(u, int) and not isinstance(u, bool) else None,
+        out.append(dict(it, id=raw_id, u=u if isinstance(u, int) and not isinstance(u, bool) else None,
                         height=h if isinstance(h, int) and not isinstance(h, bool) and h >= 1 else int(spec.get("height") or 1),
                         face=it.get("face") if it.get("face") in ("front", "rear") else spec.get("face") or "front",
-                        type_label=str(spec.get("label") or it.get("type") or "Accessory"),
+                        type_label=str(it.get("type_label") or spec.get("label") or it.get("type") or "Accessory"),
                         color=it.get("color") or spec.get("color") or ""))
     return out
 
@@ -280,16 +285,12 @@ def _totals_html(t: Dict[str, Any]) -> str:
 
 
 def _u_text(label: Callable[[int], str], u: Optional[int], height: int) -> str:
+    """``u`` is the physical bottom RU for every numbering; a span reads top RU label – bottom RU label, as on the page."""
     if u is None:
         return "—"
     if height <= 1:
         return f"U{label(u)}"
-    a, b = label(u), label(u + height - 1)
-    try:
-        a, b = sorted((a, b), key=int)
-    except ValueError:
-        pass
-    return f"U{a}–{b}"
+    return f"U{label(u + height - 1)}–{label(u)}"
 
 
 def _notes_html(text: str, doc: Dict[str, Any], L: _RackLinks, pages_ok: Callable[[str], bool], device_ok: Callable[[str], bool]) -> str:
@@ -337,13 +338,15 @@ def rack_page_html(doc: Dict[str, Any], project: str, rack_id: str, *, base: str
     form = FORM_FACTORS.get(str(rack.get("form_factor") or ""), FORM_FACTORS["cabinet"])
     ru_label = getattr(R, "ru_label", None)
 
+    start_u = rack.get("start_u") if isinstance(rack.get("start_u"), int) and not isinstance(rack.get("start_u"), bool) and rack["start_u"] >= 0 else 1
+
     def label(u: int) -> str:
         if callable(ru_label):
             try:
                 return str(ru_label(rack, u))
             except Exception:
                 pass
-        return str(u)
+        return str(units - u + start_u if rack.get("numbering") == "top_down" else u - 1 + start_u)
 
     out: List[str] = []
     room_name = str((room or {}).get("name") or (room or {}).get("id") or "")
@@ -368,7 +371,7 @@ def rack_page_html(doc: Dict[str, Any], project: str, rack_id: str, *, base: str
     if rack.get("row"):
         kv.append(("Row", esc(rack["row"])))
     numbering = "top down" if rack.get("numbering") == "top_down" else "bottom up"
-    kv.append(("Units", esc(f"{units}U · numbered {numbering}" + (f" from {label(1)}" if label(1) != "1" else ""))))
+    kv.append(("Units", esc(f"{units}U · numbered {numbering}" + (f" from {start_u}" if start_u != 1 else ""))))
     kv.append(("Width", esc(f"{width_in}{chr(0x2033)}")))
     kv.append(("Form factor", esc(form)))
     if _num(rack.get("depth_mm")):
@@ -385,12 +388,10 @@ def rack_page_html(doc: Dict[str, Any], project: str, rack_id: str, *, base: str
         out.append(f'<p class="rv-warn" role="note">{len(coll)} overlap{"s" if len(coll) != 1 else ""} in this rack: check the elevation.</p>')
     out.append("</section>")
 
-    top_down = rack.get("numbering") == "top_down"
-
     def top_key(u: Optional[int], h: int) -> float:
         if u is None:
             return float("inf")
-        return float(u) if top_down else float(-(u + h - 1))
+        return float(-(u + h - 1))
 
     devs = {d["id"]: d for d in doc.get("devices") or [] if isinstance(d, dict) and d.get("id")}
     paged = {i for i, d in devs.items() if not d.get("auto")}
