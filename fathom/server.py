@@ -598,7 +598,11 @@ def r_login_page(req: Request) -> Response:
 
 
 def _user_out(u: Dict[str, Any]) -> Dict[str, Any]:
-    return {"username": u.get("username"), "role": u.get("role")}
+    out = {"username": u.get("username"), "role": u.get("role")}
+    # Per-project overrides ride along when there are any (the plain {username, role} shape stays for everyone else).
+    if u.get("projects"):
+        out["projects"] = dict(u.get("projects") or {})
+    return out
 
 
 def _cookie(req: Request, value: str, max_age: int) -> str:
@@ -723,6 +727,235 @@ def r_user_password(req: Request) -> Response:
         if fresh:
             resp.cookies.append(_cookie(req, make_session(fresh), 1_209_600))
     return resp
+
+
+# ---- invites, editing lock, suggestions (phase 2 P2A: FR-USER-11..13, §5.3, §5.16)
+
+_INVITE = r"(?P<invite>inv-[A-Za-z0-9_-]{16,64})"
+_STATUS_TEXT.setdefault(423, "Locked")
+#: ``settings`` keys the lock op itself may touch while a project is locked
+_LOCK_KEYS = ("locked", "locked_by", "locked_at")
+_SUGGEST_FORWARD_TIMEOUT = 5.0
+
+
+def _invite_url(req: Request, token: str) -> str:
+    base = str(os.environ.get("FATHOM_PUBLIC_URL") or req.root_url).rstrip("/")
+    return f"{base}/invite/{quote(token)}"
+
+
+@route("GET", "/api/v2/invites", role="admin", summary="Open invite links", tags=["users"])
+def r_invites(req: Request) -> Response:
+    from .users import list_invites
+
+    return Response.json({"invites": list_invites(), "accept_url": (req.script_root or "") + "/invite/{token}"})
+
+
+@route("POST", "/api/v2/invites", role="admin", summary="Create a one-time invite link ({role, projects, ttl_hours, note})", tags=["users"], body="Invite")
+def r_invites_create(req: Request) -> Response:
+    from .users import UserError, create_invite
+
+    body = req.json()
+    try:
+        inv = create_invite(str(body.get("role") or "editor"), body.get("projects"), created_by=req.username,
+                            ttl_hours=body.get("ttl_hours") if body.get("ttl_hours") is not None else 72, note=str(body.get("note") or ""))
+    except UserError as exc:
+        raise _user_error(exc)
+    inv["url"] = _invite_url(req, inv["token"])
+    return Response.json(inv, 201)
+
+
+@route("DELETE", r"/api/v2/invites/" + _INVITE, role="admin", summary="Revoke an invite link", tags=["users"])
+def r_invite_delete(req: Request) -> Response:
+    from .users import revoke_invite
+
+    if not revoke_invite(req.params["invite"]):
+        raise ApiError(404, "invite not found")
+    return Response.json({"ok": True})
+
+
+@route("GET", r"/invite/" + _INVITE, role="public", summary="Invite page (asks the API whether the token is still valid)", tags=["users"], page="app")
+def r_invite_page(req: Request) -> Response:
+    if req.path.endswith("/"):  # keep the page's relative asset URLs (../static/…) valid
+        return Response(b"", 302, "text/plain; charset=utf-8", {"Location": req.script_root + req.path.rstrip("/")})
+    p = STATIC_DIR / "invite.html"
+    if not p.is_file():
+        raise ApiError(404, "invite page not installed")
+    return Response.text(p.read_text(encoding="utf-8"), "text/html; charset=utf-8", headers={"Cache-Control": "no-cache"})
+
+
+@route("GET", r"/api/v2/invites/" + _INVITE + "/check", role="public", summary="Is this invite still open? ({ok, role, expires, auth_enabled} or 404 invalid_invite)", tags=["users"])
+def r_invite_check(req: Request) -> Response:
+    from .users import auth_enabled, get_invite
+
+    inv = get_invite(req.params["invite"])
+    if inv is None:
+        raise ApiError(404, "this invite link is no longer valid", "invalid_invite")
+    return Response.json({"ok": True, "role": inv.get("role"), "expires": inv.get("expires"), "auth_enabled": auth_enabled()})
+
+
+@route("POST", r"/api/v2/invites/" + _INVITE + "/accept", role="public", summary="Accept an invite ({username, password}): creates the user and signs them in", tags=["users"], body="Login")
+def r_invite_accept(req: Request) -> Response:
+    from .users import UserError, make_session, note_failure, note_success, redeem_invite, throttled
+
+    token = req.params["invite"]
+    ip = req.remote_addr
+    if throttled(ip, token):
+        raise ApiError(429, "too many attempts; try again in a few minutes", "throttled")
+    body = req.json()
+    try:
+        user = redeem_invite(token, str(body.get("username") or ""), str(body.get("password") or ""))
+    except UserError as exc:
+        if exc.code == "not_found":
+            note_failure(ip, token)
+            raise ApiError(404, str(exc), "invalid_invite")
+        raise _user_error(exc)
+    note_success(ip, token)
+    resp = Response.json({"user": _user_out(user)})
+    resp.cookies.append(_cookie(req, make_session(user), 1_209_600))
+    return resp
+
+
+# -- editing lock (settings.locked): /changes and PUT refuse with 423 unless the batch is the unlock itself
+
+
+def _lock_flags(name: str) -> Dict[str, Any]:
+    """``locked`` / ``locked_by`` / ``locked_at`` of a project's settings (for the project list)."""
+    from .project import load_dict
+
+    out: Dict[str, Any] = {"locked": False, "locked_by": "", "locked_at": ""}
+    pf = find_project_file(projects_root() / name)
+    if pf is None:
+        return out
+    try:
+        s = load_dict(pf).get("settings") or {}
+    except Exception:
+        return out
+    if isinstance(s, dict) and s.get("locked") is True:
+        out.update({"locked": True, "locked_by": str(s.get("locked_by") or ""), "locked_at": str(s.get("locked_at") or "")})
+    return out
+
+
+def _locked_error(settings: Dict[str, Any]) -> ApiError:
+    return ApiError(423, "this project is locked for editing", "locked",
+                    {"locked_by": str(settings.get("locked_by") or ""), "locked_at": str(settings.get("locked_at") or "")})
+
+
+def _lock_only_ops(settings: Dict[str, Any], ops: List[Any]) -> bool:
+    """True when every op only touches the lock keys of ``settings`` (a replace counts when nothing else differs)."""
+    for op in ops:
+        if not isinstance(op, dict) or op.get("op") != "root" or op.get("key") != "settings" or not isinstance(op.get("value"), dict):
+            return False
+        value = op["value"]
+        if op.get("replace"):
+            for k in set(settings) | set(value):
+                if k not in _LOCK_KEYS and settings.get(k) != value.get(k):
+                    return False
+        elif any(k not in _LOCK_KEYS for k in value):
+            return False
+    return True
+
+
+def _stamp_lock(req: Request, stored: Dict[str, Any], value: Dict[str, Any], replace: bool) -> None:
+    """Fill ``locked_by`` / ``locked_at`` in a settings patch that flips ``locked`` (clients only send ``locked``)."""
+    from .history import utc_now
+
+    if "locked" not in value and not replace:
+        return
+    was = stored.get("locked") is True
+    now_locked = value.get("locked") is True
+    if now_locked and not was:
+        value["locked_by"] = req.username or "local"
+        value["locked_at"] = utc_now()
+    elif now_locked:
+        value["locked_by"] = str(stored.get("locked_by") or req.username or "local")
+        value["locked_at"] = str(stored.get("locked_at") or utc_now())
+    elif replace:
+        value.pop("locked_by", None)
+        value.pop("locked_at", None)
+    else:
+        value["locked_by"] = None
+        value["locked_at"] = None
+
+
+def _lock_guard_ops(req: Request, doc: Dict[str, Any], ops: List[Any]) -> List[Any]:
+    """423 when the stored doc is locked and the batch is not the unlock; stamps lock ops either way."""
+    settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    if settings.get("locked") is True and not _lock_only_ops(settings, ops):
+        raise _locked_error(settings)
+    out: List[Any] = []
+    for op in ops:
+        if isinstance(op, dict) and op.get("op") == "root" and op.get("key") == "settings" and isinstance(op.get("value"), dict):
+            op = dict(op, value=dict(op["value"]))
+            _stamp_lock(req, settings, op["value"], bool(op.get("replace")))
+        out.append(op)
+    return out
+
+
+def _lock_guard_put(req: Request, stored: Dict[str, Any], doc: Dict[str, Any]) -> None:
+    """PUT counterpart: 423 unless only the lock keys differ; stamps ``locked_by`` / ``locked_at`` in ``doc``."""
+    import copy
+
+    from . import schema
+
+    s_stored = stored.get("settings") if isinstance(stored.get("settings"), dict) else {}
+    if not isinstance(doc.get("settings"), dict):
+        if s_stored.get("locked") is True:
+            raise _locked_error(s_stored)
+        return
+    if s_stored.get("locked") is True:
+        if schema.doc_version(doc) != 2:
+            raise _locked_error(s_stored)
+        a = schema.normalize(copy.deepcopy(stored))
+        b = schema.normalize(copy.deepcopy(doc))
+        for d in (a, b):
+            d.pop("revision", None)
+            for k in _LOCK_KEYS:
+                (d.get("settings") or {}).pop(k, None)
+        if schema.diff_docs(a, b):
+            raise _locked_error(s_stored)
+    if "locked" in doc["settings"] or s_stored.get("locked") is True:
+        _stamp_lock(req, s_stored, doc["settings"], True)
+
+
+# -- "Suggest an improvement": problem reports with kind=suggestion, optionally forwarded
+
+
+def _suggest_url(doc: Dict[str, Any]) -> str:
+    s = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    url = str(s.get("suggest_url") or os.environ.get("FATHOM_SUGGEST_URL") or "").strip()
+    return url if re.match(r"^https?://", url, re.I) else ""
+
+
+def _forward_suggestion(url: str, payload: Dict[str, Any]) -> bool:
+    """POST the suggestion as JSON to ``url``; failures are logged and never fail the report."""
+    import urllib.error
+    import urllib.request
+
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    try:
+        rq = urllib.request.Request(url, data=data, method="POST",
+                                    headers={"Content-Type": "application/json; charset=utf-8", "User-Agent": f"fathom/{__version__}"})
+        with urllib.request.urlopen(rq, timeout=_SUGGEST_FORWARD_TIMEOUT) as resp:
+            return 200 <= int(getattr(resp, "status", 200) or 200) < 300
+    except Exception as exc:  # network / HTTP / bad URL: the report is already stored
+        sys.stderr.write(f"fathom: suggestion forward to {url} failed: {exc}\n")
+        return False
+
+
+@route("GET", "/api/v2/suggestions", role="admin", summary="Improvement suggestions across every project (newest first)", tags=["problems"])
+def r_suggestions(req: Request) -> Response:
+    items: List[Dict[str, Any]] = []
+    for n in list_projects():
+        try:
+            doc, _ = _load(_project_dir(n))
+        except ApiError:
+            continue
+        for r in doc.get("problems") or []:
+            if isinstance(r, dict) and r.get("id") and r.get("kind") == "suggestion":
+                items.append(dict(_problem_view(doc, r, n), project=n))
+    items.reverse()
+    items.sort(key=lambda r: str(r.get("created") or ""), reverse=True)
+    return Response.json({"items": items})
 
 
 # ---- backups
@@ -1015,6 +1248,7 @@ def r_projects_v2(req: Request) -> Response:
     for n in list_projects():
         info = project_info_v2(n)
         info["role"] = req.role_for(n)
+        info.update(_lock_flags(n))
         rows.append(info)
     return Response.json({"projects": rows})
 
@@ -1060,6 +1294,7 @@ def r_project_put_v2(req: Request) -> Response:
     doc = body.get("doc")
     if not isinstance(doc, dict):
         raise ApiError(400, "body.doc must be an object")
+    _lock_guard_put(req, _load(pdir)[0], doc)
     res = save_doc(doc, pdir, base_revision=base, author=req.username, summary=str(body.get("summary") or "Saved"), source="put")
     return Response.json({"revision": res["revision"], "rebased": res["rebased"], "problems": res["problems"]}, headers={"ETag": f'"r{res["revision"]}"'})
 
@@ -1075,6 +1310,7 @@ def r_project_changes(req: Request) -> Response:
         raise ApiError(400, "ops must be a list")
     if len(ops) > MAX_OPS:
         raise ApiError(400, f"at most {MAX_OPS} ops per request")
+    ops = _lock_guard_ops(req, _load(pdir)[0], ops)
     res = _changes(req, pdir, ops, _int(body.get("base_revision"), -1), str(body.get("summary") or f"{len(ops)} change{'s' if len(ops) != 1 else ''}"), "changes")
     return Response.json(res, headers={"ETag": f'"r{res["revision"]}"'})
 
@@ -1872,6 +2108,7 @@ def r_sop_bundle(req: Request) -> Response:
 # ---- problem reports (§4.3.16, §5.16): "Report a problem" from any SOP page
 
 _PROBLEM_TEXT_MAX = 2000
+PROBLEM_KINDS = ("problem", "suggestion")
 
 
 def _multipart_form(req: Request) -> Tuple[Dict[str, str], List[Tuple[str, bytes, str]]]:
@@ -1921,9 +2158,12 @@ def _create_problem(req: Request, pdir: Path, via: str) -> Dict[str, Any]:
         photo = next((f for f in files if f[1]), None)
     else:
         body = req.json()
+    kind = str(body.get("kind") or "problem").strip().lower()
+    if kind not in PROBLEM_KINDS:
+        raise ApiError(400, f"kind must be one of {', '.join(PROBLEM_KINDS)}", "bad_enum")
     text = str(body.get("text") or "").strip()
     if not text:
-        raise ApiError(400, "describe the problem", "missing_field")
+        raise ApiError(400, "describe the problem" if kind == "problem" else "describe the suggestion", "missing_field")
     text = text[:_PROBLEM_TEXT_MAX]
     devs = {d.get("id"): d for d in doc.get("devices") or [] if isinstance(d, dict)}
     device = str(body.get("device") or "").strip()
@@ -1938,7 +2178,7 @@ def _create_problem(req: Request, pdir: Path, via: str) -> Dict[str, Any]:
     # counts, the implicit "local" admin of a login-less server does not).
     login = req.username if req.auth_via != "local" else ""
     by = (req.username if via == "app" else (name or login)) or name or "anonymous"
-    ent: Dict[str, Any] = {"id": "pr-" + secrets.token_hex(4), "text": text, "status": "open", "created": now, "by": by, "via": via}
+    ent: Dict[str, Any] = {"id": "pr-" + secrets.token_hex(4), "kind": kind, "text": text, "status": "open", "created": now, "by": by, "via": via}
     if device:
         ent["device"] = device
         if devs[device].get("room"):
@@ -1961,41 +2201,53 @@ def _create_problem(req: Request, pdir: Path, via: str) -> Dict[str, Any]:
     # Reports through public pages / share links only create the problem entry, whoever is logged in.
     if device and via == "app" and req.user is not None and role_at_least(req.role_for(pdir.name), "editor"):
         stamp = now[:16].replace("T", " ")
-        line = f"[{stamp} {by}] Problem: {text}"
+        line = f"[{stamp} {by}] {'Suggestion' if kind == 'suggestion' else 'Problem'}: {text}"
         note = str(devs[device].get("note") or "").rstrip()
         merge: Dict[str, Any] = {"note": (note + "\n" if note else "") + line}
         status = str(body.get("device_status") or "").strip()
-        if status:
+        if status and kind == "problem":  # a suggestion never changes the device status
             if status not in STATUSES:
                 raise ApiError(400, f"device_status must be one of {', '.join(STATUSES)}", "bad_enum")
             merge["status"] = status
         ops.append({"op": "merge", "coll": "devices", "id": device, "value": merge})
         noted = True
-    res = _server_ops(req, pdir, ops, f"Problem reported: {text[:60]}", "problems")
-    return {"problem": ent, "noted": noted, "revision": res["revision"]}
+    res = _server_ops(req, pdir, ops, f"{'Suggestion' if kind == 'suggestion' else 'Problem reported'}: {text[:60]}", "problems")
+    out: Dict[str, Any] = {"problem": ent, "noted": noted, "revision": res["revision"]}
+    if kind == "suggestion":
+        target = _suggest_url(doc)
+        base = _public_base(req, doc)
+        link = (_device_url(base, pdir.name, device) if device
+                else f"{base}/p/{quote(pdir.name)}/sop/{quote(page)}" if page else f"{base}/p/{quote(pdir.name)}")
+        out["forwarded"] = bool(target) and _forward_suggestion(target, {
+            "project": pdir.name, "kind": kind, "text": text, "name": by, "device": device or None, "page": page or None, "url": link})
+    return out
 
 
-@route("POST", r"/api/v2/projects/" + _NAME + "/problems", role="viewer", summary="Report a problem (JSON or multipart with a photo)", tags=["problems"], body="ProblemReport")
+@route("POST", r"/api/v2/projects/" + _NAME + "/problems", role="viewer", summary="Report a problem or suggest an improvement (kind=problem|suggestion; JSON or multipart with a photo)", tags=["problems"], body="ProblemReport")
 def r_problems_create(req: Request) -> Response:
     pdir = _project_dir(req.params["name"])
     return Response.json(_create_problem(req, pdir, "app"), 201)
 
 
-@route("GET", r"/api/v2/projects/" + _NAME + "/problems", role="viewer", summary="Problem reports (?status=, ?device=, ?page=)", tags=["problems"])
+@route("GET", r"/api/v2/projects/" + _NAME + "/problems", role="viewer", summary="Problem reports (?status=, ?device=, ?page=, ?kind=problem|suggestion)", tags=["problems"])
 def r_problems(req: Request) -> Response:
     pdir = _project_dir(req.params["name"])
     doc, _ = _load(pdir)
     status = req.query.get("status") or ""
     device = req.query.get("device") or ""
     page = req.query.get("page") or ""
+    kind = req.query.get("kind") or ""
     items = [r for r in doc.get("problems") or [] if isinstance(r, dict) and r.get("id")
              and (not status or (r.get("status") or "open") == status)
-             and (not device or r.get("device") == device) and (not page or r.get("page") == page)]
+             and (not device or r.get("device") == device) and (not page or r.get("page") == page)
+             and (not kind or (r.get("kind") or "problem") == kind)]
     # newest first; reports filed within the same second keep their insertion order (later entries first)
     items.reverse()
     items.sort(key=lambda r: str(r.get("created") or ""), reverse=True)
+    is_open = [r for r in doc.get("problems") or [] if isinstance(r, dict) and (r.get("status") or "open") == "open"]
     return Response.json({"problems": [_problem_view(doc, r, pdir.name) for r in items],
-                          "open": sum(1 for r in doc.get("problems") or [] if isinstance(r, dict) and (r.get("status") or "open") == "open"),
+                          "open": sum(1 for r in is_open if (r.get("kind") or "problem") == "problem"),
+                          "open_suggestions": sum(1 for r in is_open if r.get("kind") == "suggestion"),
                           "revision": _rev(doc)})
 
 

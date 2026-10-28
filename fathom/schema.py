@@ -1532,6 +1532,17 @@ def validate_doc(doc: Doc) -> List[Problem]:
     settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
     if settings.get("units") not in (None, "metric", "imperial"):
         P.append(_prob("error", "bad_enum", "settings", "settings/units", "units must be metric or imperial"))
+    if "locked" in settings and not isinstance(settings.get("locked"), bool):
+        P.append(_prob("error", "bad_type", "settings", "settings/locked", "locked must be true or false"))
+    for key in ("locked_by", "locked_at"):
+        if settings.get(key) is not None and not isinstance(settings.get(key), str):
+            P.append(_prob("error", "bad_type", "settings", f"settings/{key}", f"{key} must be a string"))
+    if settings.get("suggest_url") is not None:
+        url = settings.get("suggest_url")
+        if not isinstance(url, str):
+            P.append(_prob("error", "bad_type", "settings", "settings/suggest_url", "suggest_url must be a string"))
+        elif url and not re.match(r"^https?://[^\s/?#]+", url, re.I):
+            P.append(_prob("error", "bad_enum", "settings", "settings/suggest_url", "suggest_url must be an http(s) URL"))
 
     colls: Dict[str, List[Dict[str, Any]]] = {}
     for coll in COLLECTIONS:
@@ -2102,6 +2113,7 @@ JSON_SCHEMA: Dict[str, Any] = {
         "settings": _obj({
             "default_room": _STR, "units": {"type": "string", "enum": ["metric", "imperial"]}, "cable_tag_pattern": _STR,
             "currency": _STR, "public_url": _STR, "autosave": _BOOL, "problem_email": _STR, "short_codes": _BOOL,
+            "locked": _BOOL, "locked_by": _STR, "locked_at": _STR, "suggest_url": _STR,
             "labels": _obj({"cols": _INT, "rows": _INT, "width_in": _NUM, "height_in": _NUM, "page": {"type": "string", "enum": ["letter", "a4"]}}),
             "assistant": _obj({"llm": _BOOL}),
         }),

@@ -38,6 +38,10 @@ SPEC_ROLES = {
     ("GET", "/api/v2/session"): "public", ("POST", "/api/v2/session"): "public", ("DELETE", "/api/v2/session"): "any",
     ("GET", "/api/v2/users"): "admin", ("POST", "/api/v2/users"): "admin", ("PATCH", "/api/v2/users/{}"): "admin",
     ("DELETE", "/api/v2/users/{}"): "admin", ("POST", "/api/v2/users/me/password"): "any", ("GET", "/login"): "public",
+    # phase2 P2A
+    ("GET", "/api/v2/invites"): "admin", ("POST", "/api/v2/invites"): "admin", ("DELETE", "/api/v2/invites/{}"): "admin",
+    ("GET", "/invite/{}"): "public", ("GET", "/api/v2/invites/{}/check"): "public", ("POST", "/api/v2/invites/{}/accept"): "public",
+    ("GET", "/api/v2/suggestions"): "admin",
     ("GET", "/api/v2/backups"): "admin", ("POST", "/api/v2/backups"): "admin", ("POST", "/api/v2/backups/upload"): "admin",
     ("GET", "/api/v2/backups/{}"): "admin", ("DELETE", "/api/v2/backups/{}"): "admin", ("POST", "/api/v2/backups/{}/restore"): "admin",
     ("GET", "/healthz"): "public", ("GET", "/api/v2/schema.json"): "public",
@@ -103,7 +107,8 @@ SAMPLES = ["proj", "main", "atem-mini", "rk-foh", "cables", "1", "nobody", "imp-
 PARAM_HINTS = {"name": "proj", "room": "main", "device": "atem-mini", "rack": "rk-foh", "kind": "cables", "rev": "1", "username": "nobody",
                "iid": "imp-0001", "att": "att-000000000000", "token": "sh-abc123", "fp": "fp-none", "run": "run1", "file": "index.html",
                "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip", "table": "devices", "slug": "power-up",
-               "rid": "run-20260101-000000-0000", "pid": "pr-00000000", "code": "ABCD2345", "tname": "proj"}
+               "rid": "run-20260101-000000-0000", "pid": "pr-00000000", "code": "ABCD2345", "tname": "proj",
+               "invite": "inv-000000000000000000000000"}  # phase2 P2A
 DISCOVERY_FIXTURES = str(Path(__file__).parent / "fixtures" / "discovery")
 
 

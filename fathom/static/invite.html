@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>You're invited · Fathom</title>
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" href="../static/css/app.css">
+<style>
+.login{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px))}
+.login form{width:min(360px,100%);background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:22px}
+.login h1{margin:0 0 4px;font-size:13px;letter-spacing:1.8px;text-transform:uppercase;color:var(--accent)}
+.login p{margin:0 0 16px;color:var(--muted)}
+.login label{display:block;color:var(--muted);font-size:12px;margin:10px 0 4px}
+.login input{width:100%;font-size:16px;min-height:44px}
+.login button{width:100%;margin-top:16px;min-height:44px}
+.login .err{color:var(--err);min-height:18px;margin-top:10px;font-size:13px}
+.login .hint{color:var(--muted);font-size:12px;margin:6px 0 0}
+.login[data-state="invalid"] .fields,.login[data-state="checking"] .fields{display:none}
+</style>
+</head>
+<body>
+<div class="login" id="invite" data-state="checking">
+  <form id="invite-form" autocomplete="on">
+    <h1>Fathom</h1>
+    <p id="invite-intro">Checking your invite…</p>
+    <div class="fields">
+      <label for="invite-user">Choose a username</label>
+      <input id="invite-user" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required pattern="[A-Za-z0-9][A-Za-z0-9._@-]{0,63}">
+      <label for="invite-pass">Password</label>
+      <input id="invite-pass" name="password" type="password" autocomplete="new-password" minlength="8" required>
+      <label for="invite-pass2">Repeat password</label>
+      <input id="invite-pass2" name="password2" type="password" autocomplete="new-password" minlength="8" required>
+      <p class="hint">Letters, digits and . _ @ - for the username; at least 8 characters for the password.</p>
+      <button class="primary" type="submit" id="invite-submit">Accept invite</button>
+    </div>
+    <div class="err" id="invite-error" role="alert" aria-live="assertive"></div>
+  </form>
+</div>
+<script type="module" src="../static/js/invite.js"></script>
+</body>
+</html>
