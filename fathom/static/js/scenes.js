@@ -5,7 +5,7 @@
 // ctx.preview. Every surface tolerates a server without scene support (404 → hidden / toast).
 
 import { h } from './dom.js';
-import { activeScene, activeSceneId, sceneDiffText } from './model-core.js';
+import { activeSceneId, sceneDiffText } from './model-core.js';
 import { isLockedError } from './api.js';
 
 export const SCENE_VIEWS = ['patch', 'table', 'map', 'plan', 'racks', 'rooms'];
@@ -325,8 +325,7 @@ export function mountSceneBar(el, ctx) {
     select.value = cur;
     select.title = editor && !pv ? 'Switch scene' : 'Preview scene';
     const act = activeEntry();
-    const live = (!act || isBase(act)) && S.doc ? activeScene(S.doc) : null;
-    const activeName = act && !isBase(act) ? sceneName(act) : (live ? sceneName(live) : '');
+    const activeName = act && !isBase(act) ? sceneName(act) : '';
     if (activeName && !pv) {
       chip.textContent = 'Scene ' + activeName;
       chip.title = 'Edits go into scene ' + activeName;
@@ -352,7 +351,7 @@ export function mountSceneBar(el, ctx) {
       const list = (r && Array.isArray(r.scenes)) ? r.scenes.slice() : [];
       if (!list.some(isBase)) list.unshift({ id: 'base', name: 'Base', base: true });
       S.scenes = list;
-      S.active = (r && r.active) || 'base';
+      S.active = (r && r.active) || activeSceneId(S.doc);
       S.supported = true;
       S.failed = false;
       render();
@@ -544,7 +543,8 @@ export function mountSceneBar(el, ctx) {
     openMenu: openActions,
     newScene: newScene,
     compare: compare,
-    state: function () { return { scenes: scenes(), active: S.active, supported: S.supported, hidden: el.hidden }; },
+    // scenes is null until GET …/scenes has answered.
+    state: function () { return { scenes: S.scenes, active: S.active, supported: S.supported, failed: S.failed, hidden: el.hidden }; },
     destroy: function () {
       S.destroyed = true;
       if (S.timer) clearTimeout(S.timer);

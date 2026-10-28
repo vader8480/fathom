@@ -1321,10 +1321,13 @@ function openScenesMenu() {
   (function attempt() {
     const b = A.sceneBar && A.sceneBar.handle;
     const st = b ? b.state() : null;
-    if (b && st && st.scenes && !st.hidden) { b.openMenu(); return; }
-    if (b && st && !st.supported) { toast(SCENES_UNSUPPORTED, 'warn'); return; }
-    if (b && st && st.scenes && st.hidden) { toast('This project has no scenes yet', 'info'); return; }
-    if (++tries > 40) { toast(SCENES_UNSUPPORTED, 'warn'); return; }
+    if (st && !st.supported) { toast(SCENES_UNSUPPORTED, 'warn'); return; }
+    if (st && st.failed) { toast('Scenes could not be loaded', 'warn'); return; }
+    if (st && st.scenes) {
+      if (!st.hidden) b.openMenu(); else toast('This project has no scenes yet', 'info');
+      return;
+    }
+    if (++tries > 60) { toast(SCENES_UNSUPPORTED, 'warn'); return; }
     setTimeout(attempt, 100);
   })();
 }

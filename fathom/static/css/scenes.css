@@ -9,7 +9,8 @@
 .app-scenes>.grow{flex:1 1 0;min-width:4px}
 .app-scenes-label{color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.2px}
 .app-scenes select{min-height:30px;max-width:min(360px,60vw);padding:3px 8px;font-size:12.5px;text-overflow:ellipsis}
-.app-scenes-more{min-width:32px;min-height:30px;font-size:16px;line-height:1}
+/* the actions button stays in view while the bar scrolls sideways */
+.app-scenes button.app-scenes-more{position:sticky;right:0;min-width:32px;min-height:30px;font-size:16px;line-height:1;background:var(--panel-2);box-shadow:-8px 0 8px -4px var(--panel-2)}
 .app-scenes-status{font-size:12px}
 .app-scenes-status[hidden]{display:none}
 
@@ -50,13 +51,14 @@
 /* ---- phones: taller targets, stacked compare columns */
 @media (max-width:699px){
   .scn-cols{grid-template-columns:minmax(0,1fr)}
-  .app-scenes select{max-width:min(300px,62vw)}
+  .app-scenes-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .app-scenes select{max-width:min(300px,56vw)}
+  .app-scene-chip{max-width:34vw}
 }
 @media (pointer:coarse){
   .app-scenes{height:44px}
-  .app-scenes select,.app-scenes-more{min-height:40px}
-  .app-scenes-more{min-width:44px;min-height:44px}
   .app-scenes select{min-height:44px}
+  .app-scenes button.app-scenes-more{min-width:44px;min-height:44px}
   .app-preview button{min-height:44px;min-width:44px}
   .scn-check{min-height:44px}
 }
