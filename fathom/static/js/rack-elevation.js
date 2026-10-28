@@ -1590,6 +1590,10 @@ export function createElevation(el, ctx, opts) {
       else { S.selItem = null; render(); }
     }
   });
+  // ⋯ is only drawn while its block has focus: keep that focus so the click lands on it.
+  listen(racksEl, 'mousedown', function (e) {
+    if (e.target.closest('.rk-more')) e.preventDefault();
+  });
   listen(racksEl, 'click', function (e) {
     const more = e.target.closest('.rk-more');
     if (more) {
