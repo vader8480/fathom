@@ -110,7 +110,7 @@ with `pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
  changes need only a reload. The editor UI is at `/` (there is no `/ui`).
 - **Backend tests:**
   `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -q`
-  (1071 tests, about 19 min, most of it the `test_ui_*.py` Chrome suites; all
+  (1088 tests, about 19 min, most of it the `test_ui_*.py` Chrome suites; all
   pass with one skip when the `discovery` extra is installed, as in CI). This
   VM installs only `.[dev,serve]`, so two discovery tests skip and
   `test_discovery.ActiveGuard.test_snmp_pacer_counts_and_pauses` errors (no
