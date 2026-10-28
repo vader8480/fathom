@@ -1,0 +1,1335 @@
+{
+  "fathom": 2,
+  "revision": 0,
+  "meta": {
+    "org": "Your church",
+    "system": "Chapel",
+    "title": "Chapel signal flow",
+    "slug": "church-chpl",
+    "description": "Starter: traditional chapel with an analog system. Small mixer, lectern mic, two wireless channels, amplifier and two wall speakers, a hearing-assist transmitter and a single display fed from a media player.",
+    "footnote": "Arrows show signal direction. Starter template: replace models and names with what is actually installed."
+  },
+  "settings": {
+    "default_room": "chpl",
+    "units": "metric",
+    "cable_tag_pattern": "{room}-{D}-{n:03}",
+    "currency": "USD",
+    "public_url": "",
+    "autosave": true,
+    "labels": {
+      "cols": 3,
+      "rows": 10,
+      "width_in": 2.625,
+      "height_in": 1.0,
+      "page": "letter"
+    }
+  },
+  "venues": [
+    {
+      "id": "chpl-venue",
+      "name": "Your church",
+      "order": 1
+    }
+  ],
+  "rooms": [
+    {
+      "id": "chpl",
+      "venue": "chpl-venue",
+      "name": "Chapel",
+      "code": "CHPL",
+      "kind": "chapel",
+      "order": 1,
+      "flow": {
+        "columns": [
+          {
+            "id": "sources",
+            "label": "Sources",
+            "side": "left"
+          },
+          {
+            "id": "stage_io",
+            "label": "Stage I/O",
+            "side": "left"
+          },
+          {
+            "id": "dante",
+            "label": "Dante",
+            "side": "spine"
+          },
+          {
+            "id": "mix",
+            "label": "Mix & Dante",
+            "side": "right"
+          },
+          {
+            "id": "amps",
+            "label": "Amps · TX",
+            "side": "right"
+          },
+          {
+            "id": "outputs",
+            "label": "Speakers · IEMs",
+            "side": "right"
+          }
+        ],
+        "groups": [
+          {
+            "id": "A",
+            "label": "Stage inputs",
+            "side": "left"
+          },
+          {
+            "id": "B",
+            "label": "Wireless",
+            "side": "left"
+          },
+          {
+            "id": "C",
+            "label": "Playback · cameras · lighting desk",
+            "side": "left"
+          },
+          {
+            "id": "E",
+            "label": "Mix · video · network",
+            "side": "right"
+          },
+          {
+            "id": "F",
+            "label": "Monitors · IEM",
+            "side": "right"
+          },
+          {
+            "id": "G",
+            "label": "PA",
+            "side": "right"
+          },
+          {
+            "id": "H",
+            "label": "Screens · stream",
+            "side": "right"
+          },
+          {
+            "id": "L",
+            "label": "Lighting",
+            "side": "right"
+          }
+        ],
+        "spine": {
+          "label": "Chapel",
+          "show": false
+        },
+        "options": {
+          "auto_dante_nodes": true,
+          "auto_sources": false,
+          "dante_counts": false,
+          "appendix": true
+        }
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "chpl-audio",
+      "room": "chpl",
+      "discipline": "audio",
+      "name": "Chapel audio"
+    },
+    {
+      "id": "chpl-video",
+      "room": "chpl",
+      "discipline": "video",
+      "name": "Chapel video"
+    }
+  ],
+  "locations": [
+    {
+      "id": "chpl-vestry",
+      "name": "Vestry cupboard",
+      "venue": "chpl-venue",
+      "room": "chpl",
+      "kind": "closet"
+    },
+    {
+      "id": "chpl-nave",
+      "name": "Nave",
+      "venue": "chpl-venue",
+      "room": "chpl",
+      "kind": "stage"
+    }
+  ],
+  "racks": [
+    {
+      "id": "chpl-rk-wall",
+      "name": "Vestry wall rack",
+      "room": "chpl",
+      "location": "chpl-vestry",
+      "units": 6,
+      "numbering": "bottom_up",
+      "faces": [
+        "front",
+        "rear"
+      ],
+      "depth_mm": 400,
+      "order": 1
+    }
+  ],
+  "networks": [],
+  "devices": [
+    {
+      "id": "chpl-lectern-mic",
+      "name": "Lectern mic",
+      "kind": "mic",
+      "manufacturer": "Shure",
+      "model": "MX412 gooseneck",
+      "brand": "shure",
+      "ports": [
+        {
+          "id": "mic-out",
+          "name": "Mic Out",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Mic Out",
+          "index": 1,
+          "connector": "XLR3M"
+        }
+      ],
+      "room": "chpl",
+      "system": "chpl-audio",
+      "location": "chpl-nave",
+      "flow": {
+        "group": "A",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "chpl-handheld",
+      "name": "Wireless handheld",
+      "kind": "mic",
+      "manufacturer": "Sennheiser",
+      "model": "EW 100 G4 835-S",
+      "brand": "sennheiser",
+      "ports": [
+        {
+          "id": "rf-out",
+          "name": "RF Out",
+          "dir": "out",
+          "medium": "rf",
+          "group": "RF Out",
+          "index": 1
+        }
+      ],
+      "room": "chpl",
+      "system": "chpl-audio",
+      "location": "chpl-nave",
+      "flow": {
+        "group": "B",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "fair",
+        "notes": "Battery door clip worn"
+      }
+    },
+    {
+      "id": "chpl-lav",
+      "name": "Wireless lavalier",
+      "kind": "mic",
+      "manufacturer": "Sennheiser",
+      "model": "EW 100 G4 ME2",
+      "brand": "sennheiser",
+      "ports": [
+        {
+          "id": "rf-out",
+          "name": "RF Out",
+          "dir": "out",
+          "medium": "rf",
+          "group": "RF Out",
+          "index": 1
+        }
+      ],
+      "room": "chpl",
+      "system": "chpl-audio",
+      "location": "chpl-nave",
+      "flow": {
+        "group": "B",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "chpl-wrx-1",
+      "name": "Wireless RX 1 (handheld)",
+      "kind": "wireless_rx",
+      "manufacturer": "Generic",
+      "model": "Wireless mic receiver",
+      "template": "generic-wireless-mic-rx",
+      "ports": [
+        {
+          "id": "antenna-a",
+          "name": "Antenna A",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "antenna-b",
+          "name": "Antenna B",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "output-1",
+          "name": "Output 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Output",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "output-2",
+          "name": "Output 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Output",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "output-3",
+          "name": "Output 3",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Output",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "output-4",
+          "name": "Output 4",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Output",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "control",
+          "name": "Control",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Control",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "mains-in",
+          "name": "Mains In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Mains In",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "chpl",
+      "system": "chpl-audio",
+      "location": "chpl-vestry",
+      "flow": {
+        "group": "B",
+        "column": "stage_io"
+      },
+      "rack": {
+        "id": "chpl-rk-wall",
+        "u": 5,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "chpl-wrx-2",
+      "name": "Wireless RX 2 (lavalier)",
+      "kind": "wireless_rx",
+      "manufacturer": "Generic",
+      "model": "Wireless mic receiver",
+      "template": "generic-wireless-mic-rx",
+      "ports": [
+        {
+          "id": "antenna-a",
+          "name": "Antenna A",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "antenna-b",
+          "name": "Antenna B",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "output-1",
+          "name": "Output 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Output",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "output-2",
+          "name": "Output 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Output",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "output-3",
+          "name": "Output 3",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Output",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "output-4",
+          "name": "Output 4",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Output",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "control",
+          "name": "Control",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Control",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "mains-in",
+          "name": "Mains In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Mains In",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "chpl",
+      "system": "chpl-audio",
+      "location": "chpl-vestry",
+      "flow": {
+        "group": "B",
+        "column": "stage_io"
+      },
+      "rack": {
+        "id": "chpl-rk-wall",
+        "u": 6,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "chpl-mixer",
+      "name": "Analog mixer",
+      "kind": "console",
+      "manufacturer": "Yamaha",
+      "model": "MG12XU",
+      "brand": "yamaha",
+      "routing": {
+        "mode": "matrix"
+      },
+      "ports": [
+        {
+          "id": "mic-in-1",
+          "name": "Mic In 1",
+          "dir": "in",
+          "medium": "analog",
+          "group": "Mic In",
+          "index": 1,
+          "connector": "XLR3F"
+        },
+        {
+          "id": "mic-in-2",
+          "name": "Mic In 2",
+          "dir": "in",
+          "medium": "analog",
+          "group": "Mic In",
+          "index": 2,
+          "connector": "XLR3F"
+        },
+        {
+          "id": "mic-in-3",
+          "name": "Mic In 3",
+          "dir": "in",
+          "medium": "analog",
+          "group": "Mic In",
+          "index": 3,
+          "connector": "XLR3F"
+        },
+        {
+          "id": "mic-in-4",
+          "name": "Mic In 4",
+          "dir": "in",
+          "medium": "analog",
+          "group": "Mic In",
+          "index": 4,
+          "connector": "XLR3F"
+        },
+        {
+          "id": "mic-in-5",
+          "name": "Mic In 5",
+          "dir": "in",
+          "medium": "analog",
+          "group": "Mic In",
+          "index": 5,
+          "connector": "XLR3F"
+        },
+        {
+          "id": "mic-in-6",
+          "name": "Mic In 6",
+          "dir": "in",
+          "medium": "analog",
+          "group": "Mic In",
+          "index": 6,
+          "connector": "XLR3F"
+        },
+        {
+          "id": "main-l",
+          "name": "Main L",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Main Out",
+          "index": 1,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "main-r",
+          "name": "Main R",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Main Out",
+          "index": 2,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "aux-1",
+          "name": "Aux 1",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Aux Out",
+          "index": 1,
+          "connector": "TRS 1/4\""
+        },
+        {
+          "id": "aux-2",
+          "name": "Aux 2",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Aux Out",
+          "index": 2,
+          "connector": "TRS 1/4\""
+        }
+      ],
+      "room": "chpl",
+      "system": "chpl-audio",
+      "location": "chpl-vestry",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "inventory": {
+        "condition": "good",
+        "serial": "MG12-CHPL-001"
+      }
+    },
+    {
+      "id": "chpl-amp",
+      "name": "Power amp",
+      "kind": "amp",
+      "manufacturer": "Generic",
+      "model": "Power amplifier",
+      "template": "generic-amplifier",
+      "ports": [
+        {
+          "id": "input-1",
+          "name": "Input 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Input",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "input-2",
+          "name": "Input 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Input",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "input-3",
+          "name": "Input 3",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Input",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "input-4",
+          "name": "Input 4",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Input",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "output-1",
+          "name": "Output 1",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Output",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "output-2",
+          "name": "Output 2",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Output",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "output-3",
+          "name": "Output 3",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Output",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "output-4",
+          "name": "Output 4",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Output",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "control",
+          "name": "Control",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Control",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "mains-in",
+          "name": "Mains In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Mains In",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "chpl",
+      "system": "chpl-audio",
+      "location": "chpl-vestry",
+      "flow": {
+        "group": "G",
+        "column": "amps"
+      },
+      "rack": {
+        "id": "chpl-rk-wall",
+        "u": 2,
+        "height": 2,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "fair",
+        "purchase_date": "2016-05-01"
+      }
+    },
+    {
+      "id": "chpl-spk-l",
+      "name": "Wall speaker L",
+      "kind": "speaker",
+      "manufacturer": "Bose",
+      "model": "DesignMax DM8S",
+      "ports": [
+        {
+          "id": "input",
+          "name": "Speaker In",
+          "dir": "in",
+          "medium": "speaker",
+          "group": "Speaker In",
+          "index": 1,
+          "connector": "NL4"
+        }
+      ],
+      "room": "chpl",
+      "system": "chpl-audio",
+      "location": "chpl-nave",
+      "flow": {
+        "group": "G",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "chpl-spk-r",
+      "name": "Wall speaker R",
+      "kind": "speaker",
+      "manufacturer": "Bose",
+      "model": "DesignMax DM8S",
+      "ports": [
+        {
+          "id": "input",
+          "name": "Speaker In",
+          "dir": "in",
+          "medium": "speaker",
+          "group": "Speaker In",
+          "index": 1,
+          "connector": "NL4"
+        }
+      ],
+      "room": "chpl",
+      "system": "chpl-audio",
+      "location": "chpl-nave",
+      "flow": {
+        "group": "G",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "chpl-hearing",
+      "name": "Hearing-assist transmitter",
+      "kind": "iem",
+      "manufacturer": "Listen Technologies",
+      "model": "LT-800 (72 MHz)",
+      "ports": [
+        {
+          "id": "audio-in",
+          "name": "Audio In",
+          "dir": "in",
+          "medium": "analog",
+          "group": "Audio In",
+          "index": 1,
+          "connector": "TRS 1/4\""
+        },
+        {
+          "id": "rf-out",
+          "name": "RF Out",
+          "dir": "out",
+          "medium": "iem_wireless",
+          "group": "RF Out",
+          "index": 1
+        },
+        {
+          "id": "mains-in",
+          "name": "Mains In",
+          "dir": "in",
+          "medium": "power",
+          "group": "Mains In",
+          "index": 1,
+          "connector": "IEC C13"
+        }
+      ],
+      "room": "chpl",
+      "system": "chpl-audio",
+      "location": "chpl-vestry",
+      "flow": {
+        "group": "F",
+        "column": "amps"
+      },
+      "rack": {
+        "id": "chpl-rk-wall",
+        "u": 4,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "notes": "6 receivers in the welcome desk drawer"
+      }
+    },
+    {
+      "id": "chpl-media",
+      "name": "Media player",
+      "kind": "video_source",
+      "manufacturer": "Apple",
+      "model": "Apple TV HD",
+      "brand": "apple",
+      "ports": [
+        {
+          "id": "hdmi-out",
+          "name": "HDMI Out",
+          "dir": "out",
+          "medium": "hdmi",
+          "group": "HDMI Out",
+          "index": 1,
+          "connector": "HDMI-A"
+        }
+      ],
+      "room": "chpl",
+      "system": "chpl-video",
+      "location": "chpl-vestry",
+      "flow": {
+        "group": "C",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "chpl-display",
+      "name": "Nave display",
+      "kind": "display",
+      "manufacturer": "Generic",
+      "model": "Display",
+      "template": "generic-display",
+      "ports": [
+        {
+          "id": "hdmi-in-1",
+          "name": "HDMI In 1",
+          "dir": "in",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "hdmi-in-2",
+          "name": "HDMI In 2",
+          "dir": "in",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "displayport-in",
+          "name": "DisplayPort In",
+          "dir": "in",
+          "medium": "displayport",
+          "connector": "DP",
+          "group": "DisplayPort In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "control",
+          "name": "Control",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Control",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "rs-232",
+          "name": "RS-232",
+          "dir": "in",
+          "medium": "rs232",
+          "connector": "DB9",
+          "group": "RS-232",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "mains-in",
+          "name": "Mains In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Mains In",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "chpl",
+      "system": "chpl-video",
+      "location": "chpl-nave",
+      "flow": {
+        "group": "H",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "chpl-pdu",
+      "name": "Rack PDU",
+      "kind": "power",
+      "manufacturer": "Generic",
+      "model": "PDU 8-outlet",
+      "template": "generic-pdu-8",
+      "ports": [
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Power In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-1",
+          "name": "Outlet 1",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-2",
+          "name": "Outlet 2",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-3",
+          "name": "Outlet 3",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-4",
+          "name": "Outlet 4",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-5",
+          "name": "Outlet 5",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-6",
+          "name": "Outlet 6",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-7",
+          "name": "Outlet 7",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-8",
+          "name": "Outlet 8",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 8,
+          "origin": "template"
+        }
+      ],
+      "room": "chpl",
+      "system": "chpl-audio",
+      "location": "chpl-vestry",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "rack": {
+        "id": "chpl-rk-wall",
+        "u": 1,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    }
+  ],
+  "cables": [
+    {
+      "id": "chpl-c-0001",
+      "from": {
+        "device": "chpl-lectern-mic",
+        "port": "mic-out"
+      },
+      "to": {
+        "device": "chpl-mixer",
+        "port": "mic-in-1"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 20.0,
+      "signal": "Lectern",
+      "tag": "CHPL-A-001"
+    },
+    {
+      "id": "chpl-c-0002",
+      "from": {
+        "device": "chpl-wrx-1",
+        "port": "output-1"
+      },
+      "to": {
+        "device": "chpl-mixer",
+        "port": "mic-in-2"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 1.0,
+      "signal": "Handheld",
+      "tag": "CHPL-A-002"
+    },
+    {
+      "id": "chpl-c-0003",
+      "from": {
+        "device": "chpl-wrx-2",
+        "port": "output-1"
+      },
+      "to": {
+        "device": "chpl-mixer",
+        "port": "mic-in-3"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 1.0,
+      "signal": "Lavalier",
+      "tag": "CHPL-A-003"
+    },
+    {
+      "id": "chpl-c-0004",
+      "from": {
+        "device": "chpl-handheld",
+        "port": "rf-out"
+      },
+      "to": {
+        "device": "chpl-wrx-1",
+        "port": "antenna-a"
+      },
+      "medium": "rf",
+      "label": "RF",
+      "tag": "CHPL-A-004"
+    },
+    {
+      "id": "chpl-c-0005",
+      "from": {
+        "device": "chpl-lav",
+        "port": "rf-out"
+      },
+      "to": {
+        "device": "chpl-wrx-2",
+        "port": "antenna-a"
+      },
+      "medium": "rf",
+      "label": "RF",
+      "tag": "CHPL-A-005"
+    },
+    {
+      "id": "chpl-c-0006",
+      "from": {
+        "device": "chpl-mixer",
+        "port": "main-l"
+      },
+      "to": {
+        "device": "chpl-amp",
+        "port": "input-1"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 1.0,
+      "signal": "Main L",
+      "tag": "CHPL-A-006"
+    },
+    {
+      "id": "chpl-c-0007",
+      "from": {
+        "device": "chpl-mixer",
+        "port": "main-r"
+      },
+      "to": {
+        "device": "chpl-amp",
+        "port": "input-2"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 1.0,
+      "signal": "Main R",
+      "tag": "CHPL-A-007"
+    },
+    {
+      "id": "chpl-c-0008",
+      "from": {
+        "device": "chpl-amp",
+        "port": "output-1"
+      },
+      "to": {
+        "device": "chpl-spk-l",
+        "port": "input"
+      },
+      "medium": "speaker",
+      "type": "2×2.5 mm² speaker",
+      "length_m": 25.0,
+      "tag": "CHPL-A-008"
+    },
+    {
+      "id": "chpl-c-0009",
+      "from": {
+        "device": "chpl-amp",
+        "port": "output-2"
+      },
+      "to": {
+        "device": "chpl-spk-r",
+        "port": "input"
+      },
+      "medium": "speaker",
+      "type": "2×2.5 mm² speaker",
+      "length_m": 25.0,
+      "tag": "CHPL-A-009"
+    },
+    {
+      "id": "chpl-c-0010",
+      "from": {
+        "device": "chpl-mixer",
+        "port": "aux-1"
+      },
+      "to": {
+        "device": "chpl-hearing",
+        "port": "audio-in"
+      },
+      "medium": "analog",
+      "type": "TRS–TRS",
+      "length_m": 1.0,
+      "signal": "Hearing loop feed",
+      "tag": "CHPL-A-010"
+    },
+    {
+      "id": "chpl-c-0011",
+      "from": {
+        "device": "chpl-media",
+        "port": "hdmi-out"
+      },
+      "to": {
+        "device": "chpl-display",
+        "port": "hdmi-in-1"
+      },
+      "medium": "hdmi",
+      "type": "HDMI 2.0 active",
+      "length_m": 20.0,
+      "tag": "CHPL-V-001"
+    },
+    {
+      "id": "chpl-c-0012",
+      "from": {
+        "device": "chpl-pdu",
+        "port": "outlet-1"
+      },
+      "to": {
+        "device": "chpl-amp",
+        "port": "mains-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 1.0,
+      "tag": "CHPL-P-001"
+    },
+    {
+      "id": "chpl-c-0013",
+      "from": {
+        "device": "chpl-pdu",
+        "port": "outlet-2"
+      },
+      "to": {
+        "device": "chpl-wrx-1",
+        "port": "mains-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 1.0,
+      "tag": "CHPL-P-002"
+    },
+    {
+      "id": "chpl-c-0014",
+      "from": {
+        "device": "chpl-pdu",
+        "port": "outlet-3"
+      },
+      "to": {
+        "device": "chpl-wrx-2",
+        "port": "mains-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 1.0,
+      "tag": "CHPL-P-003"
+    },
+    {
+      "id": "chpl-c-0015",
+      "from": {
+        "device": "chpl-pdu",
+        "port": "outlet-4"
+      },
+      "to": {
+        "device": "chpl-hearing",
+        "port": "mains-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 1.0,
+      "tag": "CHPL-P-004"
+    },
+    {
+      "id": "chpl-c-0016",
+      "from": {
+        "device": "chpl-pdu",
+        "port": "outlet-5"
+      },
+      "to": {
+        "device": "chpl-display",
+        "port": "mains-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 20.0,
+      "tag": "CHPL-P-005"
+    }
+  ],
+  "bundles": [],
+  "floorplans": [],
+  "attachments": [],
+  "templates": [],
+  "imports": [],
+  "pages": [
+    {
+      "id": "chpl-pg-sunday-power-up",
+      "slug": "chpl-sunday-power-up",
+      "title": "Sunday power-up: Chapel",
+      "kind": "sop",
+      "status": "published",
+      "order": 1,
+      "summary": "Switch the chapel sound and screen on (about 3 minutes).",
+      "tags": [
+        "sunday",
+        "power"
+      ],
+      "rooms": [
+        "chpl"
+      ],
+      "devices": [
+        "chpl-pdu",
+        "chpl-mixer",
+        "chpl-amp",
+        "chpl-wrx-1",
+        "chpl-wrx-2",
+        "chpl-display"
+      ],
+      "review_due": "2027-09-01",
+      "body": "## 1. Power\n\n- [ ] Switch on [[device:chpl-pdu]] in the vestry cupboard. The receivers and the hearing-assist transmitter come up with it.\n\n## 2. Sound\n\n- [ ] Switch on [[device:chpl-mixer]]; check the main fader is at the tape mark.\n- [ ] Switch on [[device:chpl-amp]] **last**.\n- [ ] Switch on the handheld and the lavalier; check RF on [[device:chpl-wrx-1]] and [[device:chpl-wrx-2]].\n\n## 3. Screen\n\n- [ ] Switch on [[device:chpl-display]] with the remote and pick **HDMI 1** ([[device:chpl-media]]).\n\n## After the service\n\n- [ ] Amp off first, then the mixer, then the PDU.\n",
+      "created": "2026-10-01T09:00:00Z",
+      "updated": "2026-10-01T09:00:00Z",
+      "updated_by": "starter",
+      "owner": "starter"
+    }
+  ],
+  "problems": []
+}

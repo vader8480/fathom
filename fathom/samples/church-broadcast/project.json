@@ -1,0 +1,2404 @@
+{
+  "fathom": 2,
+  "revision": 0,
+  "meta": {
+    "org": "Your church",
+    "system": "Broadcast booth",
+    "title": "Broadcast / livestream signal flow",
+    "slug": "church-bcast",
+    "description": "Starter: broadcast / livestream booth. Three SDI cameras into a switcher, encoder and recorder, a Dante audio feed from FOH, multiview and program monitors, intercom, a PTZ controller and a broadcast rack on a switch with a stream VLAN.",
+    "footnote": "Arrows show signal direction. Starter template: replace models and names with what is actually installed."
+  },
+  "settings": {
+    "default_room": "bcast",
+    "units": "metric",
+    "cable_tag_pattern": "{room}-{D}-{n:03}",
+    "currency": "USD",
+    "public_url": "",
+    "autosave": true,
+    "labels": {
+      "cols": 3,
+      "rows": 10,
+      "width_in": 2.625,
+      "height_in": 1.0,
+      "page": "letter"
+    }
+  },
+  "venues": [
+    {
+      "id": "bcast-venue",
+      "name": "Your church",
+      "order": 1
+    }
+  ],
+  "rooms": [
+    {
+      "id": "bcast",
+      "venue": "bcast-venue",
+      "name": "Broadcast booth",
+      "code": "BCST",
+      "kind": "broadcast",
+      "order": 1,
+      "flow": {
+        "columns": [
+          {
+            "id": "sources",
+            "label": "Sources",
+            "side": "left"
+          },
+          {
+            "id": "stage_io",
+            "label": "Stage I/O",
+            "side": "left"
+          },
+          {
+            "id": "dante",
+            "label": "Dante",
+            "side": "spine"
+          },
+          {
+            "id": "mix",
+            "label": "Mix & Dante",
+            "side": "right"
+          },
+          {
+            "id": "amps",
+            "label": "Amps · TX",
+            "side": "right"
+          },
+          {
+            "id": "outputs",
+            "label": "Speakers · IEMs",
+            "side": "right"
+          }
+        ],
+        "groups": [
+          {
+            "id": "A",
+            "label": "Stage inputs",
+            "side": "left"
+          },
+          {
+            "id": "B",
+            "label": "Wireless",
+            "side": "left"
+          },
+          {
+            "id": "C",
+            "label": "Playback · cameras · lighting desk",
+            "side": "left"
+          },
+          {
+            "id": "E",
+            "label": "Mix · video · network",
+            "side": "right"
+          },
+          {
+            "id": "F",
+            "label": "Monitors · IEM",
+            "side": "right"
+          },
+          {
+            "id": "G",
+            "label": "PA",
+            "side": "right"
+          },
+          {
+            "id": "H",
+            "label": "Screens · stream",
+            "side": "right"
+          },
+          {
+            "id": "L",
+            "label": "Lighting",
+            "side": "right"
+          }
+        ],
+        "spine": {
+          "label": "Dante · AV network",
+          "show": true
+        },
+        "options": {
+          "auto_dante_nodes": true,
+          "auto_sources": false,
+          "dante_counts": false,
+          "appendix": true
+        }
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "bcast-video",
+      "room": "bcast",
+      "discipline": "video",
+      "name": "Broadcast video"
+    },
+    {
+      "id": "bcast-audio",
+      "room": "bcast",
+      "discipline": "audio",
+      "name": "Broadcast audio"
+    },
+    {
+      "id": "bcast-network",
+      "room": "bcast",
+      "discipline": "network",
+      "name": "Broadcast network"
+    }
+  ],
+  "locations": [
+    {
+      "id": "bcast-booth",
+      "name": "Broadcast booth",
+      "venue": "bcast-venue",
+      "room": "bcast",
+      "kind": "booth"
+    },
+    {
+      "id": "bcast-room",
+      "name": "Camera positions",
+      "venue": "bcast-venue",
+      "room": "bcast",
+      "kind": "stage"
+    }
+  ],
+  "racks": [
+    {
+      "id": "bcast-rk-bcast",
+      "name": "Broadcast rack",
+      "room": "bcast",
+      "location": "bcast-booth",
+      "units": 20,
+      "numbering": "bottom_up",
+      "faces": [
+        "front",
+        "rear"
+      ],
+      "depth_mm": 800,
+      "order": 1
+    }
+  ],
+  "networks": [
+    {
+      "id": "av-dante",
+      "name": "Dante primary",
+      "vlan": 20,
+      "subnet": "10.20.0.0/24",
+      "gateway": "10.20.0.1",
+      "protocol": "dante"
+    },
+    {
+      "id": "av-ctrl",
+      "name": "AV control",
+      "vlan": 30,
+      "subnet": "10.30.0.0/24",
+      "gateway": "10.30.0.1",
+      "protocol": "control"
+    },
+    {
+      "id": "av-stream",
+      "name": "Stream uplink",
+      "vlan": 50,
+      "subnet": "10.50.0.0/24",
+      "gateway": "10.50.0.1",
+      "protocol": "other",
+      "notes": "Internet uplink for RTMP/SRT; isolated from the AV VLANs."
+    }
+  ],
+  "devices": [
+    {
+      "id": "bcast-cam-1",
+      "name": "Camera 1 (centre)",
+      "kind": "camera",
+      "manufacturer": "Sony",
+      "model": "SRG-X400",
+      "brand": "sony",
+      "template": "sony-srg-x400",
+      "ports": [
+        {
+          "id": "hdmi-out",
+          "name": "HDMI Out",
+          "dir": "out",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out",
+          "name": "SDI Out",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "rs-232-422",
+          "name": "RS-232/422",
+          "dir": "io",
+          "medium": "rs422",
+          "connector": "RJ45",
+          "group": "RS-232/422",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in",
+          "name": "Audio In",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "TRS 3.5mm",
+          "group": "Audio In",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-video",
+      "location": "bcast-room",
+      "flow": {
+        "group": "C",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "good",
+        "asset_tag": "CH-0301"
+      },
+      "interfaces": [
+        {
+          "id": "control",
+          "role": "control",
+          "ip": "10.30.0.161",
+          "network": "av-ctrl",
+          "protocol": "control",
+          "switch": "bcast-sw",
+          "switch_port": "gbe-poe-4"
+        }
+      ]
+    },
+    {
+      "id": "bcast-cam-2",
+      "name": "Camera 2 (left)",
+      "kind": "camera",
+      "manufacturer": "Sony",
+      "model": "SRG-X400",
+      "brand": "sony",
+      "template": "sony-srg-x400",
+      "ports": [
+        {
+          "id": "hdmi-out",
+          "name": "HDMI Out",
+          "dir": "out",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out",
+          "name": "SDI Out",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "rs-232-422",
+          "name": "RS-232/422",
+          "dir": "io",
+          "medium": "rs422",
+          "connector": "RJ45",
+          "group": "RS-232/422",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in",
+          "name": "Audio In",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "TRS 3.5mm",
+          "group": "Audio In",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-video",
+      "location": "bcast-room",
+      "flow": {
+        "group": "C",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "good",
+        "asset_tag": "CH-0302"
+      },
+      "interfaces": [
+        {
+          "id": "control",
+          "role": "control",
+          "ip": "10.30.0.162",
+          "network": "av-ctrl",
+          "protocol": "control",
+          "switch": "bcast-sw",
+          "switch_port": "gbe-poe-5"
+        }
+      ]
+    },
+    {
+      "id": "bcast-cam-3",
+      "name": "Camera 3 (balcony)",
+      "kind": "camera",
+      "manufacturer": "Panasonic",
+      "model": "AW-UE150",
+      "brand": "panasonic",
+      "template": "panasonic-aw-ue150",
+      "ports": [
+        {
+          "id": "sdi-out-12g",
+          "name": "SDI Out 12G",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-3g",
+          "name": "SDI Out 3G",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "hdmi-out",
+          "name": "HDMI Out",
+          "dir": "out",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "genlock-in",
+          "name": "Genlock In",
+          "dir": "in",
+          "medium": "sync",
+          "connector": "BNC",
+          "group": "Genlock In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-1",
+          "name": "Audio In 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Audio In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-2",
+          "name": "Audio In 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Audio In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "rs-422",
+          "name": "RS-422",
+          "dir": "io",
+          "medium": "rs422",
+          "connector": "RJ45",
+          "group": "RS-422",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-video",
+      "location": "bcast-room",
+      "flow": {
+        "group": "C",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "good",
+        "asset_tag": "CH-0303"
+      },
+      "interfaces": [
+        {
+          "id": "control",
+          "role": "control",
+          "ip": "10.30.0.163",
+          "network": "av-ctrl",
+          "protocol": "control",
+          "switch": "bcast-sw",
+          "switch_port": "gbe-poe-6"
+        }
+      ]
+    },
+    {
+      "id": "bcast-gfx-pc",
+      "name": "Graphics / stream PC",
+      "kind": "computer",
+      "manufacturer": "Custom",
+      "model": "Windows PC + OBS",
+      "ports": [
+        {
+          "id": "hdmi-out",
+          "name": "HDMI Out",
+          "dir": "out",
+          "medium": "hdmi",
+          "group": "HDMI Out",
+          "index": 1,
+          "connector": "HDMI-A"
+        },
+        {
+          "id": "lan",
+          "name": "LAN",
+          "dir": "io",
+          "medium": "network",
+          "group": "LAN",
+          "index": 1,
+          "connector": "RJ45"
+        },
+        {
+          "id": "usb",
+          "name": "USB",
+          "dir": "io",
+          "medium": "usb",
+          "group": "USB",
+          "index": 1,
+          "connector": "USB-A"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-video",
+      "location": "bcast-booth",
+      "flow": {
+        "group": "C",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.50.0.170",
+          "network": "av-stream",
+          "protocol": "other",
+          "switch": "bcast-sw",
+          "switch_port": "gbe-poe-9"
+        }
+      ]
+    },
+    {
+      "id": "bcast-gfx-conv",
+      "name": "HDMI→SDI (graphics)",
+      "kind": "converter",
+      "manufacturer": "Decimator Design",
+      "model": "MD-HX",
+      "brand": "decimator",
+      "template": "decimator-md-hx",
+      "ports": [
+        {
+          "id": "hdmi-in",
+          "name": "HDMI In",
+          "dir": "in",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in",
+          "name": "SDI In",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-a",
+          "name": "SDI Out A",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-b",
+          "name": "SDI Out B",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "hdmi-out",
+          "name": "HDMI Out",
+          "dir": "out",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI Out",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-video",
+      "location": "bcast-booth",
+      "flow": {
+        "group": "C",
+        "column": "stage_io"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "bcast-audio-io",
+      "name": "FOH feed (Dante→analog)",
+      "kind": "stage_io",
+      "manufacturer": "Yamaha",
+      "model": "Ro8-D",
+      "brand": "yamaha",
+      "template": "yamaha-ro8-d",
+      "dante": true,
+      "routing": {
+        "mode": "indexed"
+      },
+      "ports": [
+        {
+          "id": "analog-out-1",
+          "name": "Analog Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-2",
+          "name": "Analog Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-3",
+          "name": "Analog Out 3",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-4",
+          "name": "Analog Out 4",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-5",
+          "name": "Analog Out 5",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-6",
+          "name": "Analog Out 6",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-7",
+          "name": "Analog Out 7",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-8",
+          "name": "Analog Out 8",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "dante-primary",
+          "name": "Dante Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "etherCON",
+          "group": "Dante",
+          "index": 1,
+          "channels": 8,
+          "origin": "template"
+        },
+        {
+          "id": "dante-secondary",
+          "name": "Dante Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "etherCON",
+          "group": "Dante",
+          "index": 2,
+          "channels": 8,
+          "origin": "template"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-audio",
+      "location": "bcast-booth",
+      "flow": {
+        "group": "A",
+        "column": "stage_io"
+      },
+      "dante_name": "BCAST-RO8",
+      "rack": {
+        "id": "bcast-rk-bcast",
+        "u": 14,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.20.0.160",
+          "network": "av-dante",
+          "protocol": "dante",
+          "switch": "bcast-sw",
+          "switch_port": "gbe-poe-1"
+        }
+      ]
+    },
+    {
+      "id": "bcast-switcher",
+      "name": "Production switcher",
+      "kind": "video_switcher",
+      "manufacturer": "Blackmagic Design",
+      "model": "ATEM 1 M/E Constellation HD",
+      "brand": "blackmagic",
+      "template": "blackmagic-atem-1me-constellation-hd",
+      "ports": [
+        {
+          "id": "sdi-in-1",
+          "name": "SDI In 1",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-2",
+          "name": "SDI In 2",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-3",
+          "name": "SDI In 3",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-4",
+          "name": "SDI In 4",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-5",
+          "name": "SDI In 5",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-6",
+          "name": "SDI In 6",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-7",
+          "name": "SDI In 7",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-8",
+          "name": "SDI In 8",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-9",
+          "name": "SDI In 9",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 9,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-10",
+          "name": "SDI In 10",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 10,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-1",
+          "name": "SDI Out 1",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-2",
+          "name": "SDI Out 2",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-3",
+          "name": "SDI Out 3",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-4",
+          "name": "SDI Out 4",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-5",
+          "name": "SDI Out 5",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-6",
+          "name": "SDI Out 6",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "multiview-out",
+          "name": "Multiview Out",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "Multiview Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-1",
+          "name": "Audio In 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Audio In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-2",
+          "name": "Audio In 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Audio In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "talkback",
+          "name": "Talkback",
+          "dir": "io",
+          "medium": "intercom",
+          "connector": "XLR5F",
+          "group": "Talkback",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "reference-in",
+          "name": "Reference In",
+          "dir": "in",
+          "medium": "sync",
+          "connector": "BNC",
+          "group": "Reference In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "ethernet",
+          "name": "Ethernet",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Ethernet",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "usb-webcam-out",
+          "name": "USB Webcam Out",
+          "dir": "out",
+          "medium": "usb",
+          "connector": "USB-C",
+          "group": "USB Webcam Out",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-video",
+      "location": "bcast-booth",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "rack": {
+        "id": "bcast-rk-bcast",
+        "u": 16,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "asset_tag": "CH-0310",
+        "serial": "ATEM-BCST-001"
+      },
+      "interfaces": [
+        {
+          "id": "control",
+          "role": "control",
+          "ip": "10.30.0.164",
+          "network": "av-ctrl",
+          "protocol": "control",
+          "switch": "bcast-sw",
+          "switch_port": "gbe-poe-2"
+        }
+      ]
+    },
+    {
+      "id": "bcast-encoder",
+      "name": "Stream encoder",
+      "kind": "encoder",
+      "manufacturer": "Blackmagic Design",
+      "model": "Web Presenter HD",
+      "brand": "blackmagic",
+      "template": "blackmagic-web-presenter-hd",
+      "ports": [
+        {
+          "id": "sdi-in",
+          "name": "SDI In",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-loop-out",
+          "name": "SDI Loop Out",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Loop Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "usb-webcam-out",
+          "name": "USB Webcam Out",
+          "dir": "out",
+          "medium": "usb",
+          "connector": "USB-C",
+          "group": "USB Webcam Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "ethernet",
+          "name": "Ethernet",
+          "dir": "out",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Ethernet",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-video",
+      "location": "bcast-booth",
+      "flow": {
+        "group": "H",
+        "column": "amps"
+      },
+      "rack": {
+        "id": "bcast-rk-bcast",
+        "u": 12,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.50.0.171",
+          "network": "av-stream",
+          "protocol": "other",
+          "switch": "bcast-sw",
+          "switch_port": "gbe-poe-10"
+        }
+      ]
+    },
+    {
+      "id": "bcast-recorder",
+      "name": "Program recorder",
+      "kind": "recorder",
+      "manufacturer": "Blackmagic Design",
+      "model": "HyperDeck Studio HD Mini",
+      "brand": "blackmagic",
+      "ports": [
+        {
+          "id": "sdi-in",
+          "name": "SDI In",
+          "dir": "in",
+          "medium": "sdi",
+          "group": "SDI In",
+          "index": 1,
+          "connector": "BNC"
+        },
+        {
+          "id": "sdi-out",
+          "name": "SDI Out",
+          "dir": "out",
+          "medium": "sdi",
+          "group": "SDI Out",
+          "index": 1,
+          "connector": "BNC"
+        },
+        {
+          "id": "ethernet",
+          "name": "Ethernet",
+          "dir": "io",
+          "medium": "network",
+          "group": "Ethernet",
+          "index": 1,
+          "connector": "RJ45"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-video",
+      "location": "bcast-booth",
+      "flow": {
+        "group": "H",
+        "column": "amps"
+      },
+      "rack": {
+        "id": "bcast-rk-bcast",
+        "u": 11,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "interfaces": [
+        {
+          "id": "control",
+          "role": "control",
+          "ip": "10.30.0.165",
+          "network": "av-ctrl",
+          "protocol": "control",
+          "switch": "bcast-sw",
+          "switch_port": "gbe-poe-8"
+        }
+      ]
+    },
+    {
+      "id": "bcast-multiview",
+      "name": "Multiview monitor",
+      "kind": "display",
+      "manufacturer": "Lilliput",
+      "model": "BM280-4KS 28\"",
+      "ports": [
+        {
+          "id": "sdi-in",
+          "name": "SDI In",
+          "dir": "in",
+          "medium": "sdi",
+          "group": "SDI In",
+          "index": 1,
+          "connector": "BNC"
+        },
+        {
+          "id": "sdi-loop",
+          "name": "SDI Loop",
+          "dir": "out",
+          "medium": "sdi",
+          "group": "SDI Loop",
+          "index": 1,
+          "connector": "BNC"
+        },
+        {
+          "id": "hdmi-in",
+          "name": "HDMI In",
+          "dir": "in",
+          "medium": "hdmi",
+          "group": "HDMI In",
+          "index": 1,
+          "connector": "HDMI-A"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-video",
+      "location": "bcast-booth",
+      "flow": {
+        "group": "H",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "bcast-pgm-mon",
+      "name": "Program monitor",
+      "kind": "display",
+      "manufacturer": "Lilliput",
+      "model": "A12 12.5\"",
+      "ports": [
+        {
+          "id": "sdi-in",
+          "name": "SDI In",
+          "dir": "in",
+          "medium": "sdi",
+          "group": "SDI In",
+          "index": 1,
+          "connector": "BNC"
+        },
+        {
+          "id": "sdi-loop",
+          "name": "SDI Loop",
+          "dir": "out",
+          "medium": "sdi",
+          "group": "SDI Loop",
+          "index": 1,
+          "connector": "BNC"
+        },
+        {
+          "id": "hdmi-in",
+          "name": "HDMI In",
+          "dir": "in",
+          "medium": "hdmi",
+          "group": "HDMI In",
+          "index": 1,
+          "connector": "HDMI-A"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-video",
+      "location": "bcast-booth",
+      "flow": {
+        "group": "H",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "fair"
+      }
+    },
+    {
+      "id": "bcast-stream",
+      "name": "Stream destination",
+      "kind": "stream",
+      "manufacturer": "YouTube",
+      "model": "Live + church website",
+      "ports": [
+        {
+          "id": "rtmp",
+          "name": "RTMP / SRT",
+          "dir": "in",
+          "medium": "network",
+          "group": "Ingest",
+          "index": 1
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-video",
+      "location": "bcast-booth",
+      "flow": {
+        "group": "H",
+        "column": "outputs"
+      },
+      "status": "installed"
+    },
+    {
+      "id": "bcast-intercom",
+      "name": "Intercom main station",
+      "kind": "intercom",
+      "manufacturer": "Clear-Com",
+      "model": "MS-702",
+      "ports": [
+        {
+          "id": "ch-a",
+          "name": "Channel A",
+          "dir": "io",
+          "medium": "intercom",
+          "group": "Party line",
+          "index": 1,
+          "connector": "XLR3F"
+        },
+        {
+          "id": "ch-b",
+          "name": "Channel B",
+          "dir": "io",
+          "medium": "intercom",
+          "group": "Party line",
+          "index": 2,
+          "connector": "XLR3F"
+        },
+        {
+          "id": "program-in",
+          "name": "Program In",
+          "dir": "in",
+          "medium": "analog",
+          "group": "Program In",
+          "index": 1,
+          "connector": "XLR3F"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-audio",
+      "location": "bcast-booth",
+      "flow": {
+        "group": "F",
+        "column": "amps"
+      },
+      "rack": {
+        "id": "bcast-rk-bcast",
+        "u": 9,
+        "height": 2,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "bcast-beltpacks",
+      "name": "Intercom beltpacks",
+      "kind": "intercom",
+      "manufacturer": "Clear-Com",
+      "model": "RS-701",
+      "ports": [
+        {
+          "id": "line",
+          "name": "Party line",
+          "dir": "io",
+          "medium": "intercom",
+          "group": "Party line",
+          "index": 1,
+          "connector": "XLR3M"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-audio",
+      "location": "bcast-room",
+      "flow": {
+        "group": "F",
+        "column": "outputs"
+      },
+      "count": 3,
+      "inventory": {
+        "condition": "fair",
+        "notes": "One headset ear pad missing"
+      }
+    },
+    {
+      "id": "bcast-ptz-ctrl",
+      "name": "PTZ controller",
+      "kind": "control",
+      "manufacturer": "Sony",
+      "model": "RM-IP500",
+      "brand": "sony",
+      "ports": [
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "group": "Network",
+          "index": 1,
+          "connector": "RJ45"
+        },
+        {
+          "id": "rs-422",
+          "name": "RS-422",
+          "dir": "io",
+          "medium": "rs422",
+          "group": "RS-422",
+          "index": 1,
+          "connector": "RJ45"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-video",
+      "location": "bcast-booth",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "interfaces": [
+        {
+          "id": "control",
+          "role": "control",
+          "ip": "10.30.0.166",
+          "network": "av-ctrl",
+          "protocol": "control",
+          "switch": "bcast-sw",
+          "switch_port": "gbe-poe-7"
+        }
+      ]
+    },
+    {
+      "id": "bcast-sw",
+      "name": "Broadcast switch",
+      "kind": "switch",
+      "manufacturer": "NETGEAR",
+      "model": "M4250-26G4F-PoE+",
+      "brand": "netgear",
+      "template": "netgear-m4250-26g4f-poe",
+      "ports": [
+        {
+          "id": "gbe-poe-1",
+          "name": "GbE PoE+ 1",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 1,
+          "origin": "template",
+          "label": "Dante VLAN 20"
+        },
+        {
+          "id": "gbe-poe-2",
+          "name": "GbE PoE+ 2",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 2,
+          "origin": "template",
+          "label": "Control VLAN 30"
+        },
+        {
+          "id": "gbe-poe-3",
+          "name": "GbE PoE+ 3",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 3,
+          "origin": "template",
+          "label": "Control VLAN 30"
+        },
+        {
+          "id": "gbe-poe-4",
+          "name": "GbE PoE+ 4",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 4,
+          "origin": "template",
+          "label": "Control VLAN 30"
+        },
+        {
+          "id": "gbe-poe-5",
+          "name": "GbE PoE+ 5",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 5,
+          "origin": "template",
+          "label": "Control VLAN 30"
+        },
+        {
+          "id": "gbe-poe-6",
+          "name": "GbE PoE+ 6",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 6,
+          "origin": "template",
+          "label": "Control VLAN 30"
+        },
+        {
+          "id": "gbe-poe-7",
+          "name": "GbE PoE+ 7",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 7,
+          "origin": "template",
+          "label": "Control VLAN 30"
+        },
+        {
+          "id": "gbe-poe-8",
+          "name": "GbE PoE+ 8",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 8,
+          "origin": "template",
+          "label": "Control VLAN 30"
+        },
+        {
+          "id": "gbe-poe-9",
+          "name": "GbE PoE+ 9",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 9,
+          "origin": "template",
+          "label": "Stream VLAN 50"
+        },
+        {
+          "id": "gbe-poe-10",
+          "name": "GbE PoE+ 10",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 10,
+          "origin": "template",
+          "label": "Stream VLAN 50"
+        },
+        {
+          "id": "gbe-poe-11",
+          "name": "GbE PoE+ 11",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 11,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-12",
+          "name": "GbE PoE+ 12",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 12,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-13",
+          "name": "GbE PoE+ 13",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 13,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-14",
+          "name": "GbE PoE+ 14",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 14,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-15",
+          "name": "GbE PoE+ 15",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 15,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-16",
+          "name": "GbE PoE+ 16",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 16,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-17",
+          "name": "GbE PoE+ 17",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 17,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-18",
+          "name": "GbE PoE+ 18",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 18,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-19",
+          "name": "GbE PoE+ 19",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 19,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-20",
+          "name": "GbE PoE+ 20",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 20,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-21",
+          "name": "GbE PoE+ 21",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 21,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-22",
+          "name": "GbE PoE+ 22",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 22,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-23",
+          "name": "GbE PoE+ 23",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 23,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-24",
+          "name": "GbE PoE+ 24",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 24,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-25",
+          "name": "GbE 25",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE",
+          "index": 25,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-26",
+          "name": "GbE 26",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE",
+          "index": 26,
+          "origin": "template"
+        },
+        {
+          "id": "sfp-1",
+          "name": "SFP 1",
+          "dir": "io",
+          "medium": "network",
+          "connector": "SFP",
+          "group": "SFP",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sfp-2",
+          "name": "SFP 2",
+          "dir": "io",
+          "medium": "network",
+          "connector": "SFP",
+          "group": "SFP",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "sfp-3",
+          "name": "SFP 3",
+          "dir": "io",
+          "medium": "network",
+          "connector": "SFP",
+          "group": "SFP",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "sfp-4",
+          "name": "SFP 4",
+          "dir": "io",
+          "medium": "network",
+          "connector": "SFP",
+          "group": "SFP",
+          "index": 4,
+          "origin": "template"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-network",
+      "location": "bcast-booth",
+      "flow": {
+        "group": "E",
+        "column": "dante"
+      },
+      "rack": {
+        "id": "bcast-rk-bcast",
+        "u": 20,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "asset_tag": "CH-0320"
+      },
+      "interfaces": [
+        {
+          "id": "management",
+          "role": "management",
+          "ip": "10.30.0.4",
+          "network": "av-ctrl",
+          "protocol": "management"
+        }
+      ]
+    },
+    {
+      "id": "bcast-ups",
+      "name": "Rack UPS",
+      "kind": "power",
+      "manufacturer": "Generic",
+      "model": "UPS",
+      "template": "generic-ups",
+      "routing": {
+        "mode": "passthrough"
+      },
+      "ports": [
+        {
+          "id": "mains-in",
+          "name": "Mains In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Mains In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-1",
+          "name": "Outlet 1",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-2",
+          "name": "Outlet 2",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-3",
+          "name": "Outlet 3",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-4",
+          "name": "Outlet 4",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-5",
+          "name": "Outlet 5",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-6",
+          "name": "Outlet 6",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "management",
+          "name": "Management",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Management",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-network",
+      "location": "bcast-booth",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "rack": {
+        "id": "bcast-rk-bcast",
+        "u": 1,
+        "height": 2,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "purchase_date": "2025-01-15",
+        "warranty_until": "2028-01-15"
+      }
+    },
+    {
+      "id": "bcast-pdu",
+      "name": "Rack PDU",
+      "kind": "power",
+      "manufacturer": "Generic",
+      "model": "PDU 8-outlet",
+      "template": "generic-pdu-8",
+      "ports": [
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Power In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-1",
+          "name": "Outlet 1",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-2",
+          "name": "Outlet 2",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-3",
+          "name": "Outlet 3",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-4",
+          "name": "Outlet 4",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-5",
+          "name": "Outlet 5",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-6",
+          "name": "Outlet 6",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-7",
+          "name": "Outlet 7",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-8",
+          "name": "Outlet 8",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 8,
+          "origin": "template"
+        }
+      ],
+      "room": "bcast",
+      "system": "bcast-network",
+      "location": "bcast-booth",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "rack": {
+        "id": "bcast-rk-bcast",
+        "u": 3,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    }
+  ],
+  "cables": [
+    {
+      "id": "bcast-c-0001",
+      "from": {
+        "device": "bcast-cam-1",
+        "port": "sdi-out"
+      },
+      "to": {
+        "device": "bcast-switcher",
+        "port": "sdi-in-1"
+      },
+      "medium": "sdi",
+      "type": "RG6 3G-SDI",
+      "length_m": 40.0,
+      "signal": "CAM 1",
+      "tag": "BCST-V-001"
+    },
+    {
+      "id": "bcast-c-0002",
+      "from": {
+        "device": "bcast-cam-2",
+        "port": "sdi-out"
+      },
+      "to": {
+        "device": "bcast-switcher",
+        "port": "sdi-in-2"
+      },
+      "medium": "sdi",
+      "type": "RG6 3G-SDI",
+      "length_m": 50.0,
+      "signal": "CAM 2",
+      "tag": "BCST-V-002"
+    },
+    {
+      "id": "bcast-c-0003",
+      "from": {
+        "device": "bcast-cam-3",
+        "port": "sdi-out-3g"
+      },
+      "to": {
+        "device": "bcast-switcher",
+        "port": "sdi-in-3"
+      },
+      "medium": "sdi",
+      "type": "RG6 3G-SDI",
+      "length_m": 60.0,
+      "signal": "CAM 3",
+      "tag": "BCST-V-003"
+    },
+    {
+      "id": "bcast-c-0004",
+      "from": {
+        "device": "bcast-gfx-pc",
+        "port": "hdmi-out"
+      },
+      "to": {
+        "device": "bcast-gfx-conv",
+        "port": "hdmi-in"
+      },
+      "medium": "hdmi",
+      "type": "HDMI 2.0",
+      "length_m": 2.0,
+      "tag": "BCST-V-004"
+    },
+    {
+      "id": "bcast-c-0005",
+      "from": {
+        "device": "bcast-gfx-conv",
+        "port": "sdi-out-a"
+      },
+      "to": {
+        "device": "bcast-switcher",
+        "port": "sdi-in-4"
+      },
+      "medium": "sdi",
+      "type": "RG59 3G-SDI",
+      "length_m": 2.0,
+      "signal": "GFX",
+      "tag": "BCST-V-005"
+    },
+    {
+      "id": "bcast-c-0006",
+      "from": {
+        "device": "bcast-audio-io",
+        "port": "analog-out-1"
+      },
+      "to": {
+        "device": "bcast-switcher",
+        "port": "audio-in-1"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 1.0,
+      "signal": "FOH mix L",
+      "tag": "BCST-A-001"
+    },
+    {
+      "id": "bcast-c-0007",
+      "from": {
+        "device": "bcast-audio-io",
+        "port": "analog-out-2"
+      },
+      "to": {
+        "device": "bcast-switcher",
+        "port": "audio-in-2"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 1.0,
+      "signal": "FOH mix R",
+      "tag": "BCST-A-002"
+    },
+    {
+      "id": "bcast-c-0008",
+      "from": {
+        "device": "bcast-audio-io",
+        "port": "analog-out-3"
+      },
+      "to": {
+        "device": "bcast-intercom",
+        "port": "program-in"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 1.0,
+      "signal": "Program feed",
+      "tag": "BCST-A-003"
+    },
+    {
+      "id": "bcast-c-0009",
+      "from": {
+        "device": "bcast-switcher",
+        "port": "sdi-out-1"
+      },
+      "to": {
+        "device": "bcast-encoder",
+        "port": "sdi-in"
+      },
+      "medium": "sdi",
+      "type": "RG59 3G-SDI",
+      "length_m": 1.0,
+      "signal": "PGM",
+      "tag": "BCST-V-006"
+    },
+    {
+      "id": "bcast-c-0010",
+      "from": {
+        "device": "bcast-encoder",
+        "port": "sdi-loop-out"
+      },
+      "to": {
+        "device": "bcast-recorder",
+        "port": "sdi-in"
+      },
+      "medium": "sdi",
+      "type": "RG59 3G-SDI",
+      "length_m": 1.0,
+      "signal": "PGM",
+      "tag": "BCST-V-007"
+    },
+    {
+      "id": "bcast-c-0011",
+      "from": {
+        "device": "bcast-switcher",
+        "port": "sdi-out-2"
+      },
+      "to": {
+        "device": "bcast-pgm-mon",
+        "port": "sdi-in"
+      },
+      "medium": "sdi",
+      "type": "RG59 3G-SDI",
+      "length_m": 2.0,
+      "signal": "PGM",
+      "tag": "BCST-V-008"
+    },
+    {
+      "id": "bcast-c-0012",
+      "from": {
+        "device": "bcast-switcher",
+        "port": "multiview-out"
+      },
+      "to": {
+        "device": "bcast-multiview",
+        "port": "sdi-in"
+      },
+      "medium": "sdi",
+      "type": "RG59 3G-SDI",
+      "length_m": 2.0,
+      "signal": "Multiview",
+      "tag": "BCST-V-009"
+    },
+    {
+      "id": "bcast-c-0013",
+      "from": {
+        "device": "bcast-encoder",
+        "port": "ethernet"
+      },
+      "to": {
+        "device": "bcast-stream",
+        "port": "rtmp"
+      },
+      "medium": "network",
+      "type": "Cat6 (via VLAN 50)",
+      "length_m": 1.0,
+      "signal": "RTMP",
+      "tag": "BCST-N-001"
+    },
+    {
+      "id": "bcast-c-0014",
+      "from": {
+        "device": "bcast-audio-io",
+        "port": "dante-primary"
+      },
+      "to": {
+        "device": "bcast-sw",
+        "port": "gbe-poe-1"
+      },
+      "medium": "dante",
+      "type": "Cat6 STP",
+      "length_m": 1.0,
+      "signal": "Dante",
+      "tag": "BCST-A-004"
+    },
+    {
+      "id": "bcast-c-0015",
+      "from": {
+        "device": "bcast-switcher",
+        "port": "ethernet"
+      },
+      "to": {
+        "device": "bcast-sw",
+        "port": "gbe-poe-2"
+      },
+      "medium": "network",
+      "type": "Cat6",
+      "length_m": 1.0,
+      "tag": "BCST-N-002"
+    },
+    {
+      "id": "bcast-c-0016",
+      "from": {
+        "device": "bcast-cam-1",
+        "port": "network"
+      },
+      "to": {
+        "device": "bcast-sw",
+        "port": "gbe-poe-4"
+      },
+      "medium": "network",
+      "type": "Cat6",
+      "length_m": 40.0,
+      "signal": "Control + PoE",
+      "tag": "BCST-N-003"
+    },
+    {
+      "id": "bcast-c-0017",
+      "from": {
+        "device": "bcast-cam-2",
+        "port": "network"
+      },
+      "to": {
+        "device": "bcast-sw",
+        "port": "gbe-poe-5"
+      },
+      "medium": "network",
+      "type": "Cat6",
+      "length_m": 50.0,
+      "signal": "Control + PoE",
+      "tag": "BCST-N-004"
+    },
+    {
+      "id": "bcast-c-0018",
+      "from": {
+        "device": "bcast-cam-3",
+        "port": "network"
+      },
+      "to": {
+        "device": "bcast-sw",
+        "port": "gbe-poe-6"
+      },
+      "medium": "network",
+      "type": "Cat6",
+      "length_m": 60.0,
+      "signal": "Control + PoE",
+      "tag": "BCST-N-005"
+    },
+    {
+      "id": "bcast-c-0019",
+      "from": {
+        "device": "bcast-ptz-ctrl",
+        "port": "network"
+      },
+      "to": {
+        "device": "bcast-sw",
+        "port": "gbe-poe-7"
+      },
+      "medium": "network",
+      "type": "Cat6",
+      "length_m": 2.0,
+      "tag": "BCST-N-006"
+    },
+    {
+      "id": "bcast-c-0020",
+      "from": {
+        "device": "bcast-recorder",
+        "port": "ethernet"
+      },
+      "to": {
+        "device": "bcast-sw",
+        "port": "gbe-poe-8"
+      },
+      "medium": "network",
+      "type": "Cat6",
+      "length_m": 1.0,
+      "tag": "BCST-N-007"
+    },
+    {
+      "id": "bcast-c-0021",
+      "from": {
+        "device": "bcast-gfx-pc",
+        "port": "lan"
+      },
+      "to": {
+        "device": "bcast-sw",
+        "port": "gbe-poe-9"
+      },
+      "medium": "network",
+      "type": "Cat6",
+      "length_m": 2.0,
+      "signal": "Stream VLAN",
+      "tag": "BCST-N-008"
+    },
+    {
+      "id": "bcast-c-0022",
+      "from": {
+        "device": "bcast-intercom",
+        "port": "ch-a"
+      },
+      "to": {
+        "device": "bcast-beltpacks",
+        "port": "line"
+      },
+      "medium": "intercom",
+      "type": "XLR3 M-F",
+      "length_m": 30.0,
+      "signal": "Party line A",
+      "tag": "BCST-A-005"
+    },
+    {
+      "id": "bcast-c-0023",
+      "from": {
+        "device": "bcast-ups",
+        "port": "outlet-1"
+      },
+      "to": {
+        "device": "bcast-pdu",
+        "port": "power-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 1.0,
+      "tag": "BCST-P-001"
+    }
+  ],
+  "bundles": [],
+  "floorplans": [],
+  "attachments": [],
+  "templates": [],
+  "imports": [],
+  "pages": [
+    {
+      "id": "bcast-pg-sunday-power-up",
+      "slug": "bcast-sunday-power-up",
+      "title": "Sunday power-up: Broadcast booth",
+      "kind": "sop",
+      "status": "published",
+      "order": 1,
+      "summary": "Bring the stream chain up and run the pre-service checks (about 15 minutes, finish 30 minutes before the service).",
+      "tags": [
+        "sunday",
+        "power"
+      ],
+      "rooms": [
+        "bcast"
+      ],
+      "devices": [
+        "bcast-ups",
+        "bcast-pdu",
+        "bcast-sw",
+        "bcast-switcher",
+        "bcast-multiview",
+        "bcast-ptz-ctrl",
+        "bcast-gfx-pc",
+        "bcast-audio-io",
+        "bcast-recorder",
+        "bcast-encoder"
+      ],
+      "review_due": "2027-09-01",
+      "body": "## 1. Power\n\n- [ ] Check [[device:bcast-ups]] shows mains OK; switch on [[device:bcast-pdu]].\n- [ ] Wait for [[device:bcast-sw]] link lights.\n\n## 2. Video\n\n- [ ] Power on [[device:bcast-switcher]]; the multiview on [[device:bcast-multiview]] should show all inputs.\n- [ ] Wake the cameras from [[device:bcast-ptz-ctrl]] and recall preset **1** on each ([[device:bcast-cam-1]], [[device:bcast-cam-2]], [[device:bcast-cam-3]]).\n- [ ] Open the graphics package on [[device:bcast-gfx-pc]] and confirm input **4 GFX**.\n\n## 3. Audio\n\n- [ ] Confirm FOH feed meters on the switcher (left and right from [[device:bcast-audio-io]]).\n- [ ] Talk to FOH on intercom channel A.\n\n## 4. Stream and record\n\n- [ ] Insert a formatted card in [[device:bcast-recorder]].\n- [ ] On [[device:bcast-encoder]] start the stream to [[device:bcast-stream]] 10 minutes before; verify the preview on a phone.\n",
+      "created": "2026-10-01T09:00:00Z",
+      "updated": "2026-10-01T09:00:00Z",
+      "updated_by": "starter",
+      "owner": "starter"
+    }
+  ],
+  "problems": []
+}

@@ -1,0 +1,2565 @@
+{
+  "fathom": 2,
+  "revision": 0,
+  "meta": {
+    "org": "Your church",
+    "system": "Portable church",
+    "title": "Portable church signal flow",
+    "slug": "church-port",
+    "description": "Starter: portable church set up and torn down every week. Road cases are containers holding the console, stage box, wireless, speakers on stands and the cable trunk; every item carries a load-in tag and a condition so the truck pack can be checked on a phone.",
+    "footnote": "Arrows show signal direction. Starter template: replace models and names with what is actually installed."
+  },
+  "settings": {
+    "default_room": "port",
+    "units": "metric",
+    "cable_tag_pattern": "{room}-{D}-{n:03}",
+    "currency": "USD",
+    "public_url": "",
+    "autosave": true,
+    "labels": {
+      "cols": 3,
+      "rows": 10,
+      "width_in": 2.625,
+      "height_in": 1.0,
+      "page": "letter"
+    }
+  },
+  "venues": [
+    {
+      "id": "port-venue",
+      "name": "Your church",
+      "order": 1
+    }
+  ],
+  "rooms": [
+    {
+      "id": "port",
+      "venue": "port-venue",
+      "name": "Portable church",
+      "code": "PORT",
+      "kind": "other",
+      "order": 1,
+      "flow": {
+        "columns": [
+          {
+            "id": "sources",
+            "label": "Sources",
+            "side": "left"
+          },
+          {
+            "id": "stage_io",
+            "label": "Stage I/O",
+            "side": "left"
+          },
+          {
+            "id": "dante",
+            "label": "Dante",
+            "side": "spine"
+          },
+          {
+            "id": "mix",
+            "label": "Mix & Dante",
+            "side": "right"
+          },
+          {
+            "id": "amps",
+            "label": "Amps · TX",
+            "side": "right"
+          },
+          {
+            "id": "outputs",
+            "label": "Speakers · IEMs",
+            "side": "right"
+          }
+        ],
+        "groups": [
+          {
+            "id": "A",
+            "label": "Stage inputs",
+            "side": "left"
+          },
+          {
+            "id": "B",
+            "label": "Wireless",
+            "side": "left"
+          },
+          {
+            "id": "C",
+            "label": "Playback · cameras · lighting desk",
+            "side": "left"
+          },
+          {
+            "id": "E",
+            "label": "Mix · video · network",
+            "side": "right"
+          },
+          {
+            "id": "F",
+            "label": "Monitors · IEM",
+            "side": "right"
+          },
+          {
+            "id": "G",
+            "label": "PA",
+            "side": "right"
+          },
+          {
+            "id": "H",
+            "label": "Screens · stream",
+            "side": "right"
+          },
+          {
+            "id": "L",
+            "label": "Lighting",
+            "side": "right"
+          }
+        ],
+        "spine": {
+          "label": "Dante · AV network",
+          "show": true
+        },
+        "options": {
+          "auto_dante_nodes": true,
+          "auto_sources": false,
+          "dante_counts": false,
+          "appendix": true
+        }
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "port-audio",
+      "room": "port",
+      "discipline": "audio",
+      "name": "Portable audio"
+    },
+    {
+      "id": "port-video",
+      "room": "port",
+      "discipline": "video",
+      "name": "Portable video"
+    }
+  ],
+  "locations": [
+    {
+      "id": "port-truck",
+      "name": "Trailer",
+      "venue": "port-venue",
+      "room": "port",
+      "kind": "storage"
+    },
+    {
+      "id": "port-floor",
+      "name": "Hall floor",
+      "venue": "port-venue",
+      "room": "port",
+      "kind": "stage"
+    }
+  ],
+  "racks": [
+    {
+      "id": "port-rk-stage",
+      "name": "Stage rack (case)",
+      "room": "port",
+      "location": "port-floor",
+      "units": 8,
+      "numbering": "bottom_up",
+      "faces": [
+        "front",
+        "rear"
+      ],
+      "depth_mm": 500,
+      "order": 1,
+      "notes": "Lives in the stage rack case; roll in, plug in."
+    },
+    {
+      "id": "port-rk-wireless",
+      "name": "Wireless rack (case)",
+      "room": "port",
+      "location": "port-floor",
+      "units": 4,
+      "numbering": "bottom_up",
+      "faces": [
+        "front",
+        "rear"
+      ],
+      "depth_mm": 400,
+      "order": 2
+    }
+  ],
+  "networks": [
+    {
+      "id": "av-dante",
+      "name": "Dante primary",
+      "vlan": 20,
+      "subnet": "10.20.0.0/24",
+      "gateway": "10.20.0.1",
+      "protocol": "dante"
+    }
+  ],
+  "devices": [
+    {
+      "id": "port-case-foh",
+      "name": "FOH console case",
+      "kind": "container",
+      "manufacturer": "Gator",
+      "model": "G-TOUR TF-Rack",
+      "ports": [],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-truck",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min",
+          "Truck position": "Rear door, first off"
+        }
+      }
+    },
+    {
+      "id": "port-case-stage",
+      "name": "Stage rack case",
+      "kind": "container",
+      "manufacturer": "SKB",
+      "model": "8U shock rack",
+      "ports": [],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-truck",
+      "flow": {
+        "group": "A",
+        "column": "stage_io"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min",
+          "Truck position": "Rear door, second off"
+        }
+      }
+    },
+    {
+      "id": "port-case-wireless",
+      "name": "Wireless case",
+      "kind": "container",
+      "manufacturer": "SKB",
+      "model": "4U shallow rack",
+      "ports": [],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-truck",
+      "flow": {
+        "group": "B",
+        "column": "stage_io"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "fair",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        },
+        "notes": "Rear lid latch sticks"
+      }
+    },
+    {
+      "id": "port-cart-speakers",
+      "name": "Speaker cart",
+      "kind": "container",
+      "manufacturer": "Rock-n-Roller",
+      "model": "R12 multi-cart",
+      "ports": [],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-truck",
+      "flow": {
+        "group": "G",
+        "column": "outputs"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        }
+      }
+    },
+    {
+      "id": "port-trunk-cables",
+      "name": "Cable trunk",
+      "kind": "container",
+      "manufacturer": "Pelican",
+      "model": "BA22 rolling trunk",
+      "ports": [],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-truck",
+      "flow": {
+        "group": "A",
+        "column": "sources"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        }
+      }
+    },
+    {
+      "id": "port-case-video",
+      "name": "Video case",
+      "kind": "container",
+      "manufacturer": "Pelican",
+      "model": "1510",
+      "ports": [],
+      "room": "port",
+      "system": "port-video",
+      "location": "port-truck",
+      "flow": {
+        "group": "H",
+        "column": "outputs"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        }
+      }
+    },
+    {
+      "id": "port-stage-mics",
+      "name": "Stage mics & DIs",
+      "kind": "mic",
+      "manufacturer": "Mixed",
+      "model": "Vocal mics + DIs",
+      "ports": [
+        {
+          "id": "out-1",
+          "name": "Stage input 1",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Stage inputs",
+          "index": 1,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-2",
+          "name": "Stage input 2",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Stage inputs",
+          "index": 2,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-3",
+          "name": "Stage input 3",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Stage inputs",
+          "index": 3,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-4",
+          "name": "Stage input 4",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Stage inputs",
+          "index": 4,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-5",
+          "name": "Stage input 5",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Stage inputs",
+          "index": 5,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-6",
+          "name": "Stage input 6",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Stage inputs",
+          "index": 6,
+          "connector": "XLR3M"
+        }
+      ],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "A",
+        "column": "sources"
+      },
+      "count": 6,
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        }
+      },
+      "container": "port-trunk-cables"
+    },
+    {
+      "id": "port-handhelds",
+      "name": "Wireless handhelds",
+      "kind": "mic",
+      "manufacturer": "Shure",
+      "model": "ULXD2/SM58",
+      "brand": "shure",
+      "template": "shure-ulxd2-sm58",
+      "ports": [
+        {
+          "id": "rf-out",
+          "name": "RF Out",
+          "dir": "out",
+          "medium": "rf",
+          "group": "RF Out",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "B",
+        "column": "sources"
+      },
+      "count": 2,
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        }
+      },
+      "container": "port-case-wireless"
+    },
+    {
+      "id": "port-bodypacks",
+      "name": "Wireless bodypacks",
+      "kind": "mic",
+      "manufacturer": "Shure",
+      "model": "ULXD1 + headset",
+      "brand": "shure",
+      "ports": [
+        {
+          "id": "rf-out",
+          "name": "RF Out",
+          "dir": "out",
+          "medium": "rf",
+          "group": "RF Out",
+          "index": 1
+        }
+      ],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "B",
+        "column": "sources"
+      },
+      "count": 2,
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "fair",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        },
+        "notes": "One headset cable intermittent"
+      },
+      "container": "port-case-wireless"
+    },
+    {
+      "id": "port-stagebox",
+      "name": "Stage box",
+      "kind": "stage_io",
+      "manufacturer": "Yamaha",
+      "model": "Tio1608-D",
+      "brand": "yamaha",
+      "template": "yamaha-tio1608-d",
+      "dante": true,
+      "routing": {
+        "mode": "indexed"
+      },
+      "ports": [
+        {
+          "id": "analog-in-1",
+          "name": "Analog In 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-2",
+          "name": "Analog In 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-3",
+          "name": "Analog In 3",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-4",
+          "name": "Analog In 4",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-5",
+          "name": "Analog In 5",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-6",
+          "name": "Analog In 6",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-7",
+          "name": "Analog In 7",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-8",
+          "name": "Analog In 8",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-9",
+          "name": "Analog In 9",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 9,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-10",
+          "name": "Analog In 10",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 10,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-11",
+          "name": "Analog In 11",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 11,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-12",
+          "name": "Analog In 12",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 12,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-13",
+          "name": "Analog In 13",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 13,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-14",
+          "name": "Analog In 14",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 14,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-15",
+          "name": "Analog In 15",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 15,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-16",
+          "name": "Analog In 16",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 16,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-1",
+          "name": "Analog Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-2",
+          "name": "Analog Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-3",
+          "name": "Analog Out 3",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-4",
+          "name": "Analog Out 4",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-5",
+          "name": "Analog Out 5",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-6",
+          "name": "Analog Out 6",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-7",
+          "name": "Analog Out 7",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-8",
+          "name": "Analog Out 8",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "dante-primary",
+          "name": "Dante Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "etherCON",
+          "group": "Dante",
+          "index": 1,
+          "channels": 16,
+          "origin": "template"
+        },
+        {
+          "id": "dante-secondary",
+          "name": "Dante Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "etherCON",
+          "group": "Dante",
+          "index": 2,
+          "channels": 16,
+          "origin": "template"
+        }
+      ],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "A",
+        "column": "stage_io"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "dante_name": "PORT-TIO",
+      "rack": {
+        "id": "port-rk-stage",
+        "u": 8,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        },
+        "serial": "TIO-PORT-001",
+        "asset_tag": "CH-0201"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.20.0.141",
+          "network": "av-dante",
+          "protocol": "dante",
+          "switch": "port-sw",
+          "switch_port": "port-1"
+        }
+      ],
+      "container": "port-case-stage"
+    },
+    {
+      "id": "port-wrx-1",
+      "name": "Wireless RX 1-2",
+      "kind": "wireless_rx",
+      "manufacturer": "Shure",
+      "model": "ULXD4D",
+      "brand": "shure",
+      "template": "shure-ulxd4d",
+      "dante": true,
+      "ports": [
+        {
+          "id": "antenna-a",
+          "name": "Antenna A",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "antenna-b",
+          "name": "Antenna B",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-1",
+          "name": "Analog Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-2",
+          "name": "Analog Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "mix-out",
+          "name": "Mix Out",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Mix Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dante-primary",
+          "name": "Dante Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 1,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "dante-secondary",
+          "name": "Dante Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 2,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "B",
+        "column": "stage_io"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "dante_name": "PORT-ULXD-1",
+      "rack": {
+        "id": "port-rk-wireless",
+        "u": 3,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        },
+        "asset_tag": "CH-0202"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.20.0.143",
+          "network": "av-dante",
+          "protocol": "dante",
+          "switch": "port-sw",
+          "switch_port": "port-3"
+        }
+      ],
+      "container": "port-case-wireless"
+    },
+    {
+      "id": "port-wrx-2",
+      "name": "Wireless RX 3-4",
+      "kind": "wireless_rx",
+      "manufacturer": "Shure",
+      "model": "ULXD4D",
+      "brand": "shure",
+      "template": "shure-ulxd4d",
+      "dante": true,
+      "ports": [
+        {
+          "id": "antenna-a",
+          "name": "Antenna A",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "antenna-b",
+          "name": "Antenna B",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-1",
+          "name": "Analog Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-2",
+          "name": "Analog Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "mix-out",
+          "name": "Mix Out",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Mix Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dante-primary",
+          "name": "Dante Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 1,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "dante-secondary",
+          "name": "Dante Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 2,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "B",
+        "column": "stage_io"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "dante_name": "PORT-ULXD-2",
+      "rack": {
+        "id": "port-rk-wireless",
+        "u": 4,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        },
+        "asset_tag": "CH-0203"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.20.0.144",
+          "network": "av-dante",
+          "protocol": "dante",
+          "switch": "port-sw",
+          "switch_port": "port-4"
+        }
+      ],
+      "container": "port-case-wireless"
+    },
+    {
+      "id": "port-mixer",
+      "name": "Console (TF-Rack)",
+      "kind": "console",
+      "manufacturer": "Yamaha",
+      "model": "TF-Rack",
+      "brand": "yamaha",
+      "template": "yamaha-tf-rack",
+      "dante": true,
+      "ports": [
+        {
+          "id": "analog-in-1",
+          "name": "Analog In 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-2",
+          "name": "Analog In 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-3",
+          "name": "Analog In 3",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-4",
+          "name": "Analog In 4",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-5",
+          "name": "Analog In 5",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-6",
+          "name": "Analog In 6",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-7",
+          "name": "Analog In 7",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-8",
+          "name": "Analog In 8",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-9",
+          "name": "Analog In 9",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 9,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-10",
+          "name": "Analog In 10",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 10,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-11",
+          "name": "Analog In 11",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 11,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-12",
+          "name": "Analog In 12",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 12,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-13",
+          "name": "Analog In 13",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 13,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-14",
+          "name": "Analog In 14",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 14,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-15",
+          "name": "Analog In 15",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 15,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-16",
+          "name": "Analog In 16",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Analog In",
+          "index": 16,
+          "origin": "template"
+        },
+        {
+          "id": "st-in-l",
+          "name": "ST In L",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "RCA",
+          "group": "ST In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "st-in-r",
+          "name": "ST In R",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "RCA",
+          "group": "ST In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-1",
+          "name": "Omni Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-2",
+          "name": "Omni Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-3",
+          "name": "Omni Out 3",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-4",
+          "name": "Omni Out 4",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-5",
+          "name": "Omni Out 5",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-6",
+          "name": "Omni Out 6",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-7",
+          "name": "Omni Out 7",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-8",
+          "name": "Omni Out 8",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-9",
+          "name": "Omni Out 9",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Omni Out",
+          "index": 9,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-10",
+          "name": "Omni Out 10",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Omni Out",
+          "index": 10,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-11",
+          "name": "Omni Out 11",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Omni Out",
+          "index": 11,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-12",
+          "name": "Omni Out 12",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Omni Out",
+          "index": 12,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-13",
+          "name": "Omni Out 13",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Omni Out",
+          "index": 13,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-14",
+          "name": "Omni Out 14",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Omni Out",
+          "index": 14,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-15",
+          "name": "Omni Out 15",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Omni Out",
+          "index": 15,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-16",
+          "name": "Omni Out 16",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Omni Out",
+          "index": 16,
+          "origin": "template"
+        },
+        {
+          "id": "ny64-d-primary",
+          "name": "NY64-D Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "etherCON",
+          "group": "NY64-D",
+          "index": 1,
+          "channels": 64,
+          "origin": "template"
+        },
+        {
+          "id": "ny64-d-secondary",
+          "name": "NY64-D Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "etherCON",
+          "group": "NY64-D",
+          "index": 2,
+          "channels": 64,
+          "origin": "template"
+        },
+        {
+          "id": "usb",
+          "name": "USB",
+          "dir": "io",
+          "medium": "usb",
+          "connector": "USB-B",
+          "group": "USB",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "dante_name": "PORT-TF",
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        },
+        "serial": "TFR-PORT-001",
+        "asset_tag": "CH-0200"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.20.0.140",
+          "network": "av-dante",
+          "protocol": "dante",
+          "switch": "port-sw",
+          "switch_port": "port-2"
+        }
+      ],
+      "container": "port-case-foh"
+    },
+    {
+      "id": "port-spk-l",
+      "name": "Speaker L (on stand)",
+      "kind": "speaker",
+      "manufacturer": "QSC",
+      "model": "K12.2",
+      "brand": "qsc",
+      "template": "qsc-k12-2",
+      "ports": [
+        {
+          "id": "input-1",
+          "name": "Input 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Input",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "input-2",
+          "name": "Input 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Input",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "thru",
+          "name": "Thru",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Thru",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Power In",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "G",
+        "column": "outputs"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        }
+      },
+      "container": "port-cart-speakers"
+    },
+    {
+      "id": "port-spk-r",
+      "name": "Speaker R (on stand)",
+      "kind": "speaker",
+      "manufacturer": "QSC",
+      "model": "K12.2",
+      "brand": "qsc",
+      "template": "qsc-k12-2",
+      "ports": [
+        {
+          "id": "input-1",
+          "name": "Input 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Input",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "input-2",
+          "name": "Input 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Input",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "thru",
+          "name": "Thru",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Thru",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Power In",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "G",
+        "column": "outputs"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "poor",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        },
+        "notes": "Grille dented, handle cracked"
+      },
+      "container": "port-cart-speakers"
+    },
+    {
+      "id": "port-sub",
+      "name": "Powered sub",
+      "kind": "speaker",
+      "manufacturer": "QSC",
+      "model": "KS118",
+      "brand": "qsc",
+      "ports": [
+        {
+          "id": "input-1",
+          "name": "Input 1",
+          "dir": "in",
+          "medium": "analog",
+          "group": "Input",
+          "index": 1,
+          "connector": "XLR3F"
+        },
+        {
+          "id": "thru",
+          "name": "Thru",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Thru",
+          "index": 1,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "group": "Power In",
+          "index": 1,
+          "connector": "IEC C13"
+        }
+      ],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "G",
+        "column": "outputs"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        }
+      },
+      "container": "port-cart-speakers"
+    },
+    {
+      "id": "port-stands",
+      "name": "Speaker stands",
+      "kind": "other",
+      "manufacturer": "K&M",
+      "model": "21435",
+      "ports": [],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "G",
+        "column": "outputs"
+      },
+      "count": 2,
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        }
+      },
+      "container": "port-cart-speakers"
+    },
+    {
+      "id": "port-xlr-pack",
+      "name": "XLR cable pack",
+      "kind": "other",
+      "manufacturer": "Mixed",
+      "model": "12 × 10 m XLR",
+      "ports": [],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "A",
+        "column": "sources"
+      },
+      "count": 12,
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "fair",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        },
+        "notes": "Two cables taped: re-solder"
+      },
+      "container": "port-trunk-cables"
+    },
+    {
+      "id": "port-cat-reels",
+      "name": "Cat6 reels",
+      "kind": "other",
+      "manufacturer": "Mixed",
+      "model": "4 × 30 m etherCON",
+      "ports": [],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "A",
+        "column": "sources"
+      },
+      "count": 4,
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        }
+      },
+      "container": "port-trunk-cables"
+    },
+    {
+      "id": "port-laptop",
+      "name": "Lyrics laptop",
+      "kind": "computer",
+      "manufacturer": "Apple",
+      "model": "MacBook Pro",
+      "brand": "apple",
+      "ports": [
+        {
+          "id": "hdmi-out",
+          "name": "HDMI Out",
+          "dir": "out",
+          "medium": "hdmi",
+          "group": "HDMI Out",
+          "index": 1,
+          "connector": "HDMI-A"
+        },
+        {
+          "id": "usb",
+          "name": "USB",
+          "dir": "io",
+          "medium": "usb",
+          "group": "USB",
+          "index": 1,
+          "connector": "USB-C"
+        }
+      ],
+      "room": "port",
+      "system": "port-video",
+      "location": "port-floor",
+      "flow": {
+        "group": "C",
+        "column": "sources"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        }
+      },
+      "container": "port-case-video"
+    },
+    {
+      "id": "port-proj",
+      "name": "Projector",
+      "kind": "projector",
+      "manufacturer": "Generic",
+      "model": "Projector",
+      "template": "generic-projector",
+      "ports": [
+        {
+          "id": "hdmi-in-1",
+          "name": "HDMI In 1",
+          "dir": "in",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "hdmi-in-2",
+          "name": "HDMI In 2",
+          "dir": "in",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "hdbaset-in",
+          "name": "HDBaseT In",
+          "dir": "in",
+          "medium": "hdbaset",
+          "connector": "RJ45",
+          "group": "HDBaseT In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "control",
+          "name": "Control",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Control",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "rs-232",
+          "name": "RS-232",
+          "dir": "in",
+          "medium": "rs232",
+          "connector": "DB9",
+          "group": "RS-232",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "mains-in",
+          "name": "Mains In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Mains In",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "port",
+      "system": "port-video",
+      "location": "port-floor",
+      "flow": {
+        "group": "H",
+        "column": "outputs"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        }
+      },
+      "container": "port-case-video"
+    },
+    {
+      "id": "port-screen",
+      "name": "Tripod screen",
+      "kind": "other",
+      "manufacturer": "Da-Lite",
+      "model": "Picture King 120\"",
+      "ports": [],
+      "room": "port",
+      "system": "port-video",
+      "location": "port-floor",
+      "flow": {
+        "group": "H",
+        "column": "outputs"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        }
+      },
+      "container": "port-case-video"
+    },
+    {
+      "id": "port-sw",
+      "name": "Portable switch",
+      "kind": "switch",
+      "manufacturer": "Netgear",
+      "model": "GS308EP",
+      "brand": "netgear",
+      "ports": [
+        {
+          "id": "port-1",
+          "name": "Port 1",
+          "dir": "io",
+          "medium": "dante",
+          "group": "Port",
+          "index": 1,
+          "connector": "RJ45",
+          "label": "Dante"
+        },
+        {
+          "id": "port-2",
+          "name": "Port 2",
+          "dir": "io",
+          "medium": "dante",
+          "group": "Port",
+          "index": 2,
+          "connector": "RJ45",
+          "label": "Dante"
+        },
+        {
+          "id": "port-3",
+          "name": "Port 3",
+          "dir": "io",
+          "medium": "dante",
+          "group": "Port",
+          "index": 3,
+          "connector": "RJ45",
+          "label": "Dante"
+        },
+        {
+          "id": "port-4",
+          "name": "Port 4",
+          "dir": "io",
+          "medium": "dante",
+          "group": "Port",
+          "index": 4,
+          "connector": "RJ45",
+          "label": "Dante"
+        },
+        {
+          "id": "port-5",
+          "name": "Port 5",
+          "dir": "io",
+          "medium": "network",
+          "group": "Port",
+          "index": 5,
+          "connector": "RJ45"
+        },
+        {
+          "id": "port-6",
+          "name": "Port 6",
+          "dir": "io",
+          "medium": "network",
+          "group": "Port",
+          "index": 6,
+          "connector": "RJ45"
+        },
+        {
+          "id": "port-7",
+          "name": "Port 7",
+          "dir": "io",
+          "medium": "network",
+          "group": "Port",
+          "index": 7,
+          "connector": "RJ45"
+        },
+        {
+          "id": "port-8",
+          "name": "Port 8",
+          "dir": "io",
+          "medium": "network",
+          "group": "Port",
+          "index": 8,
+          "connector": "RJ45"
+        },
+        {
+          "id": "mains-in",
+          "name": "Mains In",
+          "dir": "in",
+          "medium": "power",
+          "group": "Mains In",
+          "index": 1
+        }
+      ],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "E",
+        "column": "dante"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "rack": {
+        "id": "port-rk-stage",
+        "u": 7,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        }
+      },
+      "container": "port-case-stage"
+    },
+    {
+      "id": "port-pdu",
+      "name": "Stage PDU",
+      "kind": "power",
+      "manufacturer": "Generic",
+      "model": "PDU 8-outlet",
+      "template": "generic-pdu-8",
+      "ports": [
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Power In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-1",
+          "name": "Outlet 1",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-2",
+          "name": "Outlet 2",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-3",
+          "name": "Outlet 3",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-4",
+          "name": "Outlet 4",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-5",
+          "name": "Outlet 5",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-6",
+          "name": "Outlet 6",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-7",
+          "name": "Outlet 7",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-8",
+          "name": "Outlet 8",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 8,
+          "origin": "template"
+        }
+      ],
+      "room": "port",
+      "system": "port-audio",
+      "location": "port-floor",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "tags": [
+        "load-in"
+      ],
+      "rack": {
+        "id": "port-rk-stage",
+        "u": 1,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "fields": {
+          "Load-in": "Truck 1",
+          "Setup time": "15 min"
+        }
+      },
+      "container": "port-case-stage"
+    }
+  ],
+  "cables": [
+    {
+      "id": "port-c-0001",
+      "from": {
+        "device": "port-stage-mics",
+        "port": "out-1"
+      },
+      "to": {
+        "device": "port-stagebox",
+        "port": "analog-in-1"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 10.0,
+      "tag": "PORT-A-001"
+    },
+    {
+      "id": "port-c-0002",
+      "from": {
+        "device": "port-stage-mics",
+        "port": "out-2"
+      },
+      "to": {
+        "device": "port-stagebox",
+        "port": "analog-in-2"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 10.0,
+      "tag": "PORT-A-002"
+    },
+    {
+      "id": "port-c-0003",
+      "from": {
+        "device": "port-stage-mics",
+        "port": "out-3"
+      },
+      "to": {
+        "device": "port-stagebox",
+        "port": "analog-in-3"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 10.0,
+      "tag": "PORT-A-003"
+    },
+    {
+      "id": "port-c-0004",
+      "from": {
+        "device": "port-stage-mics",
+        "port": "out-4"
+      },
+      "to": {
+        "device": "port-stagebox",
+        "port": "analog-in-4"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 10.0,
+      "tag": "PORT-A-004"
+    },
+    {
+      "id": "port-c-0005",
+      "from": {
+        "device": "port-stage-mics",
+        "port": "out-5"
+      },
+      "to": {
+        "device": "port-stagebox",
+        "port": "analog-in-5"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 10.0,
+      "tag": "PORT-A-005"
+    },
+    {
+      "id": "port-c-0006",
+      "from": {
+        "device": "port-stage-mics",
+        "port": "out-6"
+      },
+      "to": {
+        "device": "port-stagebox",
+        "port": "analog-in-6"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 10.0,
+      "tag": "PORT-A-006"
+    },
+    {
+      "id": "port-c-0007",
+      "from": {
+        "device": "port-handhelds",
+        "port": "rf-out"
+      },
+      "to": {
+        "device": "port-wrx-1",
+        "port": "antenna-a"
+      },
+      "medium": "rf",
+      "label": "RF",
+      "tag": "PORT-A-007"
+    },
+    {
+      "id": "port-c-0008",
+      "from": {
+        "device": "port-bodypacks",
+        "port": "rf-out"
+      },
+      "to": {
+        "device": "port-wrx-2",
+        "port": "antenna-a"
+      },
+      "medium": "rf",
+      "label": "RF",
+      "tag": "PORT-A-008"
+    },
+    {
+      "id": "port-c-0009",
+      "from": {
+        "device": "port-stagebox",
+        "port": "dante-primary"
+      },
+      "to": {
+        "device": "port-sw",
+        "port": "port-1"
+      },
+      "medium": "dante",
+      "type": "Cat6 etherCON",
+      "length_m": 30.0,
+      "signal": "Dante",
+      "tag": "PORT-A-009"
+    },
+    {
+      "id": "port-c-0010",
+      "from": {
+        "device": "port-mixer",
+        "port": "ny64-d-primary"
+      },
+      "to": {
+        "device": "port-sw",
+        "port": "port-2"
+      },
+      "medium": "dante",
+      "type": "Cat6 etherCON",
+      "length_m": 30.0,
+      "signal": "Dante",
+      "tag": "PORT-A-010"
+    },
+    {
+      "id": "port-c-0011",
+      "from": {
+        "device": "port-wrx-1",
+        "port": "dante-primary"
+      },
+      "to": {
+        "device": "port-sw",
+        "port": "port-3"
+      },
+      "medium": "dante",
+      "type": "Cat6",
+      "length_m": 1.0,
+      "tag": "PORT-A-011"
+    },
+    {
+      "id": "port-c-0012",
+      "from": {
+        "device": "port-wrx-2",
+        "port": "dante-primary"
+      },
+      "to": {
+        "device": "port-sw",
+        "port": "port-4"
+      },
+      "medium": "dante",
+      "type": "Cat6",
+      "length_m": 1.0,
+      "tag": "PORT-A-012"
+    },
+    {
+      "id": "port-c-0013",
+      "from": {
+        "device": "port-stagebox",
+        "port": "analog-out-1"
+      },
+      "to": {
+        "device": "port-spk-l",
+        "port": "input-1"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 10.0,
+      "signal": "Main L",
+      "tag": "PORT-A-013"
+    },
+    {
+      "id": "port-c-0014",
+      "from": {
+        "device": "port-stagebox",
+        "port": "analog-out-2"
+      },
+      "to": {
+        "device": "port-spk-r",
+        "port": "input-1"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 10.0,
+      "signal": "Main R",
+      "tag": "PORT-A-014"
+    },
+    {
+      "id": "port-c-0015",
+      "from": {
+        "device": "port-stagebox",
+        "port": "analog-out-3"
+      },
+      "to": {
+        "device": "port-sub",
+        "port": "input-1"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 10.0,
+      "signal": "Sub",
+      "tag": "PORT-A-015"
+    },
+    {
+      "id": "port-c-0016",
+      "from": {
+        "device": "port-laptop",
+        "port": "usb"
+      },
+      "to": {
+        "device": "port-mixer",
+        "port": "usb"
+      },
+      "medium": "usb",
+      "type": "USB-C to B",
+      "length_m": 3.0,
+      "signal": "Playback",
+      "tag": "PORT-X-001"
+    },
+    {
+      "id": "port-c-0017",
+      "from": {
+        "device": "port-laptop",
+        "port": "hdmi-out"
+      },
+      "to": {
+        "device": "port-proj",
+        "port": "hdmi-in-1"
+      },
+      "medium": "hdmi",
+      "type": "HDMI 2.0 active",
+      "length_m": 15.0,
+      "tag": "PORT-V-001"
+    },
+    {
+      "id": "port-c-0018",
+      "from": {
+        "device": "port-pdu",
+        "port": "outlet-1"
+      },
+      "to": {
+        "device": "port-sw",
+        "port": "mains-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 1.0,
+      "tag": "PORT-P-001"
+    },
+    {
+      "id": "port-c-0019",
+      "from": {
+        "device": "port-pdu",
+        "port": "outlet-2"
+      },
+      "to": {
+        "device": "port-spk-l",
+        "port": "power-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 15.0,
+      "tag": "PORT-P-002"
+    },
+    {
+      "id": "port-c-0020",
+      "from": {
+        "device": "port-pdu",
+        "port": "outlet-3"
+      },
+      "to": {
+        "device": "port-spk-r",
+        "port": "power-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 15.0,
+      "tag": "PORT-P-003"
+    },
+    {
+      "id": "port-c-0021",
+      "from": {
+        "device": "port-pdu",
+        "port": "outlet-4"
+      },
+      "to": {
+        "device": "port-sub",
+        "port": "power-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 10.0,
+      "tag": "PORT-P-004"
+    },
+    {
+      "id": "port-c-0022",
+      "from": {
+        "device": "port-pdu",
+        "port": "outlet-5"
+      },
+      "to": {
+        "device": "port-proj",
+        "port": "mains-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 15.0,
+      "tag": "PORT-P-005"
+    }
+  ],
+  "bundles": [],
+  "floorplans": [],
+  "attachments": [],
+  "templates": [],
+  "imports": [],
+  "pages": [
+    {
+      "id": "port-pg-sunday-power-up",
+      "slug": "port-sunday-power-up",
+      "title": "Sunday set-up & power-up: Portable church",
+      "kind": "sop",
+      "status": "published",
+      "order": 1,
+      "summary": "Roll the cases in, connect the few cables that matter and power up (about 25 minutes).",
+      "tags": [
+        "sunday",
+        "load-in"
+      ],
+      "rooms": [
+        "port"
+      ],
+      "devices": [
+        "port-case-stage",
+        "port-case-foh",
+        "port-cart-speakers",
+        "port-stagebox",
+        "port-mixer",
+        "port-sw",
+        "port-pdu",
+        "port-spk-l",
+        "port-spk-r",
+        "port-sub",
+        "port-proj"
+      ],
+      "review_due": "2027-09-01",
+      "body": "## 1. Load-in order\n\n- [ ] [[device:port-case-stage]] and [[device:port-case-foh]] first, then [[device:port-cart-speakers]], [[device:port-case-wireless]], [[device:port-trunk-cables]], [[device:port-case-video]].\n- [ ] Check every case against its contents list in the inventory (condition **poor** items get a photo).\n\n## 2. Connect\n\n- [ ] Two Cat6 reels: [[device:port-stagebox]] and [[device:port-mixer]] to [[device:port-sw]] (ports 1 and 2).\n- [ ] Speakers on the stands; XLR from [[device:port-stagebox]] outs 1–3.\n\n## 3. Power-up\n\n- [ ] Switch on [[device:port-pdu]]; wait for the Dante LED on [[device:port-stagebox]].\n- [ ] Power on [[device:port-mixer]] and recall scene **Portable AM**.\n- [ ] Switch on [[device:port-spk-l]], [[device:port-spk-r]] and [[device:port-sub]] last.\n- [ ] [[device:port-laptop]] to [[device:port-proj]]; focus the screen.\n",
+      "created": "2026-10-01T09:00:00Z",
+      "updated": "2026-10-01T09:00:00Z",
+      "updated_by": "starter",
+      "owner": "starter"
+    }
+  ],
+  "problems": []
+}
