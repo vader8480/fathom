@@ -372,7 +372,7 @@ T('VIEW_ROLES, TAB_ROLES and canSee', () => {
   const VIEW_ROLES = fn('VIEW_ROLES', D2);
   for (const v of ALL_VIEWS) assert.equal(VIEW_ROLES[v], 'viewer', m(U, D2, `VIEW_ROLES.${v}`));
   const TAB_ROLES = fn('TAB_ROLES', D2);
-  assert.deepEqual(plain(TAB_ROLES.settings), { users: 'admin', backups: 'admin', sharing: 'editor', trash: 'admin' }, m(U, D2, 'TAB_ROLES.settings'));
+  assert.deepEqual(plain(TAB_ROLES.settings), { users: 'admin', invites: 'admin', backups: 'admin', sharing: 'editor', suggestions: 'admin', trash: 'admin' }, m(U, D2, 'TAB_ROLES.settings'));
   const canSee = fn('canSee', D2);
   const cases = [
     ['settings', 'viewer', 'users', false], ['settings', 'editor', 'users', false], ['settings', 'admin', 'users', true],
@@ -380,6 +380,8 @@ T('VIEW_ROLES, TAB_ROLES and canSee', () => {
     ['settings', 'viewer', 'sharing', false], ['settings', 'editor', 'sharing', true], ['settings', 'admin', 'sharing', true],
     ['settings', 'viewer', 'networks', true], ['settings', 'viewer', undefined, true],
     ['settings', 'viewer', 'trash', false], ['settings', 'editor', 'trash', false], ['settings', 'admin', 'trash', true],
+    ['settings', 'viewer', 'invites', false], ['settings', 'editor', 'invites', false], ['settings', 'admin', 'invites', true],
+    ['settings', 'viewer', 'suggestions', false], ['settings', 'editor', 'suggestions', false], ['settings', 'admin', 'suggestions', true],
     ['no-such-view', 'viewer', undefined, true], ['no-such-view', 'admin', 'x', true],
   ];
   for (const [v, role, tab, exp] of cases) assert.equal(canSee(v, role, tab), exp, m(U, D2, `canSee(${v}, ${role}, ${tab})`));
