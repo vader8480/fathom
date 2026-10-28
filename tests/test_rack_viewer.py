@@ -14,9 +14,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from unittest import mock
 
 try:
-    from _helpers import CAMPUS_DIR, read_json, temp_env
+    from _helpers import CAMPUS_DIR, basic, call, get_app, install_campus, jbody, read_json, requires, temp_data_dir, temp_env
 except ImportError:  # pragma: no cover
-    from tests._helpers import CAMPUS_DIR, read_json, temp_env
+    from tests._helpers import CAMPUS_DIR, basic, call, get_app, install_campus, jbody, read_json, requires, temp_data_dir, temp_env
 
 from fathom import racks
 from fathom import render_rack
@@ -194,18 +194,48 @@ class RackViewerPage(unittest.TestCase):
         self.assertEqual([a["src"] for a in imgs], [f"{BASE}api/v2/projects/campus/qr/rack/rk-foh.svg"])
         self.assertIn("FOH rack", imgs[0]["alt"])
 
-    def test_share_token_in_links_and_qr(self) -> None:
-        html = self.page(share="sh-tok_1")
+    def test_share_links_go_through_the_mirror(self) -> None:
+        self.doc["pages"] = [{"slug": "rack-power", "title": "Rack power", "status": "published", "body": "x"}]
+        foh = next(r for r in self.doc["racks"] if r["id"] == "rk-foh")
+        foh["notes"] += "\n\nSee [[page:rack-power]]."
+        with temp_env(FATHOM_PUBLIC_URL=None):
+            html = self.page(share="sh-tok_1")
         t = parse(html)
-        viewer = [h for h in t.hrefs() if "/p/campus/" in h or h.startswith(BASE + "p/")]
-        self.assertTrue(viewer)
-        for h in viewer:
-            self.assertTrue(h.endswith("?share=sh-tok_1"), h)
+        mirror = BASE + "s/sh-tok_1/"
+        hrefs = [h for h in t.hrefs() if not h.endswith((".webmanifest", ".png"))]
+        self.assertTrue(hrefs)
+        for h in hrefs:
+            self.assertTrue(h.startswith(mirror), h)
+            self.assertNotIn("?share=", h)
+            self.assertNotIn("/p/", h)
         for r in t.rows("data-device"):
-            self.assertEqual(r["hrefs"], [f"{BASE}p/campus/d/{r['attrs']['data-device']}?share=sh-tok_1"])
-        src = [a["src"] for tag, a in t.tags if tag == "img"]
-        self.assertEqual(src, [f"{BASE}api/v2/projects/campus/qr/rack/rk-foh.svg?share=sh-tok_1"])
+            self.assertEqual(r["hrefs"], [f"{mirror}d/{r['attrs']['data-device']}"])
+        for want in ("r/main", "rooms", "sop/rack-power", "d/switcher"):
+            self.assertIn(mirror + want, hrefs)
         self.assertNotIn("#/campus", html, "share viewers get no editor link")
+        self.assertNotIn("/qr/rack/", html, "the viewer-role QR API is not used on share pages")
+        self.assertFalse([a for tag, a in t.tags if tag == "div" and a.get("class") == "rv-qr"], "no public URL -> no QR")
+
+    def test_share_qr_inline_with_public_url(self) -> None:
+        from fathom.qr import svg as qr_svg
+
+        self.doc["settings"]["public_url"] = "https://av.example.org/"
+        html = self.page(share="sh-tok_1")
+        self.assertIn(qr_svg("https://av.example.org/s/sh-tok_1/rk/rk-foh", "M", scale=4), html)
+        self.assertFalse([a for tag, a in parse(html).tags if tag == "img"])
+        self.assertNotIn("/qr/rack/", html)
+        with temp_env(FATHOM_PUBLIC_URL="https://env.example.org"):
+            self.doc["settings"]["public_url"] = ""
+            html = self.page(share="sh-tok_1")
+            self.assertIn(qr_svg("https://env.example.org/s/sh-tok_1/rk/rk-foh", "M", scale=4), html)
+            html = self.page(base="https://abs.example.org/", share="sh-tok_1")
+        self.assertIn(qr_svg("https://abs.example.org/s/sh-tok_1/rk/rk-foh", "M", scale=4), html)
+
+    def test_non_share_viewer_links_unchanged(self) -> None:
+        t = parse(self.page())
+        hrefs = [h for h in t.hrefs() if not h.endswith((".webmanifest", ".png"))]
+        self.assertFalse([h for h in hrefs if "/s/" in h or "share" in h])
+        self.assertTrue(all(h.startswith(BASE + "p/campus/") or h.startswith(BASE + "#/") for h in hrefs), hrefs)
 
     def test_accessories(self) -> None:
         rows = parse(self.page()).rows("data-item")
@@ -324,6 +354,42 @@ class RackViewerPage(unittest.TestCase):
         self.assertEqual(parse(html).errors, [])
         self.assertIn("No devices in this rack.", html)
         self.assertIn("0 U used", html)
+
+
+class RackSharePageEndToEnd(unittest.TestCase):
+    """Login on (a user exists): an anonymous visitor opens ``/s/<token>/rk/<rack>`` and follows its links."""
+
+    def test_anonymous_share_visitor(self) -> None:
+        users = requires("users")
+        app = get_app()
+        with temp_data_dir() as data:
+            install_campus(data, "campus")
+            users.add_user("ada", "ada-password-1", role="admin")
+            admin = dict(basic("ada", "ada-password-1"), **{"Content-Type": "application/json", "X-Fathom": "1"})
+            st, _, b = call(app, "POST", "/api/v2/projects/campus/shares", {"scope": "all"}, admin)
+            self.assertEqual(st, 201, b)
+            token = jbody(b)["share"]["token"]
+            st, _, _ = call(app, "GET", "/p/campus/rk/rk-foh")
+            self.assertNotEqual(st, 200, "login is on: /p/ needs a viewer")
+            st, h, b = call(app, "GET", f"/s/{token}/rk/rk-foh")
+            self.assertEqual(st, 200, b[:300])
+            self.assertTrue(h["content-type"].startswith("text/html"))
+            t = parse(b.decode("utf-8"))
+            self.assertEqual(t.errors, [])
+            hrefs = [x for x in t.hrefs() if not x.endswith((".webmanifest", ".png"))]
+            devices = [r["hrefs"][0] for r in t.rows("data-device") if r["hrefs"]]
+            self.assertTrue(devices)
+            self.assertIn(f"/s/{token}/rooms", hrefs)
+            self.assertIn(f"/s/{token}/r/main", hrefs)
+            for href in hrefs:
+                self.assertTrue(href.startswith(f"/s/{token}/"), href)
+                self.assertNotIn("?share=", href)
+            for href in [devices[0], f"/s/{token}/rooms", f"/s/{token}/r/main"]:
+                st, _, b = call(app, "GET", href)
+                self.assertEqual(st, 200, (href, b[:200]))
+            st, _, b = call(app, "GET", devices[0])
+            self.assertIn(b"<h1>", b)
+            self.assertNotIn(b"/qr/rack/", call(app, "GET", f"/s/{token}/rk/rk-foh")[2], "no viewer-role QR API on share pages")
 
 
 try:
