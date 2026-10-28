@@ -291,6 +291,131 @@ def remove_user(username: str) -> None:
         _save([u for u in users if u.get("username") != username])
 
 
+# ------------------------------------------------------------- invites
+# One-time links an admin hands out instead of creating the account (FR-USER-11).
+# ``<data>/invites.json`` = {"invites": [{token, role, projects, created_by, created, expires, note, used_by, used_at}]}.
+
+INVITE_RE = re.compile(r"^inv-[A-Za-z0-9_-]{16,64}$")
+INVITE_TTL_HOURS = 72.0
+INVITE_MAX_TTL_HOURS = 24.0 * 365
+INVITE_NOTE_MAX = 200
+
+
+def invites_path() -> Path:
+    return _data_root() / "invites.json"
+
+
+def _load_invites() -> List[Dict[str, Any]]:
+    p = invites_path()
+    if not p.is_file():
+        return []
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    items = data.get("invites") if isinstance(data, dict) else data
+    return [i for i in items or [] if isinstance(i, dict) and isinstance(i.get("token"), str)]
+
+
+def _save_invites(items: List[Dict[str, Any]]) -> None:
+    p = invites_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(f".invites.{os.getpid()}.tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps({"invites": items}, indent=2, ensure_ascii=False) + "\n")
+    os.replace(tmp, p)
+
+
+def _iso(ts: float) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts))
+
+
+def _from_iso(text: Any) -> Optional[float]:
+    try:
+        import calendar
+
+        return float(calendar.timegm(time.strptime(str(text), "%Y-%m-%dT%H:%M:%SZ")))
+    except (TypeError, ValueError):
+        return None
+
+
+def invite_expired(inv: Dict[str, Any], now: Optional[float] = None) -> bool:
+    exp = _from_iso(inv.get("expires"))
+    return exp is None or exp <= (time.time() if now is None else now)
+
+
+def create_invite(role: str = "editor", projects: Optional[Dict[str, str]] = None, created_by: str = "",
+                  ttl_hours: Any = INVITE_TTL_HOURS, note: str = "") -> Dict[str, Any]:
+    _check_role(role)
+    proj = _check_projects(projects)
+    try:
+        hours = float(ttl_hours if ttl_hours is not None else INVITE_TTL_HOURS)
+    except (TypeError, ValueError):
+        raise UserError("ttl_hours must be a number of hours")
+    if not (0 < hours <= INVITE_MAX_TTL_HOURS):
+        raise UserError(f"ttl_hours must be between 0 and {int(INVITE_MAX_TTL_HOURS)}")
+    now = time.time()
+    inv: Dict[str, Any] = {
+        "token": "inv-" + secrets.token_urlsafe(32)[:26], "role": role, "projects": proj, "created_by": str(created_by or ""),
+        "created": _iso(now), "expires": _iso(now + hours * 3600.0), "note": str(note or "")[:INVITE_NOTE_MAX],
+        "used_by": None, "used_at": None,
+    }
+    with _LOCK:
+        items = [i for i in _load_invites() if i.get("used_by") or not invite_expired(i, now)]
+        items.append(inv)
+        _save_invites(items)
+    return dict(inv)
+
+
+def list_invites(include_used: bool = False) -> List[Dict[str, Any]]:
+    """Open invites (expired ones are pruned from the file; used ones are kept and listed only on request)."""
+    now = time.time()
+    with _LOCK:
+        items = _load_invites()
+        keep = [i for i in items if i.get("used_by") or not invite_expired(i, now)]
+        if len(keep) != len(items):
+            _save_invites(keep)
+    return [dict(i) for i in keep if include_used or not i.get("used_by")]
+
+
+def get_invite(token: str) -> Optional[Dict[str, Any]]:
+    """The invite when it is still open (known, unused, unexpired), else None."""
+    if not INVITE_RE.match(token or ""):
+        return None
+    for inv in _load_invites():
+        if hmac.compare_digest(str(inv.get("token")).encode("utf-8"), token.encode("utf-8")):
+            if inv.get("used_by") or invite_expired(inv):
+                return None
+            return dict(inv)
+    return None
+
+
+def revoke_invite(token: str) -> bool:
+    with _LOCK:
+        items = _load_invites()
+        keep = [i for i in items if i.get("token") != token]
+        if len(keep) == len(items):
+            return False
+        _save_invites(keep)
+        return True
+
+
+def redeem_invite(token: str, username: str, password: str) -> Dict[str, Any]:
+    """Create the invited user and mark the invite used. ``UserError`` (``not_found``) for an unknown,
+    used or expired token; the username / password rules are ``add_user``'s."""
+    with _LOCK:
+        items = _load_invites()
+        inv = next((i for i in items if INVITE_RE.match(token or "") and i.get("token") == token), None)
+        if inv is None or inv.get("used_by") or invite_expired(inv):
+            raise UserError("this invite link is no longer valid", "not_found")
+        user = add_user(username, password, role=str(inv.get("role") or "editor"), projects=inv.get("projects") or None)
+        inv["used_by"] = user["username"]
+        inv["used_at"] = utc_now()
+        _save_invites(items)
+        return user
+
+
 # --------------------------------------------------------------- verify
 
 
