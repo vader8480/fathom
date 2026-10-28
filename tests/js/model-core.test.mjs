@@ -723,3 +723,50 @@ T('isLocked reads settings.locked strictly', () => {
   assert.equal(isLocked(null), false);
   assert.equal(isLocked(undefined), false);
 });
+
+// ---- P3B: scenes (FR-SCN, SPEC §6.15)
+
+T('activeSceneId / sceneById / activeScene read settings.scene and scenes[]', () => {
+  const activeSceneId = need(mc, 'activeSceneId', 'FR-SCN', S);
+  const sceneById = need(mc, 'sceneById', 'FR-SCN', S);
+  const activeScene = need(mc, 'activeScene', 'FR-SCN', S);
+  const base = { id: 'sc-0000base', name: 'Base', base: true, data: {} };
+  const xmas = { id: 'sc-aaaaaaaa', name: 'Christmas', base: false, data: {} };
+  const doc = Object.assign(fx(), { scenes: [base, xmas] });
+  assert.equal(activeSceneId(doc), 'base', 'no settings.scene means Base');
+  assert.equal(activeScene(doc), null);
+  assert.equal(sceneById(doc, 'base'), base, "'base' maps to the entry flagged base");
+  assert.equal(sceneById(doc, ''), base);
+  assert.equal(sceneById(doc, 'sc-aaaaaaaa'), xmas);
+  assert.equal(sceneById(doc, 'sc-nope'), null);
+  doc.settings = Object.assign({}, doc.settings, { scene: 'sc-aaaaaaaa' });
+  assert.equal(activeSceneId(doc), 'sc-aaaaaaaa');
+  assert.equal(activeScene(doc), xmas);
+  doc.settings.scene = 'sc-gone';
+  assert.equal(activeSceneId(doc), 'sc-gone', 'a dangling id is reported as is');
+  assert.equal(activeScene(doc), null, 'but there is no active entry for it');
+  doc.settings.scene = 'sc-0000base';
+  assert.equal(activeScene(doc), null, 'the Base entry is never the active named scene');
+  doc.settings.scene = '';
+  assert.equal(activeSceneId(doc), 'base');
+  assert.equal(activeScene({ settings: { scene: 'x' } }), null, 'no scenes[] at all');
+  assert.equal(sceneById({ scenes: 'nope' }, 'base'), null);
+  assert.equal(activeSceneId(null), 'base');
+  assert.equal(activeScene(null), null);
+  assert.equal(sceneById(null, 'base'), null);
+});
+
+T('sceneDiffText words the summary like the server', () => {
+  const sceneDiffText = need(mc, 'sceneDiffText', 'FR-SCN', S);
+  assert.equal(sceneDiffText({ cables_added: 3, cables_removed: 1, cables_changed: 0, devices_moved: 2, markers_changed: 0 }), '+3 cables \u00b7 \u22121 cable \u00b7 2 devices moved');
+  assert.equal(sceneDiffText({ cables_added: 1 }), '+1 cable');
+  assert.equal(sceneDiffText({ cables_changed: 2 }), '2 cables changed');
+  assert.equal(sceneDiffText({ markers_changed: 1 }), '1 marker changed');
+  assert.equal(sceneDiffText({ devices_moved: 1, markers_changed: 2, cables_changed: 1 }), '1 cable changed \u00b7 1 device moved \u00b7 2 markers changed', 'fixed order');
+  assert.equal(sceneDiffText({}), 'No differences');
+  assert.equal(sceneDiffText(null), 'No differences');
+  assert.equal(sceneDiffText({ cables_added: 0, cables_removed: 0 }), 'No differences', 'zero parts are omitted');
+  assert.equal(sceneDiffText({ summary: { cables_removed: 2 } }), '\u22122 cables', 'accepts a diff dict holding summary');
+  assert.equal(sceneDiffText({ diff: { cables_added: 4 } }), '+4 cables', 'accepts a scene row holding diff');
+  assert.equal(sceneDiffText({ cables_added: '2', devices_moved: 'x' }), '+2 cables', 'numeric strings count, junk does not');
+});
