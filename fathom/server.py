@@ -84,8 +84,9 @@ FILE_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbo
 STATIC_EXT = {
     ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
     ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png",
-    ".webmanifest": "application/manifest+json", ".txt": "text/plain; charset=utf-8",
+    ".webmanifest": "application/manifest+json", ".txt": "text/plain; charset=utf-8", ".webp": "image/webp",
 }
+mimetypes.add_type("image/webp", ".webp")
 SHELL_ASSETS = [
     "./", "static/app.html", "static/login.html", "static/css/app.css", "static/css/patchview.css", "static/css/plan.css",
     "static/js/app.js", "static/js/api.js", "static/js/model-core.js", "static/js/inspector.js", "static/js/assistant-ui.js",
@@ -99,12 +100,12 @@ _STATUS_TEXT = {
     200: "OK", 201: "Created", 204: "No Content", 302: "Found", 304: "Not Modified", 400: "Bad Request", 401: "Unauthorized",
     403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 409: "Conflict", 413: "Payload Too Large",
     415: "Unsupported Media Type", 422: "Unprocessable Entity", 428: "Precondition Required", 429: "Too Many Requests",
-    500: "Internal Server Error", 507: "Insufficient Storage",
+    500: "Internal Server Error", 501: "Not Implemented", 507: "Insufficient Storage",
 }
 _DEFAULT_CODES = {
     400: "bad_request", 401: "auth_required", 403: "forbidden", 404: "not_found", 405: "method_not_allowed", 409: "conflict",
     413: "too_large", 415: "unsupported_format", 422: "invalid", 428: "precondition_required", 429: "throttled", 500: "internal",
-    507: "no_space",
+    501: "not_available", 507: "no_space",
 }
 
 
@@ -907,9 +908,13 @@ def _template_summary(t: Dict[str, Any]) -> Dict[str, Any]:
     out["ports_summary"] = t.get("ports_summary") or _ports_summary(t)
     out["source"] = t.get("source") or "builtin"
     for k, v in t.items():
-        if k not in out and k in ("tags", "brand"):
+        if k not in out and k in _SUMMARY_EXTRA:
             out[k] = v
     return out
+
+
+_SUMMARY_EXTRA = ("tags", "brand", "full_depth", "airflow", "rack_category", "image_front", "image_rear", "weight_kg", "power_w",
+                  "width", "depth_mm", "part_number")
 
 
 def _doc_for_query(req: Request) -> Optional[Dict[str, Any]]:
@@ -924,7 +929,14 @@ def r_library(req: Request) -> Response:
     from .library import list_templates
 
     doc = _doc_for_query(req)
-    ts = list_templates(q=req.query.get("q", ""), discipline=req.query.get("discipline", ""), kind=req.query.get("kind", ""), doc=doc)
+    extra: Dict[str, Any] = {}
+    if "source" in req.query:
+        extra["source"] = req.query["source"]
+    if "ids" in req.query:
+        extra["ids"] = [i.strip() for i in req.query["ids"].split(",") if i.strip()]
+    if "rack" in req.query:
+        extra["rack"] = req.query["rack"] in ("1", "true", "yes")
+    ts = _compat(list_templates, q=req.query.get("q", ""), discipline=req.query.get("discipline", ""), kind=req.query.get("kind", ""), doc=doc, **extra)
     return Response.json({"templates": [_template_summary(t) for t in ts]})
 
 
@@ -2658,7 +2670,8 @@ def r_tag_preview(req: Request) -> Response:
     return Response.json({"ops": ops, "count": len(ops), "base_revision": _rev(doc)})
 
 
-@route("GET", r"/api/v2/projects/" + _NAME + r"/racks/(?P<rack>" + _EID + r")\.svg", role="viewer", summary="Rack elevation SVG (?face=front|rear)", tags=["schedules"], page="file")
+@route("GET", r"/api/v2/projects/" + _NAME + r"/racks/(?P<rack>" + _EID + r")\.svg", role="viewer",
+       summary="Rack elevation SVG (?face=front|rear|both, ?images=1 embeds device images, ?annotate=<field> adds a label column)", tags=["schedules"], page="file")
 def r_rack_svg(req: Request) -> Response:
     from .racks import rack_svg
 
@@ -2668,11 +2681,221 @@ def r_rack_svg(req: Request) -> Response:
     if not any(isinstance(r, dict) and r.get("id") == rid for r in doc.get("racks") or []):
         raise ApiError(404, "rack not found")
     face = req.query.get("face") or "front"
-    if face not in ("front", "rear"):
-        raise ApiError(400, "face must be front or rear")
-    r = Response.text(rack_svg(doc, rid, face=face), "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
+    if face not in ("front", "rear", "both"):
+        raise ApiError(400, "face must be front, rear or both")
+    annotate = req.query.get("annotate") or None
+    if annotate is not None and annotate not in RACK_ANNOTATIONS:
+        raise ApiError(400, f"annotate must be one of {', '.join(RACK_ANNOTATIONS)}", "bad_enum")
+    try:
+        text = rack_svg(doc, rid, face=face, images=req.query.get("images") == "1", annotate=annotate, base_url="")
+    except TypeError:
+        if face == "both":
+            raise ApiError(501, "not available")
+        text = rack_svg(doc, rid, face=face)
+    r = Response.text(text, "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
     r.csp = FILE_CSP
     return r
+
+
+# ---- racks: Rackula features (§5, contract E)
+
+RACK_ANNOTATIONS = ("name", "model", "ip", "serial", "asset_tag", "code", "power", "weight", "status")
+
+
+def _engine(module: str, name: str) -> Callable[..., Any]:
+    """``fathom.<module>.<name>``, or 501 while that engine is not installed."""
+    import importlib
+
+    full = f"{__package__}.{module}"
+    try:
+        mod = importlib.import_module(full)
+    except ImportError as exc:
+        if getattr(exc, "name", None) not in (full, f"{__package__}.{module.rsplit('.', 1)[0]}"):
+            _log_exc(f"{full} failed to import")
+        raise ApiError(501, "not available")
+    fn = getattr(mod, name, None)
+    if not callable(fn):
+        raise ApiError(501, "not available")
+    return fn
+
+
+def _rack_or_404(doc: Dict[str, Any], rack_id: str) -> Dict[str, Any]:
+    for r in doc.get("racks") or []:
+        if isinstance(r, dict) and r.get("id") == rack_id:
+            return r
+    raise ApiError(404, f"rack '{rack_id}' not found")
+
+
+def _valid_share(pdir: Path, token: str) -> bool:
+    return bool(token) and _share_lookup(token)[0] == pdir.name
+
+
+def _rack_apply(req: Request, pdir: Path, body: Dict[str, Any], ops: Any, summary: str, source: str) -> Dict[str, Any]:
+    """Commit server-built ops like ``POST …/changes``: on ``base_revision`` (rebased or 409 on conflict), one history entry."""
+    if body.get("base_revision") is None:
+        raise ApiError(428, "base_revision is required", "precondition_required")
+    if not isinstance(ops, list):
+        raise ApiError(500, "engine returned no ops list")
+    return _changes(req, pdir, ops, _int(body.get("base_revision"), -1), summary, source)
+
+
+@route("GET", r"/p/" + _NAME + r"/rk/(?P<rack>" + _EID + ")", role="viewer", summary="Viewer: rack page (front + rear elevation, totals, device list, QR; ?share=<token> carried on links)",
+       tags=["viewer"], page="viewer")
+def r_view_rack(req: Request) -> Response:
+    pdir, doc = _viewer_project(req)
+    rid = req.params["rack"]
+    _rack_or_404(doc, rid)
+    page = _engine("render_rack", "rack_page_html")
+    share = req.query.get("share") or ""
+    if not _valid_share(pdir, share):
+        m = re.match(r"^/s/(sh-[A-Za-z0-9_-]+)", req.path)
+        share = m.group(1) if m and _valid_share(pdir, m.group(1)) else ""
+    try:
+        html = page(doc, pdir.name, rid, base=req.script_root + "/", share=share, link_style="viewer")
+    except KeyError:
+        raise ApiError(404, f"rack '{rid}' not found")
+    return _viewer_html(html)
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/qr/rack/(?P<rack>" + _EID + r")\.svg", role="viewer",
+       summary="QR code SVG for the public rack page (?share=<token> to encode a share link, ?ecl=, ?scale=)", tags=["schedules"], page="file")
+def r_qr_rack(req: Request) -> Response:
+    from .qr import svg
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    rid = req.params["rack"]
+    _rack_or_404(doc, rid)
+    base = _public_base(req, doc)
+    if not base:
+        raise ApiError(409, "no public URL is known (set settings.public_url or FATHOM_PUBLIC_URL)", "no_public_url")
+    ecl = (req.query.get("ecl") or "M").upper()
+    if ecl not in ("L", "M", "Q", "H"):
+        raise ApiError(400, "ecl must be L, M, Q or H")
+    token = req.query.get("share") or ""
+    if token:
+        shares = _read_shares(pdir)
+        if token not in shares:
+            raise ApiError(404, "share link not found", "share_missing")
+        if not _share_allows(shares[token], f"rk/{rid}"):
+            raise ApiError(409, "this share link only opens procedures", "share_scope")
+        url = f"{base}/s/{quote(token)}/rk/{quote(rid)}"
+    else:
+        url = f"{base}/p/{quote(pdir.name)}/rk/{quote(rid)}"
+    r = Response.text(svg(url, ecl=ecl, scale=_int(req.query.get("scale"), 4, 1, 40)), "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
+    r.csp = FILE_CSP
+    return r
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/racks/(?P<rack>" + _EID + ")/totals", role="viewer",
+       summary="Rack totals: U used/free, weight vs max load, power vs limit, device and item counts", tags=["racks"])
+def r_rack_totals(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    rid = req.params["rack"]
+    _rack_or_404(doc, rid)
+    totals = _engine("racks", "rack_totals")
+    try:
+        return Response.json(totals(doc, rid))
+    except KeyError:
+        raise ApiError(404, f"rack '{rid}' not found")
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/racks/import", role="editor",
+       summary="Import a Rackula layout ({text} YAML/JSON, {zip_b64} .Rackula.zip or {url} share link): preview, or apply with apply + base_revision",
+       tags=["racks"], body="RackImport")
+def r_rack_import(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    body = req.json()
+    payload = {k: body[k] for k in ("text", "zip_b64", "url") if isinstance(body.get(k), str) and body[k].strip()}
+    if not payload:
+        raise ApiError(400, "send text, zip_b64 or url")
+    preview = _engine("parsers.rackula", "preview")
+    doc, _ = _load(pdir)
+    try:
+        res = preview(doc, payload)
+    except ValueError as exc:
+        raise ApiError(422, f"could not read the Rackula layout: {exc}", "invalid")
+    if not body.get("apply"):
+        return Response.json(res)
+    ops = res.get("ops")
+    warnings = res.get("warnings") or []
+    if isinstance(ops, list) and not ops:
+        if body.get("base_revision") is None:
+            raise ApiError(428, "base_revision is required", "precondition_required")
+        return Response.json({"revision": _rev(doc), "applied": 0, "warnings": warnings})
+    out = _rack_apply(req, pdir, body, ops, "Import from Rackula", "import")
+    return Response.json({"revision": out["revision"], "applied": len(ops), "warnings": warnings}, headers={"ETag": f'"r{out["revision"]}"'})
+
+
+@route("GET", "/api/v2/rack-templates", role="viewer", summary="Starter rack templates (id, name, description, units, width_in, form_factor)", tags=["racks"])
+def r_rack_templates(req: Request) -> Response:
+    return Response.json({"templates": _engine("rack_templates", "list_templates")()})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/racks/from-template", role="editor",
+       summary="Create a rack (with placeholder devices and accessories) from a starter template", tags=["racks"], body="RackFromTemplate")
+def r_rack_from_template(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    body = req.json()
+    tid = body.get("template")
+    if not isinstance(tid, str) or not tid:
+        raise ApiError(400, "template is required")
+    room = str(body.get("room") or "")
+    apply_ops = _engine("rack_templates", "apply_ops")
+    doc, _ = _load(pdir)
+    if room:
+        _room_or_404(doc, room)
+    try:
+        res = apply_ops(doc, tid, name=str(body.get("name") or ""), room=room, location=str(body.get("location") or ""))
+    except KeyError:
+        raise ApiError(404, f"rack template '{tid}' not found")
+    out = _rack_apply(req, pdir, body, res.get("ops"), f"Added rack from template {tid}", "changes")
+    return Response.json({"revision": out["revision"], "rack": res.get("rack_id")}, 201, headers={"ETag": f'"r{out["revision"]}"'})
+
+
+@route("POST", "/api/v2/library/import/netbox", role="editor", summary="Save a NetBox device-type YAML as a global custom template ({text, override?})",
+       tags=["library"], body="NetboxImport")
+def r_library_import_netbox(req: Request) -> Response:
+    from .library import save_custom_template, validate_template
+
+    body = req.json()
+    text = body.get("text")
+    if not isinstance(text, str) or not text.strip():
+        raise ApiError(400, "text is required")
+    to_template = _engine("parsers.netbox_devicetype", "to_template")
+    try:
+        t = to_template(text)
+    except ValueError as exc:
+        raise ApiError(422, f"could not read the NetBox device type: {exc}", "invalid")
+    problems = validate_template(t)
+    if problems:
+        raise ApiError(422, "template is not valid", "invalid", {"problems": [{"level": "error", "code": "invalid", "ref": "", "path": "", "message": str(p)} for p in problems]})
+    override = body.get("override") is True or req.query.get("override") == "1"
+    if str(t.get("id")) in _builtin_ids() and not override:
+        raise ApiError(409, "a built-in template has this id; pass override to shadow it", "exists")
+    try:
+        save_custom_template(t, override=override)
+    except FileExistsError as exc:
+        raise ApiError(409, str(exc), "exists")
+    return Response.json(t, 201)
+
+
+@route("GET", r"/api/v2/library/(?P<tid>[A-Za-z0-9][A-Za-z0-9._-]{0,127})/netbox\.yaml", role="viewer",
+       summary="A template as NetBox device-type YAML (?project= for project templates)", tags=["library"], page="file")
+def r_library_netbox(req: Request) -> Response:
+    from .library import get_template
+
+    tid = req.params["tid"]
+    t = get_template(tid, doc=_doc_for_query(req))
+    if t is None:
+        raise ApiError(404, "template not found")
+    text = _engine("parsers.netbox_devicetype", "from_template")(t)
+    fname = _safe_filename(tid + ".yaml")
+    return Response.text(text, "application/yaml; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+# ---- end racks: Rackula features
 
 
 @route("GET", r"/api/v2/projects/" + _NAME + r"/qr/(?P<device>" + _EID + r")\.svg", role="viewer", summary="QR code SVG for a device page", tags=["schedules"], page="file")
