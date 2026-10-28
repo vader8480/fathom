@@ -294,5 +294,388 @@ class StarterAsTemplate(unittest.TestCase):
             self.assertEqual(jbody(b)["doc"]["rooms"][0]["id"], "chpl")
 
 
+# ---------------------------------------------------------------- user starters (phase6 P6A, FR-ROOM-11)
+
+
+class RoomExtraction(unittest.TestCase):
+    """``room_to_starter_doc``: the room's slice of campus-demo, cross-room cables and attachments dropped, inventory cleared."""
+
+    def setUp(self):
+        self.schema = requires("schema")
+        self.starters = requires("starters")
+
+    def test_main_room_slice_validates_and_keeps_ids(self):
+        base = _campus()
+        out, info = self.starters.room_to_starter_doc(base, "main", "Big room")
+        self.assertEqual(len(base["rooms"]), 3, "the input doc is not modified")
+        self.assertEqual(_errors(self.schema.validate_doc(out)), [], fr("FR-ROOM-11", "3.1", "the extracted doc validates"))
+        self.assertEqual([r["id"] for r in out["rooms"]], ["main"], "ids are kept; merge_room re-prefixes on use")
+        self.assertEqual(out["settings"]["default_room"], "main")
+        self.assertEqual(out["meta"]["title"], "Main Auditorium")
+        self.assertEqual(out["meta"]["description"], "Big room")
+        self.assertEqual(out["meta"]["org"], base["meta"]["org"])
+        self.assertEqual([v["id"] for v in out["venues"]], ["riverside"])
+        src_devs = [d for d in base["devices"] if d.get("room") == "main"]
+        self.assertEqual(info["devices"], len(src_devs))
+        self.assertEqual({d["id"] for d in out["devices"]}, {d["id"] for d in src_devs})
+        for coll in ("systems", "racks"):
+            self.assertTrue(all(e["room"] == "main" for e in out[coll]), coll)
+        self.assertEqual(out["attachments"], [], "attachments are never copied")
+        self.assertEqual(out["floorplans"], [], "a floor plan whose image is a file goes with the file")
+        self.assertEqual(out["problems"], [])
+        self.assertEqual(out["scenes"], [])
+        self.assertEqual(out["imports"], [])
+
+    def test_cables_need_both_ends_in_the_room(self):
+        base = _campus()
+        out, info = self.starters.room_to_starter_doc(base, "main")
+        main_ids = {d["id"] for d in base["devices"] if d.get("room") == "main"}
+        both = [c for c in base["cables"] if c["from"]["device"] in main_ids and c["to"]["device"] in main_ids]
+        one = [c for c in base["cables"] if (c["from"]["device"] in main_ids) != (c["to"]["device"] in main_ids)]
+        self.assertTrue(one, "campus-demo has cross-room cables to test with")
+        self.assertEqual(info["cables"], len(both))
+        self.assertEqual(info["dropped_cables"], len(one), fr("FR-ROOM-11", "5.6", "cables with one end elsewhere are dropped and counted"))
+        kept = {c["id"] for c in out["cables"]}
+        self.assertTrue(all(c["id"] in kept for c in both))
+        self.assertFalse(any(c["id"] in kept for c in one))
+        bundle_ids = {b["id"] for b in out["bundles"]}
+        self.assertTrue(all(c.get("bundle") in bundle_ids for c in out["cables"] if c.get("bundle")), "kept cables only reference kept bundles")
+        self.assertTrue(all(any(c.get("bundle") == b for c in out["cables"]) for b in bundle_ids), "bundles without members are dropped")
+
+    def test_attachments_dropped_and_counted(self):
+        base = _campus()
+        main_ids = {d["id"] for d in base["devices"] if d.get("room") == "main"}
+        fps = [f for f in base["floorplans"] if f["room"] == "main"]
+        refs = set()
+        for f in fps:
+            for k in ("source", "image"):
+                if isinstance(f.get(k), dict) and f[k].get("attachment"):
+                    refs.add(f[k]["attachment"])
+        refs |= {a["id"] for a in base["attachments"] if a.get("device") in main_ids}
+        for p in base["pages"]:
+            if "main" in (p.get("rooms") or []):
+                refs |= set(p.get("attachments") or [])
+        self.assertTrue(refs, "campus-demo has files attached to the main room")
+        out, info = self.starters.room_to_starter_doc(base, "main")
+        self.assertEqual(info["dropped_files"], len(refs), fr("FR-ROOM-11", "5.6", "each attachment left behind counts once"))
+        self.assertTrue(all(not p.get("attachments") for p in out["pages"]))
+        # a floor plan without a file keeps only the markers of kept devices
+        doc = json.loads(json.dumps(base))
+        doc["floorplans"].append({"id": "fp-sketch", "name": "Sketch", "room": "main", "source": {"kind": "svg"}, "image": {"kind": "svg", "width": 10, "height": 10},
+                                  "markers": [{"device": "foh-cl5", "x": 0.5, "y": 0.5}, {"device": "chapel-mixer", "x": 0.1, "y": 0.1}]})
+        out2, _ = self.starters.room_to_starter_doc(doc, "main")
+        fp = [f for f in out2["floorplans"] if f["id"] == "fp-sketch"]
+        self.assertEqual(len(fp), 1)
+        self.assertEqual([m["device"] for m in fp[0]["markers"]], ["foh-cl5"])
+
+    def test_inventory_status_and_codes_are_cleared(self):
+        base = _campus()
+        dev = [d for d in base["devices"] if d.get("room") == "main"][0]
+        dev["status"] = "installed"
+        dev["code"] = "A1"
+        dev["short_code"] = "ABCD2345"
+        dev["inventory"] = {"serial": "SN-1", "asset_tag": "AT-1", "price": 999, "cost": 999.5, "condition": "good", "firmware": "1.2"}
+        out, _ = self.starters.room_to_starter_doc(base, "main")
+        x = [d for d in out["devices"] if d["id"] == dev["id"]][0]
+        self.assertEqual(x["status"], "planned", fr("FR-ROOM-11", "3.1", "templates are not inventories"))
+        self.assertNotIn("code", x)
+        self.assertNotIn("short_code", x)
+        self.assertEqual(x["inventory"], {"condition": "good", "firmware": "1.2"})
+        self.assertTrue(all(d["status"] == "planned" and "short_code" not in d for d in out["devices"]))
+
+    def test_pages_networks_templates_follow_the_room(self):
+        base = _campus()
+        out, info = self.starters.room_to_starter_doc(base, "chapel")
+        self.assertEqual(_errors(self.schema.validate_doc(out)), [])
+        self.assertEqual([p["slug"] for p in out["pages"]], ["chapel-pre-service"])
+        self.assertEqual(out["pages"][0]["rooms"], ["chapel"])
+        chapel_ids = {d["id"] for d in out["devices"]}
+        used = {i.get("network") for d in out["devices"] for i in d.get("interfaces") or [] if i.get("network")}
+        self.assertEqual({n["id"] for n in out["networks"]}, used, "only networks kept devices use are copied")
+        self.assertEqual(info["networks"], len(used))
+        tpls = {d.get("template") for d in out["devices"] if d.get("template")}
+        self.assertEqual({t["id"] for t in out["templates"]}, {t["id"] for t in base["templates"] if t["id"] in tpls})
+        self.assertTrue(all(x in chapel_ids for p in out["pages"] for x in p.get("devices") or []), "page device links point at kept devices")
+
+    def test_unknown_room(self):
+        with self.assertRaises(self.starters.StarterError) as cm:
+            self.starters.room_to_starter_doc(_campus(), "nope")
+        self.assertEqual(cm.exception.code, "not_found")
+
+
+class UserStarterStore(unittest.TestCase):
+    """``save_starter`` / ``delete_starter`` / ``list_starters`` on ``FATHOM_DATA/starters``: ids, dedupe, replace, bundled protection, lock, corrupt entries."""
+
+    def setUp(self):
+        self.schema = requires("schema")
+        self.starters = requires("starters")
+
+    def test_save_lists_loads_merges_and_deletes(self):
+        with temp_data_dir() as data:
+            entry, info = self.starters.save_starter(_campus(), "main", "  Main Auditorium ", "Big room", ["Audio", "video", "x y", "audio"], author="ada", source_project="campus")
+            self.assertEqual(entry["id"], "user-main-auditorium", fr("FR-ROOM-11", "5.6", "id = user-<slug(label)>"))
+            self.assertEqual(entry["source"], "user")
+            self.assertEqual(entry["label"], "Main Auditorium")
+            self.assertEqual(entry["tags"], ["audio", "video", "x-y"])
+            self.assertEqual(entry["room"], "main")
+            self.assertEqual(entry["room_name"], "Main Auditorium")
+            self.assertEqual(entry["devices"], info["devices"])
+            self.assertEqual(entry["created_by"], "ada")
+            self.assertEqual(entry["source_project"], "campus")
+            sdir = data / "starters" / "user-main-auditorium"
+            self.assertTrue((sdir / "starter.json").is_file() and (sdir / "project.json").is_file())
+            self.assertTrue((data / "starters" / ".lock").exists(), "writes go under FATHOM_DATA/starters/.lock")
+            meta = json.loads((sdir / "starter.json").read_text(encoding="utf-8"))
+            self.assertEqual(set(meta), {"id", "label", "blurb", "room", "tags", "created", "created_by", "source_project", "source_room"})
+            self.assertEqual(meta["source_room"], "main")
+            rows = self.starters.list_starters()
+            self.assertEqual([r["id"] for r in rows], STARTER_IDS + ["user-main-auditorium"], "bundled first, then user starters")
+            self.assertEqual([r["source"] for r in rows], ["bundled"] * 5 + ["user"])
+            self.assertEqual(self.starters.get_starter("user-main-auditorium")["room"], "main")
+            self.assertEqual(self.starters.get_starter("church-chapel")["source"], "bundled")
+            doc = self.starters.load_starter_doc("user-main-auditorium")
+            self.assertEqual(_errors(self.schema.validate_doc(doc)), [])
+            # merge_room accepts the user id transparently and the result validates
+            merged, minfo = self.starters.merge_room(_campus(), "user-main-auditorium", "Second hall")
+            self.assertEqual(minfo["room"], "second-hall")
+            self.assertEqual(minfo["devices"], info["devices"])
+            self.assertEqual(_errors(self.schema.validate_doc(merged)), [])
+            self.assertTrue(all(d["id"].startswith("second-hall-") for d in merged["devices"] if d["room"] == "second-hall"))
+            self.starters.delete_starter("user-main-auditorium")
+            self.assertFalse(sdir.exists())
+            self.assertEqual([r["id"] for r in self.starters.list_starters()], STARTER_IDS)
+            self.assertIsNone(self.starters.get_starter("user-main-auditorium"))
+            with self.assertRaises(self.starters.StarterError) as cm:
+                self.starters.load_starter_doc("user-main-auditorium")
+            self.assertEqual(cm.exception.code, "not_found")
+
+    def test_exists_dedupe_replace_and_bundled(self):
+        with temp_data_dir():
+            base = _campus()
+            self.starters.save_starter(base, "main", "Hall")
+            with self.assertRaises(self.starters.StarterError) as cm:
+                self.starters.save_starter(base, "main", "Hall")
+            self.assertEqual(cm.exception.code, "exists")
+            e2, _ = self.starters.save_starter(base, "main", "Hall", dedupe=True)
+            self.assertEqual(e2["id"], "user-hall-2", fr("FR-ROOM-11", "5.6", "deduped with -2, -3…"))
+            e3, _ = self.starters.save_starter(base, "main", "Hall", dedupe=True)
+            self.assertEqual(e3["id"], "user-hall-3")
+            e4, _ = self.starters.save_starter(base, "chapel", "Hall", "now the chapel", replace=True)
+            self.assertEqual(e4["id"], "user-hall")
+            self.assertEqual(e4["room"], "chapel")
+            self.assertEqual(e4["blurb"], "now the chapel")
+            self.assertEqual(self.starters.load_starter_doc("user-hall")["rooms"][0]["id"], "chapel")
+            for code, kw in (("bundled", {"starter_id": "church-chapel"}), ("bad_id", {"starter_id": "hall"}), ("missing_field", {})):
+                with self.assertRaises(self.starters.StarterError) as cm:
+                    self.starters.save_starter(base, "main", "" if code == "missing_field" else "Hall", replace=True, **kw)
+                self.assertEqual(cm.exception.code, code)
+            with self.assertRaises(self.starters.StarterError) as cm:
+                self.starters.delete_starter("church-chapel")
+            self.assertEqual(cm.exception.code, "bundled", fr("FR-ROOM-11", "5.6", "bundled starters cannot be deleted"))
+            self.assertTrue((SAMPLES / "church-chapel" / "project.json").is_file())
+            with self.assertRaises(self.starters.StarterError) as cm:
+                self.starters.delete_starter("user-nope")
+            self.assertEqual(cm.exception.code, "not_found")
+            with self.assertRaises(self.starters.StarterError):
+                self.starters.delete_starter("../projects")
+
+    def test_corrupt_user_starters_are_skipped(self):
+        with temp_data_dir() as data:
+            self.starters.save_starter(_campus(), "main", "Good")
+            bad = data / "starters" / "user-bad"
+            bad.mkdir(parents=True)
+            (bad / "starter.json").write_text("{not json", encoding="utf-8")
+            (bad / "project.json").write_text("{}", encoding="utf-8")
+            nometa = data / "starters" / "user-nometa"
+            nometa.mkdir()
+            (nometa / "project.json").write_text("{}", encoding="utf-8")
+            (data / "starters" / "Not-A-Starter").mkdir()
+            self.assertEqual([r["id"] for r in self.starters.list_starters()], STARTER_IDS + ["user-good"], fr("FR-ROOM-11", "5.6", "corrupt entries are skipped"))
+            for sid in ("user-bad", "user-nometa", "user-missing"):
+                self.assertIsNone(self.starters.get_starter(sid))
+                with self.assertRaises(self.starters.StarterError) as cm:
+                    self.starters.load_starter_doc(sid)
+                self.assertEqual(cm.exception.code, "not_found", sid)
+                with self.assertRaises(self.starters.StarterError) as cm:
+                    self.starters.merge_room(_campus(), sid)
+            # a descriptor that parses but points at a corrupt doc
+            (bad / "starter.json").write_text(json.dumps({"id": "user-bad", "label": "Bad", "room": "main"}), encoding="utf-8")
+            (bad / "project.json").write_text("{nope", encoding="utf-8")
+            self.assertEqual([r["id"] for r in self.starters.list_starters()], STARTER_IDS + ["user-good"])
+            with self.assertRaises(self.starters.StarterError) as cm:
+                self.starters.starter_entry("user-bad")
+            self.assertEqual(cm.exception.code, "not_found")
+
+    def test_save_holds_the_starters_lock(self):
+        import threading
+
+        project = requires("project")
+        with temp_data_dir() as data:
+            root = data / "starters"
+            starters = self.starters
+            got = {}
+
+            def worker():
+                starters.save_starter(_campus(), "chapel", "Locked")
+                got["done"] = True
+
+            with project.project_lock(root):
+                t = threading.Thread(target=worker)
+                t.start()
+                t.join(0.6)
+                self.assertTrue(t.is_alive(), fr("FR-ROOM-11", "5.6", "save_starter waits for FATHOM_DATA/starters/.lock"))
+                self.assertFalse(got)
+            t.join(10)
+            self.assertTrue(got.get("done"))
+            self.assertEqual(self.starters.get_starter("user-locked")["room"], "chapel")
+
+
+class UserStarterRoutes(unittest.TestCase):
+    """``POST …/rooms/<room>/save-starter``, ``GET`` / ``DELETE /api/v2/starters/<id>``; roles."""
+
+    def setUp(self):
+        requires("server")
+        self.app = get_app()
+
+    def test_save_get_list_merge_delete(self):
+        with temp_data_dir() as data:
+            install_project(data, "proj", src_dir=CAMPUS_DIR)
+            body = {"label": "Main hall", "blurb": "Our big room", "tags": ["audio", "video"]}
+            st, _, b = call(self.app, "POST", "/api/v2/projects/proj/rooms/main/save-starter", body, JSON_H)
+            self.assertEqual(st, 201, b[:300])
+            out = jbody(b)
+            self.assertEqual(set(out), {"starter", "dropped_cables", "dropped_files"}, fr("FR-ROOM-11", "5.6", "201 body"))
+            s = out["starter"]
+            self.assertEqual(s["id"], "user-main-hall")
+            self.assertEqual(s["source"], "user")
+            self.assertEqual(s["tags"], ["audio", "video"])
+            self.assertEqual(s["source_project"], "proj")
+            self.assertEqual(s["source_room"], "main")
+            self.assertGreater(out["dropped_cables"], 0)
+            self.assertGreater(out["dropped_files"], 0)
+            self.assertTrue((data / "starters" / "user-main-hall" / "project.json").is_file())
+            # GET one (user and bundled)
+            st, _, b = call(self.app, "GET", "/api/v2/starters/user-main-hall")
+            self.assertEqual(st, 200)
+            self.assertEqual(jbody(b)["starter"]["devices"], s["devices"])
+            st, _, b = call(self.app, "GET", "/api/v2/starters/church-chapel")
+            self.assertEqual(st, 200)
+            self.assertEqual(jbody(b)["starter"]["source"], "bundled")
+            st, _, b = call(self.app, "GET", "/api/v2/starters/user-nope")
+            self.assertEqual(st, 404)
+            st, _, b = call(self.app, "GET", "/api/v2/starters")
+            rows = jbody(b)["starters"]
+            self.assertEqual([r["id"] for r in rows], STARTER_IDS + ["user-main-hall"])
+            # the project revision did not move: saving a starter is not a project write
+            st, _, b = call(self.app, "GET", "/api/v2/projects/proj/history?limit=1")
+            self.assertEqual(jbody(b)["revisions"], [])
+            # from-starter accepts the user id
+            st, _, b = call(self.app, "POST", "/api/v2/projects/proj/rooms/from-starter", {"starter": "user-main-hall", "name": "Hall two"}, JSON_H)
+            self.assertEqual(st, 201, b[:300])
+            self.assertEqual(jbody(b)["room"], "hall-two")
+            self.assertEqual(jbody(b)["info"]["devices"], s["devices"])
+            st, _, b = call(self.app, "GET", "/api/v2/projects/proj/history?limit=1")
+            self.assertEqual(jbody(b)["revisions"][0]["summary"], "Added room Hall two from starter Main hall")
+            # exists → 409, replace → 201 with the same id
+            st, _, b = call(self.app, "POST", "/api/v2/projects/proj/rooms/chapel/save-starter", {"label": "Main hall"}, JSON_H)
+            self.assertEqual(st, 409)
+            self.assertEqual(jbody(b)["code"], "exists")
+            st, _, b = call(self.app, "POST", "/api/v2/projects/proj/rooms/chapel/save-starter", {"label": "Main hall", "replace": True}, JSON_H)
+            self.assertEqual(st, 201, b[:300])
+            self.assertEqual(jbody(b)["starter"]["room"], "chapel")
+            # bundled ids can never be replaced
+            st, _, b = call(self.app, "POST", "/api/v2/projects/proj/rooms/chapel/save-starter", {"label": "Chapel", "id": "church-chapel", "replace": True}, JSON_H)
+            self.assertEqual(st, 409)
+            self.assertEqual(jbody(b)["code"], "bundled")
+            # 400 empty label / bad tags, 404 unknown room / project
+            st, _, b = call(self.app, "POST", "/api/v2/projects/proj/rooms/main/save-starter", {"label": "  "}, JSON_H)
+            self.assertEqual(st, 400)
+            self.assertEqual(jbody(b)["code"], "missing_field")
+            st, _, b = call(self.app, "POST", "/api/v2/projects/proj/rooms/main/save-starter", {"label": "x", "tags": "audio"}, JSON_H)
+            self.assertEqual(st, 400)
+            st, _, b = call(self.app, "POST", "/api/v2/projects/proj/rooms/nope/save-starter", {"label": "x"}, JSON_H)
+            self.assertEqual(st, 404)
+            st, _, b = call(self.app, "POST", "/api/v2/projects/nope/rooms/main/save-starter", {"label": "x"}, JSON_H)
+            self.assertEqual(st, 404)
+            # CSRF guard
+            st, _, b = call(self.app, "POST", "/api/v2/projects/proj/rooms/main/save-starter", '{"label": "x"}', {"Content-Type": "text/plain"})
+            self.assertEqual(st, 403)
+            # DELETE: 409 bundled, 204 user, 404 after
+            st, _, b = call(self.app, "DELETE", "/api/v2/starters/church-chapel", None, JSON_H)
+            self.assertEqual(st, 409)
+            self.assertEqual(jbody(b)["code"], "bundled")
+            st, _, b = call(self.app, "DELETE", "/api/v2/starters/user-main-hall", None, JSON_H)
+            self.assertEqual(st, 204, b[:200])
+            self.assertFalse((data / "starters" / "user-main-hall").exists())
+            st, _, b = call(self.app, "DELETE", "/api/v2/starters/user-main-hall", None, JSON_H)
+            self.assertEqual(st, 404)
+            st, _, b = call(self.app, "GET", "/api/v2/starters")
+            self.assertEqual([r["id"] for r in jbody(b)["starters"]], STARTER_IDS)
+
+    def test_roles_editor_saves_admin_deletes(self):
+        from fathom.users import add_user
+
+        with temp_data_dir(FATHOM_AUTH="1") as data:
+            install_project(data, "proj", src_dir=CAMPUS_DIR)
+            add_user("v", "viewer-password-1", "viewer")
+            add_user("e", "editor-password-1", "editor")
+            add_user("a", "admin-password-01", "admin")
+            from _helpers import basic  # type: ignore
+            v, e, a = basic("v", "viewer-password-1"), basic("e", "editor-password-1"), basic("a", "admin-password-01")
+            st, _, b = call(self.app, "POST", "/api/v2/projects/proj/rooms/main/save-starter", {"label": "Hall"}, dict(JSON_H, **v))
+            self.assertEqual(st, 403, fr("FR-ROOM-11", "5.6", "viewers cannot save"))
+            st, _, b = call(self.app, "POST", "/api/v2/projects/proj/rooms/main/save-starter", {"label": "Hall"}, dict(JSON_H, **e))
+            self.assertEqual(st, 201, b[:200])
+            self.assertEqual(jbody(b)["starter"]["created_by"], "e")
+            st, _, b = call(self.app, "GET", "/api/v2/starters/user-hall", None, v)
+            self.assertEqual(st, 200, "viewers can read")
+            st, _, b = call(self.app, "DELETE", "/api/v2/starters/user-hall", None, dict(JSON_H, **e))
+            self.assertEqual(st, 403, fr("FR-ROOM-11", "5.6", "only admins delete"))
+            st, _, b = call(self.app, "DELETE", "/api/v2/starters/user-hall", None, dict(JSON_H, **a))
+            self.assertEqual(st, 204)
+
+    def test_openapi_has_the_schemas_and_routes(self):
+        st, _, b = call(self.app, "GET", "/api/openapi.json")
+        spec = jbody(b)
+        for name in ("StarterSave", "StarterInfo"):
+            self.assertIn(name, spec["components"]["schemas"])
+        self.assertIn("post", spec["paths"]["/api/v2/projects/{name}/rooms/{room}/save-starter"])
+        self.assertEqual(set(spec["paths"]["/api/v2/starters/{starter}"]), {"get", "delete"})
+
+
+class UserStarterCli(unittest.TestCase):
+    def test_new_project_from_user_starter_and_starters_listing(self):
+        import io
+        from contextlib import redirect_stdout
+
+        cli = requires("cli")
+        project = requires("project")
+        schema = requires("schema")
+        starters = requires("starters")
+        with temp_data_dir():
+            starters.save_starter(_campus(), "chapel", "Our chapel", "small")
+            with redirect_stdout(io.StringIO()):
+                cli.main(["new", "fromstarter", "--template", "user-our-chapel", "--org", "St Mary"])
+            pdir = project.projects_root() / "fromstarter"
+            doc = json.loads((pdir / "project.json").read_text(encoding="utf-8"))
+            self.assertEqual(doc["rooms"][0]["id"], "chapel", fr("FR-ROOM-11", "5.6", "fathom new --template user-<slug>"))
+            self.assertEqual(doc["meta"]["org"], "St Mary")
+            self.assertEqual(_errors(schema.validate_doc(doc)), [])
+            self.assertTrue(all(d.get("short_code") for d in doc["devices"]), "short codes assigned on creation")
+            loaded, _ = project.load_project("fromstarter")
+            self.assertTrue(loaded.nodes)
+            with self.assertRaises(SystemExit):
+                cli.main(["new", "y", "--template", "user-nope"])
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                cli.main(["starters"])
+            lines = buf.getvalue().splitlines()
+            ids = [ln.split()[0] for ln in lines[1:-1]]
+            self.assertEqual(ids, STARTER_IDS + ["user-our-chapel"])
+            row = [ln for ln in lines if ln.startswith("user-our-chapel")][0].split()
+            self.assertEqual(row[1], "user")
+            self.assertEqual(row[-2:], [str(len(doc["devices"])), str(len(doc["cables"]))])
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
