@@ -100,10 +100,8 @@ def campus() -> Dict[str, Any]:
 
 
 def expected_order(doc: Dict[str, Any], rack_id: str) -> List[str]:
-    rack = next(r for r in doc["racks"] if r["id"] == rack_id)
+    """``u`` is the physical bottom RU for every numbering, so the top of the rack is the highest ``u + height - 1``."""
     placed = [p for p in racks.rack_devices(doc, rack_id) if p["u"] is not None]
-    if rack.get("numbering") == "top_down":
-        return [p["device"] for p in sorted(placed, key=lambda p: p["u"])]
     return [p["device"] for p in sorted(placed, key=lambda p: -(p["u"] + p["height"] - 1))]
 
 
@@ -151,14 +149,37 @@ class RackViewerPage(unittest.TestCase):
         self.assertIn("rear", first)
 
     def test_top_down_numbering_order(self) -> None:
+        # rk-bcast: 20U top_down, label = 20 - u + 1. bc-switch u19 → 2; bc-router u16+2U (RUs 16–17) → 4–5;
+        # bc-ultrix u14 → 7; bc-dsp u12 → 9; bc-control u10 → 11.
         rows = parse(self.page("rk-bcast")).rows("data-device")
-        self.assertEqual([r["attrs"]["data-device"] for r in rows], expected_order(self.doc, "rk-bcast"))
-        self.assertEqual(rows[0]["cells"][0], "U10")
+        ids = [r["attrs"]["data-device"] for r in rows]
+        self.assertEqual(ids, ["bc-switch", "bc-router", "bc-ultrix", "bc-dsp", "bc-control"])
+        self.assertEqual(ids, expected_order(self.doc, "rk-bcast"))
+        self.assertEqual([r["cells"][0] for r in rows], ["U2", "U4–5", "U7", "U9", "U11"])
+        rack = next(r for r in self.doc["racks"] if r["id"] == "rk-bcast")
+        self.assertEqual([r["cells"][0] for r in rows][2], "U" + racks.ru_label(rack, 14))
 
     def test_multi_u_span(self) -> None:
         rows = {r["attrs"]["data-device"]: r for r in parse(self.page("rk-amp")).rows("data-device")}
-        self.assertEqual(rows["rio-sl"]["cells"][0], "U18–22")
-        self.assertEqual(rows["amp-main"]["cells"][0], "U4–5")
+        self.assertEqual(rows["rio-sl"]["cells"][0], "U22–18", "top RU label first, as on the page")
+        self.assertEqual(rows["amp-main"]["cells"][0], "U5–4")
+
+    def test_start_u_labels(self) -> None:
+        foh = next(r for r in self.doc["racks"] if r["id"] == "rk-foh")
+        foh["start_u"] = 0
+        bc = next(r for r in self.doc["racks"] if r["id"] == "rk-bcast")
+        bc["start_u"] = 5
+        t = parse(self.page())
+        rows = t.rows("data-device")
+        self.assertEqual([r["cells"][0] for r in rows], ["U11", "U9", "U7", "U5", "U0"])
+        self.assertIn("12U · numbered bottom up from 0", " ".join(t.text))
+        items = {r["attrs"]["data-item"]: r["cells"][1] for r in t.rows("data-item")}
+        self.assertEqual(items, {"ri-3": "U10", "ri-1": "U2", "ri-2": "U1", "ri-4": "U1"})
+        svg_labels = [x for x in t.text if x.strip().isdigit()]
+        self.assertIn("0", svg_labels, "the elevation's RU labels start at start_u")
+        self.assertNotIn("12", svg_labels)
+        rows = parse(self.page("rk-bcast")).rows("data-device")
+        self.assertEqual([r["cells"][0] for r in rows], ["U6", "U8–9", "U11", "U13", "U15"])
 
     def test_device_links_build(self) -> None:
         with temp_env(FATHOM_PUBLIC_URL=None):
@@ -274,7 +295,7 @@ class RackViewerPage(unittest.TestCase):
                                        "power_w": 900, "power_limit_w": 1800, "devices": 6, "items": 4})
         with mock.patch.object(racks, "rack_totals", fake, create=True):
             html = self.page()
-        fake.assert_called_once_with(self.doc, "rk-foh")
+        self.assertIn(mock.call(self.doc, "rk-foh"), fake.call_args_list)
         self.assertRegex(html, r'class="rv-stat rv-over" data-stat="Weight"><div class="k">Weight</div><div class="v">212\.5 kg</div><div class="s">of 200 kg max load · over')
         self.assertRegex(html, r'class="rv-stat" data-stat="Power"><div class="k">Power</div><div class="v">900 W</div><div class="s">of 1800 W circuit limit<')
         self.assertIn("7 U used", html)
@@ -293,8 +314,7 @@ class RackViewerPage(unittest.TestCase):
             return f'<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg" data-face="{face}" width="380" height="300"><title>t</title></svg>'
 
         with mock.patch.object(racks, "rack_svg", fake_svg), \
-                mock.patch.object(racks, "ru_label", lambda rack, u: str(u + 99), create=True), \
-                mock.patch.object(racks, "ITEM_TYPES", [{"type": "vent", "label": "Vent (perforated)", "height": 1, "face": "front", "depth": "half"}], create=True):
+                mock.patch.object(racks, "ru_label", lambda rack, u: str(u + 99), create=True):
             html = self.page()
             build = self.page(base="", link_style="build")
         self.assertEqual(calls[:2], [{"face": "front", "images": True, "base_url": BASE}, {"face": "rear", "images": True, "base_url": BASE}])
@@ -302,20 +322,48 @@ class RackViewerPage(unittest.TestCase):
         self.assertNotIn("<?xml", html)
         rows = parse(html).rows("data-device")
         self.assertEqual(rows[0]["cells"][0], "U111")
-        self.assertIn("Vent (perforated)", html)
         self.assertNotIn("<?xml", build)
 
-    def test_shelf_children_listed(self) -> None:
-        def fake_devices(doc: Any, rack_id: str) -> List[Dict[str, Any]]:
-            out = [dict(p) for p in orig(doc, rack_id)]
-            if rack_id == "rk-foh":
-                out.append({"device": "iem-tx", "rack": "rk-foh", "u": 3, "height": 1, "face": "front", "side": "full", "depth": "full", "shelf": "ri-1", "slot": 1})
-            return out
+    def test_items_without_rack_items_use_item_types(self) -> None:
+        import types as _types
 
-        orig = racks.rack_devices
-        with mock.patch.object(racks, "rack_devices", fake_devices):
-            rows = {r["attrs"]["data-device"]: r["cells"] for r in parse(self.page()).rows("data-device")}
+        foh = next(r for r in self.doc["racks"] if r["id"] == "rk-foh")
+        old = _types.SimpleNamespace(ITEM_TYPES=[{"type": "vent", "label": "Vent (perforated)", "height": 1, "face": "front", "depth": "half"}])
+        got = render_rack._items(old, self.doc, foh, render_rack._item_table(old))
+        self.assertEqual([it["id"] for it in got], ["ri-1", "ri-2", "ri-3", "ri-4"])
+        self.assertEqual(got[2]["type_label"], "Vent (perforated)")
+        self.assertEqual(got[3]["face"], "rear")
+        real = render_rack._items(racks, self.doc, foh, render_rack._item_table(racks))
+        self.assertEqual([it["id"] for it in real], ["ri-1", "ri-2", "ri-3", "ri-4"], "raw ids, not item:<id>")
+        self.assertEqual([it["type_label"] for it in real], ["Shelf", "Blank panel", "Vent panel", "Lacing bar"])
+
+    def test_shelf_children_listed_and_drawn(self) -> None:
+        iem = next(d for d in self.doc["devices"] if d["id"] == "iem-tx")
+        iem["rack"] = {"id": "rk-foh", "u": 3, "height": 1, "face": "front", "side": "full", "shelf": "ri-1", "slot": 1}
+        self.assertEqual(racks.shelf_contents(self.doc, "rk-foh", "ri-1"), [{"slot": 0, "device": None}, {"slot": 1, "device": "iem-tx"}])
+        t = parse(self.page())
+        rows = {r["attrs"]["data-device"]: r["cells"] for r in t.rows("data-device")}
         self.assertIn("Shelf Laptop shelf · cell 2", rows["iem-tx"])
+        self.assertEqual(rows["iem-tx"][0], "U3")
+        ids = [r["attrs"]["data-device"] for r in t.rows("data-device")]
+        self.assertEqual(ids, ["sw-foh", "ulxd-main", "switcher", "ctrl-main", "iem-tx", "pdu-foh"])
+        child = [a for tag, a in t.tags if tag == "g" and a.get("data-device") == "iem-tx"]
+        self.assertTrue(child, "shelf child drawn in the elevation")
+        self.assertEqual((child[0].get("data-shelf"), child[0].get("data-slot")), ("ri-1", "1"))
+        self.assertIn("6 devices", " ".join(t.text))
+
+    def test_accessories_in_elevation(self) -> None:
+        t = parse(self.page())
+        by_face: Dict[str, List[str]] = {}
+        face = ""
+        for tag, a in t.tags:
+            if tag == "div" and a.get("class") == "rv-svg":
+                face = a.get("data-face", "")
+            if tag == "g" and a.get("data-item"):
+                by_face.setdefault(face, []).append(a["data-item"])
+        self.assertEqual(sorted(by_face.get("front", [])), ["ri-1", "ri-2", "ri-3"])
+        self.assertIn("ri-4", by_face.get("rear", []), "rear lacing bar on the rear face")
+        self.assertIn("ri-1", by_face.get("rear", []), "full-depth shelf shows from the rear too")
 
     def test_escaping(self) -> None:
         bad = "<script>alert(1)</script>"
@@ -421,6 +469,13 @@ class RackViewerScreenshots(unittest.TestCase):
     def test_desktop_and_phone(self) -> None:
         doc = campus()
         doc["settings"]["public_url"] = "https://av.example.org"
+        foh = next(r for r in doc["racks"] if r["id"] == "rk-foh")
+        foh.update(max_load_kg=60, power_limit_w=1800)
+        iem = next(d for d in doc["devices"] if d["id"] == "iem-tx")
+        iem["rack"] = {"id": "rk-foh", "u": 3, "height": 1, "face": "front", "side": "full", "shelf": "ri-1", "slot": 1}
+        for d in doc["devices"]:
+            if (d.get("rack") or {}).get("id") == "rk-foh":
+                d.update(weight_kg=11.5, power_w=180)
         html = rack_page_html(doc, "campus", "rk-foh", base="", link_style="build")
         out = _shot_dir()
         out.mkdir(parents=True, exist_ok=True)
