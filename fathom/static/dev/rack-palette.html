@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fathom harness · Rack library palette</title>
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/feedback.css">
+<link rel="stylesheet" href="../css/rack-palette.css">
+<style>
+  html, body { height: 100%; }
+  body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
+  .h-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 12px; padding-top: max(6px, env(safe-area-inset-top));
+    border-bottom: 1px solid var(--border); background: var(--panel); font-size: 12px; color: var(--muted); min-height: 44px; }
+  .h-bar b { color: var(--accent); letter-spacing: 1.2px; text-transform: uppercase; font-size: 11px; }
+  .h-bar .h-grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .h-main { flex: 1; min-height: 0; display: grid; grid-template-columns: 380px minmax(0, 1fr); }
+  #rpal-h-palette { min-height: 0; min-width: 0; border-right: 1px solid var(--border); }
+  .h-side { min-height: 0; overflow: auto; padding: 12px 16px; }
+  .h-side h2 { margin: 0 0 6px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  #rpal-h-log { margin: 0; padding: 0; list-style: none; font: 12px var(--mono); color: var(--muted); }
+  #rpal-h-log li { padding: 3px 0; border-bottom: 1px dashed var(--border); }
+  @media (max-width: 699px) {
+    .h-main { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) 96px; }
+    #rpal-h-palette { border-right: 0; border-bottom: 1px solid var(--border); }
+    .h-side { padding: 8px 12px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+  }
+</style>
+</head>
+<body data-rpal-harness>
+<header class="h-bar"><b>Harness</b><strong>Rack library palette</strong><span class="h-grow">rack-palette.js · stub library · ?api=0 · ?fail=1 · ?many=N</span><a class="chip" href="index.html">All harnesses</a></header>
+<main class="h-main">
+  <div id="rpal-h-palette"></div>
+  <aside class="h-side" aria-label="Harness log"><h2>Events</h2><ul id="rpal-h-log"></ul></aside>
+</main>
+<div id="fathom-live" class="sr-only" aria-live="polite"></div>
+<script type="application/json" id="rpal-h-data">
+{
+  "vocab": {"kinds": {
+    "power": {"label": "Power · UPS · PDU", "discipline": "power"},
+    "switch": {"label": "Network switches", "discipline": "network"},
+    "network": {"label": "Network", "discipline": "network"},
+    "computer": {"label": "Computers", "discipline": "audio"},
+    "stage_io": {"label": "Stage I/O", "discipline": "audio"},
+    "wireless_rx": {"label": "Wireless receivers", "discipline": "audio"},
+    "video_switcher": {"label": "Video switchers", "discipline": "video"},
+    "video_router": {"label": "Video routers", "discipline": "video"},
+    "patch_panel": {"label": "Patch panels · wall plates", "discipline": "other"},
+    "dmx_node": {"label": "DMX nodes · splitters", "discipline": "lighting"},
+    "other": {"label": "Other", "discipline": "other"}
+  }},
+  "library": {"templates": [
+    {"id": "generic-1u-server", "manufacturer": "Generic", "model": "1U Server", "name": "1U Server", "kind": "computer", "ru": 1, "source": "catalog", "rack_category": "server", "image_front": "_generic/server/1u-server.front.webp", "image_rear": "_generic/server/1u-server.rear.webp", "full_depth": true},
+    {"id": "apc-smt1500rmi2uc", "manufacturer": "APC", "model": "SMT1500RMI2UC", "name": "SMT1500RMI2UC", "part_number": "SMT1500RMI2UC", "kind": "power", "ru": 2, "source": "catalog", "rack_category": "power", "image_front": "apc/apc-smt1500rmi2uc.front.webp", "weight_kg": 26.4, "power_w": 1000},
+    {"id": "ubiquiti-usw-pro-48-poe", "manufacturer": "Ubiquiti", "model": "USW-Pro-48-PoE", "name": "USW-Pro-48-PoE", "kind": "switch", "ru": 1, "source": "catalog", "rack_category": "network"},
+    {"id": "netgear-gs724t", "manufacturer": "Netgear", "model": "GS724T", "name": "GS724T", "kind": "switch", "ru": 1, "source": "catalog", "rack_category": "network"},
+    {"id": "synology-rs822plus", "manufacturer": "Synology", "model": "RS822+", "name": "RS822+", "kind": "computer", "ru": 1, "source": "catalog", "rack_category": "storage"},
+    {"id": "dell-poweredge-r640", "manufacturer": "Dell", "model": "PowerEdge R640", "name": "PowerEdge R640", "kind": "computer", "ru": 1, "source": "catalog", "rack_category": "server"},
+    {"id": "ac-infinity-cloudplate-t7", "manufacturer": "AC Infinity", "model": "CLOUDPLATE T7", "name": "CLOUDPLATE T7", "kind": "other", "ru": 2, "source": "catalog", "rack_category": "cooling"},
+    {"id": "bmd-videohub-40x40-12g", "manufacturer": "Blackmagic Design", "model": "Smart Videohub 40x40 12G", "name": "Smart Videohub 40x40 12G", "kind": "video_router", "ru": 2, "source": "builtin"},
+    {"id": "yamaha-rio3224-d2", "manufacturer": "Yamaha", "model": "Rio3224-D2", "name": "Rio3224-D2", "kind": "stage_io", "ru": 5, "source": "builtin"},
+    {"id": "shure-ulxd4q", "manufacturer": "Shure", "model": "ULXD4Q", "name": "ULXD4Q", "kind": "wireless_rx", "ru": 1, "source": "builtin"},
+    {"id": "shure-blx88", "manufacturer": "Shure", "model": "BLX88", "name": "BLX88 (not rackable)", "kind": "wireless_rx", "ru": null, "source": "builtin"},
+    {"id": "enttec-storm-24", "manufacturer": "ENTTEC", "model": "Storm 24", "name": "Storm 24", "kind": "dmx_node", "ru": 1, "source": "extension"},
+    {"id": "church-patch-24", "manufacturer": "House", "model": "Patch 24", "name": "Stage patch 24", "kind": "patch_panel", "ru": 1, "source": "custom"},
+    {"id": "sanctuary-atem", "manufacturer": "Blackmagic Design", "model": "ATEM Constellation 8K", "name": "Sanctuary ATEM", "kind": "video_switcher", "ru": 2, "source": "project"},
+    {"id": "generic-ups", "manufacturer": "Generic", "model": "UPS", "name": "UPS", "kind": "power", "ru": 2, "source": "preset"}
+  ]},
+  "templates": {
+    "yamaha-rio3224-d2": {"id": "yamaha-rio3224-d2", "manufacturer": "Yamaha", "model": "Rio3224-D2", "name": "Rio3224-D2", "kind": "stage_io", "ru": 5, "dante": true, "routing": "indexed",
+      "ports": [{"group": "Analog In", "dir": "in", "medium": "analog", "connector": "XLR3F", "count": 32}, {"group": "Analog Out", "dir": "out", "medium": "analog", "connector": "XLR3M", "count": 16},
+        {"group": "AES Out", "dir": "out", "medium": "aes3", "connector": "XLR3M", "names": ["1/2", "3/4", "5/6", "7/8"], "channels": 2},
+        {"group": "Dante", "dir": "io", "medium": "dante", "connector": "etherCON", "names": ["Primary", "Secondary"], "channels": 32}]},
+    "netgear-gs724t": {"id": "netgear-gs724t", "manufacturer": "Netgear", "model": "GS724T", "name": "GS724T", "kind": "switch", "ru": 1, "rack_category": "network",
+      "ports": [{"group": "Port", "dir": "io", "medium": "network", "connector": "RJ45", "count": 24}, {"group": "SFP", "dir": "io", "medium": "fiber", "connector": "SFP", "count": 2}]}
+  },
+  "presets": [
+    {"id": "generic-ups", "label": "UPS", "group": "Power", "kind": "power", "ru": 2, "routing": "passthrough",
+      "ports": [{"group": "Mains In", "dir": "in", "medium": "power", "connector": "IEC C14"}, {"group": "Outlet", "dir": "out", "medium": "power", "connector": "IEC C13", "count": 6}, {"group": "Management", "dir": "io", "medium": "network", "connector": "RJ45"}]},
+    {"id": "generic-pdu", "label": "PDU", "group": "Power", "kind": "power", "ru": 1,
+      "ports": [{"group": "Mains In", "dir": "in", "medium": "power", "connector": "IEC C20"}, {"group": "Outlet", "dir": "out", "medium": "power", "connector": "IEC C13", "count": 8}]},
+    {"id": "generic-switch-24", "label": "24-port switch", "group": "Network & IT", "kind": "switch", "ru": 1,
+      "ports": [{"group": "Port", "dir": "io", "medium": "network", "connector": "RJ45", "count": 24}]}
+  ]
+}
+</script>
+<script type="module" src="../js/rack-palette.js"></script>
+</body>
+</html>

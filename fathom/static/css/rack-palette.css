@@ -1,0 +1,55 @@
+/* Rack library palette (docs/notes/rackula.md PAL): search, category chips, favourites / recent /
+   results rows. Fills its container (the host sizes it: a side panel at md/lg, a bottom sheet at sm).
+   Colours come from app.css; the swatches use the contract category colours via --rpal-c. */
+.rpal-root{display:flex;flex-direction:column;height:100%;min-height:0;min-width:0;background:var(--panel);color:var(--text)}
+.rpal-head{flex:none;display:flex;flex-direction:column;gap:8px;padding:10px 10px 8px;border-bottom:1px solid var(--border)}
+.rpal-search{width:100%;min-width:0;min-height:36px;box-sizing:border-box}
+.rpal-chips{display:flex;flex-wrap:wrap;gap:6px}
+.rpal-chips:empty{display:none}
+@media (pointer:coarse){
+  .rpal-chips{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .rpal-chips::-webkit-scrollbar{display:none}
+}
+.rpal-chip{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:2px 10px;border-radius:999px;background:transparent;color:var(--muted);font-size:12px;white-space:nowrap}
+.rpal-chip[aria-pressed=true]{color:var(--text);border-color:var(--border-2);background:rgba(142,162,255,.14)}
+.rpal-chip-n{font-size:11px;opacity:.75;font-variant-numeric:tabular-nums}
+.rpal-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--rpal-c,var(--muted));flex:none}
+
+.rpal-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:4px 0 12px}
+.rpal-sec + .rpal-sec{border-top:1px solid var(--border);margin-top:4px}
+.rpal-sec-title{display:flex;align-items:center;gap:8px;margin:0;padding:10px 12px 4px;font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+.rpal-count{font-weight:400;letter-spacing:0;font-variant-numeric:tabular-nums}
+.rpal-list{list-style:none;margin:0;padding:0}
+
+.rpal-row{display:flex;align-items:center;gap:10px;min-height:44px;padding:4px 8px 4px 12px;cursor:grab;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:pan-y;outline:none;border-left:2px solid transparent}
+.rpal-row:hover{background:rgba(255,255,255,.03)}
+.rpal-row:focus-visible,.rpal-row.rpal-active:focus-within{background:rgba(142,162,255,.1);border-left-color:var(--accent)}
+.rpal-row.rpal-dragging{opacity:.55;cursor:grabbing}
+.rpal-thumb{flex:none;width:56px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:4px;overflow:hidden;background:var(--panel-2)}
+.rpal-img{display:block;width:100%;height:100%;object-fit:contain;-webkit-user-drag:none;pointer-events:none}
+.rpal-swatch{display:block;width:100%;height:100%;background:var(--rpal-c,#6272A4);background-image:repeating-linear-gradient(90deg,transparent 0 10px,rgba(0,0,0,.18) 10px 11px)}
+.rpal-text{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25}
+.rpal-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rpal-sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--muted)}
+.rpal-ru{flex:none;min-width:28px;text-align:right;font:12px var(--mono);color:var(--muted)}
+.rpal-star{flex:none;min-width:34px;min-height:34px;padding:0;border-color:transparent;background:transparent;color:var(--muted);font-size:17px;line-height:1}
+.rpal-star.rpal-on{color:var(--warn)}
+.rpal-add{flex:none;min-height:32px;padding:4px 12px;font-size:13px}
+.rpal-more{display:block;width:calc(100% - 24px);margin:8px 12px 0;min-height:36px}
+.rpal-body .fb-empty{margin:24px auto}
+
+@media (pointer:coarse){
+  .rpal-search{min-height:44px}
+  .rpal-chip{min-height:44px;padding:4px 14px}
+  .rpal-row{min-height:52px}
+  .rpal-star{min-width:44px;min-height:44px}
+  .rpal-add{min-height:44px;min-width:56px}
+  .rpal-more{min-height:44px}
+}
+@media (max-width:699px){
+  .rpal-thumb{width:44px}
+  .rpal-sub{font-size:11.5px}
+}
+@media (prefers-reduced-motion:reduce){
+  .rpal-row{transition:none}
+}
