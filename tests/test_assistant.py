@@ -443,9 +443,11 @@ class Assistant(unittest.TestCase):
                 self.assertEqual(req["body"]["model"], "stub-model")
                 self.assertIs(req["body"]["stream"], False)
                 self.assertEqual(req["body"]["messages"][0]["role"], "system")
-                self.assertTrue(req["body"]["messages"][0]["content"].startswith("You are Fathom's AV/lighting troubleshooting assistant."))
-                self.assertIn("SYSTEM DATA (JSON):", req["body"]["messages"][-1]["content"] if req["body"]["messages"][-1]["role"] == "user" else
-                              json.dumps(req["body"]["messages"]))
+                # the plain rephrase bridge sends the SYSTEM DATA blob; the Phase 4 tool loop (a provider with chat_tools) sends the
+                # built-in analysis inside the question instead - both ground the model in the deterministic answer
+                self.assertTrue(req["body"]["messages"][0]["content"].startswith("You are Fathom's AV/lighting"))
+                last_user = json.dumps([m for m in req["body"]["messages"] if m.get("role") == "user"][-1:])
+                self.assertTrue("SYSTEM DATA (JSON):" in last_user or "built-in analysis" in last_user, last_user[:300])
                 n_before = len(seen)
                 a_off = self.assistant.answer(sunday_doc(), Q_LIVESTREAM, room="main", use_llm=False, base_revision=1)
                 self.assertEqual(a_off["llm"]["used"], False)
