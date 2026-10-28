@@ -3133,7 +3133,7 @@ def r_floorplan_image(req: Request) -> Response:
     return _serve_user_file(path, str(img.get("mime") or _PLAN_MIME.get(str((fp.get("image") or {}).get("kind")), "")), path.name)
 
 
-@route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")\.svg", role="viewer", summary="Floor plan export SVG with markers", tags=["floorplans"], page="file")
+@route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")\.svg", role="viewer", summary="Floor plan export SVG with markers (?runs=1 adds paths and cable runs, ?scene=)", tags=["floorplans"], page="file")
 def r_floorplan_svg(req: Request) -> Response:
     from .floorplan import plan_svg
 
@@ -3141,7 +3141,9 @@ def r_floorplan_svg(req: Request) -> Response:
     doc, _ = _load(pdir)
     fid = req.params["fp"]
     _floorplan(doc, fid)
-    r = Response.text(plan_svg(doc, fid, pdir), "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
+    want_runs = str(req.query.get("runs") or "").strip().lower() in ("1", "true", "yes")
+    sid = str(req.query.get("scene") or "").strip() or None
+    r = Response.text(plan_svg(doc, fid, pdir, runs=want_runs, scene=sid), "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
     r.csp = FILE_CSP
     return r
 
