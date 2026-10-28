@@ -3135,15 +3135,11 @@ def r_floorplan_image(req: Request) -> Response:
 
 @route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")\.svg", role="viewer", summary="Floor plan export SVG with markers (?runs=1 adds paths and cable runs, ?scene=)", tags=["floorplans"], page="file")
 def r_floorplan_svg(req: Request) -> Response:
-    from .floorplan import plan_svg
-
     pdir = _project_dir(req.params["name"])
     doc, _ = _load(pdir)
     fid = req.params["fp"]
     _floorplan(doc, fid)
-    want_runs = str(req.query.get("runs") or "").strip().lower() in ("1", "true", "yes")
-    sid = str(req.query.get("scene") or "").strip() or None
-    r = Response.text(plan_svg(doc, fid, pdir, runs=want_runs, scene=sid), "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
+    r = Response.text(_plan_svg_text(req, pdir, doc, fid), "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
     r.csp = FILE_CSP
     return r
 
@@ -3337,6 +3333,125 @@ def r_rack_svg(req: Request) -> Response:
     r = Response.text(rack_svg(doc, rid, face=face), "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
     r.csp = FILE_CSP
     return r
+
+
+# ---- patch canvas and plan exports (phase 5 P5C, §3.23 FR-EXP-06/07, §5.7 / §5.9, §6.9.10)
+
+_RASTER_MIME = {"png": "image/png", "pdf": "application/pdf"}
+_CHROME_MISSING_MSG = "PNG/PDF export needs Google Chrome on the server (SVG export always works)"
+
+
+def _chrome_missing_response() -> Response:
+    """400 ``chrome_missing`` (``error`` carries the code so a HEAD probe and a fetch read the same thing)."""
+    r = Response.json({"error": "chrome_missing", "code": "chrome_missing", "message": _CHROME_MISSING_MSG}, 400)
+    r.csp = FILE_CSP
+    return r
+
+
+def _raster_response(req: Request, fmt: str, filename: str, render: Callable[[], str]) -> Response:
+    """Rasterise ``render()`` (an SVG) as ``fmt`` (``png`` | ``pdf``) through :mod:`fathom.raster`.
+
+    ``HEAD`` answers 200 (Chrome present) or 400 ``chrome_missing`` without rendering so the client can grey out
+    menu items; ``?width=`` (PNG, ≤ 6000) and ``?paper=`` / ``?orientation=`` (PDF; default A3, orientation from the
+    drawing's aspect ratio) tune the output; 502 ``chrome_failed`` carries a redacted ``details.detail``."""
+    from . import raster
+
+    if fmt not in _RASTER_MIME:
+        raise ApiError(404, "not found")
+    headers = {"Cache-Control": "no-cache", "Content-Disposition": f'attachment; filename="{_safe_filename(filename)}"'}
+    if not raster.available():
+        return _chrome_missing_response()
+    if req.is_head:
+        r = Response(b"", 200, _RASTER_MIME[fmt], headers)
+        r.csp = FILE_CSP
+        return r
+    svg = render()
+    width = _int(req.query.get("width"), 2000, 200, raster.MAX_PNG_WIDTH)
+    paper = req.query.get("paper") or "A3"
+    if paper not in raster.PAPERS:
+        raise ApiError(400, "paper must be A4, A3, letter or tabloid")
+    orient = req.query.get("orientation") or "auto"
+    if orient not in ("auto", "landscape", "portrait"):
+        raise ApiError(400, "orientation must be auto, landscape or portrait")
+    vw, vh = raster.viewbox_size(svg)
+    landscape = vw >= vh if orient == "auto" else orient == "landscape"
+    try:
+        data = raster.render_bytes(svg, fmt, width=width, paper=paper, landscape=landscape)
+    except raster.RasterError as exc:
+        if exc.code == "chrome_missing":
+            return _chrome_missing_response()
+        raise ApiError(502, "PNG/PDF rendering failed on the server", "chrome_failed", {"detail": exc.detail})
+    r = Response(data, 200, _RASTER_MIME[fmt], headers)
+    r.csp = FILE_CSP
+    return r
+
+
+def _patch_svg_text(req: Request, pdir: Path, doc: Dict[str, Any], room: str) -> str:
+    from .patch_svg import patch_svg
+
+    state = req.query.get("state") or "all"
+    if state not in ("all", "planned", "as_built", "everything"):
+        raise ApiError(400, "state must be all, planned, as_built or everything")
+    sid = str(req.query.get("scene") or "").strip()
+    if sid:
+        _scene_or_404(doc, sid)
+    return patch_svg(doc, room, overlay=_overlay(doc, pdir, strict=False), scene=sid or None, filter={"state": state})
+
+
+def _patch_room(req: Request) -> Tuple[Path, Dict[str, Any], str]:
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    room = req.params["room"]
+    if room not in _room_ids(doc):
+        raise ApiError(404, f"room '{room}' not found")
+    return pdir, doc, room
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/rooms/(?P<room>" + _EID + r")/patch\.svg", role="viewer",
+       summary="Patch canvas of a room as SVG (?scene=<sid>, ?state=as_built|planned|all)", tags=["schedules"], page="file")
+def r_patch_svg(req: Request) -> Response:
+    pdir, doc, room = _patch_room(req)
+    r = Response.text(_patch_svg_text(req, pdir, doc, room), "image/svg+xml; charset=utf-8",
+                      headers={"Cache-Control": "no-cache", "Content-Disposition": f'inline; filename="{_safe_filename(pdir.name + "-" + room + "-patch.svg")}"'})
+    r.csp = FILE_CSP
+    return r
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/rooms/(?P<room>" + _EID + r")/patch\.(?P<fmt>png|pdf)", role="viewer",
+       summary="Patch canvas of a room as PNG (?width= ≤ 6000) or PDF (?paper=, ?orientation=), rendered with Chrome; ?scene=, ?state= as the SVG; "
+               "400 chrome_missing without Chrome; HEAD probes without rendering", tags=["schedules"], page="file")
+def r_patch_raster(req: Request) -> Response:
+    pdir, doc, room = _patch_room(req)
+    fmt = req.params["fmt"]
+    return _raster_response(req, fmt, f"{pdir.name}-{room}-patch.{fmt}", lambda: _patch_svg_text(req, pdir, doc, room))
+
+
+def _plan_svg_text(req: Request, pdir: Path, doc: Dict[str, Any], fid: str) -> str:
+    """``floorplan.plan_svg`` for the route's ``?runs=1``, ``?scene=`` and ``?hide=L1,L2`` (``hide`` overrides the plan's hidden layers)."""
+    from .floorplan import plan_svg
+
+    sid = str(req.query.get("scene") or "").strip()
+    if sid:
+        doc = _scene_view(doc, sid)  # applies the scene (404 when unknown), so plan_svg gets scene=None
+    want_runs = str(req.query.get("runs") or "").strip().lower() in ("1", "true", "yes")
+    hide = [x for x in (req.query.get("hide") or "").split(",") if x]
+    if hide:
+        doc = dict(doc)
+        doc["floorplans"] = [dict(f, hidden_layers=hide) if isinstance(f, dict) and f.get("id") == fid else f for f in doc.get("floorplans") or []]
+    return plan_svg(doc, fid, pdir, runs=want_runs)
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")\.(?P<fmt>png|pdf)", role="viewer",
+       summary="Floor plan export as PNG (?width= ≤ 6000) or PDF (?paper=, ?orientation=) rendered with Chrome; ?runs=1 draws shared paths and cable runs, "
+               "?scene=, ?hide= as the image route; 400 chrome_missing without Chrome; HEAD probes without rendering", tags=["floorplans"], page="file")
+def r_floorplan_raster(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    fid = req.params["fp"]
+    _floorplan(doc, fid)
+    fmt = req.params["fmt"]
+    suffix = "-runs" if req.query.get("runs") == "1" else ""
+    return _raster_response(req, fmt, f"{pdir.name}-{fid}{suffix}.{fmt}", lambda: _plan_svg_text(req, pdir, doc, fid))
 
 
 # ---- device labels for the Brady M511 (phase 1 P1B, §3.24 FR-QR-03..05, §5.8)
