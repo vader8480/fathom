@@ -29,7 +29,7 @@ PATCH_LABELS = ["Room", "Device", "Section", "Dir", "Port", "Label", "Peer devic
 SCHEDULE_KEYS = {
     "patch": ["room", "device", "section", "dir", "port", "label", "peer_device", "peer_port", "cable_tag", "medium", "source"],
     "cables": ["tag", "from_room", "from_device", "from_port", "to_room", "to_device", "to_port", "medium", "type", "length", "length_unit",
-               "color", "channels", "signal", "status", "bundle", "note", "id"],
+               "length_est_m", "color", "channels", "signal", "status", "bundle", "note", "id"],
     "ip": ["room", "device", "interface", "role", "ip", "prefix", "gateway", "vlan", "network", "mac", "hostname", "switch", "switch_port",
            "protocol", "dhcp", "source", "note"],
     "dmx": ["universe", "address", "end", "footprint", "device", "room", "mode", "channel", "protocol", "sacn_group", "artnet", "source"],
@@ -38,7 +38,7 @@ SCHEDULE_KEYS = {
                   "purchase_date", "warranty_until", "vendor", "cost", "currency", "po", "rack", "ru", "ips", "notes"],
     "racks": ["rack", "room", "units", "face", "u", "height", "side", "device", "model"],
 }
-CABLE_LABELS = ["Tag", "From room", "From device", "From port", "To room", "To device", "To port", "Medium", "Type", "Length", "Unit", "Color",
+CABLE_LABELS = ["Tag", "From room", "From device", "From port", "To room", "To device", "To port", "Medium", "Type", "Length", "Unit", "Est. m", "Color",
                 "Channels", "Signal", "Status", "Bundle", "Note", "Id"]
 
 

@@ -315,6 +315,8 @@ def normalize(doc: Doc) -> Doc:
                 elif isinstance(ports, list):
                     e["ports"] = [p for p in ports if not (isinstance(p, dict) and p.get("auto") is True)]
                 _normalize_device_extras(e)
+            if coll == "floorplans" and not isinstance(e.get("paths"), list):
+                e["paths"] = []  # FR-PLAN-14: shared paths always present (never a route when absent)
             lst.append(e)
         out[coll] = lst
     for k, v in src.items():
@@ -1750,6 +1752,8 @@ def validate_doc(doc: Doc) -> List[Problem]:
                 v = m.get(k)
                 if isinstance(v, (int, float)) and not isinstance(v, bool) and not 0 <= v <= 1:
                     P.append(_prob("warning", "marker_out_of_bounds", ref, f"{ref}/markers/{j}/{k}", "marker outside the plan"))
+        P.extend(_path_problems(f, ref))
+    P.extend(_route_problems(colls))
     for a in colls["attachments"]:
         ref = f"attachments/{a['id']}"
         dangling(ref, ref + "/device", "device", a.get("device"), "devices")
@@ -1764,6 +1768,93 @@ def validate_doc(doc: Doc) -> List[Problem]:
 
     # ---- helpers owned by other units (skipped when not importable)
     P.extend(_helper_problems(doc, colls))
+    return P
+
+
+#: FR-PLAN-14 shared path kinds and FR-PLAN-15 route modes (`fathom/runs.py`)
+PATH_KINDS: Tuple[str, ...] = ("tray", "catwalk", "trench", "conduit", "floor", "other")
+ROUTE_MODES: Tuple[str, ...] = ("auto", "manual")
+
+
+def _is_point(v: Any) -> bool:
+    return (isinstance(v, (list, tuple)) and len(v) == 2
+            and all(isinstance(c, (int, float)) and not isinstance(c, bool) for c in v))
+
+
+def _path_problems(fp: Dict[str, Any], ref: str) -> List[Problem]:
+    """``floorplan.paths[]`` (§4.3.11): ``paths`` must be a list (error ``bad_type``);
+    a path whose ``points`` is not a list of ≥ 2 ``[x, y]`` number pairs is an error
+    ``path_bad_points``; a point outside [0, 1] is the same code as a warning."""
+    P: List[Problem] = []
+    paths = fp.get("paths")
+    if paths is None:
+        return P
+    if not isinstance(paths, list):
+        return [_prob("error", "bad_type", ref, ref + "/paths", "paths must be a list")]
+    seen: Set[str] = set()
+    for j, p in enumerate(paths):
+        path = f"{ref}/paths/{j}"
+        if not isinstance(p, dict):
+            P.append(_prob("error", "bad_type", ref, path, "path must be an object"))
+            continue
+        pid = p.get("id")
+        if not isinstance(pid, str) or not pid:
+            P.append(_prob("error", "missing_field", ref, path + "/id", "path needs an id"))
+        elif not ID_RE.match(pid):
+            P.append(_prob("error", "bad_id", ref, path + "/id", f"bad path id {pid!r}"))
+        elif pid in seen:
+            P.append(_prob("error", "duplicate_id", ref, path + "/id", f"duplicate path id {pid!r}"))
+        else:
+            seen.add(pid)
+        pts = p.get("points")
+        if not isinstance(pts, list) or len(pts) < 2 or not all(_is_point(q) for q in pts):
+            P.append(_prob("error", "path_bad_points", ref, path + "/points", "path points must be at least two [x, y] number pairs"))
+        elif any(not (0 <= q[0] <= 1 and 0 <= q[1] <= 1) for q in pts):
+            P.append(_prob("warning", "path_bad_points", ref, path + "/points", "path point outside the plan"))
+        for k in ("elevation_m",):
+            v = p.get(k)
+            if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))):
+                P.append(_prob("error", "bad_type", ref, f"{path}/{k}", f"{k} must be a number"))
+    return P
+
+
+def _route_problems(colls: Dict[str, List[Dict[str, Any]]]) -> List[Problem]:
+    """``cable.route`` / ``bundle.route`` (§4.3.10): wrong type is an error; a
+    ``plan`` that is not a floor plan is a warning ``route_wrong_plan``; a ``via``
+    entry naming no path on that plan is a warning ``route_dangling_path``
+    (the run then falls back to a straight line). A run is advisory: a missing
+    marker is not reported here (``runs.plan_runs`` lists it under ``unplaced``)."""
+    P: List[Problem] = []
+    plans = {f["id"]: {str(p.get("id")) for p in (f.get("paths") or []) if isinstance(p, dict)} for f in colls["floorplans"]}
+    for coll in ("cables", "bundles"):
+        for e in colls[coll]:
+            route = e.get("route")
+            if route is None:
+                continue
+            ref = f"{coll}/{e['id']}"
+            if not isinstance(route, dict):
+                P.append(_prob("error", "bad_type", ref, ref + "/route", "route must be an object"))
+                continue
+            if route.get("mode") not in (None, *ROUTE_MODES):
+                P.append(_prob("error", "bad_enum", ref, ref + "/route/mode", f"route mode must be one of {', '.join(ROUTE_MODES)}"))
+            for k in ("slack_m", "drop_m"):
+                v = route.get(k)
+                if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))):
+                    P.append(_prob("error", "bad_type", ref, f"{ref}/route/{k}", f"{k} must be a number"))
+            pts = route.get("points")
+            if pts is not None and (not isinstance(pts, list) or not all(_is_point(q) for q in pts)):
+                P.append(_prob("error", "bad_type", ref, ref + "/route/points", "route points must be [x, y] number pairs"))
+            plan = route.get("plan")
+            if plan is not None and plan not in plans:
+                P.append(_prob("warning", "route_wrong_plan", ref, ref + "/route/plan", f"{ref}: route plan '{plan}' is not a floor plan (route ignored)"))
+            via = route.get("via")
+            if via is not None and not isinstance(via, list):
+                P.append(_prob("error", "bad_type", ref, ref + "/route/via", "route via must be a list of path ids"))
+                continue
+            known = plans[plan] if plan in plans else (set().union(*plans.values()) if plans else set())
+            for j, pid in enumerate(via or []):
+                if pid not in known:
+                    P.append(_prob("warning", "route_dangling_path", ref, f"{ref}/route/via/{j}", f"{ref}: path '{pid}' does not exist on the plan (straight run instead)"))
     return P
 
 
@@ -2190,6 +2281,18 @@ _CHANNEL_LINK = _obj({
     "level": _STR, "source": _STR, "note": _STR,
 }, ("from", "to", "kind"))
 
+_POINT = {"type": "array", "items": _NUM, "minItems": 2, "maxItems": 2}
+#: §4.3.11 shared path on a floor plan (FR-PLAN-14)
+_PATH = _obj({
+    "id": _ID, "name": _STR, "kind": {"type": "string", "enum": list(PATH_KINDS)}, "points": {"type": "array", "items": _POINT, "minItems": 2},
+    "color": _STR, "elevation_m": _NUM, "note": _STR,
+}, ("id", "points"))
+#: §4.3.10 advisory route of a cable / bundle on one plan (FR-PLAN-15)
+_ROUTE = _obj({
+    "plan": _ID, "points": _arr(_POINT), "via": _arr(_ID), "slack_m": _NUM, "drop_m": _NUM,
+    "mode": {"type": "string", "enum": list(ROUTE_MODES)},
+})
+
 JSON_SCHEMA: Dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://fathom.local/api/v2/schema.json",
@@ -2259,11 +2362,13 @@ JSON_SCHEMA: Dict[str, Any] = {
             "color": _STR, "channels": _INT, "status": _STATUS, "bidirectional": _BOOL, "bundle": _STR, "label": _STR,
             "signal": _STR, "note": _STR, "count": _INT, "from_text": _STR, "to_text": _STR,
             "flow": _obj({"seq": _INT, "from_card": _STR, "to_card": _STR}),
+            "route": _ROUTE,
         }, ("id", "from", "to", "medium"))),
         "bundles": _arr(_obj({
             "id": _ID, "kind": {"type": "string", "enum": ["multicore", "loom", "snake", "link"]}, "tag": _STR, "type": _STR,
             "length_m": _NUM, "medium": _STR, "label": _STR, "signal": _STR, "note": _STR, "count": _INT,
             "from_text": _STR, "to_text": _STR, "bidirectional": _BOOL, "flow": _obj({"seq": _INT, "from_card": _STR, "to_card": _STR}),
+            "route": _ROUTE,
         }, ("id",))),
         "floorplans": _arr(_obj({
             "id": _ID, "name": _STR, "room": _STR,
@@ -2274,6 +2379,7 @@ JSON_SCHEMA: Dict[str, Any] = {
             "calibration": _obj({"p1": _arr(_NUM), "p2": _arr(_NUM), "distance": _NUM, "unit": {"type": "string", "enum": ["m", "ft"]}}),
             "units": {"type": "object"},
             "markers": _arr(_obj({"device": _STR, "x": _NUM, "y": _NUM, "rotation": _NUM, "label": _STR}, ("device", "x", "y"))),
+            "paths": _arr(_PATH),
             "order": _INT, "notes": _STR,
         }, ("id", "name", "room", "source", "image"))),
         "attachments": _arr(_obj({

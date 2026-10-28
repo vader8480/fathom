@@ -3146,6 +3146,88 @@ def r_floorplan_svg(req: Request) -> Response:
     return r
 
 
+# ---- cable runs on floor plans (phase 5 P5A: FR-PLAN-14..17, §5.7, §6.9.9)
+
+
+def _plan_scene(req: Request) -> Optional[str]:
+    sid = str(req.query.get("scene") or "").strip()
+    return sid or None
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")/runs", role="viewer",
+       summary="Cable runs on a floor plan with lengths (?scene=): paths, runs, totals, unplaced", tags=["floorplans"])
+def r_floorplan_runs(req: Request) -> Response:
+    from .runs import plan_runs
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    fid = req.params["fp"]
+    _floorplan(doc, fid)
+    try:
+        out = plan_runs(doc, fid, _plan_scene(req))
+    except KeyError as exc:
+        raise ApiError(404, f"scene or floor plan {exc} not found", "not_found")
+    out["revision"] = _rev(doc)
+    return Response.json(out)
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")/runs/snap", role="viewer",
+       summary="Nearest point on a shared path ({point: [x, y], max: 0.02}) → {path, point} or {path: null}", tags=["floorplans"], body="RunSnap")
+def r_floorplan_runs_snap(req: Request) -> Response:
+    from .runs import SNAP_DIST, snap
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    fp = _floorplan(doc, req.params["fp"])
+    body = req.json()
+    pt = body.get("point")
+    if not (isinstance(pt, list) and len(pt) == 2 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in pt)):
+        raise ApiError(400, "point must be [x, y] in normalised plan coordinates")
+    mx = body.get("max", SNAP_DIST)
+    if isinstance(mx, bool) or not isinstance(mx, (int, float)) or mx < 0:
+        raise ApiError(400, "max must be a non-negative number (normalised plan units)")
+    hit = snap(fp, pt, float(mx))
+    return Response.json(hit if hit is not None else {"path": None, "point": None})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")/runs/estimate", role="editor",
+       summary="Write estimated cable lengths from the plan's runs ({cables: [ids] | all: true, base_revision, round_to: 0.5}) as one revision", tags=["floorplans"], body="RunEstimate")
+def r_floorplan_runs_estimate(req: Request) -> Response:
+    from .runs import estimate_plan
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    fp = _floorplan(doc, req.params["fp"])
+    body = req.json()
+    if body.get("base_revision") is None:
+        raise ApiError(428, "base_revision is required", "precondition_required")
+    cables = body.get("cables")
+    if cables is None and body.get("all"):
+        ids: Optional[List[str]] = None
+    elif isinstance(cables, list) and all(isinstance(c, str) for c in cables):
+        ids = cables
+    else:
+        raise ApiError(400, "send cables: [ids] or all: true")
+    round_to = body.get("round_to", 0.5)
+    if isinstance(round_to, bool) or not isinstance(round_to, (int, float)) or round_to < 0:
+        raise ApiError(400, "round_to must be a non-negative number of metres")
+    settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    if settings.get("locked") is True:
+        raise _locked_error(settings)
+    plan = estimate_plan(doc, fp["id"], ids, round_to=float(round_to))
+    base = _int(body.get("base_revision"), -1)
+    out: Dict[str, Any] = {"updated": plan["updated"], "skipped": plan["skipped"]}
+    if not plan["ops"]:  # nothing differs: no revision, nothing to conflict with
+        out["revision"] = _rev(doc)
+        return Response.json(out, headers={"ETag": f'"r{out["revision"]}"'})
+    ops = _lock_guard_ops(req, doc, plan["ops"])
+    n = len(plan["updated"])
+    res = _changes(req, pdir, ops, base, f"Estimated cable lengths from {fp.get('name') or fp['id']} ({n} cable{'s' if n != 1 else ''})", "plan")
+    out["revision"] = res["revision"]
+    out["problems"] = res.get("problems") or []
+    return Response.json(out, headers={"ETag": f'"r{res["revision"]}"'})
+
+
 # ---- schedules, analysis, trace, search, QR
 
 

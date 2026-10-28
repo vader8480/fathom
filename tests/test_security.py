@@ -111,7 +111,10 @@ SPEC_ROLES = {
     ("POST", "/p/{}/problems"): "viewer", ("POST", "/s/{}/problems"): "public",
     ("GET", "/p/{}/files/{}/{}"): "viewer", ("GET", "/s/{}"): "public", ("GET", "/s/{}/{}"): "public", ("GET", "/static/{}"): "public",
     ("GET", "/sw.js"): "public", ("GET", "/manifest.webmanifest"): "public", ("GET", "/favicon.ico"): "public",
-    ("GET", "/apple-touch-icon.png"): "public", ("GET", "/api/openapi.json"): "public", ("GET", "/api/docs"): "public",
+    ("GET", "/apple-touch-icon.png"): "public",     ("GET", "/api/openapi.json"): "public", ("GET", "/api/docs"): "public",
+    # phase5 P5A
+    ("GET", "/api/v2/projects/{}/floorplans/{}/runs"): "viewer", ("POST", "/api/v2/projects/{}/floorplans/{}/runs/snap"): "viewer",
+    ("POST", "/api/v2/projects/{}/floorplans/{}/runs/estimate"): "editor",
 }
 RANK = {"viewer": 1, "editor": 2, "admin": 3}
 SAMPLES = ["proj", "main", "atem-mini", "rk-foh", "cables", "1", "nobody", "imp-0001", "att-000000000000", "sh-abc123", "fp-none",

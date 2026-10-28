@@ -20,7 +20,7 @@ FT_PER_M = 1 / 0.3048
 CABLE_COLUMNS: List[Tuple[str, str]] = [
     ("tag", "Tag"), ("from_room", "From room"), ("from_device", "From device"), ("from_port", "From port"),
     ("to_room", "To room"), ("to_device", "To device"), ("to_port", "To port"), ("medium", "Medium"), ("type", "Type"),
-    ("length", "Length"), ("length_unit", "Unit"), ("color", "Color"), ("channels", "Channels"), ("signal", "Signal"),
+    ("length", "Length"), ("length_unit", "Unit"), ("length_est_m", "Est. m"), ("color", "Color"), ("channels", "Channels"), ("signal", "Signal"),
     ("status", "Status"), ("bundle", "Bundle"), ("note", "Note"), ("id", "Id"),
 ]
 
@@ -176,10 +176,21 @@ def _port_text(p: Optional[Dict[str, Any]], pid: str) -> str:
     return str(p.get("label") or p.get("name") or pid)
 
 
+def _length_estimates(doc: Doc) -> Dict[str, float]:
+    """FR-PLAN-17: ``{cable id: estimated metres}`` from the floor-plan runs (``runs.estimates``); empty when unavailable."""
+    try:
+        from .runs import estimates
+
+        return estimates(doc)
+    except Exception:
+        return {}
+
+
 def cable_schedule(doc: Doc, room: str = "*", state: str = "all", discipline: str = "") -> Dict[str, Any]:
     d = _state_doc(doc, state)
     idx = _Index(d)
     unit = _units(doc)
+    est = _length_estimates(d)
     rows: List[Dict[str, Any]] = []
     tag_seen: Dict[str, str] = {}
     problems: List[Dict[str, Any]] = []
@@ -208,6 +219,7 @@ def cable_schedule(doc: Doc, room: str = "*", state: str = "all", discipline: st
             "medium": medium, "medium_label": (MEDIA.get(medium) or {}).get("label", medium), "discipline": disc,
             "type": c.get("type", ""), "length": _len_display(c.get("length_m"), unit),
             "length_unit": unit if isinstance(c.get("length_m"), (int, float)) else "", "length_m": c.get("length_m"),
+            "length_est_m": est.get(str(c.get("id"))),
             "color": c.get("color", ""), "channels": c.get("channels", ""), "signal": c.get("signal", ""),
             "status": c.get("status", "installed"), "bundle": (b or {}).get("tag") or c.get("bundle", ""),
             "bundle_id": c.get("bundle", ""), "note": c.get("note", ""), "id": c.get("id", ""),
