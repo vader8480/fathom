@@ -1,0 +1,388 @@
+{
+  "about": "Rack contract vectors (docs/notes/rackula.md sections B-D), shared by tests/test_rack_contract.py and tests/js/rack-contract.test.mjs. Each case has a doc, the rack under test and optional expect keys: labels {u: label}, width_px, collisions [{a, b, u, face}] (sorted), fits [{device|item, rack?, u, opts|spec, ok, reason, conflicts}] (conflicts compared as sets), shelf {item, cells}, totals, problems (Python: set of rack_* codes from validate_racks), annotations {deviceId: {field: value}}, rows (JS racksByRow ids per group), add_item {spec, id, u} (JS addItemOps; u null when nothing fits).",
+  "cases": [
+    {
+      "name": "labels-start-u-0-bottom-up-10in",
+      "doc": {
+        "racks": [{"id": "rk-a", "name": "Desk", "units": 12, "start_u": 0, "width_in": 10}],
+        "devices": []
+      },
+      "rack": "rk-a",
+      "expect": {
+        "labels": {"1": "0", "6": "5", "12": "11"},
+        "width_px": 168,
+        "collisions": [],
+        "problems": [],
+        "totals": {"units": 12, "used_u": 0, "free_u": 12, "weight_kg": 0, "max_load_kg": null, "power_w": 0, "power_limit_w": null, "devices": 0, "items": 0},
+        "add_item": {"spec": {"type": "shelf", "u": 4}, "id": "ri-1", "u": 4}
+      }
+    },
+    {
+      "name": "labels-top-down-23in",
+      "doc": {
+        "racks": [{"id": "rk-b", "name": "Broadcast", "units": 42, "numbering": "top_down", "width_in": 23}],
+        "devices": []
+      },
+      "rack": "rk-b",
+      "expect": {
+        "labels": {"1": "42", "10": "33", "42": "1"},
+        "width_px": 387,
+        "collisions": [],
+        "problems": []
+      }
+    },
+    {
+      "name": "labels-top-down-start-u-0-21in",
+      "doc": {
+        "racks": [{"id": "rk-c", "name": "Open frame", "units": 10, "numbering": "top_down", "start_u": 0, "width_in": 21, "form_factor": "open_frame"}],
+        "devices": []
+      },
+      "rack": "rk-c",
+      "expect": {
+        "labels": {"1": "9", "4": "6", "10": "0"},
+        "width_px": 354
+      }
+    },
+    {
+      "name": "device-vs-item-front",
+      "doc": {
+        "racks": [{"id": "rk-d", "name": "FOH", "units": 12, "items": [{"id": "ri-1", "type": "vent", "u": 9}]}],
+        "devices": [{"id": "mixer", "name": "Mixer", "rack": {"id": "rk-d", "u": 8, "height": 2, "face": "front"}}]
+      },
+      "rack": "rk-d",
+      "expect": {
+        "labels": {"1": "1", "12": "12"},
+        "width_px": 320,
+        "collisions": [{"a": "item:ri-1", "b": "mixer", "u": 9, "face": "front"}],
+        "problems": ["rack_overlap"],
+        "fits": [
+          {"device": "mixer", "u": 8, "opts": {}, "ok": false, "reason": "occupied", "conflicts": ["item:ri-1"]},
+          {"device": "mixer", "u": 7, "opts": {}, "ok": true, "reason": "", "conflicts": []},
+          {"device": "mixer", "u": 9, "opts": {"face": "rear", "depth": "half"}, "ok": true, "reason": "", "conflicts": []}
+        ]
+      }
+    },
+    {
+      "name": "half-depth-item-vs-rear-device",
+      "doc": {
+        "racks": [{"id": "rk-e", "name": "Amps", "units": 8, "items": [{"id": "ri-1", "type": "blank", "u": 3}]}],
+        "devices": [{"id": "amp", "name": "Amp", "rack": {"id": "rk-e", "u": 3, "height": 1, "face": "rear", "depth": "half"}}]
+      },
+      "rack": "rk-e",
+      "expect": {
+        "collisions": [],
+        "problems": [],
+        "fits": [
+          {"device": "amp", "u": 3, "opts": {}, "ok": true, "reason": "", "conflicts": []},
+          {"device": "amp", "u": 3, "opts": {"depth": "full"}, "ok": false, "reason": "occupied", "conflicts": ["item:ri-1"]},
+          {"item": null, "u": 3, "spec": {"type": "blank"}, "ok": false, "reason": "occupied", "conflicts": ["item:ri-1"]},
+          {"item": null, "u": 3, "spec": {"type": "lacing_bar"}, "ok": false, "reason": "occupied", "conflicts": ["amp"]},
+          {"item": null, "u": 3, "spec": {"type": "shelf"}, "ok": false, "reason": "occupied", "conflicts": ["amp", "item:ri-1"]},
+          {"item": null, "u": 4, "spec": {"type": "shelf"}, "ok": true, "reason": "", "conflicts": []}
+        ]
+      }
+    },
+    {
+      "name": "full-depth-shelf-vs-rear-device",
+      "doc": {
+        "racks": [{"id": "rk-f", "name": "Network", "units": 8, "items": [{"id": "ri-1", "type": "shelf", "u": 4}]}],
+        "devices": [{"id": "switch", "name": "Switch", "rack": {"id": "rk-f", "u": 4, "height": 1, "face": "rear", "depth": "half"}}]
+      },
+      "rack": "rk-f",
+      "expect": {
+        "collisions": [{"a": "item:ri-1", "b": "switch", "u": 4, "face": "rear"}],
+        "problems": ["rack_overlap"]
+      }
+    },
+    {
+      "name": "half-width-devices-vs-full-width-item",
+      "doc": {
+        "racks": [{"id": "rk-g", "name": "Stage", "units": 8, "items": [{"id": "ri-1", "type": "blank", "u": 5}]}],
+        "devices": [
+          {"id": "dsp-r", "name": "DSP right", "rack": {"id": "rk-g", "u": 5, "height": 1, "face": "front", "side": "right", "depth": "half"}},
+          {"id": "dsp-l", "name": "DSP left", "rack": {"id": "rk-g", "u": 5, "height": 1, "face": "front", "side": "left", "depth": "half"}},
+          {"id": "nas", "name": "NAS"}
+        ]
+      },
+      "rack": "rk-g",
+      "expect": {
+        "collisions": [
+          {"a": "dsp-l", "b": "item:ri-1", "u": 5, "face": "front"},
+          {"a": "dsp-r", "b": "item:ri-1", "u": 5, "face": "front"}
+        ],
+        "problems": ["rack_overlap"],
+        "fits": [
+          {"device": "dsp-l", "u": 5, "opts": {}, "ok": false, "reason": "occupied", "conflicts": ["item:ri-1"]},
+          {"device": "nas", "u": 6, "opts": {"side": "left", "depth": "half"}, "ok": true, "reason": "", "conflicts": []},
+          {"device": "nas", "u": 5, "opts": {"side": "left", "face": "rear", "depth": "half"}, "ok": true, "reason": "", "conflicts": []},
+          {"device": "nas", "u": 5, "opts": {"side": "left"}, "ok": false, "reason": "occupied", "conflicts": ["dsp-l", "item:ri-1"]}
+        ]
+      }
+    },
+    {
+      "name": "collisions-sorted-both-faces",
+      "doc": {
+        "racks": [{"id": "rk-h", "name": "Core", "units": 12, "items": [
+          {"id": "ri-2", "type": "blank", "u": 10},
+          {"id": "ri-1", "type": "blank", "u": 10}
+        ]}],
+        "devices": [
+          {"id": "zeta", "name": "Zeta", "rack": {"id": "rk-h", "u": 2, "height": 2, "face": "front"}},
+          {"id": "alpha", "name": "Alpha", "rack": {"id": "rk-h", "u": 3, "height": 1, "face": "front"}},
+          {"id": "beta", "name": "Beta", "rack": {"id": "rk-h", "u": 1, "height": 2, "face": "rear", "depth": "half"}}
+        ]
+      },
+      "rack": "rk-h",
+      "expect": {
+        "collisions": [
+          {"a": "beta", "b": "zeta", "u": 2, "face": "rear"},
+          {"a": "alpha", "b": "zeta", "u": 3, "face": "front"},
+          {"a": "alpha", "b": "zeta", "u": 3, "face": "rear"},
+          {"a": "item:ri-1", "b": "item:ri-2", "u": 10, "face": "front"}
+        ],
+        "problems": ["rack_overlap"]
+      }
+    },
+    {
+      "name": "items-out-of-range",
+      "doc": {
+        "racks": [{"id": "rk-i", "name": "Wall", "units": 6, "form_factor": "wall_mount", "items": [
+          {"id": "ri-1", "type": "drawer", "u": 6},
+          {"id": "ri-2", "type": "blank", "u": 9}
+        ]}],
+        "devices": [{"id": "ups", "name": "UPS", "rack": {"id": "rk-i", "u": 1, "height": 2, "face": "front"}}]
+      },
+      "rack": "rk-i",
+      "expect": {
+        "collisions": [],
+        "problems": ["rack_out_of_range"],
+        "fits": [
+          {"item": "ri-1", "u": 5, "spec": {}, "ok": true, "reason": "", "conflicts": []},
+          {"item": "ri-1", "u": 6, "spec": {}, "ok": false, "reason": "out_of_range", "conflicts": []},
+          {"item": null, "u": 6, "spec": {"type": "blank", "height": 2}, "ok": false, "reason": "out_of_range", "conflicts": []},
+          {"item": null, "u": 0, "spec": {"type": "blank"}, "ok": false, "reason": "out_of_range", "conflicts": []},
+          {"item": null, "u": 2, "spec": {"type": "vent"}, "ok": false, "reason": "occupied", "conflicts": ["ups"]}
+        ]
+      }
+    },
+    {
+      "name": "shelf-cells-children",
+      "doc": {
+        "racks": [{"id": "rk-j", "name": "Video", "units": 12, "items": [{"id": "ri-1", "type": "shelf", "u": 3, "slots": 3, "weight_kg": 2}]}],
+        "devices": [
+          {"id": "laptop", "name": "Laptop", "weight_kg": 2.1, "rack": {"id": "rk-j", "u": 3, "height": 1, "face": "front", "side": "full", "shelf": "ri-1", "slot": 0}},
+          {"id": "tablet", "name": "Tablet", "rack": {"id": "rk-j", "u": 3, "height": 1, "face": "front", "side": "full", "shelf": "ri-1", "slot": 2}},
+          {"id": "phone", "name": "Phone", "weight_kg": 0.2, "rack": {"id": "rk-j", "u": 3, "height": 1, "face": "front", "side": "full", "shelf": "ri-1", "slot": 2}},
+          {"id": "puck", "name": "Puck", "rack": {"id": "rk-j", "u": 3, "height": 1, "face": "front", "side": "full", "shelf": "ri-1", "slot": 3}},
+          {"id": "router", "name": "Router", "power_w": 12, "rack": {"id": "rk-j", "u": 5, "height": 1, "face": "front"}}
+        ]
+      },
+      "rack": "rk-j",
+      "expect": {
+        "shelf": {"item": "ri-1", "cells": [{"slot": 0, "device": "laptop"}, {"slot": 1, "device": null}, {"slot": 2, "device": "tablet"}]},
+        "collisions": [],
+        "problems": ["rack_shelf_overlap", "rack_slot_out_of_range"],
+        "totals": {"units": 12, "used_u": 2, "free_u": 10, "weight_kg": 4.3, "max_load_kg": null, "power_w": 12, "power_limit_w": null, "devices": 5, "items": 1},
+        "fits": [
+          {"device": "router", "u": 3, "opts": {}, "ok": false, "reason": "occupied", "conflicts": ["item:ri-1"]},
+          {"item": null, "u": 4, "spec": {"type": "blank"}, "ok": true, "reason": "", "conflicts": []}
+        ]
+      }
+    },
+    {
+      "name": "shelf-default-slots-unknown-shelf",
+      "doc": {
+        "racks": [{"id": "rk-k", "name": "Booth", "units": 12, "items": [
+          {"id": "ri-1", "type": "shelf", "u": 2},
+          {"id": "ri-2", "type": "blank", "u": 8}
+        ]}],
+        "devices": [
+          {"id": "rx", "name": "Receiver", "rack": {"id": "rk-k", "u": 2, "height": 1, "face": "front", "side": "full", "shelf": "ri-1", "slot": 1}},
+          {"id": "tx", "name": "Transmitter", "rack": {"id": "rk-k", "u": 6, "height": 1, "face": "front", "side": "full", "shelf": "ri-2", "slot": 0}},
+          {"id": "ghost", "name": "Ghost", "rack": {"id": "rk-k", "u": 10, "height": 1, "face": "front", "side": "full", "shelf": "ri-9", "slot": 0}}
+        ]
+      },
+      "rack": "rk-k",
+      "expect": {
+        "shelf": {"item": "ri-1", "cells": [{"slot": 0, "device": null}, {"slot": 1, "device": "rx"}]},
+        "problems": ["rack_shelf_unknown"]
+      }
+    },
+    {
+      "name": "totals-overrides-templates-over-limits",
+      "doc": {
+        "templates": [
+          {"id": "con-amp", "name": "Contract amp", "kind": "amp", "ru": 2, "weight_kg": 9.3, "power_w": 350},
+          {"id": "con-dsp", "name": "Contract DSP", "kind": "processor", "ru": 1, "weight_kg": 3.33, "power_w": 40.04}
+        ],
+        "racks": [
+          {"id": "rk-t", "name": "Amp rack", "units": 12, "weight_kg": 25.5, "max_load_kg": 50, "power_limit_w": 500, "items": [
+            {"id": "ri-1", "type": "shelf", "u": 6, "weight_kg": 1.2},
+            {"id": "ri-2", "type": "blank", "u": 12},
+            {"id": "ri-3", "type": "drawer", "u": 8, "weight_kg": 4.4}
+          ]},
+          {"id": "rk-other", "name": "Other", "units": 4}
+        ],
+        "devices": [
+          {"id": "amp1", "name": "Amp 1", "template": "con-amp", "rack": {"id": "rk-t", "u": 1, "face": "front"}},
+          {"id": "amp2", "name": "Amp 2", "template": "con-amp", "weight_kg": 10, "power_w": 300, "rack": {"id": "rk-t", "u": 3, "face": "front"}},
+          {"id": "dsp", "name": "DSP", "template": "con-dsp", "rack": {"id": "rk-t", "u": 6, "height": 1, "face": "front", "side": "full", "shelf": "ri-1", "slot": 0}},
+          {"id": "patch", "name": "Patch", "rack": {"id": "rk-t", "u": 7, "height": 1, "face": "rear", "depth": "half"}},
+          {"id": "spare", "name": "Spare", "weight_kg": 99, "power_w": 999},
+          {"id": "other", "name": "Other", "weight_kg": 5, "power_w": 50, "rack": {"id": "rk-other", "u": 1, "height": 1, "face": "front"}}
+        ]
+      },
+      "rack": "rk-t",
+      "expect": {
+        "totals": {"units": 12, "used_u": 9, "free_u": 3, "weight_kg": 53.7, "max_load_kg": 50, "power_w": 690, "power_limit_w": 500, "devices": 4, "items": 3},
+        "collisions": [],
+        "problems": ["rack_overweight", "rack_over_power"],
+        "annotations": {
+          "amp1": {"power": "350 W", "weight": "9.3 kg"},
+          "amp2": {"power": "300 W", "weight": "10 kg"},
+          "patch": {"power": "", "weight": ""}
+        }
+      }
+    },
+    {
+      "name": "totals-at-limits",
+      "doc": {
+        "racks": [{"id": "rk-l", "name": "Small", "units": 4, "weight_kg": 10, "max_load_kg": 15, "power_limit_w": 100}],
+        "devices": [{"id": "conditioner", "name": "Conditioner", "weight_kg": 5, "power_w": 100, "rack": {"id": "rk-l", "u": 1, "height": 2, "face": "front"}}]
+      },
+      "rack": "rk-l",
+      "expect": {
+        "totals": {"units": 4, "used_u": 2, "free_u": 2, "weight_kg": 15, "max_load_kg": 15, "power_w": 100, "power_limit_w": 100, "devices": 1, "items": 0},
+        "problems": []
+      }
+    },
+    {
+      "name": "fits-reasons",
+      "doc": {
+        "racks": [{"id": "rk-m", "name": "Fits", "units": 12, "items": [
+          {"id": "ri-1", "type": "blank", "u": 12},
+          {"id": "ri-2", "type": "drawer", "u": 5}
+        ]}],
+        "devices": [
+          {"id": "sw", "name": "Switch", "rack": {"id": "rk-m", "u": 10, "height": 1, "face": "front", "depth": "half"}},
+          {"id": "nas", "name": "NAS"}
+        ]
+      },
+      "rack": "rk-m",
+      "expect": {
+        "collisions": [],
+        "problems": [],
+        "fits": [
+          {"device": "nas", "u": 11, "opts": {}, "ok": true, "reason": "", "conflicts": []},
+          {"device": "nas", "u": 12, "opts": {}, "ok": false, "reason": "occupied", "conflicts": ["item:ri-1"]},
+          {"device": "nas", "u": 12, "opts": {"face": "rear", "depth": "half"}, "ok": true, "reason": "", "conflicts": []},
+          {"device": "nas", "u": 6, "opts": {"height": 2}, "ok": false, "reason": "occupied", "conflicts": ["item:ri-2"]},
+          {"device": "nas", "u": 12, "opts": {"height": 2}, "ok": false, "reason": "out_of_range", "conflicts": []},
+          {"device": "nas", "u": 0, "opts": {}, "ok": false, "reason": "out_of_range", "conflicts": []},
+          {"device": "nas", "rack": "rk-nope", "u": 1, "opts": {}, "ok": false, "reason": "rack_unknown", "conflicts": []},
+          {"device": "sw", "u": 10, "opts": {}, "ok": true, "reason": "", "conflicts": []},
+          {"item": null, "u": 11, "spec": {"type": "blank"}, "ok": true, "reason": "", "conflicts": []},
+          {"item": null, "u": 10, "spec": {"type": "blank"}, "ok": false, "reason": "occupied", "conflicts": ["sw"]},
+          {"item": null, "u": 10, "spec": {"type": "lacing_bar"}, "ok": true, "reason": "", "conflicts": []},
+          {"item": null, "u": 11, "spec": {"type": "drawer"}, "ok": false, "reason": "occupied", "conflicts": ["item:ri-1"]},
+          {"item": null, "u": 12, "spec": {"type": "drawer"}, "ok": false, "reason": "out_of_range", "conflicts": []},
+          {"item": "ri-2", "u": 5, "spec": {}, "ok": true, "reason": "", "conflicts": []},
+          {"item": "ri-2", "u": 9, "spec": {}, "ok": false, "reason": "occupied", "conflicts": ["sw"]},
+          {"item": "ri-2", "u": 9, "spec": {"face": "rear", "depth": "half"}, "ok": true, "reason": "", "conflicts": []},
+          {"item": null, "rack": "rk-nope", "u": 1, "spec": {"type": "blank"}, "ok": false, "reason": "rack_unknown", "conflicts": []}
+        ]
+      }
+    },
+    {
+      "name": "annotations",
+      "doc": {
+        "templates": [{"id": "con-amp", "name": "Contract amp", "kind": "amp", "ru": 1, "weight_kg": 9.5, "power_w": 350}],
+        "racks": [{"id": "rk-n", "name": "Annotated", "units": 6}],
+        "devices": [
+          {"id": "dsp-1", "name": "Main DSP", "manufacturer": "Biamp", "model": "Tesira", "code": "DSP-1", "status": "planned",
+           "power_w": 45, "weight_kg": 4.0,
+           "inventory": {"serial": "SN-1", "asset_tag": "AT-7"},
+           "interfaces": [{"id": "i1", "role": "control", "ip": "10.0.0.5"}, {"id": "i2", "role": "primary", "ip": "10.0.0.9"}],
+           "rack": {"id": "rk-n", "u": 1, "height": 1, "face": "front"}},
+          {"id": "amp-1", "name": "Amp", "model": "XLS 1502", "template": "con-amp",
+           "interfaces": [{"id": "i1", "ip": ""}, {"id": "i2", "ip": "10.0.0.7"}],
+           "rack": {"id": "rk-n", "u": 2, "face": "front"}},
+          {"id": "bare", "name": "Bare", "weight_kg": 0,
+           "interfaces": [{"id": "i1", "role": "primary", "ip": ""}, {"id": "i2", "ip": "10.1.1.1"}],
+           "rack": {"id": "rk-n", "u": 3, "height": 1, "face": "front"}}
+        ]
+      },
+      "rack": "rk-n",
+      "expect": {
+        "problems": [],
+        "annotations": {
+          "dsp-1": {"name": "Main DSP", "model": "Biamp Tesira", "ip": "10.0.0.9", "serial": "SN-1", "asset_tag": "AT-7", "code": "DSP-1", "power": "45 W", "weight": "4 kg", "status": "planned", "bogus": ""},
+          "amp-1": {"name": "Amp", "model": "XLS 1502", "ip": "10.0.0.7", "serial": "", "asset_tag": "", "code": "", "power": "350 W", "weight": "9.5 kg", "status": "installed"},
+          "bare": {"name": "Bare", "model": "", "ip": "10.1.1.1", "serial": "", "asset_tag": "", "code": "", "power": "", "weight": "", "status": "installed"}
+        }
+      }
+    },
+    {
+      "name": "racks-by-row",
+      "doc": {
+        "racks": [
+          {"id": "rk-a", "name": "Alpha", "units": 12, "order": 2, "row": "North"},
+          {"id": "rk-b", "name": "Bravo", "units": 12},
+          {"id": "rk-c", "name": "Charlie", "units": 12, "order": 1},
+          {"id": "rk-d", "name": "Delta", "units": 12, "order": 3, "row": "North"},
+          {"id": "rk-e", "name": "Echo", "units": 12, "row": "North"},
+          {"id": "rk-f", "name": "Foxtrot", "units": 12, "order": 2, "row": "South"},
+          {"id": "rk-g", "name": "Golf", "units": 12, "order": 5, "row": ""},
+          {"id": "rk-h", "name": "Aardvark", "units": 12, "row": "South"}
+        ],
+        "devices": []
+      },
+      "rack": "rk-a",
+      "expect": {
+        "rows": [["rk-c"], ["rk-a", "rk-d", "rk-e"], ["rk-f", "rk-h"], ["rk-g"], ["rk-b"]]
+      }
+    },
+    {
+      "name": "add-item-smallest-id-first-fit-top",
+      "doc": {
+        "racks": [{"id": "rk-o", "name": "Add", "units": 12, "items": [
+          {"id": "ri-1", "type": "blank", "u": 12},
+          {"id": "ri-3", "type": "vent", "u": 1},
+          {"id": "ri-x", "type": "blank", "u": 2}
+        ]}],
+        "devices": [{"id": "srv", "name": "Server", "rack": {"id": "rk-o", "u": 10, "height": 2, "face": "front"}}]
+      },
+      "rack": "rk-o",
+      "expect": {
+        "add_item": {"spec": {"type": "blank"}, "id": "ri-2", "u": 9},
+        "totals": {"units": 12, "used_u": 5, "free_u": 7, "devices": 1, "items": 3}
+      }
+    },
+    {
+      "name": "add-item-rear-lacing-bar",
+      "doc": {
+        "racks": [{"id": "rk-p", "name": "Small", "units": 3, "items": [
+          {"id": "ri-2", "type": "blank", "u": 3},
+          {"id": "ri-1", "type": "blank", "u": 2}
+        ]}],
+        "devices": [{"id": "pdu", "name": "PDU", "rack": {"id": "rk-p", "u": 1, "height": 1, "face": "front"}}]
+      },
+      "rack": "rk-p",
+      "expect": {
+        "add_item": {"spec": {"type": "lacing_bar"}, "id": "ri-3", "u": 3}
+      }
+    },
+    {
+      "name": "add-item-nothing-fits",
+      "doc": {
+        "racks": [{"id": "rk-q", "name": "Full", "units": 2}],
+        "devices": [{"id": "big", "name": "Big", "rack": {"id": "rk-q", "u": 1, "height": 2, "face": "front"}}]
+      },
+      "rack": "rk-q",
+      "expect": {
+        "add_item": {"spec": {"type": "blank"}, "id": "", "u": null},
+        "totals": {"units": 2, "used_u": 2, "free_u": 0, "devices": 1, "items": 0}
+      }
+    }
+  ]
+}
