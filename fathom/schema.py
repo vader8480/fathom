@@ -32,7 +32,7 @@ Problem = Dict[str, Any]
 SCHEMA_VERSION: int = 2
 COLLECTIONS: Tuple[str, ...] = (
     "venues", "rooms", "systems", "locations", "racks", "networks", "devices",
-    "cables", "bundles", "floorplans", "attachments", "templates", "imports", "pages", "problems",
+    "cables", "bundles", "floorplans", "attachments", "templates", "imports", "pages", "problems", "scenes",
 )
 ROOTS: Tuple[str, ...] = ("meta", "settings", "media")
 
@@ -306,6 +306,8 @@ def normalize(doc: Doc) -> Doc:
             if ent.get("auto") is True:
                 continue
             e = _clean(copy.deepcopy(ent), keep=("ports",) if coll == "devices" else ())
+            if coll == "scenes" and isinstance(ent.get("data"), dict):
+                e["data"] = copy.deepcopy(ent["data"])  # §4.3.18: empty lists / {} inside scene data are meaningful
             if coll == "devices":
                 ports = e.get("ports")
                 if ports is None:
@@ -1222,7 +1224,7 @@ def is_v1_expressible(doc: Doc) -> bool:
     """True when the doc can round-trip through the v1 format (§4.6.7)."""
     if len(doc.get("venues") or []) > 1 or len(doc.get("rooms") or []) > 1:
         return False
-    for c in ("racks", "networks", "floorplans", "attachments", "templates", "locations", "pages", "problems"):
+    for c in ("racks", "networks", "floorplans", "attachments", "templates", "locations", "pages", "problems", "scenes"):
         if doc.get(c):
             return False
     if len(doc.get("systems") or []) > 1:
@@ -1513,8 +1515,11 @@ _REQUIRED: Dict[str, Tuple[str, ...]] = {
     "locations": ("name",), "racks": ("name", "units"), "networks": ("name",),
     "devices": ("name", "kind"), "cables": ("from", "to", "medium"), "bundles": (),
     "floorplans": ("name", "room", "source", "image"), "attachments": ("name", "file", "mime"),
-    "templates": (), "imports": ("kind", "path"), "pages": ("slug", "title"), "problems": ("text",),
+    "templates": (), "imports": ("kind", "path"), "pages": ("slug", "title"), "problems": ("text",), "scenes": ("name",),
 }
+#: §4.3.18 scene name length cap and the device fields a scene owns
+MAX_SCENE_NAME = 80
+SCENE_PLACEMENT_FIELDS: Tuple[str, ...] = ("room", "location", "rack", "patch")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -1543,6 +1548,8 @@ def validate_doc(doc: Doc) -> List[Problem]:
             P.append(_prob("error", "bad_type", "settings", "settings/suggest_url", "suggest_url must be a string"))
         elif url and not re.match(r"^https?://[^\s/?#]+", url, re.I):
             P.append(_prob("error", "bad_enum", "settings", "settings/suggest_url", "suggest_url must be an http(s) URL"))
+    if settings.get("scene") is not None and not isinstance(settings.get("scene"), str):
+        P.append(_prob("error", "bad_type", "settings", "settings/scene", "scene must be a scene id string"))
 
     colls: Dict[str, List[Dict[str, Any]]] = {}
     for coll in COLLECTIONS:
@@ -1753,6 +1760,7 @@ def validate_doc(doc: Doc) -> List[Problem]:
     # ---- SOP pages (§4.3.15)
     P.extend(_page_problems(colls, ids))
     P.extend(_problem_report_problems(colls, ids))
+    P.extend(_scene_problems(settings, colls, ids, idx))
 
     # ---- helpers owned by other units (skipped when not importable)
     P.extend(_helper_problems(doc, colls))
@@ -1861,6 +1869,89 @@ def _problem_report_problems(colls: Dict[str, List[Dict[str, Any]]], ids: Dict[s
             P.append(_prob("warning", "dangling_link", ref, ref + "/page", f"{ref}: page '{r['page']}' does not exist"))
         if r.get("attachment") and r["attachment"] not in ids["attachments"]:
             P.append(_prob("warning", "dangling_link", ref, ref + "/attachment", f"{ref}: attachment '{r['attachment']}' does not exist"))
+    return P
+
+
+def _scene_problems(settings: Dict[str, Any], colls: Dict[str, List[Dict[str, Any]]], ids: Dict[str, Set[str]], idx: "DocIndex") -> List[Problem]:
+    """Scenes (§4.3.18): name shape, one ``base`` entry at most (error ``bad_enum``), typed ``data``
+    (errors ``bad_type``); duplicate names, a ``settings.scene`` that names no scene and scene cables /
+    markers / device entries pointing at devices or ports that no longer exist are warnings
+    (``duplicate_name`` / ``dangling_link``) — a deleted device must never make a scene unsaveable."""
+    P: List[Problem] = []
+    scenes_ = colls.get("scenes") or []
+    names: Dict[str, str] = {}
+    base_refs: List[str] = []
+    dev_ids = ids.get("devices") or set()
+    fp_ids = ids.get("floorplans") or set()
+    for s in scenes_:
+        ref = f"scenes/{s['id']}"
+        name = s.get("name")
+        if name is not None and not isinstance(name, str):
+            P.append(_prob("error", "bad_type", ref, ref + "/name", "name must be a string"))
+        elif isinstance(name, str):
+            if len(name) > MAX_SCENE_NAME:
+                P.append(_prob("error", "bad_enum", ref, ref + "/name", f"name is longer than {MAX_SCENE_NAME} characters"))
+            key = name.strip().casefold()
+            if key and key in names:
+                P.append(_prob("warning", "duplicate_name", ref, ref + "/name", f"scene name '{name}' is also used by {names[key]}"))
+            elif key:
+                names[key] = ref
+        if "base" in s and not isinstance(s.get("base"), bool):
+            P.append(_prob("error", "bad_type", ref, ref + "/base", "base must be true or false"))
+        if s.get("base") is True:
+            base_refs.append(ref)
+        if s.get("note") is not None and not isinstance(s.get("note"), str):
+            P.append(_prob("error", "bad_type", ref, ref + "/note", "note must be a string"))
+        data = s.get("data")
+        if data is None:
+            continue
+        if not isinstance(data, dict):
+            P.append(_prob("error", "bad_type", ref, ref + "/data", "data must be an object"))
+            continue
+        for key in ("cables", "bundles"):
+            lst = data.get(key)
+            if lst is not None and not isinstance(lst, list):
+                P.append(_prob("error", "bad_type", ref, f"{ref}/data/{key}", f"data.{key} must be a list"))
+        for key in ("markers", "devices"):
+            obj = data.get(key)
+            if obj is not None and not isinstance(obj, dict):
+                P.append(_prob("error", "bad_type", ref, f"{ref}/data/{key}", f"data.{key} must be an object"))
+        for j, c in enumerate(data.get("cables") if isinstance(data.get("cables"), list) else []):
+            if not isinstance(c, dict):
+                continue
+            cid = c.get("id") or j
+            for end in ("from", "to"):
+                ep = c.get(end)
+                if not isinstance(ep, dict) or not ep.get("device"):
+                    continue
+                dev = str(ep["device"])
+                if dev not in dev_ids:
+                    P.append(_prob("warning", "dangling_link", ref, f"{ref}/data/cables/{j}/{end}/device", f"{ref}: cable {cid}: device '{dev}' does not exist"))
+                elif ep.get("port") and idx.port(dev, str(ep["port"])) is None:
+                    P.append(_prob("warning", "dangling_link", ref, f"{ref}/data/cables/{j}/{end}/port", f"{ref}: cable {cid}: port '{dev}:{ep['port']}' does not exist"))
+        markers = data.get("markers") if isinstance(data.get("markers"), dict) else {}
+        for fp, lst in markers.items():
+            if fp not in fp_ids:
+                P.append(_prob("warning", "dangling_link", ref, f"{ref}/data/markers/{fp}", f"{ref}: floor plan '{fp}' does not exist"))
+            if not isinstance(lst, list):
+                P.append(_prob("error", "bad_type", ref, f"{ref}/data/markers/{fp}", "markers must be a list"))
+                continue
+            for j, m in enumerate(lst):
+                if isinstance(m, dict) and m.get("device") and m["device"] not in dev_ids:
+                    P.append(_prob("warning", "dangling_link", ref, f"{ref}/data/markers/{fp}/{j}/device", f"{ref}: device '{m['device']}' does not exist"))
+        devices = data.get("devices") if isinstance(data.get("devices"), dict) else {}
+        for did, entry in devices.items():
+            if not isinstance(entry, dict):
+                P.append(_prob("error", "bad_type", ref, f"{ref}/data/devices/{did}", "device placement must be an object"))
+                continue
+            if did not in dev_ids:
+                P.append(_prob("warning", "dangling_link", ref, f"{ref}/data/devices/{did}", f"{ref}: device '{did}' does not exist"))
+    if len(base_refs) > 1:
+        for ref in base_refs[1:]:
+            P.append(_prob("error", "bad_enum", ref, ref + "/base", f"only one scene may be the base ({base_refs[0]} already is)"))
+    active = settings.get("scene")
+    if isinstance(active, str) and active and active != "base" and active not in (ids.get("scenes") or set()):
+        P.append(_prob("warning", "dangling_link", "settings", "settings/scene", f"active scene '{active}' does not exist"))
     return P
 
 
@@ -2105,7 +2196,7 @@ JSON_SCHEMA: Dict[str, Any] = {
     "title": "Fathom project doc (schema 2)",
     "type": "object",
     "additionalProperties": True,
-    "required": ["fathom", "revision", "meta", "settings", *[c for c in COLLECTIONS if c not in ("pages", "problems")]],  # pages/problems: added in 0.4, optional on disk
+    "required": ["fathom", "revision", "meta", "settings", *[c for c in COLLECTIONS if c not in ("pages", "problems", "scenes")]],  # pages/problems/scenes: added in 0.4, optional on disk
     "properties": {
         "fathom": {"type": "integer", "const": 2},
         "revision": {"type": "integer", "minimum": 0},
@@ -2113,7 +2204,7 @@ JSON_SCHEMA: Dict[str, Any] = {
         "settings": _obj({
             "default_room": _STR, "units": {"type": "string", "enum": ["metric", "imperial"]}, "cable_tag_pattern": _STR,
             "currency": _STR, "public_url": _STR, "autosave": _BOOL, "problem_email": _STR, "short_codes": _BOOL,
-            "locked": _BOOL, "locked_by": _STR, "locked_at": _STR, "suggest_url": _STR,
+            "locked": _BOOL, "locked_by": _STR, "locked_at": _STR, "suggest_url": _STR, "scene": _STR,
             "labels": _obj({"cols": _INT, "rows": _INT, "width_in": _NUM, "height_in": _NUM, "page": {"type": "string", "enum": ["letter", "a4"]}}),
             "assistant": _obj({"llm": _BOOL}),
         }),
@@ -2205,5 +2296,15 @@ JSON_SCHEMA: Dict[str, Any] = {
             "created": _STR, "by": _STR, "via": {"type": "string", "enum": ["app", "public", "share"]}, "attachment": _STR,
             "resolved": _STR, "resolved_by": _STR, "note": _STR, "kind": {"type": "string", "enum": ["problem", "suggestion"]},
         }, ("id", "text"))),
+        "scenes": _arr(_obj({
+            "id": _ID, "name": {"type": "string", "maxLength": MAX_SCENE_NAME}, "note": _STR, "base": _BOOL,
+            "created": _STR, "by": _STR, "updated": _STR,
+            "data": _obj({
+                "cables": {"type": "array", "items": {"type": "object"}}, "bundles": {"type": "array", "items": {"type": "object"}},
+                "markers": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "object"}}},
+                "devices": {"type": "object", "additionalProperties": _obj({
+                    "room": _STR, "location": _STR, "rack": {"type": "object"}, "patch": {"type": "object"}})},
+            }),
+        }, ("id", "name"))),
     },
 }

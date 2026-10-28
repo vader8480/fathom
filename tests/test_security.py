@@ -75,6 +75,11 @@ SPEC_ROLES = {
     ("GET", "/api/v2/projects/{}/floorplans/{}.svg"): "viewer", ("GET", "/api/v2/projects/{}/schedules/{}"): "viewer",
     ("GET", "/api/v2/projects/{}/cables/tag-preview"): "editor", ("GET", "/api/v2/projects/{}/racks/{}.svg"): "viewer",
     ("GET", "/api/v2/projects/{}/qr/{}.svg"): "viewer", ("GET", "/api/v2/projects/{}/trace"): "viewer",
+    # phase3 P3A
+    ("GET", "/api/v2/projects/{}/scenes"): "viewer", ("POST", "/api/v2/projects/{}/scenes"): "editor",
+    ("PATCH", "/api/v2/projects/{}/scenes/{}"): "editor", ("DELETE", "/api/v2/projects/{}/scenes/{}"): "editor",
+    ("POST", "/api/v2/projects/{}/scenes/{}/activate"): "editor", ("POST", "/api/v2/projects/{}/scenes/{}/save"): "editor",
+    ("GET", "/api/v2/projects/{}/scenes/{}/diff"): "viewer", ("GET", "/api/v2/projects/{}/scenes/{}/doc"): "viewer",
     # phase1 P1B
     ("GET", "/api/v2/labels/presets"): "viewer", ("GET", "/api/v2/projects/{}/labels/devices"): "viewer",
     ("GET", "/api/v2/projects/{}/search"): "viewer", ("POST", "/api/v2/projects/{}/assistant"): "viewer",
@@ -108,7 +113,8 @@ PARAM_HINTS = {"name": "proj", "room": "main", "device": "atem-mini", "rack": "r
                "iid": "imp-0001", "att": "att-000000000000", "token": "sh-abc123", "fp": "fp-none", "run": "run1", "file": "index.html",
                "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip", "table": "devices", "slug": "power-up",
                "rid": "run-20260101-000000-0000", "pid": "pr-00000000", "code": "ABCD2345", "tname": "proj",
-               "invite": "inv-000000000000000000000000"}  # phase2 P2A
+               "invite": "inv-000000000000000000000000",  # phase2 P2A
+               "sid": "sc-00000000"}  # phase3 P3A
 DISCOVERY_FIXTURES = str(Path(__file__).parent / "fixtures" / "discovery")
 
 
