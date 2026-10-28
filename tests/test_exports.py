@@ -532,7 +532,7 @@ class Bom(unittest.TestCase):
 # ================================================================== builds (§5.9)
 
 BUILD_TOP = ["index.html", "diagram.svg", "patch-sheet.csv", "project.json", "build-notes.txt", "rooms/index.html", "patch-table.csv",
-             "cable-schedule.csv", "cable-labels.html", "ip-schedule.csv", "dmx-schedule.csv", "bom.csv", "inventory.csv"]
+             "cable-schedule.csv", "cable-labels.html", "device-labels.html", "ip-schedule.csv", "dmx-schedule.csv", "bom.csv", "inventory.csv"]
 
 
 def rel_files(run):

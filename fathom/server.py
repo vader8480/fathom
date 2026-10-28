@@ -2675,6 +2675,57 @@ def r_rack_svg(req: Request) -> Response:
     return r
 
 
+# ---- device labels for the Brady M511 (phase 1 P1B, §3.24 FR-QR-03..05, §5.8)
+
+
+@route("GET", r"/api/v2/labels/presets", role="viewer", summary="Device label presets: Brady M511 cartridge sizes (id, label, width_mm, height_mm, parts, continuous)", tags=["schedules"])
+def r_label_presets(req: Request) -> Response:
+    from .labels import DEFAULT_PRESET, presets
+
+    return Response.json({"presets": presets(), "default": DEFAULT_PRESET})
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/labels/devices", role="viewer",
+       summary="Device labels at true size for the Brady M511 (?preset=, format=html|csv|zip|svg, devices=<id,id>, room=, status=, png=0)", tags=["schedules"])
+def r_device_labels(req: Request) -> Response:
+    from .labels import DEFAULT_PRESET, PRESETS, device_label_svg, label_sheet_html, labels_csv, labels_zip, select_devices
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    preset = req.query.get("preset") or DEFAULT_PRESET
+    if preset not in PRESETS:
+        raise ApiError(400, "bad_preset", "bad_preset", {"presets": sorted(PRESETS)})
+    fmt = req.query.get("format") or "html"
+    if fmt not in ("html", "csv", "zip", "svg"):
+        raise ApiError(400, "format must be html, csv, zip or svg")
+    room = req.query.get("room") or None
+    if room and room != "*" and room not in _room_ids(doc):
+        raise ApiError(404, f"room '{room}' not found")
+    status = req.query.get("status") or None
+    devices = select_devices(doc, ids=req.query.get("devices") or None, room=room, state=status)
+    base = _public_base(req, doc)
+    name = pdir.name
+    if fmt == "svg":
+        if len(devices) != 1 or len([s for s in (req.query.get("devices") or "").split(",") if s.strip()]) != 1:
+            raise ApiError(400, "format=svg needs exactly one device id in ?devices=", "one_device")
+        r = Response.text(device_label_svg(doc, devices[0], preset, base_url=base, project=name), "image/svg+xml; charset=utf-8",
+                          headers={"Cache-Control": "no-cache", "Content-Disposition": f'inline; filename="{_safe_filename(devices[0]["id"])}-{preset}.svg"'})
+        r.csp = FILE_CSP
+        return r
+    if fmt == "csv":
+        return Response.text(labels_csv(doc, devices, base_url=base, project=name), "text/csv; charset=utf-8",
+                             headers={"Content-Disposition": 'attachment; filename="device-labels.csv"'})
+    if fmt == "zip":
+        data = labels_zip(doc, devices, preset, base_url=base, project=name, png=req.query.get("png") != "0")
+        r = Response(data, 200, "application/zip", {"Content-Disposition": f'attachment; filename="device-labels-{preset}.zip"', "Cache-Control": "no-cache"})
+        r.csp = FILE_CSP
+        return r
+    title = " · ".join(s for s in ("Device labels", (doc.get("meta") or {}).get("org") or name) if s)
+    r = Response.text(label_sheet_html(doc, devices, preset, base_url=base, title=title, project=name), "text/html; charset=utf-8", headers={"Cache-Control": "no-cache"})
+    r.csp = VIEWER_CSP
+    return r
+
+
 @route("GET", r"/api/v2/projects/" + _NAME + r"/qr/(?P<device>" + _EID + r")\.svg", role="viewer", summary="QR code SVG for a device page", tags=["schedules"], page="file")
 def r_qr(req: Request) -> Response:
     from .qr import svg
