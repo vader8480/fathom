@@ -11,7 +11,7 @@ import { openWizard } from './wizard.js';
 import { slug, newId, deepClone } from './model-core.js';
 import { suggestionControl, applyChoice } from './suggest-ui.js';
 
-function msg(e) { return (e && e.message) || String(e); }
+function msg(e) { return (e && e.details && typeof e.details.detail === 'string' && e.details.detail) || (e && e.message) || String(e); }
 function fmtTime(s) {
   if (!s) return '';
   const d = new Date(s);
