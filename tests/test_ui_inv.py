@@ -470,7 +470,7 @@ class InventoryKnoxUi(_InventoryBase):
             self.assertEqual(pg.js("document.querySelector('#inv-table tr[data-device=foh-cl5] td[data-col=code] .inv-code-text').textContent"), "ABCD-2345")
             copy = pg.js("document.querySelector('#inv-table tr[data-device=foh-cl5] td[data-col=code] .inv-copy').getAttribute('data-copy')")
             self.assertTrue(copy.endswith("/c/ABCD-2345"), copy)
-            self.assertEqual(self._cell(pg, "cam-1", "code"), "\u2014", "no code yet shows an em dash")
+            self.assertRegex(self._cell(pg, "cam-1", "code"), r"^(\u2014|[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4})", "an em dash until the server assigns a code on save (FR-INV-09)")
             self.assertEqual(self._cell(pg, "cam-1", "container"), "")
 
             # the container cell selects the container

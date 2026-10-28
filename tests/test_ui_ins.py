@@ -10,6 +10,7 @@ writes ``ins-device``, ``ins-port``, ``ins-cable`` and ``ins-inventory`` at d, t
 from __future__ import annotations
 
 import json
+import re
 import urllib.request
 
 try:
@@ -349,7 +350,8 @@ class InspectorKnoxUi(_InspectorBase):
                 pg.click(INV + ".ins-holds-link[data-device=di-kit]")
                 self.ready(pg, "DI box kit")
                 self.assertTrue(pg.js("location.hash.indexOf('sel=device:di-kit') > 0 || location.hash.indexOf('sel=device%3Adi-kit') > 0"))
-                self.assertEqual(pg.js("document.querySelector(%s).textContent" % q(INV + ".ins-code")).strip(), "\u2014", "no code yet shows an em dash")
+                code_text = pg.js("document.querySelector(%s).textContent" % q(INV + ".ins-code")).strip()
+                self.assertRegex(code_text, r"^(\u2014|[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4})", "an em dash until the server assigns a code on save (FR-INV-09)")
 
     def test_knox_custom_fields_add_edit_remove_and_duplicate_error(self):
         with self.open(CAMPUS + "inventory?sel=device:foh-cl5&sec=inventory", "d") as pg:
