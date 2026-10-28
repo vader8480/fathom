@@ -189,9 +189,20 @@ T('summaryCards: validation results (ctx.problems()) are not problem reports', (
   assert.equal(byKey(none, 'problems').count, 0, 'an empty given list still wins');
 });
 
-T('summaryCards rack: used and free go to the elevation, accessories only to a page tab', () => {
+T('summaryCards rack: the A.3 set without template info', () => {
   const doc = fx();
+  doc.racks[0].items = [{ id: 'ri-1', type: 'blank', u: 1 }];
   const cards = mod.summaryCards('rack', doc, doc.racks[0], {});
+  assert.deepEqual(cards.map((c) => [c.key, c.count, c.tab, c.sub]), [
+    ['height', 12, 'elevation', 'U'], ['used', 2, 'elevation', 'U'], ['free', 10, 'elevation', 'U'],
+    ['devices', 1, 'devices', ''], ['cables', 4, 'cables', ''], ['problems', 0, null, ''],
+  ]);
+  assert.deepEqual(mod.summaryCards('rack', doc, doc.racks[0], null).map((c) => c.key), cards.map((c) => c.key));
+});
+
+T('summaryCards rack page: used and free go to the elevation, accessories only to a page tab', () => {
+  const doc = fx();
+  const cards = mod.summaryCards('rack', doc, doc.racks[0], { info: {} });
   assert.deepEqual(cards.map((c) => [c.key, c.count, c.tab]), [
     ['used', 1, 'elevation'], ['free', 11, 'elevation'], ['weight', 0, null], ['power', 0, null],
     ['devices', 1, 'devices'], ['accessories', 0, null], ['cables', 4, 'cables'], ['problems', 0, null],
@@ -201,7 +212,7 @@ T('summaryCards rack: used and free go to the elevation, accessories only to a p
   assert.equal(byKey(cards, 'weight').level, '');
   assert.equal(byKey(cards, 'power').limit, null);
   const tabs = mod.rackTabs(doc, doc.racks[0]);
-  assert.equal(byKey(mod.summaryCards('rack', doc, doc.racks[0], { tabs }), 'accessories').tab, 'accessories');
+  assert.equal(byKey(mod.summaryCards('rack', doc, doc.racks[0], { info: {}, tabs }), 'accessories').tab, 'accessories');
   assert.deepEqual(mod.summaryCards('rack', doc, null, {}), []);
   assert.deepEqual(mod.summaryCards('cable', doc, { id: 'c-0001' }, {}), [], 'unknown kind → no cards');
 });
@@ -237,32 +248,36 @@ T('summaryCards rack: totals with template info, items and the over-limit warnin
   assert.equal(byKey(cards, 'devices').count, 3, 'shelf children count as rack devices');
   assert.equal(byKey(cards, 'accessories').count, 2);
   assert.equal(byKey(cards, 'accessories').tab, 'accessories');
-  const noInfo = mod.summaryCards('rack', doc, rack, {});
-  assert.equal(byKey(noInfo, 'weight').count, 23.5, 'without template info only device and item weights count');
+  const noInfo = mod.summaryCards('rack', doc, rack, { info: {} });
+  assert.equal(byKey(noInfo, 'weight').count, 23.5, 'without template summaries only device and item weights count');
   rack.power_limit_w = 100;
-  assert.equal(byKey(mod.summaryCards('rack', doc, rack, {}), 'power').level, 'warn');
+  assert.equal(byKey(mod.summaryCards('rack', doc, rack, { info: {} }), 'power').level, 'warn');
 });
 
-T('rackFacts: width, form factor and row; used U counts items', () => {
+T('rackFacts: width, form factor and row with opts.info; used U counts items', () => {
   const doc = fx();
   const rack = doc.racks[0];
-  let facts = mod.rackFacts(doc, rack);
+  const page = { info: {} };
+  assert.deepEqual(mod.rackFacts(doc, rack).map((f) => f.key), ['room', 'height', 'used', 'free', 'devices', 'location'],
+    'the A.3 set without opts.info');
+  let facts = mod.rackFacts(doc, rack, page);
   assert.deepEqual(facts.map((f) => f.key), ['room', 'height', 'width', 'form', 'used', 'free', 'devices', 'location']);
   assert.equal(byKey(facts, 'width').value, '19\u2033', 'default 19-inch');
   assert.equal(byKey(facts, 'form').value, 'Cabinet', 'default cabinet');
   Object.assign(rack, { width_in: 10, form_factor: 'two_post', row: 'Row A', items: [{ id: 'ri-1', type: 'drawer', u: 1 }] });
-  facts = mod.rackFacts(doc, rack);
+  facts = mod.rackFacts(doc, rack, page);
   assert.equal(byKey(facts, 'width').value, '10\u2033');
   assert.equal(byKey(facts, 'form').value, '2-post');
   assert.equal(byKey(facts, 'row').value, 'Row A');
   assert.equal(byKey(facts, 'used').value, '3 U', 'the 2U drawer + the wireless receiver');
+  assert.equal(byKey(mod.rackFacts(doc, rack), 'row'), undefined);
   rack.width_in = 17;
   rack.form_factor = 'tower';
-  facts = mod.rackFacts(doc, rack);
+  facts = mod.rackFacts(doc, rack, page);
   assert.equal(byKey(facts, 'width').value, '19\u2033', 'unknown widths read as 19');
   assert.equal(byKey(facts, 'form').value, 'Cabinet');
   const loose = { id: 'rk-loose', units: 4 };
-  facts = mod.rackFacts(doc, loose);
+  facts = mod.rackFacts(doc, loose, page);
   assert.equal(byKey(facts, 'used').value, '0 U', 'a rack object outside doc.racks still gets facts');
   assert.equal(byKey(facts, 'free').value, '4 U');
 });

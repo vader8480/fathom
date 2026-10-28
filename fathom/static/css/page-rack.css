@@ -16,9 +16,24 @@
 .rp-display-opt + .rp-display-opt { border-left: 1px solid var(--border); }
 .rp-seg .rp-display-opt:hover { color: var(--text); background: none; }
 .rp-seg .rp-display-opt[aria-pressed=true] { background: rgba(142,162,255,.18); color: var(--text); }
-.rp-ann { display: inline-flex; align-items: center; gap: 6px; }
+.rp-ann { position: relative; display: inline-flex; }
+.rp-ann-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; max-width: 100%; }
+.rp-ann-btn::after { content: ''; border: 4px solid transparent; border-top-color: currentColor; margin-top: 4px; }
 .rp-ann-label { font-size: 12px; color: var(--muted); }
-.rp-annotate, .rp-acc-type { min-height: 40px; max-width: 100%; }
+.rp-ann-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-ann-menu {
+  position: absolute; left: 0; top: calc(100% + 4px); z-index: 15; display: flex; flex-direction: column;
+  min-width: 100%; max-height: 60vh; overflow-y: auto; padding: 4px; background: var(--panel);
+  border: 1px solid var(--border-2); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.rp-ann-menu[hidden] { display: none; }
+.rp-ann-opt {
+  min-height: 36px; padding: 0 12px 0 28px; border: 0; background: none; color: var(--text); font: inherit;
+  text-align: left; white-space: nowrap; cursor: pointer; position: relative;
+}
+.rp-ann-opt:hover, .rp-ann-opt:focus-visible { background: var(--panel-2); }
+.rp-ann-opt[aria-checked=true]::before { content: '\2713'; position: absolute; left: 10px; color: var(--accent); }
+.rp-acc-type { min-height: 40px; max-width: 100%; }
 
 .rp-acc-bar { margin-bottom: 8px; }
 .rp-acc-add { min-height: 40px; }
@@ -44,14 +59,13 @@
   .rp-bar { gap: 6px; }
   .rp-faces, .rp-seg { flex: 1 1 100%; }
   .rp-face, .rp-display-opt { flex: 1 1 0; min-width: 0; }
-  .rp-ann { flex: 1 1 auto; }
-  .rp-annotate { flex: 1 1 auto; }
+  .rp-ann, .rp-ann-btn { flex: 1 1 auto; }
   .rp-acc-bar .rp-acc-type { flex: 1 1 auto; min-width: 0; }
   .rp-accessories .rp-acc-u { width: 4em; }
   .rp-accessories .rp-acc-label { min-width: 6em; }
 }
 @media (pointer: coarse) {
-  .rp-display-opt, .rp-annotate, .rp-acc-type, .rp-acc-add, .rp-acc-del, .rp-qr-print,
+  .rp-display-opt, .rp-ann-btn, .rp-ann-opt, .rp-acc-type, .rp-acc-add, .rp-acc-del, .rp-qr-print,
   .rp-accessories .rp-acc-u, .rp-accessories .rp-acc-label { min-height: 44px; }
   .rp-acc-del { min-width: 44px; }
 }

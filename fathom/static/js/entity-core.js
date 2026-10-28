@@ -205,21 +205,32 @@ function rackLimits(totals) {
   };
 }
 
-// opts.info: template summaries {id: {weight_kg, power_w}} for rackTotals.
+// The rack page passes opts.info / ctxInfo.info (template summaries
+// {id: {weight_kg, power_w}} for rackTotals, {} while loading); its presence
+// selects the page's fuller facts and cards over the A.3 set.
+function pageInfo(o) {
+  return o && o.info && typeof o.info === 'object' ? o.info : null;
+}
+
+// A.3: room, height, used, free, devices, location. With opts.info: width and
+// form factor after height, row last.
 export function rackFacts(doc, rack, opts) {
   const out = [];
   if (!rack) return out;
   const link = linker(opts);
-  const t = totalsOf(doc, rack, opts && opts.info);
+  const info = pageInfo(opts);
+  const t = totalsOf(doc, rack, info);
   if (has(rack.room)) fact(out, 'room', 'Room', nameOf(find(list(doc && doc.rooms), rack.room), rack.room), link('rooms', rack.room));
   fact(out, 'height', 'Height', t.units + ' U');
-  fact(out, 'width', 'Width', rackWidthIn(rack) + '\u2033');
-  fact(out, 'form', 'Form factor', formFactorLabel(rack));
+  if (info) {
+    fact(out, 'width', 'Width', rackWidthIn(rack) + '\u2033');
+    fact(out, 'form', 'Form factor', formFactorLabel(rack));
+  }
   fact(out, 'used', 'Used', t.used_u + ' U');
   fact(out, 'free', 'Free', Math.max(0, t.free_u) + ' U');
   fact(out, 'devices', 'Devices', String(t.devices));
   if (has(rack.location)) fact(out, 'location', 'Location', nameOf(find(list(doc && doc.locations), rack.location), rack.location));
-  fact(out, 'row', 'Row', str(rack.row));
+  if (info) fact(out, 'row', 'Row', str(rack.row));
   return out;
 }
 
@@ -367,23 +378,35 @@ function limitCard(key, label, l, unit, limitWord) {
 
 function rackCards(doc, rack, ctxInfo) {
   const name = nameOf(rack, rack.id);
-  const t = totalsOf(doc, rack, ctxInfo && ctxInfo.info);
-  const lim = rackLimits(t);
+  const info = pageInfo(ctxInfo);
+  const t = totalsOf(doc, rack, info);
   const tabs = ctxInfo && Array.isArray(ctxInfo.tabs) ? ctxInfo.tabs : rackTabs();
   const devIds = ids(rackDevices(doc, rack.id), function (p) { return p.device; });
   const devs = devIds.map(function (id) { return { id: id }; });
   const cables = cablesTouching(doc, devIds);
   const problems = problemsOf(doc, ctxInfo).filter(function (p) { return has(p.device) && devIds.indexOf(p.device) >= 0; });
+  const devCard = card('devices', 'Devices', devs, { tab: 'devices', kind: 'device', title: plural(devs.length, 'device', 'devices') + DOT + name });
+  const tail = [
+    card('cables', 'Cables', cables, { tab: 'cables', kind: 'cable', title: plural(cables.length, 'cable', 'cables') + DOT + name }),
+    card('problems', 'Problems', problems, { kind: 'problem', title: 'Open problems' + DOT + name, sub: problems.length ? 'open' : '' }),
+  ];
+  if (!info) {
+    return [
+      countCard('height', 'Height', t.units, 'elevation', 'U'),
+      countCard('used', 'Used', t.used_u, 'elevation', 'U'),
+      countCard('free', 'Free', Math.max(0, t.free_u), 'elevation', 'U'),
+      devCard,
+    ].concat(tail);
+  }
+  const lim = rackLimits(t);
   return [
     countCard('used', 'Used', t.used_u, 'elevation', 'of ' + t.units + ' U'),
     countCard('free', 'Free', Math.max(0, t.free_u), 'elevation', 'U'),
     limitCard('weight', 'Weight', lim.weight, 'kg', 'max'),
     limitCard('power', 'Power', lim.power, 'W', 'limit'),
-    card('devices', 'Devices', devs, { tab: 'devices', kind: 'device', title: plural(devs.length, 'device', 'devices') + DOT + name }),
+    devCard,
     countCard('accessories', 'Accessories', rackItems(doc, rack.id).length, tabs.indexOf('accessories') >= 0 ? 'accessories' : null),
-    card('cables', 'Cables', cables, { tab: 'cables', kind: 'cable', title: plural(cables.length, 'cable', 'cables') + DOT + name }),
-    card('problems', 'Problems', problems, { kind: 'problem', title: 'Open problems' + DOT + name, sub: problems.length ? 'open' : '' }),
-  ];
+  ].concat(tail);
 }
 
 // Overview cards: [{key, label, count, sub, tab, drill: {title, kind, ids} | null}].
@@ -391,9 +414,11 @@ function rackCards(doc, rack, ctxInfo) {
 // validation results; see problemsOf) and the SOP pages. Each falls back to the
 // doc collection (doc.problems, doc.pages) when absent. Only open problem reports
 // and non-archived pages count.
-// Racks also read ctxInfo.info (template summaries for weight and power) and
-// ctxInfo.tabs (the page's tabs; a card links only to a tab in it, default
-// rackTabs()). Their weight and power cards add {limit, level: 'warn'|'', title}.
+// Racks: height, used, free, devices, cables, problems (A.3). With ctxInfo.info
+// (template summaries, see pageInfo): used, free, weight, power, devices,
+// accessories, cables, problems; weight and power add {limit, level:
+// 'warn'|'', title}, and ctxInfo.tabs (default rackTabs()) gates the
+// accessories card's tab.
 export function summaryCards(kind, doc, entity, ctxInfo) {
   if (!entity) return [];
   if (kind === 'device') return deviceCards(doc, entity, ctxInfo);

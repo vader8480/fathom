@@ -6,7 +6,8 @@ arrive through ``loadTemplateInfo``. The ``accessories`` tab is a DataTable of `
 inline label and U edits, delete and Add accessory. The elevation takes ``/both`` plus the display
 and annotation controls (``fathom.ui.rack.display`` / ``.annotate``). The header ⋯ menu links the
 public viewer page, opens the QR dialog (and explains a 409 ``no_public_url``), exports and
-duplicates the rack. Viewers get no edit controls. Runs at d (widened to 1440×900) and m (390×844).
+duplicates the rack. Viewers get no edit controls, and at d no ⋯ (export, viewer page and QR sit in
+the header bar). Runs at d (widened to 1440×900) and m (390×844).
 
 Run alone: ``FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -p test_ui_rk_page.py -v``.
 Skips without Chrome; ``$FATHOM_UI_SHOTS`` collects ``page-*.png``.
@@ -155,8 +156,22 @@ class RackPageUi(UiCase):
                 pg.click(".rp-display-opt[data-display=image]")
                 pg.wait_for("document.querySelector('.rp-display-opt[data-display=image]').getAttribute('aria-pressed') === 'true'")
                 self.assertEqual(pg.js("localStorage.getItem('fathom.ui.rack.display')"), "image")
-                pg.js("var s = document.getElementById('rp-annotate'); s.value = 'model'; s.dispatchEvent(new Event('change')); 1")
+                self.assertFalse(pg.js("!!document.querySelector('.rp-bar select')"), "no form field for a view option")
+                pg.click(".rp-ann-btn")
+                pg.wait_for("!document.getElementById('rp-ann-menu').hidden")
+                self.assertEqual(pg.js("document.activeElement.getAttribute('data-annotate')"), "", "focus starts on the current option")
+                pg.press("Escape")
+                pg.wait_for("document.getElementById('rp-ann-menu').hidden")
+                self.assertTrue(pg.js("document.activeElement.classList.contains('rp-ann-btn')"))
+                pg.click(".rp-ann-btn")
+                pg.wait_for("!document.getElementById('rp-ann-menu').hidden")
+                if size == "m":
+                    self.assertGreaterEqual(pg.rect(".rp-ann-opt[data-annotate=model]")["height"], 44)
+                    self.assertGreaterEqual(pg.rect(".rp-ann-btn")["height"], 44)
+                pg.click(".rp-ann-opt[data-annotate=model]")
+                pg.wait_for("document.getElementById('rp-ann-menu').hidden")
                 self.assertEqual(pg.js("localStorage.getItem('fathom.ui.rack.annotate')"), "model")
+                self.assertEqual(pg.js("document.querySelector('.rp-ann-value').textContent"), "Model")
                 if size == "d":
                     opts = pg.js("""(function () { var s = document.querySelector('.rp-elev .rk-slots'); return !!s; })()""")
                     self.assertTrue(opts)
@@ -165,7 +180,8 @@ class RackPageUi(UiCase):
                 self.ready(pg, "reload")
                 page_ready(pg, "elevation")
                 self.assertEqual(pg.js("document.querySelector('.rp-display-opt[data-display=image]').getAttribute('aria-pressed')"), "true")
-                self.assertEqual(pg.js("document.getElementById('rp-annotate').value"), "model")
+                self.assertEqual(pg.js("document.querySelector('.rp-ann-value').textContent"), "Model")
+                self.assertEqual(pg.js("document.querySelector('.rp-ann-opt[aria-checked=true]').getAttribute('data-annotate')"), "model")
                 pg.click(".rp-face[data-face=rear]")
                 pg.wait_for("/\\/racks\\/rk-foh\\/elevation\\/rear$/.test(location.hash)")
                 pg.wait_for("!!document.querySelector('.rp-elev[data-face=rear] .rk-slots[data-face=rear]')")
@@ -361,8 +377,14 @@ class RackPageViewer(UiCase):
                 st = pg.js("""({inputs: document.querySelectorAll('.rp-accessories input.rp-acc-label, .rp-accessories input.rp-acc-u').length,
                   add: !!document.querySelector('.rp-acc-add'), del: document.querySelectorAll('.rp-acc-del').length})""")
                 self.assertEqual(st, {"inputs": 0, "add": False, "del": 0})
-                open_menu(pg)
-                items = pg.js("Array.prototype.map.call(document.querySelectorAll('.eh-menu .eh-menu-item'), function (a) { return a.getAttribute('data-action'); })")
+                if size == "d":
+                    self.assertFalse(pg.js("!!document.querySelector('.eh-more')"), "no ⋯ for viewers at lg")
+                    items = pg.js("Array.prototype.map.call(document.querySelectorAll('.eh-actions .eh-action'), function (a) { return a.getAttribute('data-action'); })")
+                    self.assertEqual(items, ["edit", "print", "export", "viewer", "qr"])
+                    self.assertEqual(pg.js("document.querySelector('.eh-action[data-action=viewer]').href"), self.base + "/p/campus-demo/rk/rk-foh")
+                else:
+                    open_menu(pg)
+                    items = pg.js("Array.prototype.map.call(document.querySelectorAll('.eh-menu .eh-menu-item'), function (a) { return a.getAttribute('data-action'); })")
                 self.assertIn("viewer", items)
                 self.assertIn("qr", items)
                 self.assertIn("export", items)

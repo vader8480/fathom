@@ -329,24 +329,28 @@ export function mountRackPage(el, ctx, opts) {
     if (tot && tot.power_limit_w !== null && tot.power_w > tot.power_limit_w) {
       badges.push({ key: 'over-power', label: 'Over power limit', level: 'warn', title: tot.power_w + ' W of ' + tot.power_limit_w + ' W limit.' });
     }
-    const overflow = [
+    const actions = [
+      { key: 'edit', label: ro ? 'Details' : 'Edit', primary: true, run: function () { openDrawer({ type: 'rack', id: rk.id }); } },
+      { key: 'print', label: 'Print', run: printRack },
+    ];
+    const shared = [
       { key: 'export', label: 'Export\u2026', run: function () { openRackExport(ctx, { racks: [rk.id], face: face }); } },
-      { key: 'viewer', label: 'Open viewer page', href: viewerHref(), target: '_blank' },
+      { key: 'viewer', label: ro ? 'Viewer page' : 'Open viewer page', href: viewerHref(), target: '_blank' },
       { key: 'qr', label: 'QR code\u2026', run: openQr },
     ];
-    if (!ro) {
-      overflow.push({ key: 'duplicate', label: 'Duplicate rack\u2026', run: duplicateRack });
-      overflow.push({ key: 'delete', label: 'Delete rack', danger: true, run: deleteRack });
-    }
+    // Viewers have no ⋯ menu at md/lg (it holds the write actions), so the
+    // read-only ones sit in the bar.
+    const overflow = ro ? [] : shared.concat([
+      { key: 'duplicate', label: 'Duplicate rack\u2026', run: duplicateRack },
+      { key: 'delete', label: 'Delete rack', danger: true, run: deleteRack },
+    ]);
+    if (ro) Array.prototype.push.apply(actions, shared);
     return {
       kind: 'rack', id: rk.id, glyph: GLYPH, title: rk.name || rk.id,
       subtitle: [room ? room.name || room.id : '', loc ? loc.name || loc.id : ''].filter(Boolean).join(DOT),
       facts: rackFacts(d, rk, { info: info, href: function (view, ref) { return href({ view: view, id: ref, tab: '', sub: '', room: view === 'rooms' ? ref : undefined, query: {} }); } }),
       badges: badges,
-      actions: [
-        { key: 'edit', label: ro ? 'Details' : 'Edit', primary: true, run: function () { openDrawer({ type: 'rack', id: rk.id }); } },
-        { key: 'print', label: 'Print', run: printRack },
-      ],
+      actions: actions,
       overflow: overflow,
       tabs: tabs().map(function (k) {
         const count = k === 'devices' ? devIds.length : k === 'cables' ? nCables : k === 'accessories' ? nItems : null;
@@ -551,8 +555,66 @@ export function mountRackPage(el, ctx, opts) {
     Array.prototype.forEach.call(bar.querySelectorAll('.rp-display-opt'), function (b) {
       b.setAttribute('aria-pressed', b.getAttribute('data-display') === display ? 'true' : 'false');
     });
-    const sel = bar.querySelector('.rp-annotate');
-    if (sel && sel.value !== annotate) sel.value = annotate;
+    const val = bar.querySelector('.rp-ann-value');
+    if (val) val.textContent = annLabel(annotate);
+    Array.prototype.forEach.call(bar.querySelectorAll('.rp-ann-opt'), function (b) {
+      b.setAttribute('aria-checked', b.getAttribute('data-annotate') === annotate ? 'true' : 'false');
+    });
+  }
+
+  function annLabel(key) {
+    const f = ANNOTATION_FIELDS.filter(function (x) { return x.key === key; })[0];
+    return f && f.key ? f.label : 'None';
+  }
+
+  // Annotation picker: a menu button rather than a <select>, so viewers (who may
+  // annotate the drawing) are not handed what reads as an editable field.
+  function annotatePicker() {
+    const btn = h('button', {
+      type: 'button', class: 'rp-ann-btn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-controls': 'rp-ann-menu',
+    }, [h('span', { class: 'rp-ann-label', text: 'Annotate' }), h('span', { class: 'rp-ann-value', text: annLabel(annotate) })]);
+    const menu = h('div', { id: 'rp-ann-menu', class: 'rp-ann-menu', role: 'menu', 'aria-label': 'Annotation column', hidden: true },
+      ANNOTATION_FIELDS.map(function (f) {
+        return h('button', {
+          type: 'button', class: 'rp-ann-opt', role: 'menuitemradio', 'data-annotate': f.key,
+          'aria-checked': f.key === annotate ? 'true' : 'false', text: f.key ? f.label : 'No annotation',
+        });
+      }));
+    const wrap = h('div', { class: 'rp-ann' }, [btn, menu]);
+    function opts() { return Array.prototype.slice.call(menu.querySelectorAll('.rp-ann-opt')); }
+    function open() {
+      menu.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      const cur = menu.querySelector('.rp-ann-opt[aria-checked=true]') || opts()[0];
+      if (cur) cur.focus();
+    }
+    function close(refocus) {
+      if (menu.hidden) return;
+      menu.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+      if (refocus) btn.focus();
+    }
+    offs.push(on(btn, 'click', function () { if (menu.hidden) open(); else close(false); }));
+    offs.push(on(menu, 'click', function (e) {
+      const b = e.target.closest('.rp-ann-opt');
+      if (!b) return;
+      setAnnotate(b.getAttribute('data-annotate'));
+      close(true);
+    }));
+    offs.push(on(wrap, 'keydown', function (e) {
+      if (menu.hidden) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); return; }
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
+      e.preventDefault();
+      const list = opts();
+      const i = list.indexOf(document.activeElement);
+      const n = e.key === 'Home' ? 0 : e.key === 'End' ? list.length - 1
+        : (i + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length;
+      list[n].focus();
+    }));
+    offs.push(on(document, 'pointerdown', function (e) { if (!wrap.contains(e.target)) close(false); }));
+    offs.push(on(wrap, 'focusout', function (e) { if (e.relatedTarget && !wrap.contains(e.relatedTarget)) close(false); }));
+    return wrap;
   }
 
   function setDisplay(v) {
@@ -576,20 +638,15 @@ export function mountRackPage(el, ctx, opts) {
     const modes = h('div', { class: 'rp-seg rp-display', role: 'group', 'aria-label': 'Show devices as' }, DISPLAY_MODES.map(function (m) {
       return h('button', { type: 'button', class: 'rp-display-opt', 'data-display': m, 'aria-pressed': m === display ? 'true' : 'false', text: DISPLAY_LABELS[m] || cap(m) });
     }));
-    const ann = h('select', { id: 'rp-annotate', class: 'rp-annotate', 'aria-label': 'Annotation column' }, ANNOTATION_FIELDS.map(function (f) {
-      return h('option', { value: f.key, text: f.key ? f.label : 'No annotation' });
-    }));
-    ann.value = annotate;
     const add = readOnly() || typeof ctx.pickDevice !== 'function' ? null
       : h('button', { type: 'button', class: 'rk-btn rp-add', text: 'Add device\u2026' });
     const host = h('div', { class: 'rp-elev', 'data-face': face });
-    bar = h('div', { class: 'rp-bar' }, [faces, modes, h('label', { class: 'rp-ann' }, [h('span', { class: 'rp-ann-label', text: 'Annotate' }), ann]), add]);
+    bar = h('div', { class: 'rp-bar' }, [faces, modes, annotatePicker(), add]);
     body.appendChild(h('div', { class: 'rp-panel rp-elevation', 'data-tab': 'elevation' }, [bar, host]));
     offs.push(on(modes, 'click', function (e) {
       const b = e.target.closest('.rp-display-opt');
       if (b) setDisplay(b.getAttribute('data-display'));
     }));
-    offs.push(on(ann, 'change', function () { setAnnotate(ann.value); }));
     elev = createElevation(host, ctx, { rack: rk.id, face: face === 'rear' ? 'rear' : 'front' });
     if (typeof elev.setOptions === 'function') elev.setOptions({ face: face, display: display, annotate: annotate });
     if (add) offs.push(on(add, 'click', function () { if (elev) elev.addDevice(); }));
