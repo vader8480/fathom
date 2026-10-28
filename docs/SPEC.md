@@ -1564,7 +1564,7 @@ For ports `id` = `<device>:<port>`; cables `id` = cable id; interfaces `id` = `<
 
 ### 5.14 OpenAPI
 
-`openapi.build_spec(routes, version) -> dict`: `openapi: "3.1.0"`, `info {title: "Fathom API", version}`, `servers: [{"url": "./"}]`, `components.securitySchemes {basic: http basic, session: apiKey cookie fathom_session}`, `components.schemas` (`Doc` → `$ref` to `/api/v2/schema.json`, `Op`, `Problem`, `Hit`, `Answer`, `Error`, `Floorplan`, `Attachment`, `Import`, `User`, `Page`, `PagePreview`, `PageMove`), and one `paths` entry per registered route (path params converted from regex groups to `{name}`), each with `summary`, `tags`, `x-fathom-role`, `requestBody` (when declared) and `responses` including the error codes of §5.1. `/api/docs` renders a table of method/path/role/summary grouped by tag.
+`openapi.build_spec(routes, version) -> dict`: `openapi: "3.1.0"`, `info {title: "Fathom API", version}`, `servers: [{"url": "./"}]`, `components.securitySchemes {basic: http basic, session: apiKey cookie fathom_session}`, `components.schemas` (`Doc` → `$ref` to `/api/v2/schema.json`, `Op`, `Problem`, `Hit`, `Answer`, `Error`, `Floorplan`, `Attachment`, `Import`, `User`, `Page`, `PagePreview`, `PageMove`), and one `paths` entry per registered route (path params converted from regex groups to `{name}`), each with `summary`, `tags`, `x-fathom-role`, `requestBody` (when declared) and `responses` including the error codes of §5.1. A route body name without a component schema (today `RackImport`, `RackFromTemplate`, `NetboxImport`) is emitted as `{"type": "object"}`. `/api/docs` renders a table of method/path/role/summary grouped by tag.
 
 ### 5.15 SOP pages (`fathom/markdown.py`, server section "SOP pages")
 
@@ -1916,8 +1916,28 @@ export function placeOps(doc, deviceId, rackId, u, opts) {} // opts {face, heigh
 export function unplaceOps(doc, deviceId) {}
 export function uToY(rack, u, height) {}          // top px of a block; respects numbering
 export function yToU(rack, y, height) {}          // snapped, clamped to 1..units-height+1
-export function ruLabel(rack, u) {}
+export function ruLabel(rack, u) {}               // honours start_u (§4.4.7)
+// Rackula features (§4.4.7; ids of items are 'item:<id>' wherever devices and items mix):
+export const ITEM_TYPES = [];                     // §4.3.7 table
+export function rackItems(doc, rackId) {}         // normalized items; unlabeled items get the type label
+export function itemBlocks(doc, rackId, face) {}  // [{id:'item:'+id, item, type, u, height, face, depth, label, color, slots, x:0, y, w, h, behind}]
+export function shelfCells(doc, rackId, itemId) {}       // [{slot, device|null}]
+export function shelfChildBlocks(doc, rackId, face) {}   // [{device, item, slot, x, y, w, h, behind}]
+export function itemFits(doc, rackId, itemId, u, spec) {} // {ok, reason, conflicts}
+export function rackTotals(doc, rackId, info) {}  // §4.4.7, null for an unknown rack
+export function racksByRow(racks) {}              // [{row, racks}], racks by (order ?? 1e9, name), a shared row grouped at its first rack
+export function rackWidthPx(rack) {}              // 168 / 320 / 354 / 387
+export function sideX(side, rack) {} ; export function sideW(side, rack) {}  // rack optional (width_in)
+export function addItemOps(doc, rackId, spec) {}  // {ops, id}; spec {type, u?, height?, face?, depth?, label?, color?, slots?, force?}
+export function moveItemOps(doc, rackId, itemId, u, opts) {}   // opts {face?, force?}
+export function updateItemOps(doc, rackId, itemId, patch) {}
+export function delItemOps(doc, rackId, itemId) {}             // unracks shelf children
+export function placeOnShelfOps(doc, deviceId, rackId, itemId, slot) {}
+export function duplicateDeviceOps(doc, deviceId, opts) {}     // {ops, id}; opts {rackId?}
+export function duplicateRackOps(doc, rackId, opts) {}         // {ops, id}; opts {devices?}
 ```
+
+`fits`, `firstFit`, `occupancy` and `collisions` count items; `faceBlocks` leaves out shelf children; `placement()` adds `shelf`, `slot`, `color`. Existing exports keep their signatures and behaviour for docs without the new fields.
 
 DOM modules: `floorplan.js` `mount(el, ctx)`: toolbar `div.fp-toolbar[role=toolbar]` with `#fp-select`, `#fp-fit`, `#fp-zoom-out`, `#fp-zoom-in`, `#fp-upload` (file input, label *Upload plan…*), `#fp-dev-plan` (sample plans), `#fp-calibrate` (dialog `#fp-cal-distance`, `#fp-cal-unit`), `#fp-measure`, `#fp-layers`; tools that do not fit move into ⋯ (`button.fp-menu-more` → `#fp-menu`); the device list is an explorer (§6.13.2, key `plan-unplaced`, title *Devices*, *Unplaced* and *Placed* groups) whose `ul.ex-list` is `#fp-unplaced`; canvas `div.fp-viewport[role=application]`, markers `div.fp-marker[data-device]`; delete dialog `#fp-del-*`. `rack.js`: toolbar `div.rk-toolbar` with `#rk-select`, `#rk-add`, `#rk-edit`, `#rk-face`, `#rk-print`; rack form `#rk-f-*`; unracked devices in an explorer (key `racks-unracked`, discipline chips) whose list is `#rk-unracked`; blocks `div.rk-block[data-device]`; with a route id it mounts the rack page (`page-rack.js`, explorer list `#rp-racks`, classes `rp-*`) and embeds the elevation there. `schedules.js` tabs `a[role=tab]#sch-tab-<kind>[data-kind]` for `cables|ip|dmx|bom|patch|racks|labels` (`schedules/<kind>` in the URL), panel `#sch-panel`; `#sch-state` (select), `#sch-assign-tags` (`#sch-tag-scope`, `#sch-tag-pattern`), `#sch-bulk-add` (§6.13.9 wizard), `#sch-print`, `#sch-csv-all` (server CSV of every row), `#sch-csv`; each kind is a DataTable (key `schedules.<kind>`, `ids {root: 'sch-dt', search: 'sch-filter', csv: 'sch-csv', filters: {disc: 'sch-disc', room: 'sch-room'}}`; `#sch-disc` filters a client-side Discipline column; in the app `#sch-room` is the Room column filter, in the harness a room select); BOM drill-downs open `openTableDialog` (keys `schedules.bom.cables`, `schedules.bom.devices`); the labels tab keeps its print sheet (`.sch-labels`, §6.13.4 exemption). Inline edits commit ops for doc-backed columns (cable tag/type/length/color/note/status; interface ip/vlan/mac/hostname/switch/switch_port; dmx universe/address/footprint/mode/channel). `inventory.js`: a DataTable (key `inventory`, `ids {table: 'inv-table', columns: 'inv-columns', csv: 'inv-csv', search: 'inv-filter', selectAll: 'inv-select-all', filters: {room: 'inv-room', status: 'inv-status', location: 'inv-location', kind: 'inv-kind', system: 'inv-system'}}`); `#inv-scope` (select: current room, all rooms, shared inventory), quick filters `#inv-q-warranty`, `#inv-q-serial` (URL key `quick`), `#inv-group` (group by location), `#inv-bulk-add` (wizard), `#inv-dups` (duplicates, with the API), `#inv-csv-all` (import-format export, in ⋯); bulk bar (`.dt-bulk`): `#inv-bulk-status`, `#inv-bulk-room`, `#inv-bulk-location`, `#inv-mark-installed`, `#inv-merge`; edit form `#inv-form-*`. Scope and grouping persist in the table state's `extra`. Schedules and inventory read rows from the server when `ctx.api` exists, else compute minimal rows locally from the doc (harness mode).
 
@@ -1991,7 +2011,7 @@ Node = port ref `dev:port`; plus a virtual node `dev:*` per device used by devic
 
 ### 6.10 Service worker & manifest (W1 files, W5 registration)
 
-`sw.js` (W1, SHELL): `const VERSION = '0.4.0'`, cache names `fathom-shell-<VERSION>`, `fathom-pages-<VERSION>`. `VERSION` is bumped whenever the precache list or a precached file's contract changes, so `activate` drops the old caches; it is no longer equal to `fathom.__version__` (`0.3.0`). The server still replaces a `__FATHOM_VERSION__` placeholder when serving `/sw.js`, but the file holds a literal version. Precache list (exact; relative to the SW scope; `const PRECACHE` in `sw.js`):
+`sw.js` (W1, SHELL): `const VERSION = '0.5.0'`, cache names `fathom-shell-<VERSION>`, `fathom-pages-<VERSION>`, plus `IMAGES_CACHE = 'fathom-images-1'` for rack images. `VERSION` is bumped whenever the precache list or a precached file's contract changes, so `activate` drops the old caches; it is no longer equal to `fathom.__version__` (`0.3.0`). The server still replaces a `__FATHOM_VERSION__` placeholder when serving `/sw.js`, but the file holds a literal version. Precache list (exact; relative to the SW scope; `const PRECACHE` in `sw.js`):
 
 ```text
 ./  static/app.html  static/login.html  static/css/app.css  static/css/patchview.css  static/css/plan.css
@@ -2012,11 +2032,16 @@ static/css/search.css  static/css/home.css  static/css/feedback.css  static/css/
 static/css/page-device.css  static/css/page-room.css  static/css/rack.css  static/css/inventory.css
 static/css/schedules.css  static/css/admin.css  static/css/discovery.css  static/css/inspector.css
 static/css/patchtable.css
+static/js/rack-elevation.js  static/js/rack-display.js  static/js/rack-display-core.js
+static/js/rack-palette.js  static/js/rack-palette-core.js  static/js/rack-export.js  static/js/rack-export-core.js
+static/css/rack-toolbar.css  static/css/rack-palette.css  static/css/rack-export.css  static/css/page-rack.css
 ```
+
+`rack-toolbar.css` and `page-rack.css` are listed ahead of the wave-2 units that create them; install tolerates the 404s.
 
 Every file under `static/js/` (except `package.json`) and `static/css/` is precached, so every view works offline once the shell has loaded online.
 
-Precache uses `cache.addAll` per file with individual try/catch (a missing file must not break install). Strategies: navigations under `p/` and `s/` → network-first (3 s timeout) then cache; `GET api/v2/projects/<n>` and `api/v2/meta` → network-first then cache (response header `X-Fathom-Offline: 1` added when served from cache so the shell switches to read-only offline mode); `static/**` → stale-while-revalidate; everything else → network only. `activate` deletes caches of other versions. Message `{type: "fathom:prefetch", urls}` → fetch + cache each (pages cache), reply via `event.source.postMessage({type: "fathom:prefetched", ok: n, failed: [urls]})`. `{type: "fathom:skip-waiting"}` → `skipWaiting()`.
+Precache uses `cache.addAll` per file with individual try/catch (a missing file must not break install). Strategies: navigations under `p/` and `s/` → network-first (3 s timeout) then cache; `GET api/v2/projects/<n>` and `api/v2/meta` → network-first then cache (response header `X-Fathom-Offline: 1` added when served from cache so the shell switches to read-only offline mode); `static/rack-images/**` → stale-while-revalidate in `IMAGES_CACHE` (never precached; that cache name does not follow `VERSION`, so images survive version bumps); other `static/**` → stale-while-revalidate; everything else → network only. `activate` deletes `fathom-*` caches other than the current shell, pages and images caches. Message `{type: "fathom:prefetch", urls}` → fetch + cache each (pages cache), reply via `event.source.postMessage({type: "fathom:prefetched", ok: n, failed: [urls]})`. `{type: "fathom:skip-waiting"}` → `skipWaiting()`.
 
 Registration (W5, `app.js` and viewer pages): only if `'serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:'`; `navigator.serviceWorker.register(<app root> + 'sw.js', {scope: <app root>})`; viewer pages get `<app root>` from `render_html(..., base_url=...)`. When not a secure context, Settings shows "Offline mode needs HTTPS (or localhost)".
 
@@ -2051,6 +2076,8 @@ Each frontend unit ships a harness page under `fathom/static/dev/` that works wh
 | `dev/search.html` + `search-harness.js` | SEARCH | `openSearch` against the server (`?project=`, default `campus-demo`) or the fixture offline (`?fixture=1`); `?role=viewer`, `?recent=`, `?q=&cat=`; navigations in `window.__sr` |
 | `dev/feedback.html` + `feedback-harness.js` | FEEDBACK | every `feedback.js` state side by side, notices and bell; `window.__fb` |
 | `dev/wizard.html` + `wizard-harness.js` | WIZARD | `openWizard` and `bulkAdd` with a `makeCtx` ctx; `?open=devices\|cables\|generic`, `&sample=1`, `&step=…`, `?readonly=1`; commits in `window.__wz` |
+| `dev/rack-palette.html` | PAL | `mountRackPalette` over a stub library (`bootHarness` in `rack-palette.js`); `?api=0` offline presets only, `?fail=1` library failure, `?many=N` extra entries |
+| `dev/rack-export.html` + `rack-export-harness.js` | XPT | `openRackExport` on the fixture racks; downloads intercepted for tests |
 
 `fathom/static/dev/fixture-gen.js` (W3): `export function makeFixture({devices = 150, cables = 600, seed = 1} = {})` → a valid v2 doc (single room `main`, mixed disciplines, 4–24 ports per device, cables only between compatible ports, deterministic for a seed). T2 tests validate it with `validateLocal` (0 errors).
 
@@ -2226,6 +2253,18 @@ export function on(target, type, fn, opts) {} // addEventListener -> idempotent 
 
 New modules import `h`/`esc`/`on` from `dom.js` (`app.js` re-exports `h` and `esc` for older callers). Tests: `tests/js/dom.test.mjs`.
 
+#### 6.13.11 Rack modules — display, palette, export, elevation (Rackula features)
+
+Wave 1 ships these modules and their harnesses; the racks landing (`rack.js`), the elevation display options and the rack page (`page-rack.js`) are wired to them in wave 2. Modules that consume an export another module may lack import it as a namespace and feature-detect it.
+
+- **`js/rack-display-core.js`** (pure): `DISPLAY_MODES = ['label', 'image', 'both']`; `ANNOTATION_FIELDS` = `[{key: '', label: 'None'}, name, model, ip ("IP address"), serial, asset_tag, code, power, weight, status]`; `CATEGORY_COLORS` (§4.4.7); `STORAGE = {display, annotate, face}` (§6.14); `FALLBACK_COLOR = '#9aa3b5'`; `isHexColor(s)`, `templateInfo(doc, device, info)` (`info[template]`, else the `doc.templates` entry — the reverse of `rack-core.rackTotals`, which looks in `doc.templates` first), `blockColor(device, vocab, info)`, `deviceImage(device, info, face, {base, attachmentUrl})`, `formatNumber(n)`, `annotationValue(doc, device, field, info)` (§4.4.7), `airflowGlyph(airflow, face)` → `{glyph, title}` or null (mirrored on the rear), `luminance(hex)`, `contrastRatio(l1, l2)`, `textColorOn(hex)` → `#000` or `#fff`.
+- **`js/rack-display.js`**: `loadTemplateInfo(ctx, ids)` → Promise of `{id: summary}` — project templates come from `ctx.store.doc.templates`; the rest from `ctx.api.library({ids, project})` in chunks of `CHUNK = 100` ids, cached per project and id; never rejects (`{}` without `ctx.api`). `peekTemplateInfo(ctx, id)` (a project template, the cached summary or null once settled, `undefined` while unknown or in flight), `clearTemplateInfoCache()`.
+- **`js/rack-palette-core.js`** (pure) + **`js/rack-palette.js`** + `css/rack-palette.css` (prefix `rpal-`): a searchable library palette of rack-mountable templates. `mountRackPalette(el, ctx, {onPick(entry, template), onDragStart(entry, event), presets, storage})` → `{root, destroy, focus, refresh}`. Data from `ctx.api.library({source: 'all', rack: 1, project})` (presets passed in `opts` without an API); `onPick` gets the full template (`ctx.api.template`). Search, category chips, Favourites and Recent sections, results in pages of 200 with "show more"; rows show a lazy thumbnail (`static/rack-images/<image_front>`) or a category swatch, name, maker/model, `nU`, a star and Add; Enter adds, `f` stars, arrows move; a pointer drag calls `onDragStart` (long-press 350 ms on touch); 44 px rows under coarse pointers; a picker list (D9 exemption), not a DataTable. Core: `STORAGE_KEY`, `PREFS_VERSION = 1`, `MAX_RECENTS = 12`, `MAX_FAVS = 200`, `CATEGORY_ORDER`, `CATEGORY_LABELS`, `SOURCE_ORDER = [project, custom, builtin, extension, preset, catalog]`, `categoryOf`, `categoryLabel`, `categoryColor`, `kindLabel`, `presetAsTemplate`, `dedupeCatalog` (catalog twins with the same manufacturer + model collapse into one entry with `aliases`), `normalizeEntries(libraryResponse, presets)`, `compareEntries`, `entryFields`, `scoreEntry` / `searchEntries(entries, q, opts)` (exact 100 > prefix 80 > token 60 > substring 40 > edit distance 1 on tokens ≥ 4 chars 25, over name, manufacturer, model, part number, kind label and category; ties by source then name), `groupByCategory`, `readPrefs` / `isFav` / `toggleFav` / `pushRecent`, `entriesFor`, `nextRow`, and `deviceFromTemplate(doc, template, {room, name, vocab})` → `{ops: [put device], id}` mirroring `library.instantiate` (slug id deduped, ports expanded like `presets-core.presetPorts`, `template` kept; it never sets `rack`).
+- **`js/rack-export-core.js`** (pure) + **`js/rack-export.js`** + `css/rack-export.css` (prefix `rx-`): `openRackExport(ctx, {racks, face})` opens a dialog (racks, face front / rear / both, format SVG / PNG 2× / Print-PDF, legend, annotation field, live preview; full screen at sm) and resolves with `{format, filename, racks, face}` of the export made, or null when cancelled. Device images (`imageRequests`) are fetched as data URLs so the PNG canvas is not tainted. Core: `STORAGE_KEY`, `FACE_CHOICES`, `FORMATS`, `DEFAULT_PREFS = {v: 1, face: 'front', format: 'svg', legend: true, annotate: ''}`, `readPrefs`, `exportFilename(project, rackIds, face, ext)` → `<project>-<rack|racks>-<face>.<ext>`, `pngScale(width, height, want)` (kept under Safari's canvas limits), `templateIds`, `imageRequests`, `legendEntries`, `buildRackSvg(doc, rackIds, {face, annotate, legend, images, info, vocab, title})` → a standalone, escaped SVG string (racks left to right by `racksByRow`, titles, U labels, blocks, items, shelf children, legend of categories/disciplines, footer with project and date).
+- **`js/rack-elevation.js`**: `createElevation(el, ctx, opts)` — the elevation moved out of `rack.js` (no behaviour change): viewport, faces, blocks, ghost, drag within/between racks, drop targets, keyboard, selection, fitWidth, print. `opts` = `{rack?, racks?(), face?, root?, list?: {el, accept(e)}, empty?(), onChange?(state, api)}`; API `{render, destroy, setFace, getState, setState, setOptions(o), focus, route, startDrag(e, deviceId, fromList, grabEl), print(done), addToRack(deviceId, rackId?), addDevice, templateInfo}`; also exports `roomRacks`, `deviceById`, `disciplineOf`, `discColor`, `modelLine` (imported by `rack.js`, which re-exports `createElevation`).
+
+Harnesses: `dev/rack-palette.html` (`?api=0` offline presets, `?fail=1` API failure, `?many=N`), `dev/rack-export.html` + `rack-export-harness.js`. Tests: `tests/js/rack-core-items.test.mjs`, `rack-contract.test.mjs`, `rack-display-core.test.mjs`, `rack-palette-core.test.mjs`, `rack-export-core.test.mjs`; `tests/test_ui_rack_palette.py`, `test_ui_rack_export.py`, `test_ui_rk_regress.py`.
+
 ### 6.14 Client storage keys (D8)
 
 All UI state keys start with `fathom.ui.`; every read tolerates missing, full or throwing storage and corrupt JSON.
@@ -2240,6 +2279,11 @@ All UI state keys start with `fathom.ui.`; every read tolerates missing, full or
 | `fathom.ui.notices.<project>` | session | tab, project | bell notices (max 50) |
 | `fathom.ui.seen.<project>` | local | project | ISO time of the newest open problem report already announced |
 | `fathom.ui.form.<key>` | local | form | remembered wizard input, e.g. `bulk-devices`, `bulk-cables` column mappings |
+| `fathom.ui.rack.display` | local | browser | rack block display mode `label` \| `image` \| `both` (`rack-display-core.STORAGE.display`; written by the wave-2 rack views) |
+| `fathom.ui.rack.annotate` | local | browser | rack annotation field, `''` = none (`STORAGE.annotate`; wave 2) |
+| `fathom.ui.rack.face` | local | browser | rack face `front` \| `rear` \| `both` (`STORAGE.face`; wave 2) |
+| `fathom.ui.rack.palette` | local | browser | `{v: 1, favs: [ids ≤ 200], recents: [ids ≤ 12]}` library palette favourites and recents |
+| `fathom.ui.rack.export` | local | browser | `{v: 1, face, format, legend, annotate}` last rack export choices |
 
 Deliberately **not** persisted: DataTable search text (`q`) and page (`pg`) — URL only; the selection, drawer and section (`sel`, `sec`, `drawer`) — URL only; search palette text and category. Older keys outside the prefix stay as they were: `fathom.pending.<project>` (local, unsent ops, §6.3), `fathom.sop.tasks.*` and `fathom.sop.done.*` (session, SOP task ticks), `fathom.sop.draft.*` (local, SOP editor drafts), `fathom.addgear.tab` (local, add-gear dialog tab), `fathom:login-bounces` (session, login redirect loop guard).
 
