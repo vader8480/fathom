@@ -121,7 +121,7 @@ Without installing: `python -m fathom serve` from this folder.
 | `FATHOM_PLUGINS` | plugin directories (`os.pathsep`-separated) with importer modules (`register(api)`) |
 | `FATHOM_LIBRARY` | extra equipment-template directories (`*.json`) |
 | `FATHOM_CHECKLISTS` | extra assistant checklist directories |
-| `FATHOM_LLM_URL`, `FATHOM_LLM_MODEL`, `FATHOM_LLM_API_KEY`, `FATHOM_LLM_TIMEOUT`, `FATHOM_LLM_MAX_CONTEXT` | optional OpenAI-compatible endpoint that rewords assistant answers (the answer itself is always computed locally) |
+| `FATHOM_LLM_PROVIDER`, `FATHOM_LLM_URL`, `FATHOM_LLM_MODEL`, `FATHOM_LLM_API_KEY`, `FATHOM_LLM_API`, `FATHOM_LLM_TIMEOUT`, `FATHOM_LLM_MAX_CONTEXT` | optional language model for the assistant (`openai`, `anthropic`, `xai` or any OpenAI-compatible server such as Ollama, LM Studio, vLLM, llama.cpp); env values override Settings › Assistant field by field; the deterministic answer is always computed locally |
 | `FATHOM_UNIFI_URL`, `FATHOM_UNIFI_SITE`, `FATHOM_UNIFI_API_KEY` (or `FATHOM_UNIFI_USER` / `FATHOM_UNIFI_PASSWORD`), `FATHOM_UNIFI_VERIFY_TLS` | server-wide defaults for the UniFi discovery probe; per-project settings in Discovery › Sources take precedence |
 | `FATHOM_DISCOVERY_INTERFACE`, `FATHOM_DISCOVERY_INTERFACE_IP` | interface the LLDP listener / mDNS browser bind to (default: all) |
 | `FATHOM_SNMP_HOSTS`, `FATHOM_SNMP_VERSION`, `FATHOM_SNMP_COMMUNITY`, `FATHOM_SNMP_USER`, `FATHOM_SNMP_AUTH_PROTOCOL`, `FATHOM_SNMP_AUTH_KEY`, `FATHOM_SNMP_PRIV_PROTOCOL`, `FATHOM_SNMP_PRIV_KEY` | server-wide defaults for the opt-in SNMP probe (switch list and read-only credentials); never turns the probe on by themselves |
