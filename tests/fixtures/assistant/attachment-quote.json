@@ -1,0 +1,9 @@
+{
+  "name": "scripted: read the attachment the user pointed at, then quote it",
+  "model": "fake-tools",
+  "steps": [
+    {"tool_calls": [{"id": "a1", "name": "attachment_text", "arguments": {"att_id": "att-0000000000aa", "max_chars": 2000}}]},
+    {"tool_calls": [{"id": "a2", "name": "attachment_text", "arguments": {"att_id": "att-0000000000bb"}}]},
+    {"text": "The attached notes say: gain at 12 o'clock.", "finish": "stop"}
+  ]
+}

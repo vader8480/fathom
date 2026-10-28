@@ -1,0 +1,396 @@
+{
+ "livestream": {
+  "branch": {
+   "device": "audio-rack-1",
+   "reason": "Shared with Main Speakers - L/R, which works"
+  },
+  "checks": [
+   {
+    "device": "audio-rack-1",
+    "n": 1,
+    "port": "analog-out-4",
+    "source": "kinds:stage_io/output-up",
+    "text": "Confirm the **Stream** output is up on Audio Rack 1 — it feeds ATEM Mini separately from Main Speakers - L/R."
+   },
+   {
+    "device": "atem-mini",
+    "n": 2,
+    "port": "analog-in-1",
+    "source": "template:blackmagic-atem-mini-pro/audio-on",
+    "text": "On the ATEM Mini's Audio tab, make sure the **Stream** input is set to ON, not AFV (inputs default to audio-follow-video)."
+   },
+   {
+    "device": "atem-mini",
+    "n": 3,
+    "port": "usb-out-1",
+    "source": "kinds:video_switcher/program-meter",
+    "text": "Check levels on the ATEM Mini's Program meter before it reaches Restream."
+   },
+   {
+    "device": "restream",
+    "n": 4,
+    "port": "usb-in-1",
+    "source": "kinds:stream/stream-source",
+    "text": "In the streaming software for Restream, confirm the input is **USB Stream In** and its audio is not muted."
+   },
+   {
+    "device": "restream",
+    "n": 5,
+    "port": "usb-in-1",
+    "source": "kinds:stream/stream-health",
+    "text": "Check the stream health and preview on Restream; if the preview is fine, the problem is after the encoder (platform or network)."
+   },
+   {
+    "device": "audio-rack-1",
+    "n": 6,
+    "port": "analog-out-4",
+    "source": "media:analog/reseat",
+    "text": "Re-seat or swap the cable from Audio Rack 1 **Stream** to ATEM Mini **Stream**."
+   },
+   {
+    "device": "atem-mini",
+    "n": 7,
+    "port": "usb-out-1",
+    "source": "media:usb/usb-device",
+    "text": "Check the USB cable from ATEM Mini to Restream and that the computer sees ATEM Mini as an audio/video input."
+   }
+  ],
+  "confidence": "high",
+  "intent": {
+   "discipline": "audio",
+   "room": "main",
+   "symptom": "no_audio",
+   "targets": [
+    "restream"
+   ],
+   "type": "troubleshoot",
+   "working": [
+    "main-speakers",
+    "sub-x2"
+   ]
+  },
+  "llm": {
+   "used": false
+  },
+  "notes": [
+   "HDMI In 1 on ATEM Mini also carries embedded audio, but its source (Stage Box 1 · Video Display) is not patched."
+  ],
+  "paths": [
+   {
+    "cables": [
+     "c-0011",
+     "c-0015"
+    ],
+    "hops": [
+     {
+      "device": "audio-rack-1",
+      "label": "Audio Rack 1 · Stream",
+      "port": "analog-out-4"
+     },
+     {
+      "device": "atem-mini",
+      "label": "ATEM Mini · Stream",
+      "port": "analog-in-1"
+     },
+     {
+      "device": "atem-mini",
+      "label": "USB Stream Out",
+      "port": "usb-out-1"
+     },
+     {
+      "device": "restream",
+      "label": "Restream",
+      "port": "usb-in-1"
+     }
+    ],
+    "role": "suspect",
+    "text": "Audio Rack 1 · Stream → ATEM Mini · Stream → USB Stream Out → Restream"
+   }
+  ],
+  "question": "House sound is fine, but the livestream has no audio.",
+  "suggestion": {
+   "base_revision": 1,
+   "ops": [
+    {
+     "coll": "devices",
+     "id": "atem-mini",
+     "op": "merge",
+     "value": {
+      "ports": [
+       {
+        "connector": "HDMI-A",
+        "dir": "in",
+        "group": "HDMI In",
+        "id": "hdmi-in-1",
+        "label": "SB-Video-1",
+        "medium": "hdmi",
+        "name": "Input 1"
+       },
+       {
+        "connector": "HDMI-A",
+        "dir": "in",
+        "group": "HDMI In",
+        "id": "hdmi-in-2",
+        "label": "HDMI In 2",
+        "medium": "hdmi",
+        "name": "Input 2"
+       },
+       {
+        "connector": "TRS 3.5mm",
+        "dir": "in",
+        "group": "Analog In",
+        "id": "analog-in-1",
+        "label": "Stream",
+        "medium": "analog",
+        "name": "Mic 1",
+        "note": "Stream feed: Audio Rack 1 → ATEM Mini · check Audio tab"
+       },
+       {
+        "connector": "HDMI-A",
+        "dir": "out",
+        "group": "HDMI Out",
+        "id": "hdmi-out-1",
+        "label": "Program Out",
+        "medium": "hdmi",
+        "name": "Output 1"
+       },
+       {
+        "connector": "USB-C",
+        "dir": "out",
+        "group": "USB Out",
+        "id": "usb-out-1",
+        "label": "USB Stream Out",
+        "medium": "usb",
+        "name": "USB"
+       }
+      ]
+     }
+    }
+   ],
+   "text": "Add note \"Stream feed: Audio Rack 1 → ATEM Mini · check Audio tab\" to ATEM Mini · Stream"
+  },
+  "summary": "Your stream audio takes its own path: **Audio Rack 1 · Stream** → **ATEM Mini · Stream** → USB Stream Out → Restream.",
+  "suspects": [
+   {
+    "device": "audio-rack-1",
+    "port": "analog-out-4"
+   },
+   {
+    "device": "atem-mini",
+    "port": "analog-in-1"
+   },
+   {
+    "device": "atem-mini",
+    "port": "usb-out-1"
+   },
+   {
+    "device": "restream",
+    "port": "usb-in-1"
+   }
+  ],
+  "unresolved": []
+ },
+ "locate": {
+  "branch": null,
+  "checks": [],
+  "confidence": "high",
+  "intent": {
+   "discipline": "audio",
+   "room": "main",
+   "symptom": null,
+   "targets": [
+    "spare-ulxd4d"
+   ],
+   "type": "locate",
+   "working": []
+  },
+  "llm": {
+   "used": false
+  },
+  "notes": [
+   "Nothing called 'spare ulxd4d' in Main Auditorium; using ULXD4D (spare) (shared inventory)."
+  ],
+  "paths": [],
+  "question": "Where is the spare ULXD4D?",
+  "suggestion": null,
+  "summary": "**ULXD4D (spare)** is in shared inventory (no room assigned); status spare, serial 3HX0042.",
+  "suspects": [],
+  "unresolved": []
+ },
+ "trace_tv": {
+  "branch": null,
+  "checks": [],
+  "confidence": "high",
+  "intent": {
+   "discipline": "video",
+   "room": "main",
+   "symptom": null,
+   "targets": [
+    "samsung-tv-1"
+   ],
+   "type": "trace",
+   "working": []
+  },
+  "llm": {
+   "used": false
+  },
+  "notes": [],
+  "paths": [
+   {
+    "cables": [
+     "c-0012",
+     "c-0013",
+     "c-0014"
+    ],
+    "hops": [
+     {
+      "device": "stage-box-1",
+      "label": "Stage Box 1 · Video Display",
+      "port": "hdmi-in-1"
+     },
+     {
+      "device": "stage-box-1",
+      "label": "SB-Video-1",
+      "port": "hdmi-out-1"
+     },
+     {
+      "device": "atem-mini",
+      "label": "ATEM Mini · SB-Video-1",
+      "port": "hdmi-in-1"
+     },
+     {
+      "device": "atem-mini",
+      "label": "Program Out",
+      "port": "hdmi-out-1"
+     },
+     {
+      "device": "video-converter",
+      "label": "Video Converter · Program In",
+      "port": "hdmi-in-1"
+     },
+     {
+      "device": "video-converter",
+      "label": "SDI Program Output",
+      "port": "sdi-out-1"
+     },
+     {
+      "device": "samsung-tv-1",
+      "label": "Samsung TV - 1",
+      "port": "sdi-in-1"
+     }
+    ],
+    "role": "trace",
+    "text": "Stage Box 1 · Video Display → SB-Video-1 → ATEM Mini · SB-Video-1 → Program Out → Video Converter · Program In → SDI Program Output → Samsung TV - 1"
+   },
+   {
+    "cables": [
+     "c-0013",
+     "c-0014"
+    ],
+    "hops": [
+     {
+      "device": "atem-mini",
+      "label": "ATEM Mini · HDMI In 2",
+      "port": "hdmi-in-2"
+     },
+     {
+      "device": "atem-mini",
+      "label": "Program Out",
+      "port": "hdmi-out-1"
+     },
+     {
+      "device": "video-converter",
+      "label": "Video Converter · Program In",
+      "port": "hdmi-in-1"
+     },
+     {
+      "device": "video-converter",
+      "label": "SDI Program Output",
+      "port": "sdi-out-1"
+     },
+     {
+      "device": "samsung-tv-1",
+      "label": "Samsung TV - 1",
+      "port": "sdi-in-1"
+     }
+    ],
+    "role": "trace",
+    "text": "ATEM Mini · HDMI In 2 → Program Out → Video Converter · Program In → SDI Program Output → Samsung TV - 1"
+   },
+   {
+    "cables": [
+     "c-0014"
+    ],
+    "hops": [
+     {
+      "device": "video-converter",
+      "label": "Video Converter · SDI Input 1",
+      "port": "sdi-in-1"
+     },
+     {
+      "device": "video-converter",
+      "label": "SDI Program Output",
+      "port": "sdi-out-1"
+     },
+     {
+      "device": "samsung-tv-1",
+      "label": "Samsung TV - 1",
+      "port": "sdi-in-1"
+     }
+    ],
+    "role": "trace",
+    "text": "Video Converter · SDI Input 1 → SDI Program Output → Samsung TV - 1"
+   }
+  ],
+  "question": "What feeds Samsung TV - 1?",
+  "suggestion": null,
+  "summary": "3 paths feed Samsung TV - 1: Stage Box 1 · Video Display → SB-Video-1 → ATEM Mini · SB-Video-1 → Program Out → Video Converter · Program In → SDI Program Output → Samsung TV - 1.",
+  "suspects": [],
+  "unresolved": []
+ },
+ "unresolved": {
+  "branch": null,
+  "checks": [],
+  "confidence": "low",
+  "intent": {
+   "discipline": "video",
+   "room": "main",
+   "symptom": "no_video",
+   "targets": [],
+   "type": "troubleshoot",
+   "working": []
+  },
+  "llm": {
+   "used": false
+  },
+  "notes": [],
+  "paths": [],
+  "question": "projector 2 has no picture",
+  "suggestion": null,
+  "summary": "Sorry, I couldn't match that to the system. I couldn't find 'projector 2'. Did you mean: Samsung TV - 1, ATEM Mini, Video Converter?",
+  "suspects": [],
+  "unresolved": [
+   {
+    "message": "I couldn't find 'projector 2'. Did you mean: Samsung TV - 1, ATEM Mini, Video Converter?",
+    "suggestions": [
+     {
+      "device": "samsung-tv-1",
+      "port": null,
+      "title": "Samsung TV - 1"
+     },
+     {
+      "device": "atem-mini",
+      "port": null,
+      "title": "ATEM Mini"
+     },
+     {
+      "device": "video-converter",
+      "port": null,
+      "title": "Video Converter"
+     }
+    ],
+    "text": "projector 2"
+   }
+  ]
+ }
+}
