@@ -351,7 +351,7 @@ export function mountAssistant(el, ctx) {
     }
     (a.notes || []).forEach(function (n) { box.appendChild(h('div', { class: 'ast-notes', html: renderBold(n) })); });
     if (a.llm && a.llm.used && a.llm.text) {
-      box.appendChild(h('div', { class: 'ast-llm' }, [h('div', { class: 'h' }, 'AI notes \u2014 verify against the system' + (a.llm.model ? ' \u00b7 ' + a.llm.model : '')), h('div', null, a.llm.text)]));
+      box.appendChild(h('div', { class: 'ast-llm' }, [h('div', { class: 'h' }, 'AI notes \u2014 verify against the system' + (a.llm.model ? ' \u00b7 ' + a.llm.model : '')), h('div', { html: renderBold(a.llm.text) })]));
     }
     return box;
   }
