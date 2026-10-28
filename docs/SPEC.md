@@ -1223,7 +1223,7 @@ Plain Python data (`TEMPLATES`), in display order:
 | `network-closet-24u` | Network closet · 24U | 24 | 19″ | `four_post` |
 | `desk-10in-6u` | Desk rack · 10in 6U | 6 | 10″ | `open_frame` |
 
-Every device names a library template id from `fathom/presets.py` or `fathom/library/templates/*.json` (tested). `list_templates()` → `[{id, name, description, units, width_in, form_factor}]`; `get_rack_template(id)`; `template_ids()`; `apply_ops(doc, template_id, *, name="", room="", location="")` → `{ops: [put racks/<rack> (with its items), put devices/<id> …], rack_id}`, `KeyError` for an unknown template, `RuntimeError` when a library template is missing. The rack id is `rk-<slug of name>` deduped against the doc; devices come from `library.instantiate` with `status: "planned"`, ids deduped, at fixed U/face; item ids are `ri-1, ri-2, …`. **Shelf children** get `height: 1`, the shelf's `u` and `face`, `depth: "full"`, `shelf` + `slot`, and `side` `left` / `right` by slot on a 2-cell shelf (else `full`).
+Every device names a library template id from `fathom/presets.py` or `fathom/library/templates/*.json` (tested). `list_templates()` → `[{id, name, description, units, width_in, form_factor}]`; `get_rack_template(id)` (a deep copy, or None); `template_ids(id)` (the library template ids it uses); `apply_ops(doc, template_id, *, name="", room="", location="")` → `{ops: [put racks/<rack> (with its items), put devices/<id> …], rack_id}`, `KeyError` for an unknown template, `RuntimeError` when a library template is missing. The rack id is `rk-<slug of name>` deduped against the doc; devices come from `library.instantiate` with `status: "planned"`, ids deduped, at fixed U/face; item ids are `ri-1, ri-2, …`. **Shelf children** get `height: 1`, the shelf's `u` and `face`, `depth: "full"`, `shelf` + `slot`, and `side` `left` / `right` by slot on a 2-cell shelf (else `full`).
 
 #### 4.13.2 Rackula layouts (`fathom/parsers/rackula.py`)
 
@@ -2077,7 +2077,7 @@ Each frontend unit ships a harness page under `fathom/static/dev/` that works wh
 | `dev/feedback.html` + `feedback-harness.js` | FEEDBACK | every `feedback.js` state side by side, notices and bell; `window.__fb` |
 | `dev/wizard.html` + `wizard-harness.js` | WIZARD | `openWizard` and `bulkAdd` with a `makeCtx` ctx; `?open=devices\|cables\|generic`, `&sample=1`, `&step=…`, `?readonly=1`; commits in `window.__wz` |
 | `dev/rack-palette.html` | PAL | `mountRackPalette` over a stub library (`bootHarness` in `rack-palette.js`); `?api=0` offline presets only, `?fail=1` library failure, `?many=N` extra entries |
-| `dev/rack-export.html` + `rack-export-harness.js` | XPT | `openRackExport` on the fixture racks; downloads intercepted for tests |
+| `dev/rack-export.html` + `rack-export-harness.js` | XPT | `openRackExport` on the page's inline doc with a stub ctx (stub library API, attachments resolved to a static image); `?api=0` drops `ctx.api`, `?open=1` opens on load; `window.__rx = {ctx, open(opts), results, last, calls}` |
 
 `fathom/static/dev/fixture-gen.js` (W3): `export function makeFixture({devices = 150, cables = 600, seed = 1} = {})` → a valid v2 doc (single room `main`, mixed disciplines, 4–24 ports per device, cables only between compatible ports, deterministic for a seed). T2 tests validate it with `validateLocal` (0 errors).
 
@@ -2510,8 +2510,9 @@ def promote_ops(doc: Doc, overlay: Dict[str, Any], device_ids: List[str]) -> Lis
 
 # fathom/library/__init__.py
 def load_library(refresh: bool = False) -> Dict[str, Dict[str, Any]]: ...      # builtin + extension + custom
-def list_templates(q: str = "", discipline: str = "", kind: str = "", doc: Optional[Doc] = None) -> List[Dict[str, Any]]: ...
-def get_template(template_id: str, doc: Optional[Doc] = None) -> Optional[Dict[str, Any]]: ...
+def list_templates(q: str = "", discipline: str = "", kind: str = "", doc: Optional[Doc] = None, source: Optional[str] = None, ids: Any = None, rack: Any = False) -> List[Dict[str, Any]]: ...  # §4.5.1
+def get_template(template_id: str, doc: Optional[Doc] = None) -> Optional[Dict[str, Any]]: ...   # falls back to the catalog
+def catalog_templates(refresh: bool = False) -> List[Dict[str, Any]]: ...                       # Rackula catalog tier, file order
 def validate_template(t: Dict[str, Any]) -> List[str]: ...
 def instantiate(t: Dict[str, Any], *, device_id: str, name: Optional[str] = None, room: str = "", count: Optional[int] = None) -> Dict[str, Any]: ...
 def apply_template_ops(doc: Doc, device_id: str, t: Dict[str, Any]) -> List[Op]: ...
@@ -2563,6 +2564,23 @@ def svg(text: str, ecl: str = "M", **kw: Any) -> str: ...
 def write_build(project, project_dir: Path, run_dir: Path, pdf: bool = False, png: bool = False, *, doc: Optional[Doc] = None, state: str = "all", rooms: Optional[List[str]] = None, base_url: str = "") -> Dict[str, str]: ...
 def build_doc(name_or_dir: str, *, state: str = "all", rooms: Optional[List[str]] = None, pdf: bool = False, png: bool = False, base_url: str = "", run_dir: Optional[Path] = None) -> Path: ...
 def device_url(base_url: str, project: str, device_id: str) -> str: ...
+
+# fathom/rack_templates.py (§4.13.1)
+def list_templates() -> List[Dict[str, Any]]: ...                     # [{id, name, description, units, width_in, form_factor}]
+def get_rack_template(template_id: str) -> Optional[Dict[str, Any]]: ...
+def template_ids(template_id: str) -> List[str]: ...             # library template ids a rack template uses
+def apply_ops(doc: Doc, template_id: str, *, name: str = "", room: str = "", location: str = "") -> Dict[str, Any]: ...   # {ops, rack_id}; KeyError
+
+# fathom/parsers/rackula.py (§4.13.2), parsers/netbox_devicetype.py (§4.13.3), parsers/mini_yaml.py
+def preview(doc: Doc, payload: Dict[str, Any]) -> Dict[str, Any]: ...        # {layout, racks, devices, items, warnings, ops}; ValueError
+def read_layout(payload: Dict[str, Any], warnings: Optional[List[str]] = None) -> Dict[str, Any]: ...
+def decode_share(value: str) -> Dict[str, Any]: ...
+def to_template(text: str, warnings: Optional[List[str]] = None) -> Dict[str, Any]: ...   # ValueError
+def from_template(t: Dict[str, Any]) -> str: ...
+def loads(text: str) -> Any: ...  ; def dumps(obj: Any) -> str: ...  ; def resolve_scalar(text: str) -> Any: ...
+
+# tools/rackula_catalog.py (not shipped in the wheel): python tools/rackula_catalog.py --src <Rackula checkout> writes
+# fathom/library/rackula/catalog.json and fathom/static/rack-images/<vendor>/*.webp (deterministic for a pinned commit)
 ```
 
 #### 7.4.3 W6
@@ -2589,10 +2607,22 @@ def build_index(doc: Doc, overlay: Optional[Dict[str, Any]] = None) -> SearchInd
 def search(index_or_doc: Union[SearchIndex, Doc], q: str, limit: int = 20, kinds: Optional[List[str]] = None) -> List[Dict[str, Any]]: ...  # Hit[] §5.11
 
 # fathom/racks.py
-def rack_occupancy(doc: Doc, rack_id: str) -> Dict[str, Any]: ...    # {"rack","slots":[…],"collisions":[…]}
+def rack_occupancy(doc: Doc, rack_id: str) -> Dict[str, Any]: ...    # {"rack","devices","items","shelved","slots":[…],"collisions":[…]}
 def validate_racks(doc: Doc) -> List[Problem]: ...
-def rack_svg(doc: Doc, rack_id: str, face: str = "front", scale: float = 1.0) -> str: ...
+def rack_svg(doc: Doc, rack_id: str, face: str = "front", scale: float = 1.0, *, images: bool = False,
+             annotate: Optional[str] = None, base_url: str = "") -> str: ...   # face "both"; KeyError for an unknown rack
 def rack_schedule(doc: Doc, room: str = "*") -> Dict[str, Any]: ...
+# Rackula features (§4.4.7)
+ITEM_TYPES: List[Dict[str, Any]]; CATEGORY_COLORS: Dict[str, str]; ANNOTATION_LABELS: Dict[str, str]; RACK_IMAGES_DIR: Path; IMAGE_BUDGET = 3 * 1024 * 1024
+def ru_label(rack: Optional[Dict[str, Any]], u: int) -> str: ...
+def rack_width_px(rack: Optional[Dict[str, Any]]) -> int: ...
+def placement(doc: Doc, dev: Dict[str, Any]) -> Optional[Dict[str, Any]]: ...   # {device, rack, u, height, face, side, depth, shelf, slot, color}
+def rack_devices(doc: Doc, rack_id: str) -> List[Dict[str, Any]]: ...          # shelf children included (shelf set)
+def rack_items(doc: Doc, rack_id: str) -> List[Dict[str, Any]]: ...            # [{id: 'item:<id>', item, index, type, type_label, u, height, face, depth, side, label, color, slots, weight_kg, notes}]
+def collisions(doc: Doc, rack_id: str) -> List[Dict[str, Any]]: ...            # [{a, b, u, face}]
+def shelf_contents(doc: Doc, rack_id: str, item_id: str) -> List[Dict[str, Any]]: ...   # [{slot, device}]
+def rack_totals(doc: Doc, rack_id: str) -> Dict[str, Any]: ...                 # KeyError for an unknown rack
+def annotation_value(doc: Doc, device: Dict[str, Any], field: str) -> str: ...
 
 # fathom/dmx.py
 def dmx_schedule(doc: Doc, overlay: Optional[Dict[str, Any]] = None, room: str = "*") -> Dict[str, Any]: ...
@@ -2622,6 +2652,11 @@ def render_room_index(doc: Doc, *, project: str, base_url: str = "", sw: bool = 
 def render_device_page(doc: Doc, device_id: str, *, project: str, overlay=None, base_url: str = "", qr_svg: str = "", sw: bool = False) -> str: ...
 def render_patch_page(doc: Doc, room_id: str, blocks: List[Dict[str, Any]], *, project: str, base_url: str = "", sw: bool = False) -> str: ...
 def render_report(doc: Doc, *, project: str, sections: Dict[str, str]) -> str: ...   # P1, print-oriented report.html
+# device pages also take link_style ("viewer" | "build"), share="" (carried on the rack link) and rack_pages=None (§5.9)
+def rack_summary(doc: Doc, rack_id: str) -> Dict[str, Any]: ...
+def render_rack_report_section(doc: Doc, files: Dict[str, Dict[str, str]]) -> str: ...   # report.html Racks section (rr-)
+# fathom/render_rack.py
+def rack_page_html(doc: Doc, project: str, rack_id: str, *, base: str, share: str = "", link_style: str = "viewer") -> str: ...   # §5.13; KeyError
 # fathom/render_svg.py, fathom/layout.py: signatures unchanged
 ```
 
@@ -2642,7 +2677,14 @@ def render_report(doc: Doc, *, project: str, sections: Dict[str, str]) -> str: .
 | schedules `ip` | `network.ip_schedule(doc, overlay)` |
 | schedules `dmx` | `dmx.dmx_schedule(doc, overlay)` |
 | schedules `bom`, `inventory` | `bom.bom`, `bom.inventory_schedule` |
-| schedules `racks`, `racks/<rack>.svg` | `racks.rack_schedule`, `racks.rack_svg` |
+| schedules `racks`, `racks/<rack>.svg` | `racks.rack_schedule`, `racks.rack_svg(doc, rack, face=…, images=…, annotate=…, base_url="")` |
+| `racks/<rack>/totals` | `racks.rack_totals` |
+| `racks/import` | `parsers.rackula.preview(doc, {text\|zip_b64\|url})`, then `project.apply_changes` (via `_rack_apply`) |
+| `rack-templates`, `racks/from-template` | `rack_templates.list_templates()`, `rack_templates.apply_ops(doc, template, name=, room=, location=)` + `project.apply_changes` |
+| `qr/rack/<rack>.svg` | `qr.svg(<base>/p/<n>/rk/<rack>` or `<base>/s/<token>/rk/<rack>)` |
+| `/p/<n>/rk/<rack>` | `render_rack.rack_page_html(doc, project, rack, base=<script root>/, share=…, link_style="viewer")` |
+| `library?source=&ids=&rack=` | `library.list_templates(q, discipline, kind, doc, source=, ids=, rack=)` |
+| `library/import/netbox`, `library/<id>/netbox.yaml` | `parsers.netbox_devicetype.to_template` + `library.validate_template` + `library.save_custom_template`; `library.get_template` + `parsers.netbox_devicetype.from_template` |
 | `cables/tag-preview` | `cables.assign_tags_ops` |
 | `qr/<device>.svg` | `qr.svg(export.device_url(base, project, device))` |
 | `trace` | `trace.resolve_ref`, `trace.port_graph`, `*_paths`, `path_text` |
@@ -2680,16 +2722,18 @@ def render_report(doc: Doc, *, project: str, sections: Dict[str, str]) -> str: .
 | G1 | Unit tests, current Python | `python3 -m unittest discover -s tests -v` | 0 failures/errors; skips only with a reason mentioning Chrome, rasterizer, Docker or ODA |
 | G2 | Unit tests, Python 3.9 | `/usr/bin/python3 -m unittest discover -s tests` (macOS ships 3.9.6) — or `uv run --python 3.9 --no-project python -m unittest discover -s tests` — or `docker run --rm -v "$PWD":/src -w /src python:3.9-slim python -m unittest discover -s tests` | same as G1 |
 | G3 | Selftest | `python3 -m fathom selftest` and `/usr/bin/python3 -m fathom selftest` | exit 0, last line `ok: fathom selftest passed` |
-| G4 | JS unit tests | `node --test tests/js` (Node ≥ 18) | 0 failures |
+| G4 | JS unit tests | `node --test tests/js/*.test.mjs` (Node ≥ 18; pass the files, the bare directory form fails on recent Node) | 0 failures |
 | G5 | Py 3.9 syntax | `/usr/bin/python3 -m compileall -q fathom tests` (or the uv/docker equivalents) | exit 0 |
 | G6 | JS syntax & ES2018 | `for f in fathom/static/js/*.js fathom/static/sw.js fathom/static/dev/*.js; do node --check "$f" \|\| exit 1; done` and `node --test tests/js/syntax.test.mjs` (T2: rejects `?.`, `??`, `\|\|=`, `&&=`, `??=`, class fields/`#private`, `static {`, numeric separators, top-level `await` outside functions, `import.meta` outside `*.mjs` tests; ignores strings/comments) | exit 0 |
 | G7 | Frontend smoke | `python3 -m unittest discover -s tests -p test_frontend_smoke.py -v` (the dotted `tests.test_frontend_smoke` form breaks when the `discovery` extra's `x690` installs a top-level `tests` package); the UI suites: `-p 'test_ui_*.py'` | all pages `ready` with `errors == []`; perf budget met; skipped only if no Chrome |
 | G8 | Frozen files untouched | `git diff --quiet -- tests/test_fathom.py fathom/samples/rrc-littleton/project.json fathom/samples/rrc-littleton/exports` | exit 0 |
 | G9 | Ownership | `git status --porcelain` — every new/modified path is listed in §7.2 (or `docs/notes/*.md`, `docs/QA-REPORT.md`) | QA confirms |
 | G10 | Demo builds | `python3 -m fathom demo` ; `FATHOM_DATA=$(mktemp -d) sh -c 'python3 -m fathom new cd --template campus-demo && python3 -m fathom build cd'` | exit 0; run folder contains every §5.9 file (QR only if a public URL is set: run once with `FATHOM_PUBLIC_URL=http://localhost:8080`) |
-| G11 | Packaging | `python3 -m pip wheel . --no-deps -w "$(mktemp -d)"` then `python3 -m zipfile -l <wheel>` | wheel contains `fathom/static/js/patchview.js`, `fathom/library/templates/yamaha-rio3224-d2.json`, `fathom/checklists/kinds.json`, `fathom/samples/campus-demo/project.json`, `fathom/static/sw.js` |
+| G11 | Packaging | `python3 -m pip wheel . --no-deps -w "$(mktemp -d)"` then `python3 -m zipfile -l <wheel>` | wheel contains `fathom/static/js/patchview.js`, `fathom/library/templates/yamaha-rio3224-d2.json`, `fathom/library/rackula/catalog.json`, `fathom/static/rack-images/apc/` images, `fathom/checklists/kinds.json`, `fathom/samples/campus-demo/project.json`, `fathom/static/sw.js` |
 | G12 | Docker | `docker build -t fathom:0.3 .` ; `docker run --rm -d --name fq -p 18080:8080 fathom:0.3` ; `curl -fsS http://127.0.0.1:18080/healthz` ; `docker exec fq which pdftoppm` ; `docker rm -f fq` | healthz `{"ok": true, "version": "0.3.0"}` within 20 s; pdftoppm present |
 | G13 | Live server walk | `FATHOM_DATA=$(mktemp -d) python3 -m fathom serve --port 18081` + the manual items of §9 | QA report |
+
+**Selftest rack checks** (`selftest._check_racks`, part of G3): the catalog has ≥ 600 templates and every id resolves through `get_template`; every catalog image file exists; a rack with a blank, a vent, a shelf, a catalog device and a shelf child validates with no errors, no collisions and no rack warnings; `shelf_contents` and `rack_totals` give the exact expected values; `rack_svg(face="both", images=True)` parses and embeds `data:image/webp`, and with `base_url` the rear face links only the rear image; an inline Rackula layout and `tests/fixtures/rackula/media-server.rackula.yaml` (6 devices, no collisions) preview and apply without errors; all five rack templates apply to a new doc and to campus-demo; the campus-demo build contains `racks/rk-foh-front.svg`, `racks/rk-foh-rear.svg`, `racks/rk-foh.svg` and `racks/rk-foh.html`.
 
 ### 8.2 Performance targets
 
