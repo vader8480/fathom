@@ -297,6 +297,10 @@ Format: `ID · Priority · Requirement — **AC:** acceptance criterion · Owner
 | FR-INV-03 | P0 | Photos/documents per device: upload (`<input type=file accept="image/*,application/pdf" capture>` on iOS), list, open, delete. | JPG uploaded on iPad appears in the inspector. | W5, W1 |
 | FR-INV-04 | P0 | Inventory CSV export (all device fields flattened, one row per device). | CSV contains `serial` and `asset_tag` columns. | W4 |
 | FR-INV-05 | P1 | Quick filters "warranty < 90 days" and "missing serial". | Filter works on fixture (`sound-board` has no warranty → excluded). | W4 |
+| FR-INV-06 | P1 | `device.inventory.condition` ∈ `vocab.CONDITIONS` (`new, good, fair, poor, broken`, Appendix A.5; `GET /api/v2/meta` → `conditions`). `normalize` drops unknown values; `validate_doc` warns `bad_condition`. Inventory schedule / CSV column `condition`. | `conditions` has 5 entries; `condition: "mint"` → warning then dropped on save. | P1A |
+| FR-INV-07 | P1 | **Custom fields**: `device.inventory.fields` is a str→str object (≤ 32 keys, keys trimmed to ≤ 40 chars, values stringified to ≤ 500 chars, empty keys dropped). The inventory schedule adds one `field:<key>` column per distinct key (sorted) after the fixed columns. **Project trash**: `DELETE /api/v2/projects/<n>` moves the project (and its builds) to `$FATHOM_DATA/trash/` (§4.10) for 30 days; `GET /api/v2/trash`, restore and purge routes (§5.6); `fathom trash list\|restore\|purge [--expired]`. | 40 keys → 32 kept; trashed project absent from `GET /api/v2/projects`, back after restore; restore onto a live name → 409. | P1A |
+| FR-INV-08 | P1 | **Containers**: kind `container` ("Container / case", discipline `other`); `device.container` = id of the container device. Warnings `container_missing`, `container_not_container`, `container_cycle`; `schema.container_contents(doc) -> {container_id: [device_id]}` (computed, never persisted). Schedule column `container` = the container's name. | Cycle a→b→a yields two `container_cycle` warnings. | P1A |
+| FR-INV-09 | P1 | **Short codes**: `device.short_code` = 8 chars over `23456789ABCDEFGHJKLMNPQRSTUVWXYZ` (no 0/1/I/O), shown as `XXXX-XXXX` (`schema.format_short_code` / `parse_short_code`). Every write (`save_doc`, `/changes`), project creation from a template and `fathom codes backfill [project]` assign missing codes (`schema.ensure_short_codes`, unique per doc, `secrets.choice`); a device written without its code keeps the stored one (codes are sticky); `settings.short_codes: false` opts a project out. Search: exact code (either spelling, any case) scores 100 and the device subtitle ends with ` · XXXX-XXXX`. `GET /api/v2/codes/<code>` resolves a code across projects; `GET /c/<code>` is the URL printed on labels (§5.13). | `/c/<code>` → 302 to the app for editors, to `/p/<n>/d/<id>` for viewers, HTML 404 when unknown. | P1A |
 
 ### 3.15 FR-PLN — Planning & BOM
 
@@ -602,7 +606,9 @@ Types: `str`, `int`, `num` (float), `bool`, `obj`, `[T]` array of T. "Req" = req
 | `flow` | obj | no | `{group, column, order, seq, show}` map placement for the device's primary card; `show:false` hides it from the map |
 | `patch` | obj | no | `{x, y}` world coordinates in the patch view (px at zoom 1); `collapsed: bool` |
 | `rack` | obj | no | `{id, u, height, face, side, depth}` (FR-RACK-02) |
-| `inventory` | obj | no | `{serial, asset_tag, firmware, purchase_date (YYYY-MM-DD), warranty_until (YYYY-MM-DD), vendor, cost (num), currency, po, notes}` |
+| `inventory` | obj | no | `{serial, asset_tag, firmware, purchase_date (YYYY-MM-DD), warranty_until (YYYY-MM-DD), vendor, cost (num), currency, po, notes, condition, fields}`; `condition` ∈ `CONDITIONS` (A.5; unknown values are dropped by `normalize`, warning `bad_condition`), `fields` = custom fields `{str: str}` (≤ 32 keys ≤ 40 chars, values ≤ 500 chars; FR-INV-07) |
+| `container` | str | no | id of the `container`-kind device this device travels or lives in (FR-INV-08); warnings `container_missing`, `container_not_container`, `container_cycle`; contents are computed (`schema.container_contents`) |
+| `short_code` | str | no | 8 chars over `23456789ABCDEFGHJKLMNPQRSTUVWXYZ`, unique per doc, shown as `XXXX-XXXX` (FR-INV-09); `normalize` upper-cases, strips `-` and drops malformed values, never assigns; the store assigns missing codes on every write and keeps existing ones (unless `settings.short_codes` is `false`) |
 | `interfaces` | `[Interface]` | no | §4.3.9 |
 | `dmx` | obj | no | `{universe, address, footprint, mode, channel, protocol, port}` (FR-DMX-01) |
 | `merged_from` | `[obj]` | no | provenance written by a device merge (§4.11.1): `[{id, name, source, at, by, fields: [str]}]` per absorbed duplicate |
@@ -1040,7 +1046,12 @@ $FATHOM_DATA/
     history/snap/<rev:06d>.json    full normalized doc at <rev> (rev 1 and every 25th)
     shares.json                    share-link tokens (P1)
   builds/<name>/<stamp>_<slug>/... build runs (layout §5.9)
+  trash/<name>/                    a deleted project: the whole projects/<name>/ folder moved here (FR-INV-07)
+  trash/<name>/.trashed            {"at": ISO-8601 UTC, "by": username or "", "name": original project name}
+  trash/<name>/.builds/...         its builds/<name>/ runs, moved along
 ```
+
+Trash rules: `DELETE /api/v2/projects/<n>` (and `project.delete_project` / `trash_project`) moves the folder with `shutil.move` under the project lock; when `trash/<name>` already exists the new entry is `trash/<name>-<YYYYmmddHHMMSS>` and `.trashed.name` keeps the original name. `project.list_trashed()` returns `[{name, trashed_at, trashed_by, dir, rooms, devices}]` (`dir` is the trash entry used by the restore / purge routes; counts read from the stored project file, 0 when unreadable) and first purges entries older than 30 days (`purge_expired`, also `fathom trash purge --expired`). `restore_project(dir)` moves the folder and builds back and raises `ProjectExists` when a live project has that name; `purge_project(dir)` deletes the entry. Trashed projects are not under `projects/`, so `list_projects`, `GET /api/v2/projects`, search and `find_by_short_code` never see them.
 
 `history/index.jsonl` line: `{"revision": 18, "time": "2026-10-20T21:14:03Z", "author": "priya", "summary": "Moved 3 devices", "source": "changes", "touched": ["devices/foh", "devices/mon"], "ops": 3, "snapshot": false}`.
 
@@ -1190,7 +1201,11 @@ Username regex `^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$`. Session cookie payload `{"u
 | GET | `/api/v2/projects/<n>` | viewer | — | `{"name", "revision", "doc", "problems", "role", "migrated_from": 1\|null}` + `ETag` |
 | PUT | `/api/v2/projects/<n>` | editor | `{"doc", "summary?", "base_revision?"}` + `If-Match` | `{"revision", "rebased", "problems"}`; 409; 422; 428 |
 | POST | `/api/v2/projects/<n>/changes` | editor | `{"base_revision", "ops": [...], "summary?"}` (≤ 2000 ops) | `{"revision", "rebased", "problems", "touched"}`; 409; 422 |
-| DELETE | `/api/v2/projects/<n>?confirm=<n>` | admin | — | `{"ok": true}`; 400 without confirm |
+| DELETE | `/api/v2/projects/<n>?confirm=<n>[&purge=1]` | admin | — | moves the project and its builds to the trash (§4.10): `{"ok": true, "trashed": true}`; `purge=1` deletes for good → `{"ok": true, "trashed": false}`; 400 without confirm |
+| GET | `/api/v2/trash` | admin | — | `{"items": [{"name", "trashed_at", "trashed_by", "dir", "rooms", "devices"}], "retention_days": 30}` (newest first; expired entries are purged first) |
+| POST | `/api/v2/trash/<dir>/restore` | admin | — | `{"ok": true, "name": <original name>}`; 404 `not_found`; 409 `exists` when a live project has that name |
+| DELETE | `/api/v2/trash/<dir>` | admin | — | `{"ok": true}`; 404 `not_found` |
+| GET | `/api/v2/codes/<code>` | viewer | — | `<code>` = `XXXX-XXXX` or `XXXXXXXX`, any case: `{"project", "device", "name", "room", "kind"}` for the device carrying that `short_code` in any live project the caller may view; 404 `{"error": "not_found"}` |
 | GET | `/api/v2/projects/<n>/doc.json` | viewer | — | doc as download (`Content-Disposition: attachment; filename="<n>-project.json"`) |
 | GET | `/api/v2/projects/<n>/history?limit=50&before=<rev>` | viewer | — | `{"revisions": [index lines, newest first]}` |
 | GET | `/api/v2/projects/<n>/history/<rev>` | viewer | — | `{"revision", "entry": {…index line…}, "doc"}`; 404 `history_missing` |
@@ -1399,6 +1414,7 @@ For ports `id` = `<device>:<port>`; cables `id` = cable id; interfaces `id` = `<
 | GET | `/p/<n>/r/<room>/diagram.svg` | viewer | room map SVG |
 | GET | `/p/<n>/r/<room>/patch` | viewer | read-only patch table HTML |
 | GET | `/p/<n>/d/<device>` | viewer | device page HTML |
+| GET | `/c/<code>` | viewer | the short link printed on device labels (FR-INV-09; `<code>` = `XXXX-XXXX` or `XXXXXXXX`, any case): 302 to `/#/<project>//devices/<device>` when the caller is an editor or admin of that project, else to `/p/<project>/d/<device>`; unknown code → 404 HTML page |
 | GET | `/p/<n>/sop` | viewer | published procedures index (`render_html.render_sop_index`): tree order, kind / review-due badges, ≥44 px rows |
 | GET | `/p/<n>/sop/<slug>` | viewer | chrome-free SOP page (`render_html.render_sop_page`, §5.15): published pages only (drafts/archived → 404), the pages-API payload rendered with relative refs (`../d/<id>`, `../r/<id>`, `../sop/<slug>`, `../files/<att>/<name>`), phone-first (17 px body, sticky "Applies to", collapsible contents, tap-to-toggle checklist kept in `sessionStorage` under the app's key, tap-to-zoom images, prev/next, Print button), no edit controls, inline CSS/JS only (`static/css/sop.css` is inlined). Through a `scope: "sop"` share link device/room refs render as plain chips. |
 | GET | `/p/<n>/files/<att>/<filename>` | viewer | attachment (same as `/api/v2/…/files/…`) so share links can mirror images embedded in pages |
@@ -2833,7 +2849,7 @@ Research done 2026-10-20 by web search and vendor documentation. Each note state
 
 ## Appendix A — Vocabulary tables (`fathom/vocab.py`)
 
-### A.1 Device kinds (34)
+### A.1 Device kinds (35)
 
 `side` = default side on the signal-flow map; `routing` = default internal routing (§4.4.5); `legacy` = v1 kind whose layout heuristics apply (used by `layout.py` default-column logic and `merge.py` side inference). The first 9 rows are v1 and their `color` MUST NOT change; the v1 `network` label changes to "Network" (the map key shows the spine label for this row when the spine is drawn, FR-MAP-02).
 
@@ -2873,6 +2889,7 @@ Research done 2026-10-20 by web search and vendor documentation. Each note state
 | `touch_panel` | Touch panels | control | `#d8b4fe` | left | none | source |
 | `power` | Power · UPS · PDU | power | `#f87171` | right | matrix | other |
 | `patch_panel` | Patch panels · wall plates | other | `#94a3b8` | right | passthrough | stage_io |
+| `container` | Container / case | other | `#8b94a6` | right | none | other |
 
 ### A.2 Media (41)
 
@@ -2941,6 +2958,7 @@ Research done 2026-10-20 by web search and vendor documentation. Each note state
 ### A.5 Other enums
 
 - `STATUSES = ("installed", "planned", "spare", "retired")`
+- `CONDITIONS = ("new", "good", "fair", "poor", "broken")` — `device.inventory.condition` (FR-INV-06); `GET /api/v2/meta` → `conditions` (also `vocab.conditions`)
 - `ROOM_KINDS = ("auditorium", "sanctuary", "chapel", "theatre", "studio", "control_room", "broadcast", "classroom", "conference", "lobby", "outdoor", "rack_room", "storage", "other")`
 - Location kinds: `booth, stage, rack_room, storage, catwalk, closet, other`
 - Rack `numbering`: `bottom_up, top_down`; `face`: `front, rear`; `side`: `full, left, right`; `depth`: `full, half`

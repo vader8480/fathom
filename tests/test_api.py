@@ -139,7 +139,7 @@ class MetaAndLibrary(ApiCase):
         for k in ("version", "kinds", "media", "brands", "import_kinds", "default_columns", "samples", "chrome", "auth", "public_view", "max_upload_mb"):
             self.assertIn(k, v1, fr("FR-VOC-04", "5.12", "v1 meta key %s" % k))
         self.assertIsInstance(v1["kinds"], dict)
-        self.assertEqual(len(v1["kinds"]), 34, fr("FR-VOC-04", "5.12", "v1 kinds keyed dict, now larger"))
+        self.assertEqual(len(v1["kinds"]), 35, fr("FR-VOC-04", "5.12", "v1 kinds keyed dict, now larger"))
         self.assertEqual(len(v1["media"]), 41)
         self.assertEqual(v1["max_upload_mb"], 50)
 

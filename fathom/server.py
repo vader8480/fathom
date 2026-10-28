@@ -1243,7 +1243,7 @@ def r_code_lookup(req: Request) -> Response:
 
     hit = find_by_short_code(req.params["code"])
     if hit is None or not role_at_least(req.role_for(hit["project"]), "viewer"):
-        raise ApiError(404, "no device has that code", "not_found")
+        raise ApiError(404, "not_found", "not_found")
     return Response.json(hit)
 
 
