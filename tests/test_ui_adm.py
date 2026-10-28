@@ -612,7 +612,7 @@ class AdmUi(UiCase):
             self.assertTrue(pg.js("document.querySelector(%s).disabled" % json.dumps(sel)), sel)
         self.assertFalse(pg.js("document.querySelector('#adm-llm-model').disabled"))
         self.assertEqual(pg.js("document.querySelector('.adm-llm-env[data-env=base_url]').textContent"), "Set by environment (FATHOM_LLM_URL)")
-        self.assertEqual(pg.js("document.querySelector('.adm-llm-env[data-env=api_key]').textContent"), "Set by environment (FATHOM_LLM_KEY)")
+        self.assertEqual(pg.js("document.querySelector('.adm-llm-env[data-env=api_key]').textContent"), "Set by environment (FATHOM_LLM_API_KEY)")
         self.assertTrue(pg.js("document.querySelector('[data-act=clear-key]').hidden"), "no Clear key for an env key")
         pg.intercept("/api/v2/llm/settings", 200, env, "PUT")
         pg.click("[data-act=save]")

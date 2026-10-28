@@ -345,8 +345,8 @@ export function mountAssistant(el, ctx) {
       a.unresolved.forEach(function (u) {
         const name = typeof u === 'string' ? u : (u.text || u.phrase || '');
         const sugg = (u && u.suggestions) || [];
-        box.appendChild(h('div', { class: 'ast-notes' }, ['I couldn\u2019t find \u201c' + name + '\u201d.', sugg.length ? ' Did you mean: ' : '',
-          sugg.map(function (s, i) { const t = typeof s === 'string' ? s : (s.title || s.id); return [i ? ', ' : '', h('button', { type: 'button', class: 'ast-chip', onclick: function () { input.value = entry.question.replace(name, t); input.focus(); } }, t)]; }).reduce(function (x, y) { return x.concat(y); }, [])]));
+        const chips = sugg.map(function (s, i) { const t = typeof s === 'string' ? s : (s.title || s.id); return [i ? ', ' : '', h('button', { type: 'button', class: 'ast-chip', onclick: function () { input.value = entry.question.replace(name, t); input.focus(); } }, t)]; }).reduce(function (x, y) { return x.concat(y); }, []);
+        box.appendChild(h('div', { class: 'ast-notes' }, ['I couldn\u2019t find \u201c' + name + '\u201d.', sugg.length ? ' Did you mean: ' : ''].concat(chips)));
       });
     }
     (a.notes || []).forEach(function (n) { box.appendChild(h('div', { class: 'ast-notes', html: renderBold(n) })); });
