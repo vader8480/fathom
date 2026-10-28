@@ -66,6 +66,7 @@ KINDS: Dict[str, Dict[str, Any]] = {
     "touch_panel": _k("Touch panels", "control", "#d8b4fe", "left", "none", "source"),
     "power": _k("Power · UPS · PDU", "power", "#f87171", "right", "matrix", "other"),
     "patch_panel": _k("Patch panels · wall plates", "other", "#94a3b8", "right", "passthrough", "stage_io"),
+    "container": _k("Container / case", "other", "#8b94a6", "right", "none", "other"),
 }
 
 # ------------------------------------------------------------------- media
@@ -183,6 +184,8 @@ CONNECTORS: List[str] = [
 ]
 
 STATUSES: Tuple[str, ...] = ("installed", "planned", "spare", "retired")
+#: physical condition of a device (``device.inventory.condition``, FR-INV-06)
+CONDITIONS: Tuple[str, ...] = ("new", "good", "fair", "poor", "broken")
 ROOM_KINDS: Tuple[str, ...] = (
     "auditorium", "sanctuary", "chapel", "theatre", "studio", "control_room", "broadcast",
     "classroom", "conference", "lobby", "outdoor", "rack_room", "storage", "other",
@@ -270,6 +273,7 @@ def as_dict() -> Dict[str, Any]:
         "brands": BRANDS,
         "connectors": CONNECTORS,
         "statuses": list(STATUSES),
+        "conditions": list(CONDITIONS),
         "room_kinds": list(ROOM_KINDS),
         "port_dirs": list(PORT_DIRS),
         "location_kinds": list(LOCATION_KINDS),
@@ -285,7 +289,7 @@ def as_dict() -> Dict[str, Any]:
 
 
 __all__ = [
-    "KINDS", "MEDIA", "DISCIPLINES", "BRANDS", "CONNECTORS", "STATUSES", "ROOM_KINDS", "PORT_DIRS",
+    "KINDS", "MEDIA", "DISCIPLINES", "BRANDS", "CONNECTORS", "STATUSES", "CONDITIONS", "ROOM_KINDS", "PORT_DIRS",
     "LOCATION_KINDS", "RACK_NUMBERING", "RACK_FACES", "RACK_SIDES", "RACK_DEPTHS", "INTERFACE_ROLES",
     "NETWORK_PROTOCOLS", "DMX_PROTOCOLS", "ROUTING_MODES", "CHANNEL_KINDS", "CHANNEL_LINK_KINDS", "CHANNEL_SOURCES",
     "SYMPTOMS", "NETWORK_MEDIA", "SOURCE_KINDS",

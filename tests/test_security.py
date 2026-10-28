@@ -46,6 +46,9 @@ SPEC_ROLES = {
     ("POST", "/api/v2/library"): "editor", ("DELETE", "/api/v2/library/{}"): "editor", ("GET", "/api/v2/presets"): "viewer",
     ("GET", "/api/v2/projects"): "viewer", ("POST", "/api/v2/projects"): "editor", ("GET", "/api/v2/projects/{}"): "viewer",
     ("PUT", "/api/v2/projects/{}"): "editor", ("POST", "/api/v2/projects/{}/changes"): "editor", ("DELETE", "/api/v2/projects/{}"): "admin",
+    # phase1 P1A
+    ("GET", "/api/v2/trash"): "admin", ("POST", "/api/v2/trash/{}/restore"): "admin", ("DELETE", "/api/v2/trash/{}"): "admin",
+    ("GET", "/api/v2/codes/{}"): "viewer", ("GET", "/c/{}"): "viewer",
     ("GET", "/api/v2/projects/{}/devices/duplicates"): "viewer", ("POST", "/api/v2/projects/{}/devices/merge/preview"): "editor",
     ("POST", "/api/v2/projects/{}/devices/merge"): "editor",
     ("GET", "/api/v2/projects/{}/devices/{}/channels"): "viewer", ("POST", "/api/v2/projects/{}/devices/{}/channels/apply"): "editor",
@@ -98,7 +101,7 @@ SAMPLES = ["proj", "main", "atem-mini", "rk-foh", "cables", "1", "nobody", "imp-
 PARAM_HINTS = {"name": "proj", "room": "main", "device": "atem-mini", "rack": "rk-foh", "kind": "cables", "rev": "1", "username": "nobody",
                "iid": "imp-0001", "att": "att-000000000000", "token": "sh-abc123", "fp": "fp-none", "run": "run1", "file": "index.html",
                "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip", "table": "devices", "slug": "power-up",
-               "rid": "run-20260101-000000-0000", "pid": "pr-00000000"}
+               "rid": "run-20260101-000000-0000", "pid": "pr-00000000", "code": "ABCD2345", "tname": "proj"}
 DISCOVERY_FIXTURES = str(Path(__file__).parent / "fixtures" / "discovery")
 
 

@@ -872,6 +872,12 @@ def r_meta_v2(req: Request) -> Response:
     except Exception:
         pass
     out["capabilities"] = caps
+    try:
+        from .vocab import CONDITIONS
+
+        out["conditions"] = list(CONDITIONS)
+    except Exception:  # pragma: no cover
+        out["conditions"] = ["new", "good", "fair", "poor", "broken"]
     out["auth"] = {"enabled": auth_enabled(), "public_view": public_view()}
     out["limits"] = {"max_upload_mb": _max_upload() // (1024 * 1024), "max_json_mb": _max_json() // (1024 * 1024),
                      "max_backup_mb": _max_backup() // (1024 * 1024)}
@@ -1179,14 +1185,95 @@ def r_device_channels_apply(req: Request) -> Response:
     return Response.json({"revision": revision, "changed": bool(ops), "summary": applied})
 
 
-@route("DELETE", r"/api/v2/projects/" + _NAME, role="admin", summary="Delete a project (?confirm=<name>)", tags=["projects"])
+@route("DELETE", r"/api/v2/projects/" + _NAME, role="admin", summary="Move a project to the trash (?confirm=<name>; &purge=1 deletes it for good)", tags=["projects"])
 def r_project_delete_v2(req: Request) -> Response:
     name = req.params["name"]
     _project_dir(name)
     if req.query.get("confirm") != name:
         raise ApiError(400, "pass ?confirm=<name> to delete a project and its builds")
-    delete_project(name)
+    purge = str(req.query.get("purge") or "").lower() in ("1", "true", "yes")
+    delete_project(name, purge=purge, by=req.username)
+    return Response.json({"ok": True, "trashed": not purge})
+
+
+# ---- trash and short codes (phase 1, FR-INV-07 / FR-INV-09)
+
+_TNAME = r"(?P<tname>[A-Za-z0-9][A-Za-z0-9._-]{0,63})"
+_CODE = r"(?P<code>[A-Za-z0-9]{4}-?[A-Za-z0-9]{4})"
+
+
+@route("GET", r"/api/v2/trash", role="admin", summary="Trashed projects (purges entries past the retention period)", tags=["projects"])
+def r_trash_list(req: Request) -> Response:
+    from .project import TRASH_RETENTION_DAYS, list_trashed
+
+    return Response.json({"items": list_trashed(), "retention_days": TRASH_RETENTION_DAYS})
+
+
+@route("POST", r"/api/v2/trash/" + _TNAME + "/restore", role="admin", summary="Restore a trashed project", tags=["projects"])
+def r_trash_restore(req: Request) -> Response:
+    from .project import ProjectExists, restore_project, trash_info
+
+    info = trash_info(req.params["tname"])
+    if info is None:
+        raise ApiError(404, "nothing in the trash by that name", "not_found")
+    try:
+        restore_project(req.params["tname"])
+    except ProjectExists as exc:
+        raise ApiError(409, str(exc), "exists")
+    except FileNotFoundError:
+        raise ApiError(404, "nothing in the trash by that name", "not_found")
+    return Response.json({"ok": True, "name": info["name"]})
+
+
+@route("DELETE", r"/api/v2/trash/" + _TNAME, role="admin", summary="Delete a trashed project for good", tags=["projects"])
+def r_trash_purge(req: Request) -> Response:
+    from .project import purge_project
+
+    try:
+        purge_project(req.params["tname"])
+    except FileNotFoundError:
+        raise ApiError(404, "nothing in the trash by that name", "not_found")
     return Response.json({"ok": True})
+
+
+@route("GET", r"/api/v2/codes/" + _CODE, role="viewer", summary="Resolve a device short code (XXXX-XXXX) across projects", tags=["devices"])
+def r_code_lookup(req: Request) -> Response:
+    from .project import find_by_short_code
+    from .users import role_at_least
+
+    hit = find_by_short_code(req.params["code"])
+    if hit is None or not role_at_least(req.role_for(hit["project"]), "viewer"):
+        raise ApiError(404, "no device has that code", "not_found")
+    return Response.json(hit)
+
+
+def _not_found_page(req: Request, title: str, message: str) -> Response:
+    e = html_mod.escape
+    home = (req.script_root or "") + "/"
+    text = (f"<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+            f"<title>{e(title)} · Fathom</title><style>body{{font:17px/1.5 system-ui,sans-serif;margin:0;padding:48px 24px;background:#0b1020;color:#e5e7eb}}"
+            f"main{{max-width:32rem;margin:0 auto}}h1{{font-size:1.5rem;margin:0 0 .5rem}}p{{margin:0 0 1rem;color:#9aa3b5}}"
+            f"a{{display:inline-block;min-height:44px;line-height:44px;padding:0 16px;border-radius:8px;background:#1f2937;color:#e5e7eb;text-decoration:none}}</style></head>"
+            f"<body><main><h1>{e(title)}</h1><p>{e(message)}</p><a href=\"{e(home)}\">Open Fathom</a></main></body></html>")
+    r = _viewer_html(text)
+    r.status = 404
+    return r
+
+
+@route("GET", r"/c/" + _CODE, role="viewer", summary="Short link printed on device labels: redirects to the device (editor → app, viewer → device page)", tags=["viewer"], page="viewer")
+def r_code_redirect(req: Request) -> Response:
+    from .project import find_by_short_code
+    from .users import role_at_least
+
+    hit = find_by_short_code(req.params["code"])
+    if hit is None or not role_at_least(req.role_for(hit["project"]), "viewer"):
+        return _not_found_page(req, "No device has that code", "The label may belong to another Fathom server, or the device was removed.")
+    root = req.script_root or ""
+    if role_at_least(req.role_for(hit["project"]), "editor"):
+        target = f"{root}/#/{quote(hit['project'], safe='')}//devices/{quote(hit['device'], safe='')}"
+    else:
+        target = f"{root}/p/{quote(hit['project'], safe='')}/d/{quote(hit['device'], safe='')}"
+    return Response(b"", 302, "text/plain; charset=utf-8", {"Location": target})
 
 
 @route("GET", r"/api/v2/projects/" + _NAME + r"/doc\.json", role="viewer", summary="Download the doc", tags=["projects"])

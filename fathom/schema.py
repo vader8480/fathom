@@ -55,6 +55,15 @@ CHANNEL_SOURCES: Tuple[str, ...] = ("user", "yamaha", "clf", "dante", "csv")
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "default_room": "main", "units": "metric", "cable_tag_pattern": "{D}-{n:03}", "currency": "USD", "autosave": True,
 }
+#: ``device.inventory.condition`` (fallback copy of ``vocab.CONDITIONS``, FR-INV-06)
+CONDITIONS: Tuple[str, ...] = ("new", "good", "fair", "poor", "broken")
+#: ``device.short_code``: 8 chars, no 0 / 1 / I / O so codes survive handwriting and OCR (FR-INV-09)
+SHORT_CODE_ALPHABET: str = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+SHORT_CODE_RE = re.compile(r"^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$")
+#: ``device.inventory.fields`` limits (custom fields)
+MAX_CUSTOM_FIELDS = 32
+MAX_CUSTOM_FIELD_KEY = 40
+MAX_CUSTOM_FIELD_VALUE = 500
 
 
 class SchemaError(ValueError):
@@ -83,6 +92,7 @@ _FALLBACK_KINDS = {
     "dimmer": ("lighting", "right", "matrix"), "fixture": ("lighting", "right", "passthrough"), "switch": ("network", "right", "matrix"),
     "control": ("control", "right", "matrix"), "touch_panel": ("control", "left", "none"), "power": ("power", "right", "matrix"),
     "patch_panel": ("other", "right", "passthrough"),
+    "container": ("other", "right", "none"),
 }
 _A, _V, _L, _N, _C, _P = "audio", "video", "lighting", "network", "control", "power"
 _FALLBACK_MEDIA = {
@@ -302,11 +312,156 @@ def normalize(doc: Doc) -> Doc:
                     e["ports"] = []
                 elif isinstance(ports, list):
                     e["ports"] = [p for p in ports if not (isinstance(p, dict) and p.get("auto") is True)]
+                _normalize_device_extras(e)
             lst.append(e)
         out[coll] = lst
     for k, v in src.items():
         if k not in out and k not in COLLECTIONS and k not in ROOTS:
             out[k] = copy.deepcopy(v)
+    return out
+
+
+def _conditions() -> Tuple[str, ...]:
+    try:
+        from . import vocab  # type: ignore
+
+        return tuple(getattr(vocab, "CONDITIONS", None) or CONDITIONS)
+    except Exception:  # pragma: no cover
+        return CONDITIONS
+
+
+def _normalize_device_extras(e: Dict[str, Any]) -> None:
+    """In place, on an already-copied device: FR-INV-06..09 fields
+    (``inventory.condition``, ``inventory.fields``, ``container``, ``short_code``)."""
+    inv = e.get("inventory")
+    if isinstance(inv, dict):
+        cond = inv.get("condition")
+        if cond is not None and (not isinstance(cond, str) or cond not in _conditions()):
+            inv.pop("condition", None)
+        fields = inv.get("fields")
+        if fields is not None:
+            clean = normalize_custom_fields(fields)
+            if clean:
+                inv["fields"] = clean
+            else:
+                inv.pop("fields", None)
+        if not inv:
+            e.pop("inventory", None)
+    cont = e.get("container")
+    if cont is not None and (not isinstance(cont, str) or not cont.strip()):
+        e.pop("container", None)
+    elif isinstance(cont, str):
+        e["container"] = cont.strip()
+    if "short_code" in e:
+        code = parse_short_code(e.get("short_code"))
+        if code:
+            e["short_code"] = code
+        else:
+            e.pop("short_code", None)
+
+
+def normalize_custom_fields(fields: Any) -> Dict[str, str]:
+    """``inventory.fields`` → str→str: ≤ 32 keys, keys trimmed to ≤ 40 chars,
+    values stringified and cut to ≤ 500 chars, empty keys dropped."""
+    out: Dict[str, str] = {}
+    if not isinstance(fields, dict):
+        return out
+    for k, v in fields.items():
+        key = str(k).strip()[:MAX_CUSTOM_FIELD_KEY].strip()
+        if not key or key in out:
+            continue
+        if v is None:
+            val = ""
+        elif isinstance(v, bool):
+            val = "true" if v else "false"
+        elif isinstance(v, (int, float, str)):
+            val = str(v)
+        else:
+            val = json.dumps(v, ensure_ascii=False)
+        out[key] = val[:MAX_CUSTOM_FIELD_VALUE]
+        if len(out) >= MAX_CUSTOM_FIELDS:
+            break
+    return out
+
+
+# ------------------------------------------------------- short codes (FR-INV-09)
+
+
+def parse_short_code(text: Any) -> Optional[str]:
+    """``"abcd-2345"`` / ``" ABCD2345 "`` → ``"ABCD2345"``; ``None`` when it is not a valid code."""
+    if not isinstance(text, str):
+        return None
+    code = text.strip().replace("-", "").replace(" ", "").upper()
+    return code if SHORT_CODE_RE.match(code) else None
+
+
+def format_short_code(code: Any) -> str:
+    """``"ABCD2345"`` → ``"ABCD-2345"`` (anything else is returned stripped)."""
+    c = parse_short_code(code)
+    if c is None:
+        return str(code or "").strip()
+    return c[:4] + "-" + c[4:]
+
+
+def new_short_code(taken: Optional[Set[str]] = None) -> str:
+    """A random code (``secrets.choice`` over the 32-char alphabet) not in ``taken``."""
+    import secrets
+
+    taken = taken or set()
+    while True:
+        code = "".join(secrets.choice(SHORT_CODE_ALPHABET) for _ in range(8))
+        if code not in taken:
+            return code
+
+
+def short_codes_enabled(doc: Doc) -> bool:
+    """``settings.short_codes`` is not ``False`` (an opt-out for golden-file projects)."""
+    settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    return settings.get("short_codes") is not False
+
+
+def ensure_short_codes(doc: Doc) -> int:
+    """Assign a ``short_code`` to every device lacking one, unique within the doc.
+    Mutates ``doc`` in place (the one deliberate exception to this module's
+    purity, since callers want the count); returns how many were assigned.
+    Not part of :func:`normalize`: ``project.save_doc`` / ``apply_changes``,
+    project creation and ``fathom codes backfill`` call it."""
+    devs = doc.get("devices")
+    if not isinstance(devs, list):
+        return 0
+    taken: Set[str] = set()
+    for d in devs:
+        if isinstance(d, dict):
+            code = parse_short_code(d.get("short_code"))
+            if code:
+                taken.add(code)
+    seen: Set[str] = set()
+    n = 0
+    for d in devs:
+        if not isinstance(d, dict) or d.get("auto") is True:
+            continue
+        code = parse_short_code(d.get("short_code"))
+        if code and code not in seen:
+            seen.add(code)  # the first holder keeps it; a duplicate further down gets a fresh one
+            continue
+        code = new_short_code(taken)
+        d["short_code"] = code
+        taken.add(code)
+        seen.add(code)
+        n += 1
+    return n
+
+
+def container_contents(doc: Doc) -> Dict[str, List[str]]:
+    """``{container_id: [device_id, …]}`` from ``device.container`` links (doc order;
+    computed, never persisted)."""
+    out: Dict[str, List[str]] = {}
+    for d in doc.get("devices") or []:
+        if not isinstance(d, dict) or not d.get("id"):
+            continue
+        c = d.get("container")
+        if isinstance(c, str) and c:
+            out.setdefault(c, []).append(str(d["id"]))
     return out
 
 
@@ -1075,7 +1230,7 @@ def is_v1_expressible(doc: Doc) -> bool:
     for d in doc.get("devices") or []:
         if not isinstance(d, dict):
             return False
-        for k in ("inventory", "rack", "interfaces", "dmx", "template", "routing", "patch", "tags", "channels", "channel_links"):
+        for k in ("inventory", "rack", "interfaces", "dmx", "template", "routing", "patch", "tags", "channels", "channel_links", "container"):
             if d.get(k):
                 return False
         if str(d.get("status") or "installed") != "installed":
@@ -1497,7 +1652,11 @@ def validate_doc(doc: Doc) -> List[Problem]:
             for f in ("purchase_date", "warranty_until"):
                 if inv.get(f) and not _valid_date(inv.get(f)):
                     P.append(_prob("warning", "bad_date", ref, f"{ref}/inventory/{f}", f"{f} must be YYYY-MM-DD"))
+            cond = inv.get("condition")
+            if cond not in (None, "", *_conditions()):
+                P.append(_prob("warning", "bad_condition", ref, f"{ref}/inventory/condition", f"unknown condition '{cond}' (one of {', '.join(_conditions())})"))
         P.extend(_channel_problems(d, ref, pseen))
+    P.extend(_container_problems(colls["devices"]))
 
     # ---- cables and bundles
     bundle_ids = ids["bundles"]
@@ -1586,6 +1745,37 @@ def validate_doc(doc: Doc) -> List[Problem]:
 
     # ---- helpers owned by other units (skipped when not importable)
     P.extend(_helper_problems(doc, colls))
+    return P
+
+
+def _container_problems(devices: List[Dict[str, Any]]) -> List[Problem]:
+    """``device.container`` links (FR-INV-08): target missing, target not a
+    ``container`` kind, or a loop when following the links — all warnings."""
+    P: List[Problem] = []
+    by_id = {d["id"]: d for d in devices if isinstance(d.get("id"), str)}
+    for d in devices:
+        c = d.get("container")
+        if not c:
+            continue
+        ref = f"devices/{d['id']}"
+        path = ref + "/container"
+        if not isinstance(c, str):
+            P.append(_prob("warning", "container_missing", ref, path, f"{ref}: container must be a device id"))
+            continue
+        target = by_id.get(c)
+        if target is None:
+            P.append(_prob("warning", "container_missing", ref, path, f"{ref}: container '{c}' does not exist"))
+            continue
+        if target.get("kind") != "container":
+            P.append(_prob("warning", "container_not_container", ref, path, f"{ref}: '{c}' is not a container (kind {target.get('kind') or '?'})"))
+        hops: Set[str] = {d["id"]}
+        cur: Any = c
+        while isinstance(cur, str) and cur in by_id:
+            if cur in hops:
+                P.append(_prob("warning", "container_cycle", ref, path, f"{ref}: container chain loops back through '{cur}'"))
+                break
+            hops.add(cur)
+            cur = by_id[cur].get("container")
     return P
 
 
@@ -1911,7 +2101,7 @@ JSON_SCHEMA: Dict[str, Any] = {
         "meta": _obj({k: _STR for k in ("org", "system", "title", "intro", "footnote", "slug", "version", "author", "description")}),
         "settings": _obj({
             "default_room": _STR, "units": {"type": "string", "enum": ["metric", "imperial"]}, "cable_tag_pattern": _STR,
-            "currency": _STR, "public_url": _STR, "autosave": _BOOL, "problem_email": _STR,
+            "currency": _STR, "public_url": _STR, "autosave": _BOOL, "problem_email": _STR, "short_codes": _BOOL,
             "labels": _obj({"cols": _INT, "rows": _INT, "width_in": _NUM, "height_in": _NUM, "page": {"type": "string", "enum": ["letter", "a4"]}}),
             "assistant": _obj({"llm": _BOOL}),
         }),
@@ -1950,7 +2140,11 @@ JSON_SCHEMA: Dict[str, Any] = {
             "rack": _obj({"id": _STR, "u": _INT, "height": _INT, "face": {"type": "string", "enum": ["front", "rear"]},
                           "side": {"type": "string", "enum": ["full", "left", "right"]}, "depth": {"type": "string", "enum": ["full", "half"]}}),
             "inventory": _obj({"serial": _STR, "asset_tag": _STR, "firmware": _STR, "purchase_date": _STR, "warranty_until": _STR,
-                               "vendor": _STR, "cost": _NUM, "currency": _STR, "po": _STR, "notes": _STR}),
+                               "vendor": _STR, "cost": _NUM, "currency": _STR, "po": _STR, "notes": _STR,
+                               "condition": {"type": "string", "enum": list(CONDITIONS)},
+                               "fields": {"type": "object", "additionalProperties": _STR, "maxProperties": MAX_CUSTOM_FIELDS}}),
+            "container": _ID,
+            "short_code": {"type": "string", "pattern": SHORT_CODE_RE.pattern},
             "interfaces": _arr(_INTERFACE),
             "dmx": _obj({"universe": _INT, "address": _INT, "footprint": _INT, "mode": _STR, "channel": _STR,
                          "protocol": {"type": "string", "enum": ["dmx", "sacn", "artnet"]}, "port": _STR}),
