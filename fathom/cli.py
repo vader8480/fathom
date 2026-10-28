@@ -1,7 +1,7 @@
 """Fathom command line.
 
   fathom serve [--host H] [--port N] [--data DIR] [--open]   web app (editor + viewer)
-  fathom new <name|path> [--template T] [--org O]           create a project (T: blank | rrc-littleton | campus-demo)
+  fathom new <name|path> [--template T] [--org O]           create a project (T: blank | rrc-littleton | campus-demo | church-<starter>)
   fathom import <project> <file|folder>... [--kind K] [--node ID] [--device NAME] [--room R] [--apply]
   fathom inspect <file|folder> [--kind K] [--json]          parse an export and show what was found
   fathom build <project> [--pdf] [--png] [--open] [--out DIR] [--state S] [--rooms a,b] [--base-url URL] [--no-discovery]
@@ -1006,7 +1006,7 @@ def main(argv=None) -> None:
 
     s = sub.add_parser("new", help="create a project")
     s.add_argument("name", help="project name (in the data dir) or a path")
-    s.add_argument("--template", default="blank", help="blank or a sample name (rrc-littleton, campus-demo)")
+    s.add_argument("--template", default="blank", help="blank or a sample name (rrc-littleton, campus-demo, or a church starter: church-sanctuary, church-youth-room, church-chapel, church-portable, church-broadcast)")
     s.add_argument("--org", help="organisation / venue name for the header")
     s.add_argument("--force", action="store_true")
     s.set_defaults(func=cmd_new)

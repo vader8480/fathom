@@ -1,0 +1,2349 @@
+{
+  "fathom": 2,
+  "revision": 0,
+  "meta": {
+    "org": "Your church",
+    "system": "Youth room",
+    "title": "Youth room signal flow",
+    "slug": "church-youth",
+    "description": "Starter: youth room / multipurpose hall. A small digital mixer, two wireless mics, powered speakers, one projector behind an HDMI switcher, four LED pars on a small DMX controller and a single wall rack.",
+    "footnote": "Arrows show signal direction. Starter template: replace models and names with what is actually installed."
+  },
+  "settings": {
+    "default_room": "youth",
+    "units": "metric",
+    "cable_tag_pattern": "{room}-{D}-{n:03}",
+    "currency": "USD",
+    "public_url": "",
+    "autosave": true,
+    "labels": {
+      "cols": 3,
+      "rows": 10,
+      "width_in": 2.625,
+      "height_in": 1.0,
+      "page": "letter"
+    }
+  },
+  "venues": [
+    {
+      "id": "youth-venue",
+      "name": "Your church",
+      "order": 1
+    }
+  ],
+  "rooms": [
+    {
+      "id": "youth",
+      "venue": "youth-venue",
+      "name": "Youth room",
+      "code": "YTH",
+      "kind": "other",
+      "order": 1,
+      "flow": {
+        "columns": [
+          {
+            "id": "sources",
+            "label": "Sources",
+            "side": "left"
+          },
+          {
+            "id": "stage_io",
+            "label": "Stage I/O",
+            "side": "left"
+          },
+          {
+            "id": "dante",
+            "label": "Dante",
+            "side": "spine"
+          },
+          {
+            "id": "mix",
+            "label": "Mix & Dante",
+            "side": "right"
+          },
+          {
+            "id": "amps",
+            "label": "Amps · TX",
+            "side": "right"
+          },
+          {
+            "id": "outputs",
+            "label": "Speakers · IEMs",
+            "side": "right"
+          }
+        ],
+        "groups": [
+          {
+            "id": "A",
+            "label": "Stage inputs",
+            "side": "left"
+          },
+          {
+            "id": "B",
+            "label": "Wireless",
+            "side": "left"
+          },
+          {
+            "id": "C",
+            "label": "Playback · cameras · lighting desk",
+            "side": "left"
+          },
+          {
+            "id": "E",
+            "label": "Mix · video · network",
+            "side": "right"
+          },
+          {
+            "id": "F",
+            "label": "Monitors · IEM",
+            "side": "right"
+          },
+          {
+            "id": "G",
+            "label": "PA",
+            "side": "right"
+          },
+          {
+            "id": "H",
+            "label": "Screens · stream",
+            "side": "right"
+          },
+          {
+            "id": "L",
+            "label": "Lighting",
+            "side": "right"
+          }
+        ],
+        "spine": {
+          "label": "Dante · AV network",
+          "show": true
+        },
+        "options": {
+          "auto_dante_nodes": true,
+          "auto_sources": false,
+          "dante_counts": false,
+          "appendix": true
+        }
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "youth-audio",
+      "room": "youth",
+      "discipline": "audio",
+      "name": "Youth audio"
+    },
+    {
+      "id": "youth-video",
+      "room": "youth",
+      "discipline": "video",
+      "name": "Youth video"
+    },
+    {
+      "id": "youth-lighting",
+      "room": "youth",
+      "discipline": "lighting",
+      "name": "Youth lighting"
+    }
+  ],
+  "locations": [
+    {
+      "id": "youth-booth",
+      "name": "Tech corner",
+      "venue": "youth-venue",
+      "room": "youth",
+      "kind": "booth"
+    },
+    {
+      "id": "youth-stage",
+      "name": "Platform",
+      "venue": "youth-venue",
+      "room": "youth",
+      "kind": "stage"
+    }
+  ],
+  "racks": [
+    {
+      "id": "youth-rk-wall",
+      "name": "Wall rack",
+      "room": "youth",
+      "location": "youth-booth",
+      "units": 8,
+      "numbering": "bottom_up",
+      "faces": [
+        "front",
+        "rear"
+      ],
+      "depth_mm": 450,
+      "order": 1,
+      "notes": "Wall-mounted 8U cabinet beside the tech corner."
+    }
+  ],
+  "networks": [
+    {
+      "id": "av-ctrl",
+      "name": "AV control",
+      "vlan": 30,
+      "subnet": "10.30.0.0/24",
+      "gateway": "10.30.0.1",
+      "protocol": "control"
+    }
+  ],
+  "devices": [
+    {
+      "id": "youth-stage-mics",
+      "name": "Platform inputs",
+      "kind": "mic",
+      "manufacturer": "Mixed",
+      "model": "Kick mic + 3 DIs",
+      "ports": [
+        {
+          "id": "out-1",
+          "name": "Kick",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Platform inputs",
+          "index": 1,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-2",
+          "name": "Guitar DI",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Platform inputs",
+          "index": 2,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-3",
+          "name": "Keys L (DI)",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Platform inputs",
+          "index": 3,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-4",
+          "name": "Keys R (DI)",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Platform inputs",
+          "index": 4,
+          "connector": "XLR3M"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-audio",
+      "location": "youth-stage",
+      "flow": {
+        "group": "A",
+        "column": "sources"
+      },
+      "count": 4,
+      "inventory": {
+        "condition": "fair"
+      }
+    },
+    {
+      "id": "youth-handhelds",
+      "name": "Wireless handhelds",
+      "kind": "mic",
+      "manufacturer": "Shure",
+      "model": "ULXD2/SM58",
+      "brand": "shure",
+      "template": "shure-ulxd2-sm58",
+      "ports": [
+        {
+          "id": "rf-out",
+          "name": "RF Out",
+          "dir": "out",
+          "medium": "rf",
+          "group": "RF Out",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-audio",
+      "location": "youth-stage",
+      "flow": {
+        "group": "B",
+        "column": "sources"
+      },
+      "count": 2,
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "youth-wrx-1",
+      "name": "Wireless RX 1-2",
+      "kind": "wireless_rx",
+      "manufacturer": "Shure",
+      "model": "ULXD4D",
+      "brand": "shure",
+      "template": "shure-ulxd4d",
+      "dante": true,
+      "ports": [
+        {
+          "id": "antenna-a",
+          "name": "Antenna A",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "antenna-b",
+          "name": "Antenna B",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-1",
+          "name": "Analog Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-2",
+          "name": "Analog Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "mix-out",
+          "name": "Mix Out",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Mix Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dante-primary",
+          "name": "Dante Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 1,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "dante-secondary",
+          "name": "Dante Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 2,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-audio",
+      "location": "youth-booth",
+      "flow": {
+        "group": "B",
+        "column": "stage_io"
+      },
+      "rack": {
+        "id": "youth-rk-wall",
+        "u": 6,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "asset_tag": "CH-0101"
+      },
+      "interfaces": [
+        {
+          "id": "control",
+          "role": "control",
+          "ip": "10.30.0.121",
+          "network": "av-ctrl",
+          "protocol": "control",
+          "switch": "youth-sw",
+          "switch_port": "gbe-poe-2"
+        }
+      ]
+    },
+    {
+      "id": "youth-wrx-2",
+      "name": "Wireless RX 3-4",
+      "kind": "wireless_rx",
+      "manufacturer": "Shure",
+      "model": "ULXD4D",
+      "brand": "shure",
+      "template": "shure-ulxd4d",
+      "dante": true,
+      "ports": [
+        {
+          "id": "antenna-a",
+          "name": "Antenna A",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "antenna-b",
+          "name": "Antenna B",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-1",
+          "name": "Analog Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-2",
+          "name": "Analog Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "mix-out",
+          "name": "Mix Out",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Mix Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dante-primary",
+          "name": "Dante Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 1,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "dante-secondary",
+          "name": "Dante Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 2,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-audio",
+      "location": "youth-booth",
+      "flow": {
+        "group": "B",
+        "column": "stage_io"
+      },
+      "status": "planned",
+      "rack": {
+        "id": "youth-rk-wall",
+        "u": 7,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "new",
+        "notes": "Second receiver planned for the autumn term"
+      }
+    },
+    {
+      "id": "youth-mixer",
+      "name": "Digital mixer",
+      "kind": "console",
+      "manufacturer": "Allen & Heath",
+      "model": "SQ-5",
+      "brand": "allen-heath",
+      "template": "allen-heath-sq-5",
+      "ports": [
+        {
+          "id": "mic-in-1",
+          "name": "Mic In 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-2",
+          "name": "Mic In 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-3",
+          "name": "Mic In 3",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-4",
+          "name": "Mic In 4",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-5",
+          "name": "Mic In 5",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-6",
+          "name": "Mic In 6",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-7",
+          "name": "Mic In 7",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-8",
+          "name": "Mic In 8",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-9",
+          "name": "Mic In 9",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 9,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-10",
+          "name": "Mic In 10",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 10,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-11",
+          "name": "Mic In 11",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 11,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-12",
+          "name": "Mic In 12",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 12,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-13",
+          "name": "Mic In 13",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 13,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-14",
+          "name": "Mic In 14",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 14,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-15",
+          "name": "Mic In 15",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 15,
+          "origin": "template"
+        },
+        {
+          "id": "mic-in-16",
+          "name": "Mic In 16",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Mic In",
+          "index": 16,
+          "origin": "template"
+        },
+        {
+          "id": "talkback-in",
+          "name": "Talkback In",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Talkback In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "st-in-st1-l",
+          "name": "ST In ST1 L",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "ST In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "st-in-st1-r",
+          "name": "ST In ST1 R",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "ST In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "st-in-st2-l",
+          "name": "ST In ST2 L",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "ST In",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "st-in-st2-r",
+          "name": "ST In ST2 R",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "ST In",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "xlr-out-1",
+          "name": "XLR Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "XLR Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "xlr-out-2",
+          "name": "XLR Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "XLR Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "xlr-out-3",
+          "name": "XLR Out 3",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "XLR Out",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "xlr-out-4",
+          "name": "XLR Out 4",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "XLR Out",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "xlr-out-5",
+          "name": "XLR Out 5",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "XLR Out",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "xlr-out-6",
+          "name": "XLR Out 6",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "XLR Out",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "xlr-out-7",
+          "name": "XLR Out 7",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "XLR Out",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "xlr-out-8",
+          "name": "XLR Out 8",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "XLR Out",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "xlr-out-9",
+          "name": "XLR Out 9",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "XLR Out",
+          "index": 9,
+          "origin": "template"
+        },
+        {
+          "id": "xlr-out-10",
+          "name": "XLR Out 10",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "XLR Out",
+          "index": 10,
+          "origin": "template"
+        },
+        {
+          "id": "xlr-out-11",
+          "name": "XLR Out 11",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "XLR Out",
+          "index": 11,
+          "origin": "template"
+        },
+        {
+          "id": "xlr-out-12",
+          "name": "XLR Out 12",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "XLR Out",
+          "index": 12,
+          "origin": "template"
+        },
+        {
+          "id": "out-a",
+          "name": "Out A",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "out-b",
+          "name": "Out B",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "aes-out",
+          "name": "AES Out",
+          "dir": "out",
+          "medium": "aes3",
+          "connector": "XLR3M",
+          "group": "AES Out",
+          "index": 1,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "slink",
+          "name": "SLink",
+          "dir": "io",
+          "medium": "snake",
+          "connector": "etherCON",
+          "group": "SLink",
+          "index": 1,
+          "channels": 128,
+          "origin": "template"
+        },
+        {
+          "id": "i-o-port",
+          "name": "I/O Port",
+          "dir": "io",
+          "medium": "other",
+          "group": "I/O Port",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "usb",
+          "name": "USB",
+          "dir": "io",
+          "medium": "usb",
+          "connector": "USB-B",
+          "group": "USB",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-audio",
+      "location": "youth-booth",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "inventory": {
+        "condition": "good",
+        "serial": "SQ5-YTH-001",
+        "asset_tag": "CH-0100"
+      }
+    },
+    {
+      "id": "youth-spk-l",
+      "name": "Speaker L (powered)",
+      "kind": "speaker",
+      "manufacturer": "QSC",
+      "model": "K12.2",
+      "brand": "qsc",
+      "template": "qsc-k12-2",
+      "ports": [
+        {
+          "id": "input-1",
+          "name": "Input 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Input",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "input-2",
+          "name": "Input 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Input",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "thru",
+          "name": "Thru",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Thru",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Power In",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-audio",
+      "location": "youth-stage",
+      "flow": {
+        "group": "G",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "youth-spk-r",
+      "name": "Speaker R (powered)",
+      "kind": "speaker",
+      "manufacturer": "QSC",
+      "model": "K12.2",
+      "brand": "qsc",
+      "template": "qsc-k12-2",
+      "ports": [
+        {
+          "id": "input-1",
+          "name": "Input 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Input",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "input-2",
+          "name": "Input 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Input",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "thru",
+          "name": "Thru",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Thru",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Power In",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-audio",
+      "location": "youth-stage",
+      "flow": {
+        "group": "G",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "youth-laptop",
+      "name": "Lyrics laptop",
+      "kind": "computer",
+      "manufacturer": "Apple",
+      "model": "MacBook Air",
+      "brand": "apple",
+      "ports": [
+        {
+          "id": "hdmi-out",
+          "name": "HDMI Out",
+          "dir": "out",
+          "medium": "hdmi",
+          "group": "HDMI Out",
+          "index": 1,
+          "connector": "HDMI-A"
+        },
+        {
+          "id": "usb",
+          "name": "USB",
+          "dir": "io",
+          "medium": "usb",
+          "group": "USB",
+          "index": 1,
+          "connector": "USB-C"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-video",
+      "location": "youth-booth",
+      "flow": {
+        "group": "C",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "youth-media",
+      "name": "Streaming box",
+      "kind": "video_source",
+      "manufacturer": "Apple",
+      "model": "Apple TV 4K",
+      "brand": "apple",
+      "ports": [
+        {
+          "id": "hdmi-out",
+          "name": "HDMI Out",
+          "dir": "out",
+          "medium": "hdmi",
+          "group": "HDMI Out",
+          "index": 1,
+          "connector": "HDMI-A"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-video",
+      "location": "youth-booth",
+      "flow": {
+        "group": "C",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "youth-hdmi-sw",
+      "name": "HDMI switcher 4×1",
+      "kind": "video_switcher",
+      "manufacturer": "Extron",
+      "model": "SW4 HD 4K PLUS",
+      "brand": "extron",
+      "ports": [
+        {
+          "id": "hdmi-in-1",
+          "name": "HDMI In 1",
+          "dir": "in",
+          "medium": "hdmi",
+          "group": "HDMI In",
+          "index": 1,
+          "connector": "HDMI-A"
+        },
+        {
+          "id": "hdmi-in-2",
+          "name": "HDMI In 2",
+          "dir": "in",
+          "medium": "hdmi",
+          "group": "HDMI In",
+          "index": 2,
+          "connector": "HDMI-A"
+        },
+        {
+          "id": "hdmi-in-3",
+          "name": "HDMI In 3",
+          "dir": "in",
+          "medium": "hdmi",
+          "group": "HDMI In",
+          "index": 3,
+          "connector": "HDMI-A"
+        },
+        {
+          "id": "hdmi-in-4",
+          "name": "HDMI In 4",
+          "dir": "in",
+          "medium": "hdmi",
+          "group": "HDMI In",
+          "index": 4,
+          "connector": "HDMI-A"
+        },
+        {
+          "id": "hdmi-out",
+          "name": "HDMI Out",
+          "dir": "out",
+          "medium": "hdmi",
+          "group": "HDMI Out",
+          "index": 1,
+          "connector": "HDMI-A"
+        },
+        {
+          "id": "control",
+          "name": "Control",
+          "dir": "io",
+          "medium": "network",
+          "group": "Control",
+          "index": 1,
+          "connector": "RJ45"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-video",
+      "location": "youth-booth",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "rack": {
+        "id": "youth-rk-wall",
+        "u": 5,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "interfaces": [
+        {
+          "id": "control",
+          "role": "control",
+          "ip": "10.30.0.122",
+          "network": "av-ctrl",
+          "protocol": "control",
+          "switch": "youth-sw",
+          "switch_port": "gbe-poe-3"
+        }
+      ]
+    },
+    {
+      "id": "youth-proj",
+      "name": "Projector",
+      "kind": "projector",
+      "manufacturer": "Generic",
+      "model": "Projector",
+      "template": "generic-projector",
+      "ports": [
+        {
+          "id": "hdmi-in-1",
+          "name": "HDMI In 1",
+          "dir": "in",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "hdmi-in-2",
+          "name": "HDMI In 2",
+          "dir": "in",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "hdbaset-in",
+          "name": "HDBaseT In",
+          "dir": "in",
+          "medium": "hdbaset",
+          "connector": "RJ45",
+          "group": "HDBaseT In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "control",
+          "name": "Control",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Control",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "rs-232",
+          "name": "RS-232",
+          "dir": "in",
+          "medium": "rs232",
+          "connector": "DB9",
+          "group": "RS-232",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "mains-in",
+          "name": "Mains In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Mains In",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-video",
+      "location": "youth-stage",
+      "flow": {
+        "group": "H",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "fair",
+        "notes": "Filter cleaned 2026-06"
+      },
+      "interfaces": [
+        {
+          "id": "control",
+          "role": "control",
+          "ip": "10.30.0.123",
+          "network": "av-ctrl",
+          "protocol": "control",
+          "switch": "youth-sw",
+          "switch_port": "gbe-poe-4"
+        }
+      ]
+    },
+    {
+      "id": "youth-lx-ctrl",
+      "name": "DMX controller",
+      "kind": "lighting_console",
+      "manufacturer": "Chauvet",
+      "model": "Obey 40 D-Fi 2.4",
+      "brand": "chauvet",
+      "ports": [
+        {
+          "id": "dmx-out",
+          "name": "DMX Out",
+          "dir": "out",
+          "medium": "dmx",
+          "group": "DMX Out",
+          "index": 1,
+          "connector": "XLR3M"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-lighting",
+      "location": "youth-booth",
+      "flow": {
+        "group": "C",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "youth-par-1",
+      "name": "LED par 1",
+      "kind": "fixture",
+      "manufacturer": "Chauvet",
+      "model": "SlimPAR Pro H USB",
+      "brand": "chauvet",
+      "ports": [
+        {
+          "id": "dmx-in",
+          "name": "DMX In",
+          "dir": "in",
+          "medium": "dmx",
+          "group": "DMX",
+          "index": 1,
+          "connector": "XLR3F"
+        },
+        {
+          "id": "dmx-thru",
+          "name": "DMX Thru",
+          "dir": "out",
+          "medium": "dmx",
+          "group": "DMX",
+          "index": 2,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "group": "Power",
+          "index": 1,
+          "connector": "powerCON"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-lighting",
+      "location": "youth-stage",
+      "flow": {
+        "group": "L",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "dmx": {
+        "universe": 1,
+        "address": 1,
+        "footprint": 7,
+        "mode": "7ch",
+        "protocol": "dmx"
+      }
+    },
+    {
+      "id": "youth-par-2",
+      "name": "LED par 2",
+      "kind": "fixture",
+      "manufacturer": "Chauvet",
+      "model": "SlimPAR Pro H USB",
+      "brand": "chauvet",
+      "ports": [
+        {
+          "id": "dmx-in",
+          "name": "DMX In",
+          "dir": "in",
+          "medium": "dmx",
+          "group": "DMX",
+          "index": 1,
+          "connector": "XLR3F"
+        },
+        {
+          "id": "dmx-thru",
+          "name": "DMX Thru",
+          "dir": "out",
+          "medium": "dmx",
+          "group": "DMX",
+          "index": 2,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "group": "Power",
+          "index": 1,
+          "connector": "powerCON"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-lighting",
+      "location": "youth-stage",
+      "flow": {
+        "group": "L",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "dmx": {
+        "universe": 1,
+        "address": 8,
+        "footprint": 7,
+        "mode": "7ch",
+        "protocol": "dmx"
+      }
+    },
+    {
+      "id": "youth-par-3",
+      "name": "LED par 3",
+      "kind": "fixture",
+      "manufacturer": "Chauvet",
+      "model": "SlimPAR Pro H USB",
+      "brand": "chauvet",
+      "ports": [
+        {
+          "id": "dmx-in",
+          "name": "DMX In",
+          "dir": "in",
+          "medium": "dmx",
+          "group": "DMX",
+          "index": 1,
+          "connector": "XLR3F"
+        },
+        {
+          "id": "dmx-thru",
+          "name": "DMX Thru",
+          "dir": "out",
+          "medium": "dmx",
+          "group": "DMX",
+          "index": 2,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "group": "Power",
+          "index": 1,
+          "connector": "powerCON"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-lighting",
+      "location": "youth-stage",
+      "flow": {
+        "group": "L",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "dmx": {
+        "universe": 1,
+        "address": 15,
+        "footprint": 7,
+        "mode": "7ch",
+        "protocol": "dmx"
+      }
+    },
+    {
+      "id": "youth-par-4",
+      "name": "LED par 4",
+      "kind": "fixture",
+      "manufacturer": "Chauvet",
+      "model": "SlimPAR Pro H USB",
+      "brand": "chauvet",
+      "ports": [
+        {
+          "id": "dmx-in",
+          "name": "DMX In",
+          "dir": "in",
+          "medium": "dmx",
+          "group": "DMX",
+          "index": 1,
+          "connector": "XLR3F"
+        },
+        {
+          "id": "dmx-thru",
+          "name": "DMX Thru",
+          "dir": "out",
+          "medium": "dmx",
+          "group": "DMX",
+          "index": 2,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "group": "Power",
+          "index": 1,
+          "connector": "powerCON"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-lighting",
+      "location": "youth-stage",
+      "flow": {
+        "group": "L",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "dmx": {
+        "universe": 1,
+        "address": 22,
+        "footprint": 7,
+        "mode": "7ch",
+        "protocol": "dmx"
+      }
+    },
+    {
+      "id": "youth-sw",
+      "name": "Room switch",
+      "kind": "switch",
+      "manufacturer": "Ubiquiti",
+      "model": "USW-Pro-24-PoE",
+      "brand": "ubiquiti",
+      "template": "ubiquiti-usw-pro-24-poe",
+      "ports": [
+        {
+          "id": "gbe-poe-1",
+          "name": "GbE PoE 1",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-2",
+          "name": "GbE PoE 2",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-3",
+          "name": "GbE PoE 3",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-4",
+          "name": "GbE PoE 4",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-5",
+          "name": "GbE PoE 5",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-6",
+          "name": "GbE PoE 6",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-7",
+          "name": "GbE PoE 7",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-8",
+          "name": "GbE PoE 8",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-9",
+          "name": "GbE PoE 9",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 9,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-10",
+          "name": "GbE PoE 10",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 10,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-11",
+          "name": "GbE PoE 11",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 11,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-12",
+          "name": "GbE PoE 12",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 12,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-13",
+          "name": "GbE PoE 13",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 13,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-14",
+          "name": "GbE PoE 14",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 14,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-15",
+          "name": "GbE PoE 15",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 15,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-16",
+          "name": "GbE PoE 16",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 16,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-17",
+          "name": "GbE PoE 17",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 17,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-18",
+          "name": "GbE PoE 18",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 18,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-19",
+          "name": "GbE PoE 19",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 19,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-20",
+          "name": "GbE PoE 20",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 20,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-21",
+          "name": "GbE PoE 21",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 21,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-22",
+          "name": "GbE PoE 22",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 22,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-23",
+          "name": "GbE PoE 23",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 23,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-24",
+          "name": "GbE PoE 24",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE",
+          "index": 24,
+          "origin": "template"
+        },
+        {
+          "id": "sfp-1",
+          "name": "SFP+ 1",
+          "dir": "io",
+          "medium": "network",
+          "connector": "SFP+",
+          "group": "SFP+",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sfp-2",
+          "name": "SFP+ 2",
+          "dir": "io",
+          "medium": "network",
+          "connector": "SFP+",
+          "group": "SFP+",
+          "index": 2,
+          "origin": "template"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-video",
+      "location": "youth-booth",
+      "flow": {
+        "group": "E",
+        "column": "dante"
+      },
+      "rack": {
+        "id": "youth-rk-wall",
+        "u": 8,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "interfaces": [
+        {
+          "id": "management",
+          "role": "management",
+          "ip": "10.30.0.120",
+          "network": "av-ctrl",
+          "protocol": "management"
+        }
+      ]
+    },
+    {
+      "id": "youth-pdu",
+      "name": "Rack PDU",
+      "kind": "power",
+      "manufacturer": "Generic",
+      "model": "PDU 8-outlet",
+      "template": "generic-pdu-8",
+      "ports": [
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Power In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-1",
+          "name": "Outlet 1",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-2",
+          "name": "Outlet 2",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-3",
+          "name": "Outlet 3",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-4",
+          "name": "Outlet 4",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-5",
+          "name": "Outlet 5",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-6",
+          "name": "Outlet 6",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-7",
+          "name": "Outlet 7",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-8",
+          "name": "Outlet 8",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 8,
+          "origin": "template"
+        }
+      ],
+      "room": "youth",
+      "system": "youth-audio",
+      "location": "youth-booth",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "rack": {
+        "id": "youth-rk-wall",
+        "u": 1,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    }
+  ],
+  "cables": [
+    {
+      "id": "youth-c-0001",
+      "from": {
+        "device": "youth-stage-mics",
+        "port": "out-1"
+      },
+      "to": {
+        "device": "youth-mixer",
+        "port": "mic-in-1"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 10.0,
+      "tag": "YTH-A-001"
+    },
+    {
+      "id": "youth-c-0002",
+      "from": {
+        "device": "youth-stage-mics",
+        "port": "out-2"
+      },
+      "to": {
+        "device": "youth-mixer",
+        "port": "mic-in-2"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 10.0,
+      "tag": "YTH-A-002"
+    },
+    {
+      "id": "youth-c-0003",
+      "from": {
+        "device": "youth-stage-mics",
+        "port": "out-3"
+      },
+      "to": {
+        "device": "youth-mixer",
+        "port": "mic-in-3"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 10.0,
+      "tag": "YTH-A-003"
+    },
+    {
+      "id": "youth-c-0004",
+      "from": {
+        "device": "youth-stage-mics",
+        "port": "out-4"
+      },
+      "to": {
+        "device": "youth-mixer",
+        "port": "mic-in-4"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 10.0,
+      "tag": "YTH-A-004"
+    },
+    {
+      "id": "youth-c-0005",
+      "from": {
+        "device": "youth-wrx-1",
+        "port": "analog-out-1"
+      },
+      "to": {
+        "device": "youth-mixer",
+        "port": "mic-in-5"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 1.0,
+      "signal": "Handheld 1",
+      "tag": "YTH-A-005"
+    },
+    {
+      "id": "youth-c-0006",
+      "from": {
+        "device": "youth-wrx-1",
+        "port": "analog-out-2"
+      },
+      "to": {
+        "device": "youth-mixer",
+        "port": "mic-in-6"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 1.0,
+      "signal": "Handheld 2",
+      "tag": "YTH-A-006"
+    },
+    {
+      "id": "youth-c-0007",
+      "from": {
+        "device": "youth-handhelds",
+        "port": "rf-out"
+      },
+      "to": {
+        "device": "youth-wrx-1",
+        "port": "antenna-a"
+      },
+      "medium": "rf",
+      "label": "RF",
+      "tag": "YTH-A-007"
+    },
+    {
+      "id": "youth-c-0008",
+      "from": {
+        "device": "youth-mixer",
+        "port": "out-a"
+      },
+      "to": {
+        "device": "youth-spk-l",
+        "port": "input-1"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 15.0,
+      "signal": "Main L",
+      "tag": "YTH-A-008"
+    },
+    {
+      "id": "youth-c-0009",
+      "from": {
+        "device": "youth-mixer",
+        "port": "out-b"
+      },
+      "to": {
+        "device": "youth-spk-r",
+        "port": "input-1"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 15.0,
+      "signal": "Main R",
+      "tag": "YTH-A-009"
+    },
+    {
+      "id": "youth-c-0010",
+      "from": {
+        "device": "youth-laptop",
+        "port": "usb"
+      },
+      "to": {
+        "device": "youth-mixer",
+        "port": "usb"
+      },
+      "medium": "usb",
+      "type": "USB-C to B",
+      "length_m": 2.0,
+      "signal": "Playback / record",
+      "tag": "YTH-X-001"
+    },
+    {
+      "id": "youth-c-0011",
+      "from": {
+        "device": "youth-laptop",
+        "port": "hdmi-out"
+      },
+      "to": {
+        "device": "youth-hdmi-sw",
+        "port": "hdmi-in-1"
+      },
+      "medium": "hdmi",
+      "type": "HDMI 2.0",
+      "length_m": 3.0,
+      "tag": "YTH-V-001"
+    },
+    {
+      "id": "youth-c-0012",
+      "from": {
+        "device": "youth-media",
+        "port": "hdmi-out"
+      },
+      "to": {
+        "device": "youth-hdmi-sw",
+        "port": "hdmi-in-2"
+      },
+      "medium": "hdmi",
+      "type": "HDMI 2.0",
+      "length_m": 1.0,
+      "tag": "YTH-V-002"
+    },
+    {
+      "id": "youth-c-0013",
+      "from": {
+        "device": "youth-hdmi-sw",
+        "port": "hdmi-out"
+      },
+      "to": {
+        "device": "youth-proj",
+        "port": "hdmi-in-1"
+      },
+      "medium": "hdmi",
+      "type": "HDMI 2.0 active",
+      "length_m": 15.0,
+      "tag": "YTH-V-003"
+    },
+    {
+      "id": "youth-c-0014",
+      "from": {
+        "device": "youth-lx-ctrl",
+        "port": "dmx-out"
+      },
+      "to": {
+        "device": "youth-par-1",
+        "port": "dmx-in"
+      },
+      "medium": "dmx",
+      "type": "DMX 3-pin",
+      "length_m": 5.0,
+      "tag": "YTH-L-001"
+    },
+    {
+      "id": "youth-c-0015",
+      "from": {
+        "device": "youth-par-1",
+        "port": "dmx-thru"
+      },
+      "to": {
+        "device": "youth-par-2",
+        "port": "dmx-in"
+      },
+      "medium": "dmx",
+      "type": "DMX 3-pin",
+      "length_m": 5.0,
+      "tag": "YTH-L-002"
+    },
+    {
+      "id": "youth-c-0016",
+      "from": {
+        "device": "youth-par-2",
+        "port": "dmx-thru"
+      },
+      "to": {
+        "device": "youth-par-3",
+        "port": "dmx-in"
+      },
+      "medium": "dmx",
+      "type": "DMX 3-pin",
+      "length_m": 5.0,
+      "tag": "YTH-L-003"
+    },
+    {
+      "id": "youth-c-0017",
+      "from": {
+        "device": "youth-par-3",
+        "port": "dmx-thru"
+      },
+      "to": {
+        "device": "youth-par-4",
+        "port": "dmx-in"
+      },
+      "medium": "dmx",
+      "type": "DMX 3-pin",
+      "length_m": 5.0,
+      "tag": "YTH-L-004"
+    },
+    {
+      "id": "youth-c-0018",
+      "from": {
+        "device": "youth-hdmi-sw",
+        "port": "control"
+      },
+      "to": {
+        "device": "youth-sw",
+        "port": "gbe-poe-3"
+      },
+      "medium": "network",
+      "type": "Cat6",
+      "length_m": 1.0,
+      "tag": "YTH-N-001"
+    },
+    {
+      "id": "youth-c-0019",
+      "from": {
+        "device": "youth-proj",
+        "port": "control"
+      },
+      "to": {
+        "device": "youth-sw",
+        "port": "gbe-poe-4"
+      },
+      "medium": "network",
+      "type": "Cat6",
+      "length_m": 15.0,
+      "tag": "YTH-N-002"
+    },
+    {
+      "id": "youth-c-0020",
+      "from": {
+        "device": "youth-wrx-1",
+        "port": "network"
+      },
+      "to": {
+        "device": "youth-sw",
+        "port": "gbe-poe-2"
+      },
+      "medium": "network",
+      "type": "Cat6",
+      "length_m": 1.0,
+      "tag": "YTH-N-003"
+    },
+    {
+      "id": "youth-c-0021",
+      "from": {
+        "device": "youth-pdu",
+        "port": "outlet-1"
+      },
+      "to": {
+        "device": "youth-proj",
+        "port": "mains-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 15.0,
+      "tag": "YTH-P-001"
+    },
+    {
+      "id": "youth-c-0022",
+      "from": {
+        "device": "youth-pdu",
+        "port": "outlet-2"
+      },
+      "to": {
+        "device": "youth-spk-l",
+        "port": "power-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 15.0,
+      "tag": "YTH-P-002"
+    },
+    {
+      "id": "youth-c-0023",
+      "from": {
+        "device": "youth-pdu",
+        "port": "outlet-3"
+      },
+      "to": {
+        "device": "youth-spk-r",
+        "port": "power-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 15.0,
+      "tag": "YTH-P-003"
+    }
+  ],
+  "bundles": [],
+  "floorplans": [],
+  "attachments": [],
+  "templates": [],
+  "imports": [],
+  "pages": [
+    {
+      "id": "youth-pg-sunday-power-up",
+      "slug": "youth-sunday-power-up",
+      "title": "Sunday power-up: Youth room",
+      "kind": "sop",
+      "status": "published",
+      "order": 1,
+      "summary": "Switch the youth room on for a gathering (about 5 minutes).",
+      "tags": [
+        "sunday",
+        "power"
+      ],
+      "rooms": [
+        "youth"
+      ],
+      "devices": [
+        "youth-pdu",
+        "youth-mixer",
+        "youth-spk-l",
+        "youth-spk-r",
+        "youth-hdmi-sw",
+        "youth-proj",
+        "youth-lx-ctrl"
+      ],
+      "review_due": "2027-09-01",
+      "body": "## 1. Power\n\n- [ ] Switch on [[device:youth-pdu]] in the wall rack — the switch [[device:youth-sw]] and receiver [[device:youth-wrx-1]] come up with it.\n\n## 2. Audio\n\n- [ ] Power on [[device:youth-mixer]] and recall scene **1 Youth**.\n- [ ] Switch on [[device:youth-spk-l]] and [[device:youth-spk-r]] (rear switches).\n- [ ] Check both handhelds show RF on [[device:youth-wrx-1]].\n\n## 3. Video\n\n- [ ] Pick input **1 Laptop** on [[device:youth-hdmi-sw]]; power on [[device:youth-proj]].\n\n## 4. Lighting\n\n- [ ] Switch on [[device:youth-lx-ctrl]] and press scene **Warm**.\n",
+      "created": "2026-10-01T09:00:00Z",
+      "updated": "2026-10-01T09:00:00Z",
+      "updated_by": "starter",
+      "owner": "starter"
+    }
+  ],
+  "problems": []
+}

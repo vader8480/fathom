@@ -49,6 +49,8 @@ SPEC_ROLES = {
     ("GET", "/api/v2/library/suggest"): "viewer",
     ("POST", "/api/v2/library"): "editor", ("DELETE", "/api/v2/library/{}"): "editor", ("GET", "/api/v2/presets"): "viewer",
     ("GET", "/api/v2/projects"): "viewer", ("POST", "/api/v2/projects"): "editor", ("GET", "/api/v2/projects/{}"): "viewer",
+    # phase3 P3C
+    ("GET", "/api/v2/starters"): "viewer", ("POST", "/api/v2/projects/{}/rooms/from-starter"): "editor",
     ("PUT", "/api/v2/projects/{}"): "editor", ("POST", "/api/v2/projects/{}/changes"): "editor", ("DELETE", "/api/v2/projects/{}"): "admin",
     # phase1 P1A
     ("GET", "/api/v2/trash"): "admin", ("POST", "/api/v2/trash/{}/restore"): "admin", ("DELETE", "/api/v2/trash/{}"): "admin",

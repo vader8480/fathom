@@ -98,6 +98,8 @@ pip install .                 # or: pip install -e ".[dev]"
 fathom serve --open           # http://127.0.0.1:8080, data in ~/.fathom
 fathom demo --open            # build the bundled v1 sample (RRC Littleton)
 fathom new campus --template campus-demo && fathom build campus --open
+fathom new sanctuary --template church-sanctuary   # church room starters: church-sanctuary,
+                                                   # church-youth-room, church-chapel, church-portable, church-broadcast
 ```
 
 Without installing: `python -m fathom serve` from this folder.
@@ -247,7 +249,7 @@ host list never turns an active source on by itself).
 
 ```text
 fathom serve [--host H] [--port N] [--data DIR] [--open]
-fathom new <name> [--template blank|rrc-littleton|campus-demo] [--org O]
+fathom new <name> [--template blank|rrc-littleton|campus-demo|church-sanctuary|church-youth-room|church-chapel|church-portable|church-broadcast] [--org O]
 fathom import <project> <file|folder>... [--kind auto|yamaha|dante|waves|eos|magicq|videohub|csv|atem] [--node ID] [--room R] [--apply]
 fathom inspect <file|folder> [--kind K] [--json]
 fathom build <project> [--pdf] [--png] [--open] [--out DIR] [--state all|planned|as_built] [--rooms a,b] [--base-url URL] [--no-discovery]
