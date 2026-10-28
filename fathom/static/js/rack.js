@@ -592,21 +592,22 @@ function mountLanding(el, ctx) {
     L.menu = M;
     const first = menu.querySelector('[aria-checked=true]') || menu.querySelector('button:not([disabled])');
     if (first) first.focus();
+    M.offs.push(on(document, 'keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(true); return; }
+      if (e.key === 'Tab' && o.body) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab') {
+        e.preventDefault();
+        const bs = Array.prototype.slice.call(menu.querySelectorAll('button:not([disabled])'));
+        if (!bs.length) return;
+        const i = bs.indexOf(document.activeElement);
+        const back2 = e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey);
+        bs[(i + (back2 ? bs.length - 1 : 1)) % bs.length].focus();
+      }
+    }, true));
+    // The outside-press listener waits a tick so the press that opened the menu cannot close it.
     setTimeout(function () {
       if (L.menu !== M) return;
       M.offs.push(on(document, 'pointerdown', function (e) { if (!menu.contains(e.target) && !anchor.contains(e.target)) closeMenu(); }, true));
-      M.offs.push(on(document, 'keydown', function (e) {
-        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(true); return; }
-        if (e.key === 'Tab' && o.body) return;
-        if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab') {
-          e.preventDefault();
-          const bs = Array.prototype.slice.call(menu.querySelectorAll('button:not([disabled])'));
-          if (!bs.length) return;
-          const i = bs.indexOf(document.activeElement);
-          const back2 = e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey);
-          bs[(i + (back2 ? bs.length - 1 : 1)) % bs.length].focus();
-        }
-      }, true));
     }, 0);
     return M;
   }
@@ -964,7 +965,7 @@ function mountLanding(el, ctx) {
       if (warns.length) {
         out.appendChild(h('ul', {class: 'rkt-warns', 'aria-label': 'Import warnings'}, warns.map(function (w) { return h('li', {text: String(w)}); })));
       }
-      const rackHost = h('div', {class: 'rkt-imp-table', 'data-table': 'racks'});
+      const rackHost = h('div', {class: 'rkt-imp-table' + (rs.length <= 25 ? ' rkt-onepage' : ''), 'data-table': 'racks'});
       out.appendChild(rackHost);
       tables.push(createTable(rackHost, {
         key: 'racks.import.racks', caption: 'Racks', noun: {one: 'rack', many: 'racks'}, persist: false, search: false, csv: false, pageSize: 25,
@@ -980,7 +981,7 @@ function mountLanding(el, ctx) {
         ],
       }));
       if (ds.length) {
-        const devHost = h('div', {class: 'rkt-imp-table', 'data-table': 'devices'});
+        const devHost = h('div', {class: 'rkt-imp-table' + (ds.length <= 25 ? ' rkt-onepage' : ''), 'data-table': 'devices'});
         out.appendChild(devHost);
         tables.push(createTable(devHost, {
           key: 'racks.import.devices', caption: 'Devices', noun: {one: 'device', many: 'devices'}, persist: false, search: false, csv: false, pageSize: 25,
@@ -1242,8 +1243,15 @@ function mountLanding(el, ctx) {
   // Landing shortcuts: i (display), a (annotation), ? (shortcuts); not while typing or in a dialog.
   listen(document, 'keydown', function (e) {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key !== 'i' && e.key !== 'a' && e.key !== '?') return;
     const t = e.target;
+    // Focus falls back to <body> after a dialog opened from the library closes.
+    if (e.key === 'Escape' && !lib.hidden && (!t || t === document.body) && !L.menu && !document.querySelector('.app-dialog-backdrop')) {
+      e.preventDefault();
+      toggleLibrary(false);
+      btnLib.focus();
+      return;
+    }
+    if (e.key !== 'i' && e.key !== 'a' && e.key !== '?') return;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
     if (t && t !== document.body && !root.contains(t)) return;
     if (t && t.closest && t.closest('.rkt-lib, .rkt-menu')) return;

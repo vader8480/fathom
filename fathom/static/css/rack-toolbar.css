@@ -150,6 +150,7 @@
 .rkt-imp-status { min-height: 1.4em; }
 .rkt-imp-out { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .rkt-imp-table { min-width: 0; }
+.rkt-onepage .dt-pager { display: none; }
 .rkt-warns { margin: 0; padding-left: 18px; color: var(--warn, #ff9548); font-size: 12px; }
 
 /* ------------------------------------------------- coarse pointers */
