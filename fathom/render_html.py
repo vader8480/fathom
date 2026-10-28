@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import quote
 
 from .layout import GROUP_HEADER_H, GROUP_PAD, KEY_ROW_H, Layout
@@ -750,6 +750,11 @@ class _Links:
             return self._up() + f"devices/{_q(dev)}.html"
         return self._up() + f"d/{_q(dev)}"
 
+    def rack(self, rack: str, share: str = "") -> str:
+        if self.style == "build":
+            return self._up() + f"racks/{_q(rack)}.html"
+        return self._up() + f"rk/{_q(rack)}" + (f"?share={_q(share)}" if share else "")
+
 
 def _page(title: str, body: str, *, base_url: str = "", sw: bool = False, extra_css: str = "", body_class: str = "", wrap: bool = True) -> str:
     cls = f' class="{esc(body_class)}"' if body_class else ""
@@ -990,7 +995,11 @@ def _port_rows_for_device(doc: Dict[str, Any], dev: Dict[str, Any], L: _Links, o
             + '</tr></thead><tbody>' + "".join(rows) + "</tbody></table></div>")
 
 
-def render_device_page(doc: Dict[str, Any], device_id: str, *, project: str, overlay: Optional[Dict[str, Any]] = None, base_url: str = "", qr_svg: str = "", sw: bool = False, link_style: str = "viewer") -> str:
+def render_device_page(doc: Dict[str, Any], device_id: str, *, project: str, overlay: Optional[Dict[str, Any]] = None, base_url: str = "", qr_svg: str = "", sw: bool = False,
+                       link_style: str = "viewer", share: str = "", rack_pages: Optional[Iterable[str]] = None) -> str:
+    """Device page (FR-MAP-06). The Rack line links to the rack page (``rk/<rack>``, or ``racks/<rack>.html`` in builds)
+    when the rack exists in ``doc`` and, if ``rack_pages`` is given, is one of those ids (builds pass the racks whose page
+    was written). ``share`` is carried on the viewer rack link as ``?share=``."""
     dev = _find(_devices(doc), device_id)
     L = _Links(link_style, "device", _default_room(doc))
     meta = doc.get("meta") or {}
@@ -1024,7 +1033,10 @@ def render_device_page(doc: Dict[str, Any], device_id: str, *, project: str, ove
         h_ = int(rk.get("height") or 1)
         u = rk.get("u")
         span = f"U{u}" if h_ <= 1 or u in (None, "") else f"U{u}–U{int(u) + h_ - 1}"
-        kv.append(("Rack", esc(f'{(rack or {}).get("name") or rk.get("id")} · {span} · {rk.get("face") or "front"}' + (f' · {rk.get("side")}' if rk.get("side") and rk.get("side") != "full" else ""))))
+        rack_text = esc(f'{(rack or {}).get("name") or rk.get("id")} · {span} · {rk.get("face") or "front"}' + (f' · {rk.get("side")}' if rk.get("side") and rk.get("side") != "full" else ""))
+        if rack is not None and (rack_pages is None or str(rack["id"]) in set(rack_pages)):
+            rack_text = f'<a href="{esc(L.rack(str(rack["id"]), share))}" data-rack="{esc(rack["id"])}">{rack_text}</a>'
+        kv.append(("Rack", rack_text))
     if dev.get("code"):
         kv.append(("Label code", esc(dev["code"])))
     inv = dev.get("inventory") if isinstance(dev.get("inventory"), dict) else {}
@@ -1154,6 +1166,70 @@ def render_report(doc: Dict[str, Any], *, project: str, sections: Dict[str, str]
         brk = "" if i == 0 else "page-break-before:always;break-before:page;"
         body.append(f'<section id="sec-{i}" style="{brk}"><h2>{esc(title)}</h2>{html_part}</section>')
     return _page(f"Report · {meta.get('org') or project}", "".join(body), extra_css=extra_css)
+
+
+RACK_REPORT_CSS = """
+.rr-figs{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px}
+.rr-figs figure{margin:0;break-inside:avoid;page-break-inside:avoid;max-width:100%}
+.rr-figs img{display:block;max-width:100%;height:auto;border:1px solid var(--border);border-radius:6px}
+.rr-figs figcaption{color:var(--muted);font-size:12px;margin-top:4px}
+.rr-files a{margin-right:8px;white-space:nowrap}
+"""
+
+
+def rack_summary(doc: Dict[str, Any], rack_id: str) -> Dict[str, Any]:
+    """``{units, used_u, free_u, devices}`` of one rack: ``racks.rack_totals`` when it exists, else counted from
+    ``racks.rack_occupancy`` (an RU is used when any device covers it on either face). Raises ``KeyError`` for an unknown rack."""
+    from . import racks as R
+
+    totals = getattr(R, "rack_totals", None)
+    if callable(totals):
+        try:
+            t = totals(doc, rack_id)
+            return {"units": int(t.get("units") or 0), "used_u": int(t.get("used_u") or 0), "free_u": int(t.get("free_u") or 0),
+                    "devices": int(t.get("devices") or 0)}
+        except KeyError:
+            raise
+        except Exception:  # pragma: no cover - fall back to occupancy below
+            pass
+    occ = R.rack_occupancy(doc, rack_id)
+    units = int(occ["rack"].get("units") or 0)
+    used = sum(1 for s in occ["slots"] if any(v for face in ("front", "rear") for v in s[face].values()))
+    return {"units": units, "used_u": used, "free_u": units - used, "devices": len(occ["devices"])}
+
+
+def render_rack_report_section(doc: Dict[str, Any], files: Dict[str, Dict[str, str]]) -> str:
+    """Report section *Racks*: a table with one row per rack in ``files`` (doc order) and the elevations below it.
+
+    ``files`` maps a rack id to the build-relative paths written for it: ``page`` (``racks/<rack>.html``), ``svg``
+    (both faces, ``racks/<rack>.svg``), ``front`` and ``rear``; a missing or empty path is not linked. Style with
+    :data:`RACK_REPORT_CSS`. ``""`` when there are no racks."""
+    rooms = {str(r.get("id")): str(r.get("name") or r.get("id")) for r in doc.get("rooms") or [] if isinstance(r, dict)}
+    racks = [r for r in doc.get("racks") or [] if isinstance(r, dict) and r.get("id") in files]
+    if not racks:
+        return ""
+    rows: List[str] = []
+    figs: List[str] = []
+    for rk in racks:
+        rid = str(rk["id"])
+        f = files.get(rid) or {}
+        name = str(rk.get("name") or rid)
+        try:
+            s = rack_summary(doc, rid)
+            used, free, units, ndev = str(s["used_u"]), str(s["free_u"]), str(s["units"]), str(s["devices"])
+        except Exception:
+            used, free, units, ndev = "", "", str(rk.get("units") or ""), ""
+        title = f'<a href="{esc(f["page"])}">{esc(name)}</a>' if f.get("page") else esc(name)
+        links = [(lab, f.get(key)) for key, lab in (("page", "Page"), ("svg", "Elevation SVG"), ("front", "Front SVG"), ("rear", "Rear SVG"))]
+        flinks = "".join(f'<a href="{esc(url)}">{esc(lab)}</a>' for lab, url in links if url)
+        rows.append(f'<tr data-rack="{esc(rid)}"><td>{title}</td><td>{esc(rooms.get(str(rk.get("room") or ""), rk.get("room") or ""))}</td>'
+                    f'<td>{esc(units)}</td><td>{esc(used)}</td><td>{esc(free)}</td><td>{esc(ndev)}</td><td class="rr-files no-print">{flinks}</td></tr>')
+        shots = [(f["svg"], "front and rear")] if f.get("svg") else [(f[face], face) for face in ("front", "rear") if f.get(face)]
+        for src, cap in shots:
+            figs.append(f'<figure><img src="{esc(src)}" alt="{esc(name)} {esc(cap)}"><figcaption>{esc(name)} · {esc(cap)}</figcaption></figure>')
+    head = "".join(f'<th scope="col">{h}</th>' for h in ("Rack", "Room", "Units", "Used U", "Free U", "Devices"))
+    return (f'<div class="scroll"><table class="t rr-table"><thead><tr>{head}<th scope="col" class="no-print">Files</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table></div>' + (f'<div class="rr-figs">{"".join(figs)}</div>' if figs else ""))
 
 
 # ===================================================================== SOP pages (§4.3.15, §5.15)
