@@ -3804,6 +3804,16 @@ def r_assistant(req: Request) -> Response:
     if not q:
         raise ApiError(400, "ask a question")
     room = body.get("room") or None
+    mode = str(body.get("mode") or "ask").strip().lower()
+    if mode not in ("ask", "draft"):
+        raise ApiError(400, "mode must be ask or draft")
+    if mode == "draft":
+        # Draft a room (§6.9.5b): the room is required and must exist; everything is added there
+        from .assistant_draft import resolve_room
+
+        room = resolve_room(doc, room) if isinstance(room, str) else None
+        if not room:
+            raise ApiError(400, "draft mode needs the room (id or name) the equipment goes in", "room_required")
     use_llm = bool(body.get("use_llm", True)) and bool(((doc.get("settings") or {}).get("assistant") or {}).get("llm", True))
     hist = body.get("history") if isinstance(body.get("history"), list) else None
     manual = body.get("manual_text")
@@ -3818,7 +3828,7 @@ def r_assistant(req: Request) -> Response:
     if atts and any(a not in known for a in atts):
         raise ApiError(404, "attachment not in this project", "not_found", {"attachments": [a for a in atts if a not in known]})
     ctx = {"pdir": pdir, "project": pdir.name, "username": req.username, "role": req.role_for(pdir.name),
-           "attachments": [a for a in atts or [] if a in known][:10], "manual_text": manual or ""}
+           "attachments": [a for a in atts or [] if a in known][:10], "manual_text": manual or "", "mode": mode, "room": room}
     res = answer(doc, q, room=room, overlay=_overlay(doc, pdir, strict=False), use_llm=use_llm, history=hist, base_revision=_rev(doc), ctx=ctx)
     return Response.json(res)
 

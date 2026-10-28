@@ -644,6 +644,31 @@ def t_propose_changes(args: Dict[str, Any], ctx: Dict[str, Any]) -> Any:
             "note": "Nothing is applied yet: the user must confirm this proposal in the app."}
 
 
+def t_draft_room(args: Dict[str, Any], ctx: Dict[str, Any]) -> Any:
+    """Draft mode (§6.9.5b): the model's structured equipment list → typed changes + what was recognised.
+    The result is also kept in ``ctx["draft"]`` so the answer can show it next to the proposal."""
+    from . import assistant_draft as D
+
+    items = args.get("devices")
+    if isinstance(items, str):
+        items = D.tokenize(items)
+    if not isinstance(items, list) or not items:
+        return {"error": "devices must be a non-empty list of {text, model?, kind?, count?, role?}"}
+    room = str(args.get("room") or ctx.get("room") or "").strip()
+    out = D.from_items(ctx["doc"], items, room)
+    holder = ctx.get("draft")
+    if isinstance(holder, dict):
+        holder.clear()
+        holder.update(out)
+    else:
+        ctx["draft"] = out
+    if not out["changes"]:
+        out["hint"] = "nothing resolved: ask the user for model names or kinds instead of proposing changes"
+    else:
+        out["hint"] = "pass these changes unchanged to propose_changes; list the unknown mentions in your answer"
+    return out
+
+
 _OBJ = {"type": "object"}
 _STR = {"type": "string"}
 
@@ -679,6 +704,14 @@ def tool_specs(api: _Api, config: Optional[Dict[str, Any]] = None) -> List[Any]:
               {"changes": {"type": "array", "items": {"type": "object", "properties": {"action": {"type": "string", "enum": [
                   "add_device", "remove_device", "connect", "disconnect", "move_device", "set_field"]}}, "required": ["action"]}},
                "note": {"type": "string", "description": "one line describing the change, shown to the user"}}, ["changes"]),
+        _spec(api, "draft_room",
+              "Draft mode only: turn the equipment the user described into add_device + connect changes for one room (library templates, "
+              "presets or bare kinds; default signal-flow links). Returns {changes, recognised, unknown, note}; pass changes to propose_changes.",
+              {"devices": {"type": "array", "items": {"type": "object", "properties": {
+                  "text": {"type": "string", "description": "the mention as the user wrote it"}, "model": {"type": "string"},
+                  "kind": {"type": "string", "description": "vocabulary kind, preset or role word (mixer, wireless, speakers, projector…)"},
+                  "count": {"type": "integer", "minimum": 1}, "role": {"type": "string"}}, "required": ["text"]}},
+               "room": {"type": "string", "description": "room id or name"}}, ["devices", "room"]),
     ]
     if cfg.get("web_lookup"):
         out.append(_spec(api, "web_lookup", "Web search (DuckDuckGo): top 5 titles and URLs. Use only for manuals / specs the project does not contain.",
@@ -691,7 +724,7 @@ TOOLS: List[ToolSpec] = tool_specs(_Api(None), {"web_lookup": True})  # the full
 _RUNNERS: Dict[str, Callable[[Dict[str, Any], Dict[str, Any]], Any]] = {
     "search": t_search, "trace": t_trace, "device": t_device, "schedule": t_schedule, "list_rooms": t_list_rooms,
     "list_scenes": t_list_scenes, "sop_page": t_sop_page, "attachment_text": t_attachment_text, "web_lookup": t_web_lookup,
-    "propose_changes": t_propose_changes,
+    "propose_changes": t_propose_changes, "draft_room": t_draft_room,
 }
 
 
@@ -740,6 +773,11 @@ SYSTEM_PROMPT = (
     "To change the documentation, call propose_changes with typed changes; the user confirms before anything is applied, so never "
     "claim a change was made. Keep answers short and concrete; use **bold** for device and port names."
 )
+DRAFT_PROMPT = (
+    "DRAFT MODE: the user describes a room; call draft_room once with the structured equipment list (one entry per mention, with "
+    "count, model and kind when the text says so, room \"{room}\"), then propose_changes with the changes it returns, then answer with "
+    "a 2\u20134 line summary of what will be added and what was unclear. Never add equipment the user did not mention."
+)
 
 
 def _history_messages(api: _Api, history: Optional[List[Dict[str, Any]]]) -> List[Any]:
@@ -757,7 +795,10 @@ def build_messages(api: _Api, doc: Doc, question: str, history: Optional[List[Di
         project += f" ({ctx['project']})"
     rid = str(ctx.get("room") or "")
     room = _room_name(doc, rid) if rid else "all rooms"
-    msgs = [api.Message(role="system", content=SYSTEM_PROMPT.format(project=project, room=room, role=str(ctx.get("role") or "viewer")))]
+    system = SYSTEM_PROMPT.format(project=project, room=room, role=str(ctx.get("role") or "viewer"))
+    if ctx.get("mode") == "draft":
+        system += "\n" + DRAFT_PROMPT.format(room=rid or room)
+    msgs = [api.Message(role="system", content=system)]
     msgs.extend(_history_messages(api, history))
     manual = str(ctx.get("manual_text") or "")
     if manual.strip():
