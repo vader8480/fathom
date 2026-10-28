@@ -59,6 +59,7 @@
 @media (max-width: 699px) {
   .sch-dl-row { flex-direction: column; align-items: stretch; }
   .sch-dl-row select, .sch-dl-row .sch-btn, .sch-dl-row .search-input { width: 100%; justify-content: center; }
+  .sch-dl-row .search-input { flex: 0 0 auto; }
   .sch-dl-pick { max-width: none; }
 }
 @media (pointer: coarse) {

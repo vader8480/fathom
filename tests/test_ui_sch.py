@@ -513,7 +513,7 @@ class SchedulesUi(UiCase):
                     self.assertEqual(pg.offscreen("#sch-dl-preset, #sch-dl-scope, #sch-dl-preview, #sch-dl-zip, #sch-dl-csv, #sch-dl-filter", "x"), 0)
                     heights = pg.js("""['sch-dl-preset', 'sch-dl-scope', 'sch-dl-preview', 'sch-dl-zip', 'sch-dl-csv', 'sch-dl-filter'].map(function (id) {
                       return Math.round(document.getElementById(id).getBoundingClientRect().height); })""")
-                    self.assertTrue(all(hh >= 44 for hh in heights), heights)
+                    self.assertTrue(all(44 <= hh <= 60 for hh in heights), ("44 px targets, no stretched controls in the column layout", heights))
                     widths = pg.js("""['sch-dl-preview', 'sch-dl-zip', 'sch-dl-csv'].map(function (id) {
                       return Math.round(document.getElementById(id).getBoundingClientRect().width); })""")
                     self.assertTrue(all(w >= 300 for w in widths), ("full-width buttons on the phone", widths))
