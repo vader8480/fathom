@@ -49,6 +49,9 @@ IMAGE_VENDORS = (
     "_generic", "apc", "eaton", "ac-infinity", "ubiquiti", "netgear", "cisco", "tp-link",
     "mikrotik", "synology", "qnap", "dell", "apple", "lenovo", "supermicro",
 )
+#: Rackula image folder -> bundled folder. The static route rejects path
+#: segments that start with "_" or ".", so `_generic` ships as `generic`.
+IMAGE_FOLDERS = {"_generic": "generic"}
 IMAGE_BUDGET = int(4.5 * 1024 * 1024)
 SKIP_CATEGORIES = ("blank", "shelf", "cable-management")
 AIRFLOWS = ("front-to-rear", "rear-to-front", "left-to-right", "right-to-left", "side-to-rear", "passive", "mixed")
@@ -538,7 +541,7 @@ def build(src: Path, images_out: Optional[Path] = None) -> Dict[str, Any]:
             if parts[0] not in IMAGE_VENDORS:
                 skipped["image (vendor not bundled)"] += 1
                 continue
-            target = "%s/%s" % (parts[0], parts[-1])
+            target = "%s/%s" % (IMAGE_FOLDERS.get(parts[0], parts[0]), parts[-1])
             if target in copies and copies[target] != img_root / rel:
                 raise ValueError("image name clash: %s" % target)
             copies[target] = img_root / rel
