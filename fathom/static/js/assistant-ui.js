@@ -127,7 +127,7 @@ export function mountAssistant(el, ctx) {
   // ---- model status line (meta until the first answer, then the answer's llm / used_tools)
   function setStatus(llm, usedTools) {
     if (llm && llm.used) statusLlm.textContent = [llm.provider, llm.model].filter(Boolean).join(' \u00b7 ') || 'Model';
-    else if (llm && llm.reason) statusLlm.textContent = 'Deterministic mode (' + llm.reason + ')';
+    else if (llm && (llm.reason || llm.error)) statusLlm.textContent = 'Deterministic mode (' + (llm.reason || llm.error) + ')';
     else statusLlm.textContent = 'Deterministic mode (no model configured)';
     statusLlm.setAttribute('data-llm', llm && llm.used ? 'on' : 'off');
     const list = tools.lastChild;
