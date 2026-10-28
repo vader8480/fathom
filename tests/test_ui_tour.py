@@ -142,6 +142,11 @@ class TourUi(UiCase):
             self.assertEqual(pg.js(COUNT), "2 of 4", "the Helper step (hidden button) is skipped at sm")
             # the highlight box animates into place (150 ms)
             pg.wait_for("Math.abs(document.querySelector('.tour-hl').getBoundingClientRect().top - (document.querySelector('#app-tabbar').getBoundingClientRect().top - 6)) <= 2", 5)
+            # the tab bar sits at the bottom, so the sheet moves to the top and leaves the target visible
+            self.assertEqual(pg.js(CARD + ".getAttribute('data-side')"), "sheet-top")
+            card = pg.rect(".tour-card")
+            self.assertLessEqual(card["top"], 1, "docked to the top")
+            self.assertLess(card["bottom"], pg.rect("#app-tabbar")["top"], "the sheet does not cover the tab bar")
             pg.shot("tour-step2-m")
             pg.click(".tour-next")
             pg.wait_for(STEP + " === '2'")
