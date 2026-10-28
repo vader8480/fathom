@@ -1255,7 +1255,7 @@ Every device names a library template id from `fathom/presets.py` or `fathom/lib
 - WSGI app `fathom.server:app`. All URLs below are relative to the **app root** (`SCRIPT_NAME`, empty by default); the SPA and viewer always use relative URLs so Fathom works behind a sub-path reverse proxy.
 - JSON in/out (`application/json; charset=utf-8`). Request JSON must be an object. Dates are UTC ISO 8601 with `Z`.
 - Every mutating request from `api.js`, the CLI or scripts SHOULD send `X-Fathom: 1`; multipart/urlencoded/text POSTs MUST (FR-SEC-03).
-- Errors: `{"error": "<human message>", "code": "<machine code>", "details": {…}}` with these status codes: 400 `bad_request`, 401 `auth_required` (with `WWW-Authenticate: Basic realm="Fathom"` only when the request had a Basic header or `Accept` is not HTML), 403 `forbidden` / `csrf`, 404 `not_found`, 405 `method_not_allowed`, 409 `conflict` / `v2_required` / `exists`, 413 `too_large`, 415 `unsupported_format` / `dwg_unsupported`, 422 `invalid` (with `details.problems`) / `pdf_unsupported`, 428 `precondition_required`, 429 `throttled`, 500 `internal` (no trace).
+- Errors: `{"error": "<human message>", "code": "<machine code>", "details": {…}}` with these status codes: 400 `bad_request`, 401 `auth_required` (with `WWW-Authenticate: Basic realm="Fathom"` only when the request had a Basic header or `Accept` is not HTML), 403 `forbidden` / `csrf`, 404 `not_found`, 405 `method_not_allowed`, 409 `conflict` / `v2_required` / `exists`, 413 `too_large`, 415 `unsupported_format` / `dwg_unsupported`, 422 `invalid` (with `details.problems`) / `pdf_unsupported`, 428 `precondition_required`, 429 `throttled`, 500 `internal` (no trace), 501 `not_available` (an optional engine module or function a route needs is not installed: the handler raises 501 "not available", never a 500; server helper `_engine(module, name)`), 507 `no_space`.
 - Unauthenticated browser navigation to an app page (`/`, `/static/app.html`) when auth is on → `302 /login?next=<path>`.
 - Caching: API responses `Cache-Control: no-store`; `/static/**`, `/sw.js`, `/manifest.webmanifest` → `Cache-Control: no-cache` + `ETag` (sha1 of path+size+mtime) with 304 support; viewer pages `no-cache`.
 - Every handler is registered with `@route(method, pattern, role=..., summary=..., tags=..., body=..., response=...)`; `openapi.py` builds the spec from that table (§5.14).
@@ -1307,11 +1307,13 @@ Username regex `^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$`. Session cookie payload `{"u
 | --- | --- | --- | --- |
 | GET | `/api/v2/meta` | viewer | `{"version", "vocab": vocab.as_dict(), "importers": [{"kind", "label", "mode", "accepts", "folder", "help"}], "plugins_errors": [str], "samples": [str], "capabilities": {"chrome": bool, "pdf_rasterizer": str\|null, "oda": bool, "llm": {"configured": bool, "model": str}, "secure_context_hint": bool}, "auth": {"enabled": bool, "public_view": bool}, "limits": {"max_upload_mb", "max_json_mb"}, "library_count": int}` |
 | GET | `/api/v2/schema.json` | public | `schema.JSON_SCHEMA` |
-| GET | `/api/v2/library?q=&discipline=&kind=&project=` | viewer | `{"templates": [{"id", "manufacturer", "model", "name", "kind", "discipline", "ru", "ports_summary": "32× Analog In · 16× Analog Out …", "source": "builtin\|extension\|custom\|project"}]}` (project-local included when `project` given) |
+| GET | `/api/v2/library?q=&discipline=&kind=&project=&source=&ids=&rack=` | viewer | `{"templates": [{"id", "manufacturer", "model", "name", "kind", "discipline", "ru", "ports_summary": "32× Analog In · 16× Analog Out …", "source": "builtin\|extension\|custom\|project\|preset\|catalog", "tags"}]}` (project-local included when `project` given). Summaries add `full_depth`, `airflow`, `rack_category`, `image_front`, `image_rear`, `part_number`, `weight_kg`, `power_w`, `width`, `depth_mm` when present. `source=catalog\|all\|<source>`, `ids=a,b` (that order, unknown skipped) and `rack=1\|true\|yes` (`ru ≥ 1`) per §4.5.1; without `source` the catalog is left out |
 | GET | `/api/v2/library/<id>?project=` | viewer | full template; 404 |
 | GET | `/api/v2/library/suggest?manufacturer=&model=&text=&kind=&project=&limit=` | viewer | `{"query": {…}, "suggestions": [{"template", "manufacturer", "model", "name", "kind", "source", "score", "level": "high\|medium\|low", "evidence", "kind_matches"}]}` ranked library models for identity strings (§4.11 `suggestions`); presets are never suggested; `limit` ≤ 20 |
 | POST | `/api/v2/library` | editor | body = template → 201 (written to `<data>/library/<id>.json`); 422 problems; 409 when id is built-in and `?override=1` absent |
 | DELETE | `/api/v2/library/<id>` | editor | custom only → 204; built-in → 409 |
+| POST | `/api/v2/library/import/netbox` | editor | body `{"text": <NetBox device-type YAML>, "override?": true}` (route body name `NetboxImport`; `?override=1` also works) → 201 with the saved global custom template (§4.13.3); 400 without `text`; 422 `invalid` when it does not parse, or with `details.problems` when it does not validate; 409 `exists` when the id is a built-in, extension or preset id and no override (a catalog id may be shadowed freely) |
+| GET | `/api/v2/library/<id>/netbox.yaml?project=` | viewer | `application/yaml; charset=utf-8` attachment `<id>.yaml` (`from_template`, any tier, project templates with `project`); 404 |
 | GET | `/api/v2/presets` | viewer | `{"groups": ["Power", "Network & IT", "Audio", "Video", "Lighting"], "presets": [{"id", "label", "group", "kind", "description", "aliases", "ru", "ports": [port groups], "dante"?, "dmx_footprint"?, "width"?, "routing"?, "tags"}]}` (FR-LIB-06; the same presets are served by the library routes with `source: "preset"`) |
 
 ### 5.6 Projects, documents, changes, history
@@ -1322,7 +1324,7 @@ Username regex `^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$`. Session cookie payload `{"u
 | POST | `/api/v2/projects` | editor | `{"name", "template": "blank"\|<sample>, "org"}` | 201 `{"name", "revision"}`; 400 bad name; 409 `exists` |
 | GET | `/api/v2/projects/<n>` | viewer | — | `{"name", "revision", "doc", "problems", "role", "migrated_from": 1\|null}` + `ETag` |
 | PUT | `/api/v2/projects/<n>` | editor | `{"doc", "summary?", "base_revision?"}` + `If-Match` | `{"revision", "rebased", "problems"}`; 409; 422; 428 |
-| POST | `/api/v2/projects/<n>/changes` | editor | `{"base_revision", "ops": [...], "summary?"}` (≤ 2000 ops) | `{"revision", "rebased", "problems", "touched"}`; 409; 422 |
+| POST | `/api/v2/projects/<n>/changes` | editor | `{"base_revision", "ops": [...], "summary?"}` (≤ 2000 ops, else 400) | `{"revision", "rebased", "problems", "touched"}`; 409; 422 |
 | DELETE | `/api/v2/projects/<n>?confirm=<n>` | admin | — | `{"ok": true}`; 400 without confirm |
 | GET | `/api/v2/projects/<n>/doc.json` | viewer | — | doc as download (`Content-Disposition: attachment; filename="<n>-project.json"`) |
 | GET | `/api/v2/projects/<n>/history?limit=50&before=<rev>` | viewer | — | `{"revisions": [index lines, newest first]}` |
@@ -1396,7 +1398,7 @@ Device `kind` cells are normalized to an Appendix A.1 key when they spell a kind
 | --- | --- | --- | --- | --- |
 | GET | `/api/v2/projects/<n>/schedules/<kind>` | viewer | `room`, `state`, `discipline`, `format=json\|csv\|html` | `kind ∈ patch, cables, ip, dmx, bom, inventory, racks, labels`. JSON: `{"kind", "columns": [{"key", "label"}], "rows": [{…}], "problems": [Problem], "totals?": {…}}`; CSV: `text/csv` attachment `<n>-<kind>.csv` (UTF-8, header row = column labels, `\r\n` line endings as `csv` module default); `labels` supports only `format=html` (printable sheet) |
 | GET | `/api/v2/projects/<n>/cables/tag-preview` | editor | `scope=missing\|all`, `pattern?` | `{"ops": [...], "count": int, "base_revision"}` |
-| GET | `/api/v2/projects/<n>/racks/<rack>.svg` | viewer | `face=front\|rear` | SVG |
+| GET | `/api/v2/projects/<n>/racks/<rack>.svg` | viewer | `face=front\|rear\|both`, `images=1`, `annotate=name\|model\|ip\|serial\|asset_tag\|code\|power\|weight\|status` | SVG (`racks.rack_svg`, images embedded as data URIs, `FILE_CSP`); 400 bad `face`, 400 `bad_enum` bad `annotate`; 404; 501 `not_available` for `face=both` on an engine without the keyword arguments (§5.8.3) |
 | GET | `/api/v2/projects/<n>/qr/<device>.svg` | viewer | `ecl=M`, `scale=4` | SVG; 409 `no_public_url` when no base URL can be determined |
 | GET | `/api/v2/projects/<n>/trace` | viewer | `from=<dev[:port]>` (also `dev:in-12`, `CL5 · CH 12`, `CL5 · Bass`, `Rio · Dante 6`, `rio:dante-primary#tx6`, §6.9.4), `to?`, `direction=up\|down` (when no `to`), `discipline?`, `max_depth=24`, `limit=50`, `dca=1?` (DCA membership as hops) | `{"paths": [{"hops": [{"device", "device_name", "port", "label", …channel-level keys §6.9.4}], "cables": [ids], "via": [str], "text", "incomplete?"}], "from": "<node ref>", "to": "<node ref>\|null"}`; the node refs it returns (`dev:@in-12`, `dev:@fx-1.A`, `dev:~REC 1`, `dev:port#rx17`) are accepted back in `from` / `to`; 400 unknown endpoint |
 | GET | `/api/v2/projects/<n>/search` | viewer | `q`, `limit=20`, `kinds=device,port,…` | `{"hits": [Hit]}` (§5.11) |
@@ -1412,9 +1414,21 @@ Device `kind` cells are normalized to an Appendix A.1 key when they spell a kind
 | `dmx` | `universe` Universe, `address` Address, `end` End, `footprint` Footprint, `device` Device, `room` Room, `mode` Mode, `channel` Console channel, `protocol` Protocol, `sacn_group` sACN group, `artnet` Art-Net (net:sub:uni), `source` Source |
 | `bom` | `category` Category (discipline), `manufacturer` Manufacturer, `model` Model, `template` Template, `qty` Qty, `unit_cost` Unit cost, `extended` Extended, `currency` Currency, `planned` Planned, `installed` Installed, `spare` Spare, `retired` Retired; cable lines use `category = "cable"`, `model = "<medium> · <type>"`, `qty` = count, plus `length_total_m` Total length (m) |
 | `inventory` | `id`, `name`, `room`, `location`, `kind`, `discipline`, `manufacturer`, `model`, `status`, `serial`, `asset_tag`, `firmware`, `purchase_date`, `warranty_until`, `vendor`, `cost`, `currency`, `po`, `rack`, `ru`, `ips` (semicolon-joined), `notes` |
-| `racks` | `rack` Rack, `room` Room, `units` Units, `face` Face, `u` U, `height` Height, `side` Side, `device` Device, `model` Model |
+| `racks` | `rack` Rack, `room` Room, `units` Units, `face` Face, `u` U, `height` Height, `side` Side, `device` Device, `model` Model — one row per racked device (shelf children included), then one per rack item (`device` = item label or type label, `model` = type label, `side` = `full`, JSON adds `item_id`, `item_type`, `device_id: ""`) |
 
 Device and port columns contain **names** (device `name`, port `label or name`) in CSV and both `*_id` and name keys in JSON rows (e.g. `device`, `device_id`, `port`, `port_id`).
+
+#### 5.8.3 Racks (Rackula features; server block `# ---- racks: Rackula features`)
+
+| Method | Path | Role | Request / query | Response / codes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/v2/projects/<n>/racks/<rack>/totals` | viewer | — | `racks.rack_totals` (§4.4.7); 404 unknown rack |
+| GET | `/api/v2/projects/<n>/qr/rack/<rack>.svg` | viewer (page `file`) | `ecl=M` (L/M/Q/H, else 400), `scale=4` (1–40), `share?` | QR SVG of `<public base>/p/<n>/rk/<rack>`, or with `share` of `<public base>/s/<token>/rk/<rack>`; 404 unknown rack; 409 `no_public_url`; 404 `share_missing` (unknown token); 409 `share_scope` (a `scope: "sop"` link cannot open racks) |
+| POST | `/api/v2/projects/<n>/racks/import` | editor | `{"text"\|"zip_b64"\|"url", "apply?", "base_revision?"}` (route body name `RackImport`) | without `apply`: the preview of §4.13.2, **no write**. With `apply: true`: the ops are committed like `POST …/changes` (`base_revision` required → 428; rebase/409 rules of §5.4; one revision, source `import`, summary "Import from Rackula") → `{"revision", "applied": <op count>, "warnings"}` + `ETag`; an empty op list still needs `base_revision` and returns the current revision with `applied: 0`. 400 when none of `text`/`zip_b64`/`url` is a non-empty string; 422 `invalid` when the layout cannot be read |
+| GET | `/api/v2/rack-templates` | viewer | — | `{"templates": [{id, name, description, units, width_in, form_factor}]}` (§4.13.1) |
+| POST | `/api/v2/projects/<n>/racks/from-template` | editor | `{"template", "name?", "room?", "location?", "base_revision"}` (route body name `RackFromTemplate`) | **201** `{"revision", "rack": <new rack id>}` + `ETag` (one revision, source `changes`, summary "Added rack from template <id>"); 400 without `template`; 404 unknown `room`; 404 unknown template; 428 without `base_revision`; 409 conflict |
+
+The rack page, totals, import, template and NetBox handlers load their engine through `_engine(module, name)`: a missing module or function answers 501 `not_available`; the rack SVG answers 501 for `face=both` when `rack_svg` lacks the keyword arguments and falls back to the plain call for one face. Server-built ops (import, from-template) go through `_rack_apply` → `project.apply_changes`, the same path as `/changes`, but without its 2000-op cap: an applied Rackula import is **not** limited to 2000 ops. The body `room` of `racks/import` is not passed to the parser (only `text`, `zip_b64`, `url` are), so the import always lands in the default room (`settings.default_room`, else the first room).
 
 ### 5.9 Builds
 
@@ -1439,6 +1453,8 @@ devices/<device>.html          device pages
 patch-table.csv  cable-schedule.csv  cable-labels.html  ip-schedule.csv  dmx-schedule.csv  bom.csv  inventory.csv
 console-channels.csv           (only when a console has channels, §4.3.17: Console, Group, Channel, Name, Fed by, Goes to, DCA / mute, Members, Source — `console.console_schedule`)
 racks/<rack>-front.svg  racks/<rack>-rear.svg
+racks/<rack>.svg               both faces with template images embedded (rack_svg face="both", images=True)
+racks/<rack>.html              rack page (render_rack.rack_page_html, link_style="build")
 floorplans/<floorplan>.svg
 qr/<device>.svg                (when a public URL is known)
 report.html                    (P1) print-oriented compilation ; report.pdf (optional, Chrome)
@@ -1447,6 +1463,8 @@ diagram.png                    (optional, Chrome)
 ```
 
 All internal links in a build are relative so the folder works from `file://` and from `/builds/…`.
+
+Racks in a build (`export._write_racks`, written before the device pages): `-front.svg` / `-rear.svg` always (a built-in fallback renderer when `fathom.racks` is missing or fails, with a build note); `racks/<rack>.svg` is skipped with a note when `rack_svg` does not take `face="both"` / `images` or fails; `racks/<rack>.html` is skipped with a note when `fathom.render_rack` is missing or the page fails. The rack page in a build links devices as `../devices/<id>.html` and the room as `../rooms/<room>/index.html`, embeds the elevation images, and inlines a QR only when `settings.public_url` or `FATHOM_PUBLIC_URL` is an absolute URL. Device pages link their Rack line to `racks/<rack>.html` only when that page was written (`render_device_page(..., rack_pages=…)`). `report.html` has a **Racks** section (`render_html.render_rack_report_section`, CSS prefix `rr-`; `export._fallback_rack_section` when unavailable): one row per rack — Rack, Room, Units, Used U, Free U, Devices, Files (Page, Elevation SVG, Front SVG, Rear SVG) — then a figure per rack (the both-faces SVG, else front and rear).
 
 ### 5.10 Assistant
 
@@ -1531,12 +1549,13 @@ For ports `id` = `<device>:<port>`; cables `id` = cable id; interfaces `id` = `<
 | GET | `/p/<n>/r/<room>` | viewer | room map HTML (`render_html` with nav) |
 | GET | `/p/<n>/r/<room>/diagram.svg` | viewer | room map SVG |
 | GET | `/p/<n>/r/<room>/patch` | viewer | read-only patch table HTML |
-| GET | `/p/<n>/d/<device>` | viewer | device page HTML |
+| GET | `/p/<n>/d/<device>` | viewer | device page HTML; its Rack line links to `../rk/<rack>` (carrying `?share=<token>` when the page was opened with a valid `?share=` or through `/s/<token>/`) |
+| GET | `/p/<n>/rk/<rack>` | viewer (page `viewer`) | rack page HTML (`render_rack.rack_page_html(doc, project, rack, base=<script root>/, share=…, link_style="viewer")`, CSS prefix `rv-`, print stylesheet): header (name, room, U, width, form factor; nav to the room map, All rooms, and *Open in editor* only without a share), facts (room, location, row, units with numbering and start, width, form factor, depth, empty weight), totals cards (space, weight vs max load, power vs limit, contents; over a limit styled `.rv-over`) and an overlap warning, the front and rear elevations as two `rack_svg` calls with image `href`s under the app root, the device list top-down (`U<top>–<bottom>`, shelf/cell, half depth), accessories, Markdown notes and a QR. 404 unknown rack. **Share links**: `share` = a valid `?share=` token, else the token of a `/s/<token>/rk/<rack>` path; with a share, links go through the `s/<token>/…` mirror and the QR is inlined (anonymous visitors cannot call the QR API) from `settings.public_url` / `FATHOM_PUBLIC_URL`, omitted when neither is set; without a share the QR is `<img src="api/v2/projects/<n>/qr/rack/<rack>.svg">`. Overlay (`auto`) devices are listed without links |
 | GET | `/p/<n>/sop` | viewer | published procedures index (`render_html.render_sop_index`): tree order, kind / review-due badges, ≥44 px rows |
 | GET | `/p/<n>/sop/<slug>` | viewer | chrome-free SOP page (`render_html.render_sop_page`, §5.15): published pages only (drafts/archived → 404), the pages-API payload rendered with relative refs (`../d/<id>`, `../r/<id>`, `../sop/<slug>`, `../files/<att>/<name>`), phone-first (17 px body, sticky "Applies to", collapsible contents, tap-to-toggle checklist kept in `sessionStorage` under the app's key, tap-to-zoom images, prev/next, Print button), no edit controls, inline CSS/JS only (`static/css/sop.css` is inlined). Through a `scope: "sop"` share link device/room refs render as plain chips. |
 | GET | `/p/<n>/files/<att>/<filename>` | viewer | attachment (same as `/api/v2/…/files/…`) so share links can mirror images embedded in pages |
 | GET | `/s/<token>/…` | public (valid token) | P1 mirror of `/p/<project>/…` read-only; honours the share `scope` (§5.6) |
-| GET | `/static/<path>` | public | files under `fathom/static/` with extensions `.html .js .css .json .svg .png .webmanifest .txt`; `.js` served as `text/javascript; charset=utf-8`; containment check; `dev/` harness files served only when `FATHOM_DEV=1` or the request comes from loopback |
+| GET | `/static/<path>` | public | files under `fathom/static/` with extensions `.html .js .css .json .svg .png .webmanifest .txt .webp` (`.webp` as `image/webp`; the server also registers it with `mimetypes`), every path segment matching `^[A-Za-z0-9][A-Za-z0-9._-]*$`; rack images live under `static/rack-images/<vendor>/` (§4.5.1); `.js` served as `text/javascript; charset=utf-8`; containment check; `dev/` harness files served only when `FATHOM_DEV=1` or the request comes from loopback |
 | GET | `/sw.js` | public | `fathom/static/sw.js`, `Service-Worker-Allowed: /` (scope = app root) |
 | GET | `/manifest.webmanifest` | public | `application/manifest+json` |
 | GET | `/favicon.ico`, `/apple-touch-icon.png` | public | icons from `fathom/static/icons/` |
