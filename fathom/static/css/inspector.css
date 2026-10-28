@@ -45,8 +45,31 @@
 .ins-ep-row>button{flex:none}
 .ins-missing{color:var(--text)}
 
+/* inventory extras (FR-INV-10..13): code row, holds list, custom fields */
+.ins-code{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.ins-code-text{font-family:var(--mono);font-size:13px;letter-spacing:.6px}
+.ins-copy-link{min-height:40px;cursor:pointer;font:inherit;font-size:12px}
+.ins-qr.ins-qr-thumb{width:44px;height:44px;padding:3px;border-radius:4px;flex:none}
+.ins-holds{margin:0;padding:0;list-style:none}
+.ins-holds li{display:flex;align-items:center;gap:4px;min-height:40px;border-bottom:1px solid var(--border)}
+.ins-holds li:last-child{border-bottom:0}
+.ins-holds-link{color:var(--text);text-decoration:none;min-height:40px;display:inline-flex;align-items:center}
+.ins-holds-link:hover{text-decoration:underline}
+.ins-holds-row{align-items:start}
+.ins-fields{margin:8px 0 2px}
+.ins-fields-head{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px}
+.ins-field-add{min-height:40px;cursor:pointer;font:inherit;font-size:12px}
+.ins-field-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 40px;gap:6px;align-items:center;margin:4px 0}
+.ins-field-row input{width:100%;min-width:0}
+.ins-field-row .ins-field-rm{min-width:40px;min-height:40px;padding:0}
+.ins-field-key.ins-field-dup{border-color:var(--err);outline:1px solid var(--err)}
+.ins-fields-err:empty{display:none}
+.ins-fields-err .fb-error{margin:4px 0 0}
+
 @media (pointer:coarse){
-  .ins-open-page,.ins-index-chip,.ins-now-cable,.ins-now-peer,.ins-ep-dev,.ins-ep-port{min-height:44px}
-  .ins-close{min-width:44px;min-height:44px}
+  .ins-open-page,.ins-index-chip,.ins-now-cable,.ins-now-peer,.ins-ep-dev,.ins-ep-port,.ins-copy-link,.ins-field-add,.ins-holds-link{min-height:44px}
+  .ins-close,.ins-field-row .ins-field-rm{min-width:44px;min-height:44px}
+  .ins-field-row{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 44px}
+  .ins-holds li{min-height:44px}
 }
 @media print{.ins-index,.ins-close,.ins-open-page{display:none!important}}
