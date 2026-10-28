@@ -186,6 +186,42 @@ class SearchUi(UiCase):
             pg.press("Enter")
             self.assertEqual(last_nav(pg, 1), "#/sunday-demo/main/inventory?sel=device:sound-board&sec=inventory")
 
+    # FR-SRCH short codes: a query shaped like XXXX-XXXX also asks /api/v2/codes/<code>; a 200 leads the
+    # results with the device (deduped against the text hits); a 404 or offline adds nothing.
+    def test_short_code_query_leads_with_the_device(self):
+        body = {"project": "campus-demo", "device": "foh-cl5", "name": "FOH CL5", "room": "main", "kind": "console"}
+        with self.open(CAMPUS, "d", intercepts=[("/api/v2/codes/ABCD2345*", 200, body, "GET"), ("/api/v2/codes/ZZZZ9999*", 404, {"error": "unknown code"}, "GET")]) as pg:
+            self.assertEqual(pg.smoke["errors"], [])
+            self.open_palette(pg)
+            typed(pg, "abcd-2345")
+            wait_options(pg, "foh-cl5")
+            self.assertEqual(options(pg)[0], ["device", "foh-cl5"])
+            self.assertEqual(len([o for o in options(pg) if o == ["device", "foh-cl5"]]), 1, "the code hit is deduped by id")
+            self.assertEqual(groups(pg)[0], "Devices")
+            self.assertEqual(pg.js("document.getElementById('sr-hit-0').querySelector('.sr-sub').textContent"), "Code ABCD-2345 \u00b7 Main Auditorium")
+            self.assertEqual(pg.js("document.getElementById('sr-hit-0').querySelector('.sr-title').textContent"), "FOH CL5")
+            pg.shot("search-code-d")
+            pg.press("Enter")
+            self.assertEqual(last_nav(pg, 1), "#/campus-demo/main/devices/foh-cl5")
+
+            # an unknown code adds nothing (the text search runs as usual)
+            self.open_palette(pg)
+            typed(pg, "ZZZZ-9999")
+            wait_settled(pg)
+            self.assertEqual([o for o in options(pg) if o[0] == "device"], [])
+            self.assertEqual(pg.js("document.querySelectorAll('#app-palette-list .sr-hit').length"), 0)
+
+    def test_short_code_offline_uses_the_document(self):
+        with self.open(HARNESS + "?fixture=1", "d") as pg:
+            self.assertEqual(pg.smoke["errors"], [])
+            pg.js("(function () { var d = window.__sr.ctx.store.doc.devices.filter(function (x) { return x.id === 'atem-mini'; })[0]; d.short_code = 'ATEM2345'; return 1; })()")
+            self.open_palette(pg)
+            typed(pg, "atem2345")
+            wait_options(pg, "atem-mini")
+            self.assertEqual(options(pg)[0], ["device", "atem-mini"])
+            self.assertTrue(pg.js("document.getElementById('sr-hit-0').querySelector('.sr-sub').textContent").startswith("Code ATEM-2345"))
+            self.assertEqual(pg.js("document.querySelector('.sr-foot').getAttribute('data-offline')"), "1")
+
     def test_tablet_dropdown_network_hit(self):
         with self.open(CAMPUS, "t") as pg:
             self.open_palette(pg)

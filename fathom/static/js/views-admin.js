@@ -814,7 +814,7 @@ function crudTable(ctx, coll, cols, opts) {
 
 const SETTINGS_TABS = [
   ['project', 'Project'], ['rooms', 'Venues & rooms'], ['systems', 'Systems'], ['locations', 'Locations'], ['networks', 'Networks'],
-  ['templates', 'Templates'], ['users', 'Users'], ['backups', 'Backups'], ['sharing', 'Sharing'], ['offline', 'Offline'],
+  ['templates', 'Templates'], ['users', 'Users'], ['backups', 'Backups'], ['sharing', 'Sharing'], ['offline', 'Offline'], ['trash', 'Trash'],
 ];
 
 function isoIn(days) {
@@ -1015,17 +1015,17 @@ export function mountSettings(el, ctx) {
       const deleteProject = function () {
         delErr.clear();
         return ctx.api.deleteProject(ctx.project).then(function () { location.hash = ''; location.reload(); }, function (e) {
-          if (!destroyed) delErr.show(actErr('Could not delete ' + ctx.project, e), deleteProject);
+          if (!destroyed) delErr.show(actErr('Could not move ' + ctx.project + ' to the trash', e), deleteProject);
         });
       };
       cards.push(h('section', { class: 'adm-card', 'data-card': 'danger' }, [h('h3', null, 'Danger zone'),
-        h('p', { class: 'muted' }, 'Deleting a project removes it and all its history from this server.'),
-        h('div', null, h('button', { type: 'button', class: 'danger', onclick: function () {
-          ctx.prompt('Type the project name (' + ctx.project + ') to delete it and all its history.', '', { title: 'Delete project', ok: 'Delete' }).then(function (v) {
+        h('p', { class: 'muted' }, 'Moving a project to the trash takes it off the project list. An admin can restore it, with its history and files, from Settings \u203a Trash until it is deleted permanently there.'),
+        h('div', null, h('button', { type: 'button', class: 'danger', 'data-act': 'trash-project', onclick: function () {
+          ctx.prompt('Type the project name (' + ctx.project + ') to move it to the trash. It can be restored from Settings \u203a Trash.', '', { title: 'Move to trash', ok: 'Move to trash' }).then(function (v) {
             if (v !== ctx.project) { if (v !== null) ctx.toast('Name did not match', 'warn'); return; }
             deleteProject();
           });
-        } }, 'Delete project')),
+        } }, 'Move to trash')),
         delErr.el,
       ]));
     }
@@ -1330,6 +1330,83 @@ export function mountSettings(el, ctx) {
     };
   }
 
+  // Settings › Trash (admin): projects moved to the trash, with Restore and Delete permanently.
+  function trashPanel() {
+    if (!ctx.api || !ctx.api.listTrash) return needsServer();
+    const host = h('div');
+    let retention = null;
+    function retentionText() {
+      return retention ? 'Deleted projects are kept for ' + retention + ' day' + (retention === 1 ? '' : 's') + '.' : 'Deleted projects are kept here until an admin deletes them permanently.';
+    }
+    function restoreProject(t) {
+      return ctx.api.restoreTrash(t.name).then(function () {
+        ctx.toast('Restored ' + t.name, 'ok');
+        if (ctx.reloadProjects) ctx.reloadProjects();
+        list.clear();
+        return load();
+      }, function (e) {
+        if (!destroyed) list.fail(actErr('Could not restore ' + t.name, e), function () { return restoreProject(t); });
+      });
+    }
+    function purgeProject(t) {
+      return ctx.api.purgeTrash(t.name).then(function () {
+        ctx.toast('Deleted ' + t.name + ' permanently', 'ok');
+        list.clear();
+        return load();
+      }, function (e) {
+        if (!destroyed) list.fail(actErr('Could not delete ' + t.name, e), function () { return purgeProject(t); });
+      });
+    }
+    const dt = createTable(host, {
+      key: 'settings.trash', scope: '', caption: 'Trash', noun: { one: 'project', many: 'projects' },
+      url: urlBinding(ctx), highlight: hlOf(ctx), csvName: 'trash.csv', rowId: function (t) { return t.name; },
+      rowAttrs: function (t) { return { 'data-trash': t.name }; },
+      empty: emptyFor(function () { return dt; }, function () { return { title: 'Nothing in the trash.', text: retentionText() }; }),
+      columns: [
+        { key: 'name', header: 'Project', cell: function (t) { return mono(t.name); }, sticky: true },
+        timeCol('trashed_at', 'Trashed', function (t) { return t.trashed_at; }),
+        { key: 'trashed_by', header: 'By', hideOnMobile: true, value: function (t) { return t.trashed_by || ''; } },
+        { key: 'rooms', header: 'Rooms', align: 'right', hideOnMobile: true, value: function (t) { return Number(t.rooms) || 0; } },
+        { key: 'devices', header: 'Devices', align: 'right', value: function (t) { return Number(t.devices) || 0; } },
+        actions(function (t) {
+          return [
+            h('button', { type: 'button', class: 'small', 'data-act': 'restore', 'aria-label': 'Restore ' + t.name, onclick: function () { restoreProject(t); } }, 'Restore'),
+            h('button', { type: 'button', class: 'small danger', 'data-act': 'purge', 'aria-label': 'Delete ' + t.name + ' permanently', onclick: function () {
+              confirmScope(ctx, { verb: 'Delete permanently', noun: 'project ' + t.name, danger: true, ok: 'Delete permanently',
+                detail: 'The project, its history and its files are removed from this server for good. Backups are not affected.' }).then(function (y) {
+                if (y) purgeProject(t);
+              });
+            } }, 'Delete permanently'),
+          ];
+        }),
+      ],
+    });
+    const list = listState(dt);
+    const note = h('p', { class: 'muted adm-trash-note' }, retentionText());
+    function load() {
+      list.busy();
+      return ctx.api.listTrash().then(function (r) {
+        if (destroyed) return;
+        const days = Number(r && r.retention_days);
+        retention = days > 0 ? days : null;
+        note.textContent = retentionText();
+        list.done((r && r.items) || []);
+      }, function (e) { if (!destroyed) list.fail(e, load); });
+    }
+    load();
+    return {
+      nodes: [
+        h('section', { class: 'adm-card', 'data-card': 'trash' }, [
+          h('h3', null, 'Trash'),
+          h('p', { class: 'muted' }, 'Projects moved to the trash from Settings › Project can be restored here with their history and files. ' + 'Deleting permanently cannot be undone.'),
+          note,
+        ]),
+        host,
+      ],
+      tables: [dt], primary: dt,
+    };
+  }
+
   function sharingPanel() {
     if (!ctx.api) return needsServer();
     const host = h('div');
@@ -1385,7 +1462,7 @@ export function mountSettings(el, ctx) {
     ], tables: [] };
   }
 
-  const PANELS = { project: projectPanel, rooms: roomsPanel, systems: systemsPanel, locations: locationsPanel, networks: networksPanel, templates: templatesPanel, users: usersPanel, backups: backupsPanel, sharing: sharingPanel, offline: offlinePanel };
+  const PANELS = { project: projectPanel, rooms: roomsPanel, systems: systemsPanel, locations: locationsPanel, networks: networksPanel, templates: templatesPanel, users: usersPanel, backups: backupsPanel, sharing: sharingPanel, offline: offlinePanel, trash: trashPanel };
 
   function clearPanel() {
     if (cur) cur.tables.forEach(function (t) { t.destroy(); });

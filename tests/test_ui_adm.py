@@ -18,7 +18,11 @@ except ImportError:  # pragma: no cover
 
 P = "#/campus-demo/main/"
 SIZES3 = ("d", "t", "m")
-ALL_TABS = ["project", "rooms", "systems", "locations", "networks", "templates", "users", "backups", "sharing", "offline"]
+ALL_TABS = ["project", "rooms", "systems", "locations", "networks", "templates", "users", "backups", "sharing", "offline", "trash"]
+TRASH_ITEMS = {"items": [
+    {"name": "chapel-2024", "trashed_at": "2026-10-27T09:12:00Z", "trashed_by": "admin", "rooms": 1, "devices": 18},
+    {"name": "old-broadcast", "trashed_at": "2026-10-21T16:40:00Z", "trashed_by": "jordan", "rooms": 2, "devices": 41},
+], "retention_days": 30}
 
 
 def seed_history(data: str) -> None:
@@ -197,6 +201,86 @@ class AdmUi(UiCase):
                 if path not in ("settings/project", "settings/offline"):
                     self.assertGreaterEqual(pg.js("document.querySelectorAll('#app-main .dt-table').length"), 1)
                 self.assertEqual(pg.smoke["errors"], [])
+
+    # --------------------------------------------------------------------- trash
+
+    def test_trash_empty_state_names_the_retention(self):
+        for size in ("d", "m"):
+            with self.subTest(size=size), self.open(P + "settings/trash", size, intercepts=[("/api/v2/trash*", 200, {"items": [], "retention_days": 30}, "GET")]) as pg:
+                self.view(pg, "adm-settings")
+                self.assertEqual(selected_tab(pg), "trash")
+                pg.wait_for("!!document.querySelector('.adm-panel .fb-empty')")
+                text = pg.js("document.querySelector('.adm-panel .fb-empty').textContent")
+                self.assertIn("Nothing in the trash.", text)
+                self.assertIn("Deleted projects are kept for 30 days.", text)
+                self.assertEqual(self.rows(pg), 0)
+                self.assertLessEqual(pg.page_hscroll(), 0)
+                self.assertEqual(pg.smoke["errors"], [])
+                pg.shot("adm-trash-empty-%s" % size)
+
+    def test_trash_lists_projects_with_restore_and_purge(self):
+        with self.open(P + "settings/trash", "d", intercepts=[("/api/v2/trash*", 200, TRASH_ITEMS, "GET")]) as pg:
+            self.view(pg, "adm-settings")
+            pg.wait_for("document.querySelectorAll('.adm-panel tr.dt-row').length === 2")
+            names = pg.js("Array.prototype.map.call(document.querySelectorAll('.adm-panel tr.dt-row td[data-col=name]'), function (td) { return td.textContent; })")
+            self.assertEqual(sorted(names), ["chapel-2024", "old-broadcast"])
+            cols = pg.js("Array.prototype.map.call(document.querySelectorAll('.adm-panel thead th[data-col]'), function (th) { return th.getAttribute('data-col'); })")
+            self.assertEqual(cols, ["name", "trashed_at", "trashed_by", "rooms", "devices", "actions"])
+            self.assertEqual(pg.js("document.querySelector('.adm-panel tr.dt-row[data-trash=chapel-2024] td[data-col=devices]').textContent"), "18")
+            self.assertEqual(pg.js("document.querySelector('.adm-panel tr.dt-row[data-trash=old-broadcast] td[data-col=trashed_by]').textContent"), "jordan")
+            acts = pg.js("Array.prototype.map.call(document.querySelectorAll('.adm-panel tr.dt-row[data-trash=chapel-2024] .adm-acts button'), function (b) { return [b.getAttribute('data-act'), b.textContent]; })")
+            self.assertEqual(acts, [["restore", "Restore"], ["purge", "Delete permanently"]])
+            pg.shot("adm-trash-d")
+
+            # Delete permanently asks first; declining calls nothing
+            purge = pg.intercept("/api/v2/trash/chapel-2024", 200, {"ok": True}, "DELETE")
+            pg.click(".adm-panel tr.dt-row[data-trash=chapel-2024] .adm-acts button[data-act=purge]")
+            pg.wait_for("!!document.querySelector('.app-dialog')")
+            body = pg.js("document.querySelector('.app-dialog .body').textContent")
+            self.assertIn("chapel-2024", body)
+            self.assertIn("for good", body)
+            pg.press("Escape")
+            pg.wait_for("!document.querySelector('.app-dialog')")
+            self.assertEqual(purge["hits"], 0)
+            pg.click(".adm-panel tr.dt-row[data-trash=chapel-2024] .adm-acts button[data-act=purge]")
+            pg.wait_for("!!document.querySelector('.app-dialog')")
+            pg.click(".app-dialog footer button:last-child")
+            pg.wait_for("!document.querySelector('.app-dialog')")
+            pg.wait_for("document.querySelectorAll('.app-toast').length > 0")
+            self.assertEqual(purge["hits"], 1, "DELETE /api/v2/trash/<name> once the admin confirms")
+
+            # Restore posts straight away
+            restore = pg.intercept("/api/v2/trash/old-broadcast/restore", 200, {"ok": True, "project": "old-broadcast"}, "POST")
+            pg.click(".adm-panel tr.dt-row[data-trash=old-broadcast] .adm-acts button[data-act=restore]")
+            pg.wait_for("document.querySelectorAll('.app-toast').length > 1")
+            self.assertEqual(restore["hits"], 1)
+            self.assertFalse(pg.js("!!document.querySelector('.app-dialog')"), "restore needs no confirm")
+            self.assertEqual(pg.smoke["errors"], [])
+
+    def test_trash_list_failure_shows_retry(self):
+        with self.open(P + "settings/trash", "d", intercepts=[("/api/v2/trash*", 500, {"error": "boom"}, "GET")]) as pg:
+            self.view(pg, "adm-settings")
+            pg.wait_for("!!document.querySelector('.adm-panel .fb-error .fb-retry')")
+            pg.clear_intercepts()
+            pg.intercept("/api/v2/trash*", 200, TRASH_ITEMS, "GET")
+            pg.click(".adm-panel .fb-error .fb-retry")
+            pg.wait_for("document.querySelectorAll('.adm-panel tr.dt-row').length === 2")
+
+    def test_project_delete_is_move_to_trash(self):
+        with self.open(P + "settings/project", "d") as pg:
+            self.view(pg, "adm-settings")
+            btn = "[data-card=danger] button[data-act=trash-project]"
+            pg.wait_for("!!document.querySelector(%s)" % json.dumps(btn))
+            self.assertEqual(pg.js("document.querySelector(%s).textContent" % json.dumps(btn)), "Move to trash")
+            self.assertIn("Settings \u203a Trash", pg.js("document.querySelector('[data-card=danger] p').textContent"))
+            pg.click(btn)
+            pg.wait_for("!!document.querySelector('.app-dialog')")
+            text = pg.js("document.querySelector('.app-dialog').textContent")
+            self.assertIn("move it to the trash", text)
+            self.assertIn("restored from Settings", text)
+            self.assertEqual(pg.js("document.querySelector('.app-dialog footer button:last-child').textContent"), "Move to trash")
+            pg.press("Escape")
+            pg.wait_for("!document.querySelector('.app-dialog')")
 
     # ------------------------------------------------------------------- history
 
