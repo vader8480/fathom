@@ -1512,8 +1512,9 @@ def _scene_or_404(doc: Dict[str, Any], sid: str) -> None:
 
 
 def _scene_view(doc: Dict[str, Any], sid: str) -> Dict[str, Any]:
-    """The doc as it looks with scene ``sid`` active (nothing stored); the page titles get a
-    "Scene: <name>" caption so viewer pages say which variant they show. 404 for an unknown scene."""
+    """The doc as it looks with scene ``sid`` active (nothing stored). The org eyebrow every viewer
+    page renders gets a "Scene: <name>" caption so the page says which variant it shows (the only
+    hook reachable from here without touching the renderers). 404 for an unknown scene."""
     from . import scenes as S
 
     try:
@@ -1524,12 +1525,8 @@ def _scene_view(doc: Dict[str, Any], sid: str) -> Dict[str, Any]:
     out = S.apply(doc, data)
     meta = out.get("meta") if isinstance(out.get("meta"), dict) else {}
     out["meta"] = meta
-    caption = f"Scene: {name}"
-    meta["title"] = f"{meta.get('title') or 'Signal flow'} \u00b7 {caption}"
-    for room in out.get("rooms") or []:
-        flow = room.get("flow") if isinstance(room, dict) and isinstance(room.get("flow"), dict) else None
-        if flow and flow.get("title"):
-            flow["title"] = f"{flow['title']} \u00b7 {caption}"
+    org = str(meta.get("org") or "")
+    meta["org"] = f"{org} \u00b7 Scene: {name}" if org else f"Scene: {name}"
     return out
 
 
