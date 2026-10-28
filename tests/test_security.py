@@ -71,6 +71,8 @@ SPEC_ROLES = {
     ("GET", "/api/v2/projects/{}/floorplans/{}.svg"): "viewer", ("GET", "/api/v2/projects/{}/schedules/{}"): "viewer",
     ("GET", "/api/v2/projects/{}/cables/tag-preview"): "editor", ("GET", "/api/v2/projects/{}/racks/{}.svg"): "viewer",
     ("GET", "/api/v2/projects/{}/qr/{}.svg"): "viewer", ("GET", "/api/v2/projects/{}/trace"): "viewer",
+    # phase1 P1B
+    ("GET", "/api/v2/labels/presets"): "viewer", ("GET", "/api/v2/projects/{}/labels/devices"): "viewer",
     ("GET", "/api/v2/projects/{}/search"): "viewer", ("POST", "/api/v2/projects/{}/assistant"): "viewer",
     ("GET", "/api/v2/projects/{}/pages"): "viewer", ("POST", "/api/v2/projects/{}/pages/preview"): "editor",
     ("GET", "/api/v2/projects/{}/pages/{}"): "viewer", ("PUT", "/api/v2/projects/{}/pages/{}"): "editor",

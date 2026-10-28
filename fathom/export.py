@@ -263,6 +263,7 @@ def _nav(doc: Doc, sel: List[str], current: str, prefix: str) -> Dict[str, Any]:
             {"label": "Rooms", "url": f"{prefix}rooms/index.html"},
             {"label": "Patch table", "url": f"{prefix}rooms/{current}/patch.html"},
             {"label": "Cable labels", "url": f"{prefix}cable-labels.html"},
+            {"label": "Device labels", "url": f"{prefix}device-labels.html"},
             {"label": "Report", "url": f"{prefix}report.html"},
         ],
     }
@@ -378,6 +379,12 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
         except Exception as exc:
             notes.append(f"discovered connections: {type(exc).__name__}: {exc}; section skipped")
     _write(run_dir / "cable-labels.html", cab_mod.label_sheet_html(fdoc, qr=False, base_url=base))
+    try:
+        from . import labels as lab_mod
+
+        _write(run_dir / "device-labels.html", lab_mod.label_sheet_html(sdoc, lab_mod.select_devices(sdoc), lab_mod.DEFAULT_PRESET, base_url=base, project=name))
+    except Exception as exc:
+        notes.append(f"device-labels.html: {type(exc).__name__}: {exc}")
     ips = net_mod.ip_schedule(fdoc, overlay)
     _write(run_dir / "ip-schedule.csv", cab_mod.to_csv(ips))
     sections["IP schedule"] = _html_table(ips)
