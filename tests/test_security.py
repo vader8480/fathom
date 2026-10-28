@@ -118,6 +118,9 @@ SPEC_ROLES = {
     # phase5 P5A
     ("GET", "/api/v2/projects/{}/floorplans/{}/runs"): "viewer", ("POST", "/api/v2/projects/{}/floorplans/{}/runs/snap"): "viewer",
     ("POST", "/api/v2/projects/{}/floorplans/{}/runs/estimate"): "editor",
+    # phase6 P6A
+    ("POST", "/api/v2/projects/{}/rooms/{}/save-starter"): "editor", ("GET", "/api/v2/starters/{}"): "viewer",
+    ("DELETE", "/api/v2/starters/{}"): "admin",
 }
 RANK = {"viewer": 1, "editor": 2, "admin": 3}
 SAMPLES = ["proj", "main", "atem-mini", "rk-foh", "cables", "1", "nobody", "imp-0001", "att-000000000000", "sh-abc123", "fp-none",
@@ -128,7 +131,8 @@ PARAM_HINTS = {"name": "proj", "room": "main", "device": "atem-mini", "rack": "r
                "rid": "run-20260101-000000-0000", "pid": "pr-00000000", "code": "ABCD2345", "tname": "proj",
                "invite": "inv-000000000000000000000000",  # phase2 P2A
                "sid": "sc-00000000",  # phase3 P3A
-               "fmt": "png"}  # phase5 P5C
+               "fmt": "png",  # phase5 P5C
+               "starter": "church-chapel"}  # phase6 P6A
 DISCOVERY_FIXTURES = str(Path(__file__).parent / "fixtures" / "discovery")
 
 

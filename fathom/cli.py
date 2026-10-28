@@ -1,7 +1,8 @@
 """Fathom command line.
 
   fathom serve [--host H] [--port N] [--data DIR] [--open]   web app (editor + viewer)
-  fathom new <name|path> [--template T] [--org O]           create a project (T: blank | rrc-littleton | campus-demo | church-<starter>)
+  fathom new <name|path> [--template T] [--org O]           create a project (T: blank | rrc-littleton | campus-demo | church-<starter> | user-<slug>)
+  fathom starters                                           room starters: bundled church rooms + the ones saved from your rooms
   fathom import <project> <file|folder>... [--kind K] [--node ID] [--device NAME] [--room R] [--apply]
   fathom inspect <file|folder> [--kind K] [--json]          parse an export and show what was found
   fathom build <project> [--pdf] [--png] [--open] [--out DIR] [--state S] [--rooms a,b] [--base-url URL] [--no-discovery]
@@ -132,9 +133,32 @@ def cmd_status(_a: argparse.Namespace) -> None:
 
 
 def cmd_new(a: argparse.Namespace) -> None:
-    pdir = new_project(a.name, template=a.template, org=a.org or "", force=a.force)
+    template = (a.template or "blank").strip()
+    if template.startswith("user-"):
+        from .starters import new_project_from_starter
+
+        pdir = new_project_from_starter(a.name, template, org=a.org or "", force=a.force)
+    else:
+        pdir = new_project(a.name, template=template, org=a.org or "", force=a.force)
     print(f"ok: project created at {pdir}")
     print("next: fathom import <project> <exports>, edit project.json (or fathom serve), then fathom build --open")
+
+
+def cmd_starters(_a: argparse.Namespace) -> None:
+    """``fathom starters``: every starter (bundled, then user) as ``id  source  room  devices  cables`` lines."""
+    from .starters import list_starters, starters_root
+
+    rows = list_starters()
+    if not rows:
+        print("no starters installed")
+        return
+    width = max(len(r["id"]) for r in rows)
+    print(f"{'id'.ljust(width)}  source   room                 devices  cables")
+    for r in rows:
+        room = str(r.get("room_name") or r.get("room") or "")[:20]
+        print(f"{r['id'].ljust(width)}  {str(r.get('source') or 'bundled').ljust(7)}  {room.ljust(20)} {str(r.get('devices', 0)).rjust(7)}  {str(r.get('cables', 0)).rjust(6)}")
+    users = [r for r in rows if r.get("source") == "user"]
+    print(f"{len(rows)} starter(s), {len(users)} saved by users in {display_path(starters_root())}")
 
 
 def cmd_import(a: argparse.Namespace) -> None:
@@ -1057,10 +1081,14 @@ def main(argv=None) -> None:
 
     s = sub.add_parser("new", help="create a project")
     s.add_argument("name", help="project name (in the data dir) or a path")
-    s.add_argument("--template", default="blank", help="blank or a sample name (rrc-littleton, campus-demo, or a church starter: church-sanctuary, church-youth-room, church-chapel, church-portable, church-broadcast)")
+    s.add_argument("--template", default="blank", help="blank, a sample name (rrc-littleton, campus-demo), a church starter (church-sanctuary, church-youth-room, "
+                                                        "church-chapel, church-portable, church-broadcast) or a starter you saved from a room (user-<slug>; see fathom starters)")
     s.add_argument("--org", help="organisation / venue name for the header")
     s.add_argument("--force", action="store_true")
     s.set_defaults(func=cmd_new)
+
+    s = sub.add_parser("starters", help="room starters: the bundled church rooms plus the ones saved from your rooms (FATHOM_DATA/starters)")
+    s.set_defaults(func=cmd_starters)
 
     s = sub.add_parser("import", help="copy exports into a project and register them")
     s.add_argument("project")

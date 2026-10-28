@@ -1289,6 +1289,61 @@ def r_room_from_starter(req: Request) -> Response:
                          headers={"ETag": f'"r{res["revision"]}"'})
 
 
+# ---- user starters (phase6 P6A, FR-ROOM-11): save a room as a starter under FATHOM_DATA/starters, read / delete one
+
+_STARTER_ID = r"(?P<starter>[A-Za-z0-9][A-Za-z0-9._-]{0,127})"
+_STARTER_STATUS = {"exists": 409, "bundled": 409, "missing_field": 400, "bad_id": 400, "bad_enum": 400, "not_found": 404}
+
+
+def _starter_error(exc: Any) -> ApiError:
+    code = getattr(exc, "code", "") or "bad_request"
+    return ApiError(_STARTER_STATUS.get(code, 400), str(exc), code)
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + r"/rooms/(?P<room>" + _EID + r")/save-starter", role="editor",
+       summary="Save a room as a user starter ({label, blurb?, tags?, replace?, id?})", tags=["projects"], body="StarterSave", response="StarterInfo")
+def r_room_save_starter(req: Request) -> Response:
+    from .starters import StarterError, save_starter
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    room = _room_or_404(doc, req.params["room"])
+    body = req.json()
+    tags = body.get("tags")
+    if tags is not None and not isinstance(tags, list):
+        raise ApiError(400, "tags must be a list of strings", "bad_type")
+    sid = body.get("id")
+    if sid is not None and not isinstance(sid, str):
+        raise ApiError(400, "id must be a string", "bad_type")
+    try:
+        entry, info = save_starter(doc, room, str(body.get("label") or ""), str(body.get("blurb") or ""), tags,
+                                   replace=bool(body.get("replace")), starter_id=sid or None, author=req.username, source_project=pdir.name)
+    except StarterError as exc:
+        raise _starter_error(exc)
+    return Response.json({"starter": entry, "dropped_cables": info["dropped_cables"], "dropped_files": info["dropped_files"]}, 201)
+
+
+@route("GET", r"/api/v2/starters/" + _STARTER_ID, role="viewer", summary="One starter (bundled or user) with its counts", tags=["projects"], response="StarterInfo")
+def r_starter_get(req: Request) -> Response:
+    from .starters import StarterError, starter_entry
+
+    try:
+        return Response.json({"starter": starter_entry(req.params["starter"])})
+    except StarterError as exc:
+        raise _starter_error(exc)
+
+
+@route("DELETE", r"/api/v2/starters/" + _STARTER_ID, role="admin", summary="Delete a user starter (409 bundled for bundled ids)", tags=["projects"])
+def r_starter_delete(req: Request) -> Response:
+    from .starters import StarterError, delete_starter
+
+    try:
+        delete_starter(req.params["starter"])
+    except StarterError as exc:
+        raise _starter_error(exc)
+    return Response.empty(204)
+
+
 @route("POST", "/api/v2/projects", role="editor", summary="Create a project", tags=["projects"], body="ProjectCreate")
 def r_projects_create_v2(req: Request) -> Response:
     body = req.json()

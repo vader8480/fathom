@@ -128,6 +128,20 @@ def _components() -> Dict[str, Any]:
         "ScenePatch": {"type": "object", "properties": {"name": {"type": "string", "maxLength": 80}, "note": {"type": "string"}}},
         "Starter": {"type": "object", "required": ["starter"], "properties": {"starter": {"type": "string", "description": "starter id from GET /api/v2/starters"},
                                                                           "name": {"type": "string", "description": "room name; defaults to the starter's room name"}}},
+        "StarterSave": {"type": "object", "required": ["label"], "properties": {
+            "label": {"type": "string", "maxLength": 80, "description": "starter label; the id is user-<slug(label)>"},
+            "blurb": {"type": "string", "maxLength": 500}, "tags": {"type": "array", "items": {"type": "string"}, "maxItems": 10},
+            "replace": {"type": "boolean", "default": False, "description": "overwrite an existing user starter with the same id (409 exists otherwise)"},
+            "id": {"type": "string", "pattern": "^user-[a-z0-9][a-z0-9-]{0,79}$", "description": "explicit user starter id (409 bundled for a bundled id)"}}},
+        "StarterInfo": {"type": "object", "required": ["starter"], "properties": {
+            "starter": {"type": "object", "required": ["id", "label", "room", "source"], "properties": {
+                "id": {"type": "string"}, "label": {"type": "string"}, "blurb": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}},
+                "room": {"type": "string"}, "source": {"type": "string", "enum": ["bundled", "user"]}, "room_name": {"type": "string"}, "room_kind": {"type": "string"},
+                "devices": {"type": "integer"}, "cables": {"type": "integer"}, "racks": {"type": "integer"}, "pages": {"type": "integer"},
+                "description": {"type": "string"}, "created": {"type": "string"}, "created_by": {"type": "string"},
+                "source_project": {"type": "string"}, "source_room": {"type": "string"}}},
+            "dropped_cables": {"type": "integer", "description": "save-starter only: cables with one end outside the room"},
+            "dropped_files": {"type": "integer", "description": "save-starter only: attachments (floor plan files, photos, page files) left behind"}}},
         "Invite": {"type": "object", "properties": {"role": {"type": "string", "enum": ["viewer", "editor", "admin"], "default": "editor"},
                                                   "projects": {"type": "object", "additionalProperties": {"type": "string", "enum": ["viewer", "editor"]}, "description": "per-project role overrides"},
                                                   "ttl_hours": {"type": "integer", "minimum": 1, "maximum": 720, "default": 72}, "note": {"type": "string"}}},
