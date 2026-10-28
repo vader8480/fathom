@@ -59,8 +59,25 @@ KIND_BY_CATEGORY = {
     "network": "switch", "firewall": "network", "patch-panel": "patch_panel", "power": "power",
     "cooling": "other", "other": "other", "av-media": "video",
 }
+#: Model keywords that win over the Rackula category, first match wins. Rackula
+#: files some devices under the brand's main category (a keystone panel under
+#: network, KVM switches and console servers under power).
+_MODEL_RULES: Tuple[Tuple["re.Pattern[str]", str], ...] = (
+    (re.compile(r"patch\s*panel|keystone", re.I), "patch_panel"),
+    # Tripp Lite B096/B097 and Vertiv (Avocent) ACS 8000 are serial console servers.
+    (re.compile(r"console server|\bb09[67]-\d|\bacs\d{4}", re.I), "network"),
+    # Tripp Lite B040 (console KVM), B064 and B072 (IP KVM).
+    (re.compile(r"\bkvm\b|\bb0(?:40|64|72)-\d", re.I), "computer"),
+)
 _ROUTER_RE = re.compile(
-    r"router|gateway|controller|cloud ?key|\budm\b|\budm-|\buxg\b|\buxg-|\bccr\d|\brb\d|\bisr\d|\basr\d", re.I)
+    r"router|gateway|controller|cloud ?key|\budm\b|\budm-|\buxg\b|\buxg-|\busg\b|\busg-|\bccr\d|\brb\d|\bisr\d|\basr\d"
+    # Ubiquiti EdgeRouter (ER-X, ER-12, ERPro-8), TP-Link Omada ER routers and OC
+    # controllers, TP-Link TD-W DSL modem routers.
+    r"|\ber-?\d|\ber-x\b|\berpro|\boc\d{3}\b|\btd-w\d", re.I)
+#: Rack servers that Rackula files under network (UniFi Application Server).
+_SERVER_RE = re.compile(r"\bserver\b", re.I)
+#: Supermicro SSE- Ethernet switches, filed under server.
+_SWITCH_IN_SERVER_RE = re.compile(r"\bsse-[a-z]\d", re.I)
 #: av-media model keywords, first match wins.
 _AV_RULES: Tuple[Tuple["re.Pattern[str]", str], ...] = (
     (re.compile(r"\batem\b|switcher", re.I), "video_switcher"),
@@ -371,8 +388,16 @@ def reserved_ids() -> set:
 
 
 def kind_for(category: str, model: str) -> str:
-    if category == "network" and _ROUTER_RE.search(model):
-        return "network"
+    for rx, kind in _MODEL_RULES:
+        if rx.search(model):
+            return kind
+    if category == "network":
+        if _ROUTER_RE.search(model):
+            return "network"
+        if _SERVER_RE.search(model):
+            return "computer"
+    if category == "server" and _SWITCH_IN_SERVER_RE.search(model):
+        return "switch"
     if category == "av-media":
         for rx, kind in _AV_RULES:
             if rx.search(model):

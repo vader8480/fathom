@@ -120,12 +120,19 @@ class CatalogData(unittest.TestCase):
             "24-port-patch-panel": "patch_panel", "2u-ups": "power", "1u-fan-panel": "other",
             "1u-video-switcher": "video_switcher", "1u-amplifier": "amp", "1u-audio-processor": "processor",
             "1u-streaming-encoder": "encoder", "blackmagicdesign-atem-constellation-8k": "video_switcher",
+            "ubiquiti-uacc-rack-panel-patch-blank-24": "patch_panel", "ubiquiti-usg": "network",
+            "ubiquiti-er-x": "network", "tp-link-oc200": "network", "ubiquiti-unifi-application-server": "computer",
+            "eaton-tripp-lite-b064-016-02-ipg": "computer", "vertiv-acs8008sac": "network",
+            "supermicro-sse-g3648b": "switch",
         }
         for tid, kind in expect.items():
             self.assertEqual(by_id[tid]["kind"], kind, tid)
         routers = [t for t in self.templates if t["rack_category"] == "network" and re.search(r"(?i)edgerouter|\bisr\d", t["model"])]
         self.assertTrue(routers)
         self.assertEqual({t["kind"] for t in routers}, {"network"})
+        panels = [t for t in self.templates if re.search(r"(?i)patch\s*panel|keystone", t["model"])]
+        self.assertGreaterEqual(len(panels), 9)
+        self.assertEqual({t["kind"] for t in panels}, {"patch_panel"})
 
     def test_ports_from_interfaces(self):
         by_id = {t["id"]: t for t in self.templates}
@@ -251,6 +258,29 @@ class GeneratorUnits(unittest.TestCase):
         self.assertEqual(k("av-media", "Teranex Mini"), "video")
         self.assertEqual(k("chassis", "Blade Chassis"), "computer")
         self.assertEqual(k("mystery", "X"), "other")
+
+    def test_kind_for_model_keywords_beat_the_category(self):
+        k = self.tool.kind_for
+        self.assertEqual(k("network", "24-Port Blank Keystone Patch Panel"), "patch_panel")
+        self.assertEqual(k("other", "Keystone Panel"), "patch_panel")
+        self.assertEqual(k("network", "Cat6 PatchPanel 48"), "patch_panel")
+        self.assertEqual(k("power", "Tripp Lite B064-016-02-IPG"), "computer")
+        self.assertEqual(k("power", "KVM Console"), "computer")
+        self.assertEqual(k("power", "Tripp Lite B096-016"), "network")
+        self.assertEqual(k("power", "ACS8008SAC"), "network")
+        self.assertEqual(k("other", "Serial Console Server"), "network")
+        self.assertEqual(k("power", "Tripp Lite PDUMH15AT"), "power")
+        self.assertEqual(k("power", "SMT1500RMI2UC"), "power")
+
+    def test_kind_for_network_and_server_model_codes(self):
+        k = self.tool.kind_for
+        for model in ("ER-X", "ER-12P", "ERPro-8", "ER605-V2", "ER7206", "OC200", "TD-W8950N", "USG", "USG-Pro-4"):
+            self.assertEqual(k("network", model), "network", model)
+        self.assertEqual(k("network", "UniFi Application Server"), "computer")
+        for model in ("ECS-24-PoE", "S3300-52X", "US-24-250W", "M4350-32F8V", "XSM7224S", "TL-SE2109PB"):
+            self.assertEqual(k("network", model), "switch", model)
+        self.assertEqual(k("server", "SSE-G3648B"), "switch")
+        self.assertEqual(k("server", "Storage SuperServer SSG-610P-ACR12N4H"), "computer")
 
     def test_ports_grouping(self):
         p = self.tool.ports_from_interfaces
