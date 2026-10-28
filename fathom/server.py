@@ -3430,7 +3430,9 @@ def r_view_device(req: Request) -> Response:
     except Exception:
         _log_exc("qr for device page failed")
     return _viewer_html(_compat(render_device_page, doc, dev, project=pdir.name, overlay=_overlay(doc, pdir, strict=False),
-                                base_url=_rel_base(req), qr_svg=qr_svg, sw=True))
+                                base_url=_rel_base(req), qr_svg=qr_svg, sw=True,
+                                share=next((t for t in (req.query.get("share") or "", (re.match(r"^/s/(sh-[A-Za-z0-9_-]+)", req.path) or ["", ""])[1])
+                                            if _valid_share(pdir, t)), "")))
 
 
 # ---- public SOP pages (§5.15): chrome-free, phone-first, published pages only
