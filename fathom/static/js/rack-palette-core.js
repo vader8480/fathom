@@ -3,6 +3,9 @@
 // storage, fetch or timers, so it imports in Node.
 
 import { newId, expandPortGroups, scoreText, deepClone } from './model-core.js';
+import { CATEGORY_COLORS } from './rack-display-core.js';
+
+export { CATEGORY_COLORS };
 
 export const STORAGE_KEY = 'fathom.ui.rack.palette';
 export const PREFS_VERSION = 1;
@@ -17,13 +20,6 @@ export const CATEGORY_LABELS = {
   server: 'Server', network: 'Network', firewall: 'Firewall', 'patch-panel': 'Patch panel', power: 'Power',
   storage: 'Storage', kvm: 'KVM', 'av-media': 'AV / Media', cooling: 'Cooling', shelf: 'Shelf', blank: 'Blank',
   'cable-management': 'Cable management', chassis: 'Chassis', other: 'Other',
-};
-
-// Contract B CATEGORY_COLORS (same values as rack-display-core.CATEGORY_COLORS).
-export const CATEGORY_COLORS = {
-  server: '#4A7A8A', network: '#7968A6', firewall: '#C0392B', storage: '#3D7A4A', power: '#A84A4A', kvm: '#926A40',
-  'av-media': '#A85A7A', cooling: '#75753F', chassis: '#5A6A8A', shelf: '#6272A4', blank: '#44475A',
-  'cable-management': '#6272A4', 'patch-panel': '#6272A4', other: '#6272A4',
 };
 
 // Tie-break order after the score.
@@ -103,10 +99,62 @@ function entryFrom(s, source, template) {
   return e;
 }
 
+function twinKey(e) {
+  return str(e.manufacturer).trim().toLowerCase() + '\u0000' + str(e.model).trim().toLowerCase();
+}
+
+function keeperRank(e) {
+  return e.image_front ? 0 : (e.image_rear ? 1 : 2);
+}
+
+// Collapses catalog entries that share a case-insensitive manufacturer + model (the catalog keeps some
+// devices under two slugs so Rackula layouts resolve): the one with a front image wins, then one
+// with a rear image, then the shorter id (then the smaller id). The kept entry lists the dropped ids
+// in `aliases` and stays where the first twin was. Other sources are never collapsed.
+// Returns {entries, dropped: {droppedId: keptId}}.
+export function dedupeCatalog(entries) {
+  const list = Array.isArray(entries) ? entries : [];
+  const groups = {};
+  list.forEach(function (e) {
+    if (!e || e.source !== 'catalog' || !(str(e.manufacturer) || str(e.model))) return;
+    const k = twinKey(e);
+    (groups[k] = groups[k] || []).push(e);
+  });
+  const dropped = {};
+  const keep = {};
+  Object.keys(groups).forEach(function (k) {
+    const g = groups[k];
+    if (g.length < 2) return;
+    const best = g.slice().sort(function (a, b) {
+      return (keeperRank(a) - keeperRank(b)) || (a.id.length - b.id.length) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    })[0];
+    const kept = Object.assign({}, best, { aliases: (best.aliases || []).slice() });
+    g.forEach(function (e) {
+      if (e === best) return;
+      dropped[e.id] = best.id;
+      kept.aliases.push(e.id);
+    });
+    keep[k] = kept;
+  });
+  const out = [];
+  const placed = {};
+  list.forEach(function (e) {
+    if (!e) return;
+    const k = e.source === 'catalog' ? twinKey(e) : '';
+    if (k && HAS.call(keep, k)) {
+      if (!placed[k]) { placed[k] = true; out.push(keep[k]); }
+      return;
+    }
+    out.push(e);
+  });
+  return { entries: out, dropped: dropped };
+}
+
 // Palette entries from GET /api/v2/library?source=all&rack=1 (`{templates: [summary]}`, or the list)
 // plus GET /api/v2/presets (`{presets}` or the list) as a fallback for ids the library lacks. Only
-// rack-mountable templates (`ru` ≥ 1) are kept; the first entry per id wins. `template` is the full
-// template when the data carries ports (presets), else null (fetch it with ctx.api.template).
+// rack-mountable templates (`ru` ≥ 1) are kept; the first entry per id wins; catalog twins collapse
+// (dedupeCatalog). `template` is the full template when the data carries ports (presets), else null
+// (fetch it with ctx.api.template).
 export function normalizeEntries(libraryResponse, presets) {
   const lib = libraryResponse && Array.isArray(libraryResponse.templates) ? libraryResponse.templates
     : (Array.isArray(libraryResponse) ? libraryResponse : []);
@@ -128,7 +176,7 @@ export function normalizeEntries(libraryResponse, presets) {
     seen[id] = true;
     out.push(entryFrom(t, 'preset', t));
   });
-  return out;
+  return dedupeCatalog(out).entries;
 }
 
 function sourceRank(s) {
@@ -226,32 +274,50 @@ export function readPrefs(raw) {
   return { v: PREFS_VERSION, favs: idList(v.favs, MAX_FAVS), recents: idList(v.recents, MAX_RECENTS) };
 }
 
-export function isFav(prefs, id) {
-  return readPrefs(prefs).favs.indexOf(id) >= 0;
+function idsOf(id, aliases) {
+  return [String(id)].concat(Array.isArray(aliases) ? aliases.map(String) : []);
 }
 
-// New prefs with `id` added to (end) or removed from the favourites.
-export function toggleFav(prefs, id) {
+// `aliases` (optional): the dropped twin ids of a deduped catalog entry, which count as the same entry.
+export function isFav(prefs, id, aliases) {
+  const favs = readPrefs(prefs).favs;
+  return idsOf(id, aliases).some(function (x) { return favs.indexOf(x) >= 0; });
+}
+
+// New prefs with `id` added to (end) or removed from the favourites; removing also drops its aliases.
+export function toggleFav(prefs, id, aliases) {
   const p = readPrefs(prefs);
   if (!id) return p;
-  const i = p.favs.indexOf(id);
-  const favs = i >= 0 ? p.favs.slice(0, i).concat(p.favs.slice(i + 1)) : p.favs.concat([String(id)]).slice(0, MAX_FAVS);
+  const all = idsOf(id, aliases);
+  const favs = isFav(p, id, aliases)
+    ? p.favs.filter(function (x) { return all.indexOf(x) < 0; })
+    : p.favs.concat([String(id)]).slice(0, MAX_FAVS);
   return { v: PREFS_VERSION, favs: favs, recents: p.recents };
 }
 
-// New prefs with `id` first in the recents (moved if present), at most MAX_RECENTS.
-export function pushRecent(prefs, id) {
+// New prefs with `id` first in the recents (moved if present, its aliases removed), at most MAX_RECENTS.
+export function pushRecent(prefs, id, aliases) {
   const p = readPrefs(prefs);
   if (!id) return p;
-  const recents = [String(id)].concat(p.recents.filter(function (x) { return x !== id; })).slice(0, MAX_RECENTS);
+  const all = idsOf(id, aliases);
+  const recents = [String(id)].concat(p.recents.filter(function (x) { return all.indexOf(x) < 0; })).slice(0, MAX_RECENTS);
   return { v: PREFS_VERSION, favs: p.favs, recents: recents };
 }
 
-// Entries for a list of ids (favourites, recents) in that order; unknown ids are skipped.
+// Entries for a list of ids (favourites, recents) in that order. An id dropped by dedupeCatalog
+// resolves to its kept twin (via `aliases`); unknown ids are skipped and each entry appears once.
 export function entriesFor(entries, ids) {
   const by = {};
-  (Array.isArray(entries) ? entries : []).forEach(function (e) { if (e && !HAS.call(by, e.id)) by[e.id] = e; });
-  return (Array.isArray(ids) ? ids : []).filter(function (id) { return HAS.call(by, id); }).map(function (id) { return by[id]; });
+  (Array.isArray(entries) ? entries : []).forEach(function (e) {
+    if (!e) return;
+    if (!HAS.call(by, e.id)) by[e.id] = e;
+    (Array.isArray(e.aliases) ? e.aliases : []).forEach(function (a) { if (!HAS.call(by, a)) by[a] = e; });
+  });
+  const out = [];
+  (Array.isArray(ids) ? ids : []).forEach(function (id) {
+    if (HAS.call(by, id) && out.indexOf(by[id]) < 0) out.push(by[id]);
+  });
+  return out;
 }
 
 // ------------------------------------------------------------ instantiate
