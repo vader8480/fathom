@@ -268,6 +268,159 @@ class AssistantUi(UiCase):
                 self.assertEqual(pg.js("window.__fathomErrors"), [])
 
 
+DRAFT_TEXT = "X32 with an S16 stage box, 2 ULXD4D wireless, 2 K12.2 on stands, ATEM Mini"
+DRAFT_PLACEHOLDER = "Describe the room: e.g. X32 with an S16 stage box, 4 ULXD wireless, 2 K12.2 on stands, ATEM Mini, QuickQ 10"
+
+
+class AssistantDraft(UiCase):
+    """P6B (§6.9.5b, FR-AST-15..17): the Ask | Draft a room toggle, the room select, the Draft card and Apply.
+
+    Own server (own temp data): the draft flow runs against the real ``…/assistant`` route and really applies to campus-demo.
+    """
+
+    def panel(self, size: str, scripts=(), path: str = "patch", open_panel: bool = True):
+        cm = self.open("/healthz", size, ready=False)
+        pg = cm.__enter__()
+        self.addCleanup(cm.__exit__, None, None, None)
+        for src in scripts:
+            pg.command("Page.addScriptToEvaluateOnNewDocument", {"source": src})
+        pg.goto("/" + P + path)
+        if open_panel:
+            pg.press("Control+j")
+            self.wait_panel(pg)
+        return pg
+
+    def wait_panel(self, pg) -> None:
+        pg.wait_for("document.getElementById('app-assistant').classList.contains('open') && !!document.querySelector('#app-assistant .ast-form input')")
+        pg.wait_for("getComputedStyle(document.getElementById('app-assistant')).transform === 'none'")
+        pg.wait_for("!!document.querySelector('#app-assistant .ast-form[data-voice]')")
+
+    def ask(self, pg, text: str) -> None:
+        pg.js("document.querySelector('#app-assistant .ast-form input').value = %s" % q(text))
+        pg.js("document.querySelector('#app-assistant .ast-form').dispatchEvent(new Event('submit', {bubbles: true, cancelable: true}))")
+
+    def text(self, pg, sel: str) -> str:
+        return pg.js("(function () { var e = document.querySelector(%s); return e ? e.textContent.trim() : ''; })()" % q(sel))
+
+    def bodies(self, pg, path: str) -> list:
+        return pg.js("window.__bodies.filter(function (b) { return b.url.indexOf(%s) >= 0; }).map(function (b) { return JSON.parse(b.body); })" % q(path))
+
+    def project_devices(self) -> dict:
+        import urllib.request
+
+        with urllib.request.urlopen(self.base + "/api/v2/projects/campus-demo") as r:
+            doc = json.loads(r.read().decode())["doc"]
+        return {d["id"]: d for d in doc["devices"]}, doc["cables"]
+
+    def test_toggle_room_select_draft_card_and_apply(self):
+        for size in ("d", "m"):
+            with self.subTest(size=size):
+                pg = self.panel(size, scripts=[CAPTURE])
+                # Ask is the default; the room select is hidden
+                self.assertEqual(pg.js("document.querySelector('.ast-mode-btn[data-mode=ask]').getAttribute('aria-checked')"), "true")
+                self.assertTrue(pg.js("document.querySelector('.ast-room-wrap').hidden"))
+                self.assertEqual(pg.js("document.querySelector('.ast-form input').placeholder"), "Ask about your system\u2026")
+                pg.click(".ast-mode-btn[data-mode=draft]")
+                pg.wait_for("document.querySelector('.ast-modes').getAttribute('data-mode') === 'draft'")
+                self.assertEqual(pg.js("document.querySelector('.ast-mode-btn[data-mode=draft]').getAttribute('aria-checked')"), "true")
+                self.assertEqual(pg.js("document.querySelector('.ast-form input').placeholder"), DRAFT_PLACEHOLDER)
+                self.assertFalse(pg.js("document.querySelector('.ast-room-wrap').hidden"))
+                self.assertEqual(pg.js("Array.prototype.map.call(document.querySelectorAll('.ast-room option'), function (o) { return o.value; })"), ["main", "chapel", "broadcast"])
+                self.assertEqual(pg.js("document.querySelector('.ast-room').value"), "main", "defaults to the current room")
+                self.assertTrue(pg.js("!!document.querySelector('.ast-draft-example')"), "the example description chip replaces the question chips")
+                self.assertIn("Nothing is changed until you apply", self.text(pg, ".ast-intro-draft"))
+                if size == "m":
+                    self.assertLessEqual(pg.page_hscroll(), 0)
+                    self.assertGreaterEqual(pg.rect(".ast-mode-btn[data-mode=draft]")["height"], 44)
+                    self.assertGreaterEqual(pg.rect(".ast-room")["height"], 44)
+                    # full width under the toggle: the select spans the panel like the composer input
+                    self.assertGreaterEqual(pg.rect(".ast-room-wrap")["width"], pg.rect(".ast-form input")["width"] * 0.9)
+                    self.assertGreater(pg.rect(".ast-room-wrap")["y"], pg.rect(".ast-mode")["y"])
+                pg.shot("draft-composer-" + size)
+                # the mic (headless Chrome has webkitSpeechRecognition) restores the draft placeholder after listening
+                pg.js("document.querySelector('.ast-room').value = 'chapel'; document.querySelector('.ast-room').dispatchEvent(new Event('change'))")
+                self.ask(pg, DRAFT_TEXT)
+                pg.wait_for("!!document.querySelector('.ast-draft')")
+                body = self.bodies(pg, ASK)[-1]
+                self.assertEqual((body["mode"], body["room"], body["question"]), ("draft", "chapel", DRAFT_TEXT))
+                self.assertEqual(self.text(pg, ".ast-q .ast-q-draft"), "Draft a room \u00b7 Chapel")
+                self.assertEqual(self.text(pg, ".ast-draft h4"), "Draft \u00b7 Chapel")
+                chips = pg.js("Array.prototype.map.call(document.querySelectorAll('.ast-draft-chip'), function (c) { return c.textContent; })")
+                self.assertEqual(chips, ["Behringer X32 console", "Stagebox / I/O rack", "Shure ULXD4D wireless receiver \u00d72", "QSC K12.2 speaker \u00d72",
+                                         "Blackmagic Design ATEM Mini Pro video switcher"])
+                self.assertFalse(pg.js("!!document.querySelector('.ast-draft-unknown')"))
+                pg.wait_for("!!document.querySelector('#ast-proposal-yes')")
+                self.assertEqual(self.text(pg, "#ast-proposal-yes"), "Apply")
+                self.assertEqual(self.text(pg, "#ast-proposal-no"), "Not now")
+                self.assertEqual(self.text(pg, ".ast-draft-hint"), "Nothing is changed until you apply.")
+                self.assertEqual(pg.js("document.querySelectorAll('.ast-proposal-summary li').length"), 13, "7 devices + 6 cables")
+                # the second pass (size m) drafts into a room that already has the first pass's devices, so names carry " 2"
+                self.assertRegex(self.text(pg, ".ast-a .ast-notes"), r"Stage box( 2)? \u2192 X32( 2)?", "the skipped link is explained")
+                if size == "m":
+                    self.assertLessEqual(pg.page_hscroll(), 0)
+                    self.assertGreaterEqual(pg.rect("#ast-proposal-yes")["height"], 44)
+                pg.shot("draft-card-" + size)
+                devs, cables = self.project_devices()
+                self.assertNotIn("x32" if size == "d" else "x32-2", devs, "nothing is applied before Apply")
+                pg.click("#ast-proposal-yes")
+                pg.wait_for("document.querySelector('.ast-proposal').getAttribute('data-state') === 'applied'")
+                pg.wait_for("!!document.querySelector('.app-toast.ok')")
+                self.assertIn("Applied", self.text(pg, ".ast-proposal-done"))
+                pg.shot("draft-applied-" + size)
+                devs2, cables2 = self.project_devices()
+                self.assertEqual(len(devs2) - len(devs), 7, "Apply adds the drafted devices")
+                self.assertEqual(len(cables2) - len(cables), 6, "and the default patch")
+                new = [d for d in devs2.values() if d["id"] not in devs]
+                self.assertTrue(all(d["room"] == "chapel" for d in new), "all of them in the chosen room")
+                self.assertEqual(pg.js("window.__fathomErrors"), [])
+
+    def test_unknown_mentions_and_open_event(self):
+        pg = self.panel("d", scripts=[CAPTURE], open_panel=False)
+        self.assertFalse(pg.js("document.getElementById('app-assistant').classList.contains('open')"))
+        # a view opens the Helper in Draft mode for a room (page-room.js dispatches this; the module may not be loaded yet)
+        pg.js("import('/static/js/assistant-ui.js').then(function () { document.dispatchEvent(new CustomEvent('fathom:assistant-open', {detail: {mode: 'draft', room: 'broadcast'}})); })")
+        self.wait_panel(pg)
+        pg.wait_for("document.querySelector('.ast-modes') && document.querySelector('.ast-modes').getAttribute('data-mode') === 'draft'")
+        self.assertEqual(pg.js("document.querySelector('.ast-room').value"), "broadcast")
+        # nothing the drafter knows: the card lists the unknown mentions and there is no proposal
+        self.ask(pg, "a frobnicator 9000 and three widgets")
+        pg.wait_for("!!document.querySelector('.ast-draft')")
+        self.assertEqual(pg.js("document.querySelector('.ast-draft').getAttribute('data-recognised')"), "0")
+        self.assertEqual(self.text(pg, ".ast-draft-unknown"), "Couldn\u2019t place: frobnicator 9000, widgets")
+        self.assertFalse(pg.js("!!document.querySelector('.ast-proposal')"))
+        self.assertIn("couldn't recognise", self.text(pg, ".ast-a").lower().replace("\u2019", "'"))
+        # remembered per session: close, reopen with the shortcut -> still Draft mode with that room; Ask restores the placeholder
+        pg.press("Escape")
+        pg.wait_for("!document.getElementById('app-assistant').classList.contains('open')")
+        pg.press("Control+j")
+        self.wait_panel(pg)
+        self.assertEqual(pg.js("document.querySelector('.ast-modes').getAttribute('data-mode')"), "draft")
+        self.assertEqual(pg.js("document.querySelector('.ast-room').value"), "broadcast")
+        # the event with the panel already open just switches room
+        pg.js("document.dispatchEvent(new CustomEvent('fathom:assistant-open', {detail: {mode: 'draft', room: 'Chapel'}}))")
+        pg.wait_for("document.querySelector('.ast-room').value === 'chapel'")
+        pg.click(".ast-mode-btn[data-mode=ask]")
+        pg.wait_for("document.querySelector('.ast-modes').getAttribute('data-mode') === 'ask'")
+        self.assertEqual(pg.js("document.querySelector('.ast-form input').placeholder"), "Ask about your system\u2026")
+        self.assertTrue(pg.js("document.querySelector('.ast-room-wrap').hidden"))
+        self.assertEqual(pg.js("window.__fathomErrors"), [])
+
+    def test_mic_keeps_the_draft_placeholder(self):
+        pg = self.panel("m", scripts=[SR_STUB])
+        pg.wait_for("!!document.querySelector('.ast-mic')")
+        pg.click(".ast-mode-btn[data-mode=draft]")
+        pg.wait_for("document.querySelector('.ast-modes').getAttribute('data-mode') === 'draft'")
+        pg.click(".ast-mic")
+        pg.wait_for("document.querySelector('.ast-mic').classList.contains('listening')")
+        self.assertEqual(pg.js("document.querySelector('.ast-form input').placeholder"), "Listening\u2026")
+        pg.js("(function () { var r = [[{transcript: 'X32 and two K12.2'}]]; r[0].isFinal = true; window.__sr.onresult({resultIndex: 0, results: r}); })()")
+        pg.click(".ast-mic")
+        pg.wait_for("!document.querySelector('.ast-mic').classList.contains('listening')")
+        self.assertEqual(pg.js("document.querySelector('.ast-form input').value"), "X32 and two K12.2")
+        self.assertEqual(pg.js("document.querySelector('.ast-form input').placeholder"), DRAFT_PLACEHOLDER)
+        self.assertEqual(pg.js("window.__fathomErrors"), [])
+
+
 class AssistantRoles(UiCase):
     """A signed-in viewer sees the proposal card without buttons."""
 
