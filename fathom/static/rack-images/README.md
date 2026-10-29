@@ -12,9 +12,9 @@ Copied unchanged by `tools/rackula_catalog.py` from Rackula
 (<https://github.com/RackulaLives/Rackula>, MIT, commit
 `9c7af6dd28209a776aebdb92080bcf2916cd29e6`, `src/lib/assets/device-images/`).
 Only these vendor folders are bundled, to keep the package small (total
-≤ 4.5 MB): `_generic`, `apc`, `eaton`, `ac-infinity`, `ubiquiti`, `netgear`,
-`cisco`, `tp-link`, `mikrotik`, `synology`, `qnap`, `dell`, `apple`, `lenovo`,
-`supermicro`. Rackula's `_generic` folder (its own generic artwork, flattened
+≤ 4.5 MB): `generic`, `ac-infinity`, `apc`, `apple`, `cisco`, `dell`, `eaton`,
+`lenovo`, `mikrotik`, `netgear`, `qnap`, `supermicro`, `synology`, `ubiquiti`.
+Rackula's `_generic` folder (its own generic artwork, flattened
 from its `server/`, `network/`, … subfolders) ships here as `generic/`,
 because the static file route rejects path segments that start with `_` or
 `.`. Catalog entries from other vendors ship without images.
