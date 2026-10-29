@@ -60,9 +60,9 @@ components) and §6.14 (storage keys).
 `.github/workflows/ci.yml` runs on every pull request and on pushes to
 `main` (Ubuntu, Python 3.12, Node LTS, Google Chrome stable as
 `FATHOM_CHROME`): `python -m unittest discover -s tests`,
-`node --test tests/js/*.test.mjs` and `fathom selftest`, about 2 minutes
-end to end. Logs are uploaded as an artifact when a step fails. The `Tests`
-job installs `.[serve,discovery]` when the `discovery` extra exists in
+`node --test tests/js/*.test.mjs` and `fathom selftest`, about 20 minutes
+end to end (the `Tests` job has a 45-minute timeout). Logs are uploaded as
+an artifact when a step fails. The `Tests` job installs `.[serve,discovery]` when the `discovery` extra exists in
 `pyproject.toml`, else `.[serve]`.
 
 - **Approve PR** posts an approving review from `github-actions[bot]` on
@@ -110,7 +110,7 @@ with `pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
  changes need only a reload. The editor UI is at `/` (there is no `/ui`).
 - **Backend tests:**
   `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -q`
-  (881 tests, about 16 min, most of it the `test_ui_*.py` Chrome suites; all
+  (968 tests, about 18 min, most of it the `test_ui_*.py` Chrome suites; all
   pass with one skip when the `discovery` extra is installed, as in CI). This
   VM installs only `.[dev,serve]`, so two discovery tests skip and
   `test_discovery.ActiveGuard.test_snmp_pacer_counts_and_pauses` errors (no
@@ -124,7 +124,7 @@ with `pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
   `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -p test_backup.py -v`
   (not `python -m unittest tests.test_backup`: the `discovery` extra installs
   `x690`, whose stray top-level `tests` package shadows ours).
-- **Frontend tests:** `node --test tests/js/*.test.mjs` (567 tests; pass the
+- **Frontend tests:** `node --test tests/js/*.test.mjs` (590 tests; pass the
   files, the bare directory form fails on recent Node).
 - **End-to-end check:** `.venv/bin/fathom selftest`.
 - **Calling the API with curl:** mutating requests need `X-Fathom: 1`

@@ -27,6 +27,8 @@ const NOUNS = {
   problem: { one: 'problem', many: 'problems' },
 };
 const TAB_KIND = { devices: 'device', cables: 'cable', racks: 'rack', plans: 'floorplan', procedures: 'page' };
+// GET /api/v2/starters is static per server; fetched once per page load.
+let starterCache = null;
 
 function list(v) {
   return Array.isArray(v) ? v : [];
@@ -294,6 +296,116 @@ export function mount(el, ctx) {
     }).catch(function (e) { toast((e && e.message) || 'Could not add the device', 'err'); });
   }
 
+  // ---------------------------------------------------------- add room from starter (P3C)
+
+  function errText(e, fallback) {
+    if (e && (e.code === 'locked' || e.status === 423)) return 'Editing is locked \u2014 the room was not added';
+    return (e && e.message) || fallback;
+  }
+
+  function loadStarters() {
+    if (starterCache) return Promise.resolve(starterCache);
+    if (!ctx.api || typeof ctx.api.request !== 'function') return Promise.reject(new Error('Starters need a connection to the server'));
+    return ctx.api.request('GET', 'api/v2/starters').then(function (r) {
+      starterCache = list(r && r.data && r.data.starters);
+      return starterCache;
+    });
+  }
+
+  function starterCounts(s) {
+    return [plural(s.devices || 0, NOUNS.device), plural(s.cables || 0, NOUNS.cable), plural(s.racks || 0, NOUNS.rack)].join(DOT);
+  }
+
+  function openStarterDialog() {
+    if (typeof ctx.openDialog !== 'function' || !ctx.project) return;
+    const S2 = { starters: [], selected: '', dirty: false, busy: false, dlg: null };
+    const listEl = h('div', { class: 'pr-starters', role: 'radiogroup', 'aria-label': 'Starter' }, skeleton('list'));
+    const nameInput = h('input', { type: 'text', class: 'pr-starter-name', id: 'pr-starter-name', maxlength: '80', autocomplete: 'off',
+      oninput: function () { S2.dirty = true; } });
+    const hint = h('p', { class: 'pr-starter-hint' }, 'The starter\u2019s devices, racks, cables, network and its power-up procedure are copied into a new room; ids are prefixed with the room so a starter can be added more than once.');
+    const errBox = h('div', { class: 'pr-starter-error', hidden: true });
+
+    function pick(id) {
+      S2.selected = id;
+      Array.prototype.forEach.call(listEl.querySelectorAll('.pr-starter'), function (card) {
+        const on = card.getAttribute('data-starter') === id;
+        card.setAttribute('aria-checked', on ? 'true' : 'false');
+        card.classList.toggle('pr-starter-on', on);
+      });
+      const s = S2.starters.filter(function (x) { return x.id === id; })[0];
+      if (s && (!S2.dirty || !nameInput.value.trim())) { nameInput.value = s.label || s.room_name || ''; S2.dirty = false; }
+    }
+
+    function card(s) {
+      return h('button', {
+        type: 'button', class: 'pr-starter', role: 'radio', 'aria-checked': 'false', 'data-starter': s.id,
+        onclick: function () { pick(s.id); },
+      }, [
+        h('span', { class: 'pr-starter-head' }, [h('span', { class: 'pr-starter-label' }, s.label || s.id), h('span', { class: 'pr-starter-counts' }, starterCounts(s))]),
+        h('span', { class: 'pr-starter-blurb' }, str(s.blurb)),
+        h('span', { class: 'pr-starter-tags' }, list(s.tags).map(function (t) { return h('span', { class: 'chip' }, t); })),
+      ]);
+    }
+
+    function showError(e, fallback) {
+      errBox.textContent = '';
+      errBox.appendChild(inlineError({ status: e && e.status, message: errText(e, fallback) }, null, { compact: true }));
+      errBox.hidden = false;
+    }
+
+    loadStarters().then(function (rows) {
+      S2.starters = rows;
+      listEl.textContent = '';
+      if (!rows.length) { listEl.appendChild(emptyState({ title: 'No starters are installed.' })); return; }
+      rows.forEach(function (s) { listEl.appendChild(card(s)); });
+      pick(rows[0].id);
+    }).catch(function (e) {
+      listEl.textContent = '';
+      listEl.appendChild(inlineError(e, function () { starterCache = null; S2.dlg && S2.dlg.close(null); openStarterDialog(); }, { compact: true }));
+    });
+
+    function submit() {
+      const name = nameInput.value.trim();
+      if (!S2.selected || !name || S2.busy) { if (!name) nameInput.focus(); return false; }
+      S2.busy = true;
+      errBox.hidden = true;
+      const btn = S2.dlg && S2.dlg.box.querySelector('footer button.primary');
+      if (btn) { btn.disabled = true; btn.textContent = 'Adding\u2026'; }
+      const starter = S2.starters.filter(function (x) { return x.id === S2.selected; })[0] || {};
+      ctx.api.request('POST', 'api/v2/projects/' + encodeURIComponent(ctx.project) + '/rooms/from-starter', { starter: S2.selected, name: name }).then(function (r) {
+        const out = (r && r.data) || {};
+        const reload = typeof ctx.reload === 'function' ? ctx.reload() : Promise.resolve(null);
+        return Promise.resolve(reload).catch(function () { return null; }).then(function () {
+          if (S2.dlg) S2.dlg.close(out.room || null);
+          toast('Added room ' + name + ' from ' + (starter.label || S2.selected) + ' (' + starterCounts(out.info || starter) + ')', 'ok');
+          if (out.room && !S.destroyed) go({ view: 'rooms', id: out.room, room: out.room, tab: 'overview', query: {} });
+        });
+      }).catch(function (e) {
+        S2.busy = false;
+        if (btn) { btn.disabled = false; btn.textContent = 'Add room'; }
+        showError(e, 'Could not add the room');
+      });
+      return false;
+    }
+
+    ctx.openDialog({
+      title: 'Add room from starter',
+      wide: true,
+      body: h('div', { class: 'pr-starter-dialog' }, [
+        hint,
+        listEl,
+        h('div', { class: 'pr-starter-form' }, [h('label', { for: 'pr-starter-name' }, 'Room name'), nameInput]),
+        errBox,
+      ]),
+      onOpen: function (d) {
+        S2.dlg = d;
+        d.box.classList.add('pr-starter-box');
+        nameInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+      },
+      buttons: [{ label: 'Cancel', value: null }, { label: 'Add room', primary: true, validate: submit, value: null }],
+    });
+  }
+
   function addRack(roomId) {
     if (typeof ctx.prompt !== 'function') return;
     Promise.resolve(ctx.prompt('Rack name', 'Rack', { title: 'Add rack', ok: 'Add rack' })).then(function (name) {
@@ -407,8 +519,12 @@ export function mount(el, ctx) {
     const rows = landingRows();
     const lede = h('p', { class: 'pr-lede' }, plural(rows.length, NOUNS.room) + (venueCount === 1 ? DOT + (list(d.venues)[0].name || '') : ''));
     const host = h('div', { class: 'pr-landing-table' });
+    const actions = h('div', { class: 'pr-landing-actions' });
+    if (!readOnly() && ctx.api && typeof ctx.openDialog === 'function') {
+      actions.appendChild(h('button', { type: 'button', class: 'pr-add-starter', 'data-action': 'add-starter', onclick: openStarterDialog }, 'Add room from starter\u2026'));
+    }
     root.appendChild(h('div', { class: 'pr-landing' }, [
-      h('div', { class: 'pr-landing-head' }, [h('h1', { class: 'pr-title' }, [h('span', { class: 'pr-glyph', 'aria-hidden': 'true' }, GLYPH), 'Rooms']), lede]),
+      h('div', { class: 'pr-landing-head' }, [h('h1', { class: 'pr-title' }, [h('span', { class: 'pr-glyph', 'aria-hidden': 'true' }, GLYPH), 'Rooms']), lede, actions]),
       host,
     ]));
     const num = function (key, header, hide) {

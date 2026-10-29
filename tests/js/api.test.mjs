@@ -280,3 +280,52 @@ T('ChangeQueue drops every queued op on 423 locked and reloads the doc', async (
     mock.timers.reset();
   }
 });
+
+// ---- P3B: scenes (SPEC §6.15, §5.6 "Scenes")
+
+T('scene methods hit the §5.6 scene routes with X-Fathom', async () => {
+  const f = fakeFetch((call) => jsonResponse(call.method === 'POST' && /\/scenes$/.test(call.url) ? 201 : 200, { ok: true }));
+  const a = api.createApi({ base: '/', fetchImpl: f });
+  await a.scenes('my show');
+  assert.equal(f.calls[0].method, 'GET'); assert.equal(f.calls[0].url, '/api/v2/projects/my%20show/scenes');
+  await a.createScene('my show', { name: 'Christmas', note: '', copy_from: 'sc-00000001', activate: true });
+  assert.equal(f.calls[1].method, 'POST'); assert.equal(f.calls[1].url, '/api/v2/projects/my%20show/scenes');
+  assert.deepEqual(JSON.parse(f.calls[1].body), { name: 'Christmas', note: '', copy_from: 'sc-00000001', activate: true });
+  assert.equal(f.calls[1].headers.get('X-Fathom'), '1');
+  assert.match(f.calls[1].headers.get('Content-Type') || '', /application\/json/);
+  await a.patchScene('my show', 'sc-00000001', { name: 'Xmas', note: 'choir' });
+  assert.equal(f.calls[2].method, 'PATCH'); assert.equal(f.calls[2].url, '/api/v2/projects/my%20show/scenes/sc-00000001');
+  assert.deepEqual(JSON.parse(f.calls[2].body), { name: 'Xmas', note: 'choir' });
+  await a.deleteScene('my show', 'sc-00000001');
+  assert.equal(f.calls[3].method, 'DELETE'); assert.equal(f.calls[3].url, '/api/v2/projects/my%20show/scenes/sc-00000001');
+  await a.activateScene('my show', 'sc-00000001');
+  assert.equal(f.calls[4].method, 'POST'); assert.equal(f.calls[4].url, '/api/v2/projects/my%20show/scenes/sc-00000001/activate');
+  assert.equal(f.calls[4].body, '{}', 'activate posts an empty JSON object');
+  await a.activateScene('my show', 'base');
+  assert.equal(f.calls[5].url, '/api/v2/projects/my%20show/scenes/base/activate', 'sid may be the literal base');
+  await a.activateScene('my show');
+  assert.equal(f.calls[6].url, '/api/v2/projects/my%20show/scenes/base/activate', 'no sid means Base');
+  await a.saveScene('my show', 'sc-00000001');
+  assert.equal(f.calls[7].method, 'POST'); assert.equal(f.calls[7].url, '/api/v2/projects/my%20show/scenes/sc-00000001/save');
+  await a.sceneDiff('my show', 'sc-00000001', 'base');
+  assert.equal(f.calls[8].method, 'GET'); assert.equal(f.calls[8].url, '/api/v2/projects/my%20show/scenes/sc-00000001/diff?against=base');
+  await a.sceneDiff('my show', 'sc-00000001');
+  assert.equal(f.calls[9].url, '/api/v2/projects/my%20show/scenes/sc-00000001/diff?against=base', 'against defaults to base');
+  await a.sceneDiff('my show', 'sc-00000001', 'sc-00000002');
+  assert.equal(f.calls[10].url, '/api/v2/projects/my%20show/scenes/sc-00000001/diff?against=sc-00000002');
+  await a.sceneDoc('my show', 'sc-00000001');
+  assert.equal(f.calls[11].method, 'GET'); assert.equal(f.calls[11].url, '/api/v2/projects/my%20show/scenes/sc-00000001/doc');
+  await a.sceneDoc('my show', 'base');
+  assert.equal(f.calls[12].url, '/api/v2/projects/my%20show/scenes/base/doc');
+  f.calls.forEach((c) => assert.equal(c.headers.get('X-Fathom'), '1'));
+});
+
+T('scene calls surface 404 and 423 as ApiError with status and code', async () => {
+  const f = fakeFetch((call) => {
+    if (/\/activate$/.test(call.url)) return jsonResponse(423, { error: 'locked', code: 'locked', details: { locked_by: 'sam' } });
+    return jsonResponse(404, { error: 'not found', code: 'not_found' });
+  });
+  const a = api.createApi({ base: '/', fetchImpl: f });
+  await assert.rejects(a.scenes('my show'), (e) => e instanceof api.ApiError && e.status === 404);
+  await assert.rejects(a.activateScene('my show', 'sc-00000001'), (e) => e instanceof api.ApiError && e.status === 423 && api.isLockedError(e));
+});

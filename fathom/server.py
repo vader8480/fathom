@@ -1253,6 +1253,41 @@ def r_projects_v2(req: Request) -> Response:
     return Response.json({"projects": rows})
 
 
+# ---- room starters (phase3 P3C): bundled one-room church samples offered as project templates and as rooms to add
+
+
+@route("GET", "/api/v2/starters", role="viewer", summary="Church room starter templates", tags=["projects"])
+def r_starters(req: Request) -> Response:
+    from .starters import list_starters
+
+    return Response.json({"starters": list_starters()})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/rooms/from-starter", role="editor", summary="Add a room from a starter", tags=["projects"], body="Starter")
+def r_room_from_starter(req: Request) -> Response:
+    from .schema import diff_docs
+    from .starters import StarterError, get_starter, merge_room
+
+    pdir = _project_dir(req.params["name"])
+    body = req.json()
+    starter_id = str(body.get("starter") or "")
+    starter = get_starter(starter_id)
+    if starter is None:
+        raise ApiError(400, f"unknown starter '{starter_id}'", "bad_enum")
+    room_name = str(body.get("name") or "").strip()[:80]
+    doc, _ = _load(pdir)
+    try:
+        merged, info = merge_room(doc, starter_id, room_name or None)
+    except StarterError as exc:
+        raise ApiError(404 if exc.code == "not_found" else 400, str(exc), exc.code)
+    ops = diff_docs(doc, merged)
+    ops = _lock_guard_ops(req, doc, ops)
+    summary = f"Added room {info['name']} from starter {starter['label']}"
+    res = _server_ops(req, pdir, ops, summary, "starter")
+    return Response.json({"room": info["room"], "info": info, "revision": res["revision"], "problems": res.get("problems") or []}, 201,
+                         headers={"ETag": f'"r{res["revision"]}"'})
+
+
 @route("POST", "/api/v2/projects", role="editor", summary="Create a project", tags=["projects"], body="ProjectCreate")
 def r_projects_create_v2(req: Request) -> Response:
     body = req.json()
@@ -1481,6 +1516,211 @@ def r_code_lookup(req: Request) -> Response:
     if hit is None or not role_at_least(req.role_for(hit["project"]), "viewer"):
         raise ApiError(404, "not_found", "not_found")
     return Response.json(hit)
+
+
+# ---- scenes (phase 3 P3A, FR-SCN / §4.3.18 / §5.6 "Scenes"): named patch + placement variants
+
+_SID = r"(?P<sid>sc-[0-9a-f]{8}|base)"
+
+
+def _scene_commit(req: Request, pdir: Path, mutate: Callable[[Dict[str, Any]], Tuple[Dict[str, Any], Any, str]]) -> Tuple[Dict[str, Any], Any, Dict[str, Any]]:
+    """Load → ``mutate(doc) -> (new_doc, info, summary)`` → store as one revision (source ``scene``),
+    all under the project lock so the capture and the write see the same state; 423 while the
+    project is locked for editing (FR-USER-12), like ``/changes``."""
+    from .project import project_lock, save_doc
+
+    with project_lock(pdir):
+        doc, _ = _load(pdir)
+        settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+        if settings.get("locked") is True:
+            raise _locked_error(settings)
+        new_doc, info, summary = mutate(doc)
+        res = save_doc(new_doc, pdir, base_revision=None, author=req.username, summary=summary, source="scene")
+    return new_doc, info, res
+
+
+def _scene_or_404(doc: Dict[str, Any], sid: str) -> None:
+    from . import scenes as S
+
+    if S.find(doc, sid) is None and not (sid == S.BASE):
+        raise ApiError(404, f"scene '{sid}' not found", "not_found")
+
+
+def _scene_view(doc: Dict[str, Any], sid: str) -> Dict[str, Any]:
+    """The doc as it looks with scene ``sid`` active (nothing stored). The org eyebrow every viewer
+    page renders gets a "Scene: <name>" caption so the page says which variant it shows (the only
+    hook reachable from here without touching the renderers). 404 for an unknown scene."""
+    from . import scenes as S
+
+    try:
+        data = S.scene_data(doc, sid)
+        name = S.scene_name(doc, sid)
+    except KeyError:
+        raise ApiError(404, f"scene '{sid}' not found", "not_found")
+    out = S.apply(doc, data)
+    meta = out.get("meta") if isinstance(out.get("meta"), dict) else {}
+    out["meta"] = meta
+    org = str(meta.get("org") or "")
+    meta["org"] = f"{org} \u00b7 Scene: {name}" if org else f"Scene: {name}"
+    return out
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/scenes", role="viewer", summary="Scenes (named patch + placement variants) with their diff against Base", tags=["scenes"])
+def r_scenes(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    return Response.json({"scenes": S.summarize(doc), "active": S.active_id(doc), "revision": _rev(doc)})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/scenes", role="editor", summary="Create a scene from the current state ({name, note, copy_from, activate})", tags=["scenes"], body="Scene")
+def r_scene_create(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    body = req.json()
+    name = str(body.get("name") or "").strip()
+    if not name:
+        raise ApiError(400, "name is required", "missing_field")
+    if len(name) > S.MAX_NAME:
+        raise ApiError(400, f"name is longer than {S.MAX_NAME} characters", "bad_enum")
+    note = str(body.get("note") or "")
+    copy_from = str(body.get("copy_from") or "") or None
+    activate = body.get("activate") is True
+
+    def mutate(doc: Dict[str, Any]) -> Tuple[Dict[str, Any], Any, str]:
+        if copy_from:
+            _scene_or_404(doc, copy_from)
+        new, scene = S.create(doc, name, note=note, by=req.username, copy_from=copy_from)
+        if activate:
+            new, _ = S.activate(new, scene["id"], by=req.username)
+        return new, scene["id"], f"Created scene {name}"
+
+    new_doc, sid, res = _scene_commit(req, pdir, mutate)
+    return Response.json({"scene": S.summary_for(new_doc, sid), "revision": res["revision"]}, 201)
+
+
+@route("PATCH", r"/api/v2/projects/" + _NAME + "/scenes/" + _SID, role="editor", summary="Rename a scene / edit its note ({name, note})", tags=["scenes"], body="ScenePatch")
+def r_scene_patch(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    sid = req.params["sid"]
+    body = req.json()
+    name = body.get("name")
+    note = body.get("note")
+    if name is not None:
+        name = str(name).strip()
+        if not name:
+            raise ApiError(400, "name must not be empty", "missing_field")
+        if len(name) > S.MAX_NAME:
+            raise ApiError(400, f"name is longer than {S.MAX_NAME} characters", "bad_enum")
+    if note is not None:
+        note = str(note)
+
+    def mutate(doc: Dict[str, Any]) -> Tuple[Dict[str, Any], Any, str]:
+        if S.find(doc, sid) is None:
+            raise ApiError(404, f"scene '{sid}' not found", "not_found")
+        old = S.scene_name(doc, sid)
+        new = S.rename(doc, sid, name=name, note=note)
+        label = f"Renamed scene {old} to {name}" if name is not None and name != old else f"Edited scene {old}"
+        return new, S.find(new, sid)["id"], label  # type: ignore[index]
+
+    new_doc, real_id, res = _scene_commit(req, pdir, mutate)
+    return Response.json({"scene": S.summary_for(new_doc, real_id), "revision": res["revision"]})
+
+
+@route("DELETE", r"/api/v2/projects/" + _NAME + "/scenes/" + _SID, role="editor", summary="Delete a scene (the active one is left for Base first; Base cannot be deleted)", tags=["scenes"])
+def r_scene_delete(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    sid = req.params["sid"]
+
+    def mutate(doc: Dict[str, Any]) -> Tuple[Dict[str, Any], Any, str]:
+        if S.is_base(doc, sid):
+            raise ApiError(400, "the Base scene cannot be deleted", "bad_request")
+        if S.find(doc, sid) is None:
+            raise ApiError(404, f"scene '{sid}' not found", "not_found")
+        name = S.scene_name(doc, sid)
+        return S.delete(doc, sid), None, f"Deleted scene {name}"
+
+    new_doc, _, res = _scene_commit(req, pdir, mutate)
+    return Response.json({"ok": True, "revision": res["revision"], "active": S.active_id(new_doc)})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/scenes/" + _SID + "/activate", role="editor", summary="Switch to a scene (sid may be 'base'): captures the current state into the scene being left", tags=["scenes"])
+def r_scene_activate(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    sid = req.params["sid"]
+    doc, _ = _load(pdir)
+    if sid != S.BASE and S.find(doc, sid) is None:
+        raise ApiError(404, f"scene '{sid}' not found", "not_found")
+    if S.active_id(doc) == (S.BASE if S.is_base(doc, sid) else sid):
+        empty = S.capture(doc)
+        return Response.json({"active": S.active_id(doc), "from": S.active_id(doc), "diff": S.diff(empty, empty), "revision": _rev(doc)})
+
+    def mutate(d: Dict[str, Any]) -> Tuple[Dict[str, Any], Any, str]:
+        try:
+            new, info = S.activate(d, sid, by=req.username)
+        except KeyError:
+            raise ApiError(404, f"scene '{sid}' not found", "not_found")
+        return new, info, f"Switched to scene {S.scene_name(new, info['to'])} ({info['diff']['text']})"
+
+    new_doc, info, res = _scene_commit(req, pdir, mutate)
+    return Response.json({"active": S.active_id(new_doc), "from": info["from"], "diff": info["diff"], "revision": res["revision"]})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/scenes/" + _SID + "/save", role="editor", summary="Save the current state into a scene (overwrites its stored data)", tags=["scenes"])
+def r_scene_save(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    sid = req.params["sid"]
+
+    def mutate(doc: Dict[str, Any]) -> Tuple[Dict[str, Any], Any, str]:
+        if S.find(doc, sid) is None:
+            raise ApiError(404, f"scene '{sid}' not found", "not_found")
+        new = S.save_current(doc, sid)
+        return new, S.find(new, sid)["id"], f"Saved current state into scene {S.scene_name(new, sid)}"  # type: ignore[index]
+
+    new_doc, real_id, res = _scene_commit(req, pdir, mutate)
+    return Response.json({"scene": S.summary_for(new_doc, real_id), "revision": res["revision"]})
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/scenes/" + _SID + "/diff", role="viewer", summary="Differences of a scene against another (?against=<sid|base>, default base)", tags=["scenes"])
+def r_scene_diff(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    sid = req.params["sid"]
+    against = str(req.query.get("against") or S.BASE)
+    try:
+        out = S.diff(S.scene_data(doc, against), S.scene_data(doc, sid))
+    except KeyError as exc:
+        raise ApiError(404, f"scene '{exc.args[0] if exc.args else sid}' not found", "not_found")
+    out["scene"] = sid
+    out["against"] = against
+    out["revision"] = _rev(doc)
+    return Response.json(out)
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/scenes/" + _SID + "/doc", role="viewer", summary="The project as it would look with that scene active (read-only preview, nothing changes)", tags=["scenes"])
+def r_scene_doc(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    sid = req.params["sid"]
+    try:
+        out = S.apply(doc, S.scene_data(doc, sid))
+    except KeyError:
+        raise ApiError(404, f"scene '{sid}' not found", "not_found")
+    return Response.json({"doc": out, "scene": sid, "revision": _rev(doc)})
 
 
 def _not_found_page(req: Request, title: str, message: str) -> Response:
@@ -3508,8 +3748,12 @@ def _render_room_map(req: Request, pdir: Path, doc: Dict[str, Any], room: Option
 
 
 def _viewer_project(req: Request) -> Tuple[Path, Dict[str, Any]]:
+    """Project folder and doc for a viewer page; ``?scene=<sid|base>`` renders that scene (§5.13, 404 unknown)."""
     pdir = _project_dir(req.params["name"])
     doc, _ = _load(pdir)
+    sid = str(req.query.get("scene") or "").strip()
+    if sid:
+        doc = _scene_view(doc, sid)
     return pdir, doc
 
 
