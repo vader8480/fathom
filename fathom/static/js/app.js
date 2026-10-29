@@ -34,6 +34,7 @@ export const VIEWS = {
   racks: { label: 'Racks', module: './rack.js', export: 'mount', css: ['plan.css', 'explorer.css', 'entity-header.css', 'datatable.css', 'rack.css'] },
   devices: { label: 'Devices', module: './page-device.js', export: 'mount', css: PAGE_CSS.concat(['page-device.css']) },
   inventory: { label: 'Inventory', module: './inventory.js', export: 'mount', css: ['plan.css', 'datatable.css', 'inventory.css'] },
+  files: { label: 'Files', module: './files.js', export: 'mount', css: ['plan.css', 'datatable.css', 'files.css'] },
   schedules: { label: 'Schedules', module: './schedules.js', export: 'mount', css: ['plan.css', 'datatable.css', 'schedules.css'] },
   imports: { label: 'Imports', module: './views-admin.js', export: 'mountImports', css: ADMIN_CSS },
   discovery: { label: 'Discovery', module: './views-discovery.js', export: 'mount', css: ['datatable.css', 'discovery.css'] },
@@ -48,7 +49,7 @@ const BOOT_CSS = ['drawer.css', 'inspector.css', 'search.css', 'feedback.css'];
 // kind; patch and plan draw cards on a canvas, so 'cards' is the closest shape.
 const SKELETON_KIND = {
   home: 'cards', patch: 'cards', plan: 'cards', map: 'cards', sop: 'list',
-  table: 'table', inventory: 'table', schedules: 'table', imports: 'table', discovery: 'table',
+  table: 'table', inventory: 'table', files: 'table', schedules: 'table', imports: 'table', discovery: 'table',
   history: 'table', builds: 'table', settings: 'table',
 };
 const PAGE_VIEWS = { devices: true, rooms: true, racks: true };

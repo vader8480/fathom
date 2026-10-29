@@ -18,6 +18,9 @@ Python WSGI server (`fathom/server.py`) plus a no-build ES-module frontend in
 - Engine modules are imported lazily inside handlers; follow that pattern.
 - All data lives under `FATHOM_DATA` (default `~/.fathom`; `/data` in Docker).
   Writes are atomic and per-project locked (`project.project_lock`).
+ `DELETE /api/v2/projects/<n>` moves a project to `<data>/trash/` (30-day
+ retention; `fathom trash list|restore|purge`); `?purge=1` deletes for good.
+ Devices get an 8-char `short_code` on save (`/c/<code>` resolves it).
 
 ## Frontend conventions
 
@@ -107,7 +110,7 @@ with `pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
  changes need only a reload. The editor UI is at `/` (there is no `/ui`).
 - **Backend tests:**
   `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -q`
-  (800 tests, about 15 min, most of it the `test_ui_*.py` Chrome suites; all
+  (881 tests, about 16 min, most of it the `test_ui_*.py` Chrome suites; all
   pass with one skip when the `discovery` extra is installed, as in CI). This
   VM installs only `.[dev,serve]`, so two discovery tests skip and
   `test_discovery.ActiveGuard.test_snmp_pacer_counts_and_pauses` errors (no

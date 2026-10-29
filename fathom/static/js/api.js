@@ -2,6 +2,7 @@
 // them with base_revision, handles rebases, conflicts and offline queueing.
 
 import { touchedRefs } from './model-core.js';
+import { formatShortCode, parseShortCode } from './search-core.js';
 
 export class ApiError extends Error {
   constructor(message, status, code, details) {
@@ -83,7 +84,20 @@ export function createApi(opts) {
     logout: function () { return send('DELETE', 'api/v2/session'); },
     listProjects: function () { return get('api/v2/projects'); },
     createProject: function (o) { return send('POST', 'api/v2/projects', { name: o.name, template: o.template || 'blank', org: o.org || '' }); },
-    deleteProject: function (name) { return send('DELETE', proj(name), undefined, { confirm: name }); },
+    // Moves the project to the trash (restorable from Settings › Trash); {purge: true} deletes it for good.
+    deleteProject: function (name, o) { o = o || {}; return send('DELETE', proj(name), undefined, { confirm: name, purge: o.purge ? 1 : '' }); },
+    listTrash: function () { return get('api/v2/trash'); },
+    restoreTrash: function (name) { return send('POST', 'api/v2/trash/' + enc(name) + '/restore', {}); },
+    purgeTrash: function (name) { return send('DELETE', 'api/v2/trash/' + enc(name)); },
+    lookupCode: function (code) { return get('api/v2/codes/' + enc(parseShortCode(code) || String(code || '').trim())); },
+    // Absolute link for a device short code (the QR / label target): <origin>/c/XXXX-XXXX.
+    codeLink: function (code) {
+      const path = base + 'c/' + formatShortCode(code);
+      if (typeof location === 'undefined' || !location.href) return path.charAt(0) === '/' ? path : '/' + path;
+      try { return new URL(path, location.href).href; } catch (e) { return path; }
+    },
+    labelPresets: function () { return get('api/v2/labels/presets'); },
+    deviceLabelsUrl: function (name, params) { return url(proj(name) + '/labels/devices', params); },
     getProject: function (name) {
       return request('GET', proj(name)).then(function (r) {
         const d = r.data || {};

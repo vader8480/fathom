@@ -681,3 +681,27 @@ T('store events: selection, highlight, filter, room, overlay, revision', () => {
   st.commit([{ op: 'put', coll: 'devices', id: 'zz', value: { id: 'zz', name: 'ZZ', kind: 'other', ports: [] } }], 'add');
   assert.ok(st.index.byId.devices.zz, m('§6.2', S, 'index invalidated on change'));
 });
+
+// ---- P1C: containers and accessories (FR-INV-11, FR-INV-12)
+
+T('containerDevices / containerContents / isAccessory', () => {
+  const doc = fx();
+  doc.devices.push({ id: 'case-1', name: 'FOH case', kind: 'container', room: 'main', ports: [] });
+  doc.devices.push({ id: 'case-2', name: 'Spare case', kind: 'container', room: 'main' });
+  doc.devices.push({ id: 'ghost-case', name: 'Auto', kind: 'container', room: 'main', auto: true });
+  doc.devices.find((d) => d.id === 'atem-mini').container = 'case-1';
+  doc.devices.find((d) => d.id === 'sound-board').container = 'case-1';
+  doc.devices.push({ id: 'adapter', name: 'HDMI adapter', kind: 'other', room: 'main', ports: [], container: 'case-1' });
+  doc.devices.push({ id: 'loop', name: 'Loop', kind: 'container', room: 'main', container: 'loop' });
+  assert.deepEqual(mc.containerDevices(doc).map((d) => d.id), ['case-1', 'case-2', 'loop'], 'kind container, auto devices skipped');
+  assert.deepEqual(mc.containerContents(doc, 'case-1').map((d) => d.id).sort(), ['adapter', 'atem-mini', 'sound-board']);
+  assert.deepEqual(mc.containerContents(doc, 'case-2'), []);
+  assert.deepEqual(mc.containerContents(doc, 'loop'), [], 'a container never holds itself');
+  assert.deepEqual(mc.containerContents(doc, ''), []);
+  assert.deepEqual(mc.containerContents(null, 'case-1'), []);
+  assert.deepEqual(mc.containerDevices(null), []);
+  assert.equal(mc.isAccessory(doc.devices.find((d) => d.id === 'adapter')), true, 'no ports and not a container');
+  assert.equal(mc.isAccessory(doc.devices.find((d) => d.id === 'case-1')), false, 'containers are not accessories');
+  assert.equal(mc.isAccessory(doc.devices.find((d) => d.id === 'atem-mini')), false, 'devices with ports are not accessories');
+  assert.equal(mc.isAccessory(null), false);
+});

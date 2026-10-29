@@ -20,6 +20,7 @@ def _doc() -> dict:
     """A tiny project with a manual CL5, a second CL5 that mirrors a Dante import,
     and everything that can point at a device."""
     d = schema.new_doc("Test")
+    d["settings"]["short_codes"] = False  # golden comparisons below; the store would otherwise add device short codes on every write
     d["venues"] = [{"id": "v", "name": "Venue"}]
     d["rooms"] = [{"id": "main", "name": "Main", "venue": "v", "flow": {"extra_cards": [{"id": "card-1", "device": "cl5-dante", "title": "Dante card"}]}}]
     d["racks"] = [{"id": "rk", "name": "FOH rack", "units": 20}]

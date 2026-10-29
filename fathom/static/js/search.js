@@ -9,7 +9,7 @@ import { h, on } from './dom.js';
 import { layoutFor, buildRoute, mergeRoute } from './router-core.js';
 import {
   CATEGORIES, kindsFor, categorize, groupHits, augmentLocal, mergeHits, roleFilter,
-  targetFor, recentHits, recentType, moveActive, noMatchText,
+  targetFor, recentHits, recentType, moveActive, noMatchText, isShortCodeQuery, codeHit,
 } from './search-core.js';
 
 const DEBOUNCE_MS = 150;
@@ -257,13 +257,20 @@ function create(ctx, opts) {
     if (offline(ctx)) { local(); return; }
     busy = true;
     root.setAttribute('aria-busy', 'true');
-    ctx.api.search(ctx.project, q, { limit: LIMIT, kinds: kindsFor(cat) }).then(function (r) {
+    // A short code (XXXX-XXXX) is looked up in parallel; a 200 leads the list, anything else adds nothing.
+    const codeKinds = kindsFor(cat);
+    const lookup = isShortCodeQuery(q) && typeof ctx.api.lookupCode === 'function' && (!codeKinds || codeKinds.indexOf('device') >= 0)
+      ? ctx.api.lookupCode(q).then(function (res) { return codeHit(doc, res, q); }, function () { return null; })
+      : Promise.resolve(null);
+    Promise.all([ctx.api.search(ctx.project, q, { limit: LIMIT, kinds: codeKinds }), lookup]).then(function (both) {
       if (closed || my !== seq) return;
       done();
+      const r = both[0];
       let hits = withStatus((r && Array.isArray(r.hits)) ? r.hits : [], doc);
       if (cat === 'all' || cat === 'networks') {
         hits = mergeHits(hits, localHits(doc, q, 'networks').filter(function (x) { return x.kind === 'network'; }));
       }
+      if (both[1]) hits = mergeHits([both[1]], hits);
       show(roleFilter(hits, ctx.role), q, cat, false);
     }, local);
   }

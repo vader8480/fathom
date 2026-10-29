@@ -223,7 +223,8 @@ T('6. SECTIONS, roles: sectionsFor / canSee / sectionOf / sectionRoot', () => {
   assert.equal(rc.SECTIONS.find((s) => s.key === 'home').glyph, '\u2302');
   for (const s of rc.SECTIONS) assert.deepEqual(Object.keys(s), ['key', 'label', 'glyph', 'views', 'nav'], s.key);
   for (const s of rc.SECTIONS) for (const v of s.views) assert.equal(rc.VIEW_ROLES[v], 'viewer', v);
-  assert.deepEqual(rc.TAB_ROLES, { settings: { users: 'admin', backups: 'admin', sharing: 'editor' } });
+  assert.deepEqual(rc.TAB_ROLES, { settings: { users: 'admin', backups: 'admin', sharing: 'editor', trash: 'admin' } });
+  assert.deepEqual(rc.SECTIONS.find((s) => s.key === 'devices').views, ['devices', 'inventory', 'files'], 'P1C: the Files view sits in the devices section');
 
   for (const role of ['viewer', 'editor', 'admin']) assert.equal(sectionsFor(role).length, 8, role);
   assert.deepEqual(sectionsFor('viewer').map((s) => s.views), rc.SECTIONS.map((s) => s.views));
@@ -234,6 +235,9 @@ T('6. SECTIONS, roles: sectionsFor / canSee / sectionOf / sectionRoot', () => {
   assert.equal(canSee('settings', 'editor', 'sharing'), true);
   assert.equal(canSee('settings', 'editor', 'users'), false);
   assert.equal(canSee('settings', 'admin', 'users'), true);
+  assert.equal(canSee('settings', 'editor', 'trash'), false, 'settings/trash is admin only');
+  assert.equal(canSee('settings', 'admin', 'trash'), true);
+  assert.equal(canSee('files', 'viewer'), true, 'viewers can list files');
   assert.equal(canSee('settings', 'viewer'), true);
   assert.equal(canSee('settings', 'viewer', 'networks'), true);
   assert.equal(canSee('patch', 'viewer'), true);
@@ -241,6 +245,7 @@ T('6. SECTIONS, roles: sectionsFor / canSee / sectionOf / sectionRoot', () => {
 
   assert.equal(sectionOf('table'), 'patch');
   assert.equal(sectionOf('inventory'), 'devices');
+  assert.equal(sectionOf('files'), 'devices');
   assert.equal(sectionOf('builds'), 'schedules');
   assert.equal(sectionOf('json'), 'data');
   assert.equal(sectionOf('nosuchview'), 'data');

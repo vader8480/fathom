@@ -16,6 +16,8 @@
   fathom migrate <project> [--write]                        v1 → v2 summary (and save)
   fathom user add|list|passwd|role|remove|disable|enable    users and roles
   fathom backup create [--include-builds] | list | restore <zip|name> [--yes]   whole-server backups
+  fathom trash list | restore <name> | purge <name> | purge --expired   deleted projects (kept 30 days)
+  fathom codes backfill [project]                           give every device a short code (labels)
   fathom library list [-q Q] | show <id>                    equipment templates
   fathom schedule <kind> <project> [--room R] [--csv]       patch, cables, ip, dmx, bom, inventory, racks, labels
   fathom tags <project> [--scope all] [--apply]             auto cable tags (preview, then apply)
@@ -578,6 +580,60 @@ def cmd_backup(a: argparse.Namespace) -> None:
         _die(str(exc))
 
 
+def cmd_trash(a: argparse.Namespace) -> None:
+    from . import project as P
+
+    if a.action == "list":
+        rows = P.list_trashed()
+        if not rows:
+            print(f"trash is empty ({display_path(P.trash_root())}, kept {P.TRASH_RETENTION_DAYS} days)")
+        for e in rows:
+            print(f"{e['dir']}\t{e['name']}\t{e['trashed_at']}\t{e['trashed_by'] or '-'}\t{e['rooms']} rooms\t{e['devices']} devices")
+        return
+    if a.action == "purge" and a.expired:
+        gone = P.purge_expired(a.days)
+        print(f"ok: purged {len(gone)} expired project(s)" + (": " + ", ".join(gone) if gone else ""))
+        return
+    if not a.name:
+        _die(f"trash {a.action} <name> (names: fathom trash list)")
+    try:
+        if a.action == "restore":
+            info = P.trash_info(a.name) or {}
+            P.restore_project(a.name)
+            print(f"ok: restored {info.get('name') or a.name}")
+        else:
+            P.purge_project(a.name)
+            print(f"ok: purged {a.name}")
+    except FileNotFoundError as exc:
+        _die(str(exc))
+    except P.ProjectExists as exc:
+        _die(f"{exc} (rename or trash it first)")
+
+
+def cmd_codes(a: argparse.Namespace) -> None:
+    from . import project as P, schema
+
+    if a.action != "backfill":
+        _die("codes backfill [project]")
+    names = [a.project] if a.project else list_projects()
+    total = 0
+    for name in names:
+        try:
+            doc, pdir = P.load_doc(name)
+        except SystemExit as exc:
+            _die(str(exc).replace("error: ", ""))
+        if not schema.short_codes_enabled(doc):
+            print(f"{name}: short codes are off (settings.short_codes = false)")
+            continue
+        work = schema.normalize(doc)
+        n = schema.ensure_short_codes(work)
+        if n:
+            P.save_doc(work, pdir, base_revision=None, author=getpass.getuser(), summary=f"Assigned {n} short code(s)", source="cli")
+        total += n
+        print(f"{name}: {n} code(s) assigned, {sum(1 for d in work.get('devices') or [] if isinstance(d, dict))} devices")
+    print(f"ok: {total} code(s) assigned in {len(names)} project(s)")
+
+
 def cmd_library(a: argparse.Namespace) -> None:
     from .library import get_template, list_templates, ports_summary
 
@@ -1010,6 +1066,18 @@ def main(argv=None) -> None:
     s.add_argument("--yes", action="store_true", help="restore: do not ask for confirmation")
     s.add_argument("--no-safety", action="store_true", help="restore: skip the pre-restore backup of the current data")
     s.set_defaults(func=cmd_backup)
+
+    s = sub.add_parser("trash", help="deleted projects (FATHOM_DATA/trash, kept 30 days)")
+    s.add_argument("action", choices=["list", "restore", "purge"])
+    s.add_argument("name", nargs="?", help="trash entry name from 'trash list'")
+    s.add_argument("--expired", action="store_true", help="purge: delete every entry older than --days")
+    s.add_argument("--days", type=int, default=30, help="purge --expired: retention in days (default 30)")
+    s.set_defaults(func=cmd_trash)
+
+    s = sub.add_parser("codes", help="device short codes (the XXXX-XXXX printed on labels)")
+    s.add_argument("action", choices=["backfill"])
+    s.add_argument("project", nargs="?", help="one project (default: every project in the data dir)")
+    s.set_defaults(func=cmd_codes)
 
     s = sub.add_parser("library", help="equipment templates")
     s.add_argument("action", choices=["list", "show"])

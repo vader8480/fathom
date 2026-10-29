@@ -472,6 +472,29 @@ function rowKey(kind, r) {
 
 function money(v) { return v === '' || v == null ? '' : Number(v).toFixed(2); }
 
+// Device label presets (Brady M511 cartridge sizes, §5.8 GET /api/v2/labels/presets).
+// Fetched once per page; api.request is the generic helper (api.js is not ours to extend).
+let LABEL_PRESETS = null;
+
+export function presetOptionText(p) {
+  return p.label + ' \u2014 ' + Number(p.width_mm) + '\u00d7' + Number(p.height_mm) + ' mm';
+}
+
+function fetchLabelPresets(api) {
+  if (LABEL_PRESETS) return Promise.resolve(LABEL_PRESETS);
+  let p;
+  if (api && typeof api.request === 'function') {
+    p = api.request('GET', 'api/v2/labels/presets').then(function (r) { return r.data; });
+  } else {
+    p = fetch(((api && api.base) || '') + 'api/v2/labels/presets', {credentials: 'same-origin'}).then(function (r) { return r.json(); });
+  }
+  return p.then(function (j) {
+    if (!j || !Array.isArray(j.presets)) throw new Error('bad presets');
+    LABEL_PRESETS = j;
+    return j;
+  });
+}
+
 export function mount(el, ctx) {
   const store = ctx.store;
   const vocab = ctx.vocab || store.vocab || {};
@@ -480,7 +503,9 @@ export function mount(el, ctx) {
   // harness, hosts without a router) tabs switch in memory.
   const ROUTED = !!(r0 && r0.view === 'schedules' && typeof ctx.navigateRoute === 'function' && typeof ctx.setParams === 'function');
   const S = {kind: (ROUTED && kindOf(r0.tab)) || 'cables', room: 'current', state: 'all', data: {}, gen: 0, reqId: 0,
-    preview: null, rows: [], byId: {}, hl: null, pending: false};
+    preview: null, rows: [], byId: {}, hl: null, pending: false,
+    // Device labels (Brady M511): preset id, scope all|room|selected, selected device ids, picker filter.
+    dl: {preset: '', scope: 'all', sel: {}, filter: '', error: ''}};
   const offs = [];
   let table = null;
   let lastPick = null;
@@ -1062,6 +1087,11 @@ export function mount(el, ctx) {
     if (ctx.api && ctx.api.scheduleUrl) {
       const url = ctx.api.scheduleUrl(ctx.project, 'labels', Object.assign({format: 'html'}, params()));
       body.appendChild(h('p', null, [h('a', {href: url, target: '_blank', rel: 'noopener', class: 'sch-btn', text: 'Open printable label sheet'})]));
+      // Device labels sit right under the cable-label controls; the (tall) cable sheet preview follows.
+      if (typeof ctx.api.url === 'function') {
+        body.appendChild(deviceLabelsSection());
+        body.appendChild(h('h3', {class: 'sch-dl-caption', text: 'Cable label sheet'}));
+      }
       body.appendChild(h('iframe', {class: 'sch-labels-frame', src: url, title: 'Cable label sheet'}));
       return;
     }
@@ -1075,6 +1105,195 @@ export function mount(el, ctx) {
       ]));
     });
     body.appendChild(grid);
+  }
+
+  // ------------------------------------------------- device labels (Brady M511)
+  // Section "Device labels" under the cable-label controls: preset, scope (all /
+  // this room / selected devices) and plain links to the html, zip and csv
+  // formats of GET …/labels/devices. State lives in S.dl so re-renders keep it.
+  function dlAllDevices() {
+    return list(doc().devices).filter(function (d) { return d && d.id != null && !d.auto; });
+  }
+
+  function dlRoomDevices() {
+    const r = room();
+    const rooms = byId(doc().rooms);
+    const devs = dlAllDevices().filter(function (d) { return r === '*' || d.room === r; });
+    devs.sort(function (a, b) {
+      const ra = roomName(rooms, a.room).toLowerCase(), rb = roomName(rooms, b.room).toLowerCase();
+      if (ra !== rb) return ra < rb ? -1 : 1;
+      const na = String(a.name || a.id).toLowerCase(), nb = String(b.name || b.id).toLowerCase();
+      return na < nb ? -1 : na > nb ? 1 : 0;
+    });
+    return devs;
+  }
+
+  function dlSelected() {
+    const ids = dlAllDevices().map(function (d) { return String(d.id); });
+    return ids.filter(function (id) { return !!S.dl.sel[id]; });
+  }
+
+  function dlScope() {
+    if (S.dl.scope === 'room' && room() === '*') return 'all';
+    return S.dl.scope;
+  }
+
+  function dlParams(format) {
+    const q = {preset: S.dl.preset || undefined, format: format};
+    const scope = dlScope();
+    if (scope === 'room') q.room = room();
+    else if (scope === 'selected') q.devices = dlSelected().join(',');
+    return q;
+  }
+
+  function dlUrl(format) {
+    return ctx.api.url('api/v2/projects/' + encodeURIComponent(ctx.project || '') + '/labels/devices', dlParams(format));
+  }
+
+  function dlCount() {
+    const scope = dlScope();
+    if (scope === 'selected') return dlSelected().length;
+    if (scope === 'room') return dlRoomDevices().length;
+    return dlAllDevices().length;
+  }
+
+  function deviceLabelsSection() {
+    const rooms = byId(doc().rooms);
+    const curRoom = room();
+    const presetSel = h('select', {id: 'sch-dl-preset', 'aria-label': 'Label size (Brady M511 cartridge)', title: 'Brady M511 cartridge size'});
+    const scopeSel = h('select', {id: 'sch-dl-scope', 'aria-label': 'Which devices to label'}, [
+      h('option', {value: 'all', text: 'All devices'}),
+      h('option', {value: 'room', text: curRoom === '*' ? 'This room' : 'This room (' + roomName(rooms, curRoom) + ')', disabled: curRoom === '*'}),
+      h('option', {value: 'selected', text: 'Selected devices\u2026'}),
+    ]);
+    scopeSel.value = dlScope();
+    const count = h('span', {id: 'sch-dl-count', class: 'sch-count', role: 'status'});
+    const preview = h('a', {id: 'sch-dl-preview', class: 'sch-btn', role: 'button', target: '_blank', rel: 'noopener', text: 'Preview'});
+    const zip = h('a', {id: 'sch-dl-zip', class: 'sch-btn', role: 'button', text: 'Download ZIP'});
+    const csv = h('a', {id: 'sch-dl-csv', class: 'sch-btn', role: 'button', text: 'Download CSV'});
+    const filter = h('input', {id: 'sch-dl-filter', type: 'search', class: 'search-input', placeholder: 'Filter devices', 'aria-label': 'Filter devices', value: S.dl.filter,
+      oninput: function () { S.dl.filter = filter.value; renderList(); }});
+    const listEl = h('ul', {id: 'sch-dl-list', class: 'pick-list sch-dl-list', role: 'listbox', 'aria-multiselectable': 'true', 'aria-label': 'Devices to label'});
+    const pickAll = h('button', {type: 'button', class: 'sch-btn sch-dl-all', text: 'Select shown'});
+    const pickNone = h('button', {type: 'button', class: 'sch-btn sch-dl-none', text: 'Clear'});
+    const pick = h('div', {class: 'sch-dl-pick', hidden: dlScope() !== 'selected'}, [h('div', {class: 'sch-dl-row'}, [filter, pickAll, pickNone]), listEl]);
+    const note = h('p', {class: 'sch-hint sch-dl-note', text: 'Print-ready artwork at exact size for the Brady M511: import the SVG/PNG files from the ZIP into Brady Express Labels or Brady Workstation, or print the preview at 100 %. The CSV is for Brady Workstation data import.'});
+    const err = h('p', {class: 'sch-error-note', role: 'status', hidden: true});
+    const section = h('section', {class: 'sch-devlabels', 'aria-labelledby': 'sch-dl-title'}, [
+      h('h3', {id: 'sch-dl-title', text: 'Device labels'}),
+      h('div', {class: 'sch-dl-row sch-dl-controls'}, [presetSel, scopeSel, count]),
+      pick,
+      h('div', {class: 'sch-dl-row sch-dl-actions'}, [preview, zip, csv]),
+      err, note,
+    ]);
+
+    function shown() {
+      const q = S.dl.filter.trim().toLowerCase();
+      return dlRoomDevices().filter(function (d) {
+        if (!q) return true;
+        return [d.name, d.id, d.manufacturer, d.model, roomName(rooms, d.room)].join(' ').toLowerCase().indexOf(q) >= 0;
+      });
+    }
+
+    function renderList() {
+      listEl.innerHTML = '';
+      const devs = shown();
+      if (!devs.length) { listEl.appendChild(h('li', {class: 'group', text: 'No devices match'})); return; }
+      devs.forEach(function (d) {
+        const id = String(d.id);
+        const on = !!S.dl.sel[id];
+        listEl.appendChild(h('li', {role: 'option', 'data-pick': id, 'aria-selected': on ? 'true' : 'false', tabindex: '0'}, [
+          h('span', {class: 'sch-dl-check', 'aria-hidden': 'true', text: on ? '\u2713' : ''}),
+          h('span', {class: 'sch-dl-name', text: d.name || id}),
+          h('span', {class: 'sub', text: [roomName(rooms, d.room), ((d.manufacturer || '') + ' ' + (d.model || '')).trim()].filter(Boolean).join(' \u00b7 ')}),
+        ]));
+      });
+    }
+
+    function renderLinks() {
+      const n = dlCount();
+      count.textContent = n + (n === 1 ? ' device' : ' devices');
+      const ready = !!S.dl.preset && n > 0;
+      [[preview, 'html', ''], [zip, 'zip', (ctx.project || 'project') + '-device-labels-' + (S.dl.preset || 'labels') + '.zip'],
+        [csv, 'csv', (ctx.project || 'project') + '-device-labels.csv']].forEach(function (t) {
+        const a = t[0];
+        if (ready) {
+          a.setAttribute('href', dlUrl(t[1]));
+          a.removeAttribute('aria-disabled');
+          if (t[2]) a.setAttribute('download', t[2]); else a.removeAttribute('download');
+        } else {
+          a.removeAttribute('href');
+          a.removeAttribute('download');
+          a.setAttribute('aria-disabled', 'true');
+        }
+      });
+      pick.hidden = dlScope() !== 'selected';
+    }
+
+    function toggle(li) {
+      const id = li.getAttribute('data-pick');
+      if (!id) return;
+      S.dl.sel[id] = !S.dl.sel[id];
+      const on = !!S.dl.sel[id];
+      li.setAttribute('aria-selected', on ? 'true' : 'false');
+      li.querySelector('.sch-dl-check').textContent = on ? '\u2713' : '';
+      renderLinks();
+    }
+
+    listEl.addEventListener('click', function (e) {
+      const li = e.target.closest ? e.target.closest('li[data-pick]') : null;
+      if (li) toggle(li);
+    });
+    listEl.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const li = e.target.closest ? e.target.closest('li[data-pick]') : null;
+      if (!li) return;
+      e.preventDefault();
+      toggle(li);
+    });
+    pickAll.addEventListener('click', function () { shown().forEach(function (d) { S.dl.sel[String(d.id)] = true; }); renderList(); renderLinks(); });
+    pickNone.addEventListener('click', function () { S.dl.sel = {}; renderList(); renderLinks(); });
+    presetSel.addEventListener('change', function () { S.dl.preset = presetSel.value; renderLinks(); });
+    scopeSel.addEventListener('change', function () {
+      S.dl.scope = scopeSel.value;
+      renderLinks();
+      if (S.dl.scope === 'selected') { renderList(); filter.focus(); }
+    });
+    preview.addEventListener('click', function (e) { if (preview.getAttribute('aria-disabled') === 'true') e.preventDefault(); });
+    zip.addEventListener('click', function (e) { if (zip.getAttribute('aria-disabled') === 'true') e.preventDefault(); });
+    csv.addEventListener('click', function (e) { if (csv.getAttribute('aria-disabled') === 'true') e.preventDefault(); });
+
+    function fillPresets(j) {
+      presetSel.innerHTML = '';
+      presetSel.disabled = false;
+      const ids = j.presets.map(function (p) { return p.id; });
+      if (!S.dl.preset || ids.indexOf(S.dl.preset) < 0) S.dl.preset = ids.indexOf(j.default) >= 0 ? j.default : ids[0];
+      j.presets.forEach(function (p) {
+        presetSel.appendChild(h('option', {value: p.id, text: presetOptionText(p), selected: p.id === S.dl.preset}));
+      });
+      presetSel.value = S.dl.preset;
+      renderLinks();
+    }
+
+    if (LABEL_PRESETS) {
+      fillPresets(LABEL_PRESETS);
+    } else {
+      presetSel.appendChild(h('option', {value: '', text: 'Loading sizes\u2026'}));
+      presetSel.disabled = true;
+      renderLinks();
+      fetchLabelPresets(ctx.api).then(function (j) {
+        if (destroyed || !section.isConnected) return;
+        fillPresets(j);
+      }, function (e) {
+        if (destroyed || !section.isConnected) return;
+        presetSel.innerHTML = '';
+        presetSel.appendChild(h('option', {value: '', text: 'Sizes unavailable'}));
+        err.hidden = false;
+        err.textContent = 'Label sizes could not be loaded' + (e && e.message ? ': ' + e.message : '') + '. Reload to try again.';
+      });
+    }
+    renderList();
+    return section;
   }
 
   // ------------------------------------------------------------- print

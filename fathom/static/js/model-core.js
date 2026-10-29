@@ -648,6 +648,35 @@ export function externalDevices(doc, room) {
   return (doc.devices || []).filter(function (d) { return ext[d.id]; });
 }
 
+// Physical condition vocabulary (FR-INV-10); the server's /api/v2/meta `conditions` wins when present.
+export const CONDITIONS = ['new', 'good', 'fair', 'poor', 'broken'];
+
+export function conditionsOf(vocab, meta) {
+  const pick = function (src) {
+    return src && Array.isArray(src.conditions) ? src.conditions.filter(function (c) { return typeof c === 'string' && c; }) : [];
+  };
+  const v = pick(vocab);
+  if (v.length) return v;
+  const m = pick(meta);
+  return m.length ? m : CONDITIONS.slice();
+}
+
+// Containers (FR-INV-12): devices of kind `container` (a case, rack drawer, crate) hold other
+// devices through `device.container`. Both helpers return the device records themselves.
+export function containerDevices(doc) {
+  return ((doc && doc.devices) || []).filter(function (d) { return d && d.kind === 'container' && !d.auto; });
+}
+
+export function containerContents(doc, containerId) {
+  if (!containerId) return [];
+  return ((doc && doc.devices) || []).filter(function (d) { return d && d.container === containerId && d.id !== containerId; });
+}
+
+// Accessories: devices without ports that are not containers (cables, adapters, stands).
+export function isAccessory(device) {
+  return !!device && device.kind !== 'container' && devicePorts(device).length === 0;
+}
+
 export function filterDevices(doc, filter, vocab) {
   filter = filter || {};
   const room = filter.room;

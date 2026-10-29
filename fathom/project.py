@@ -9,6 +9,8 @@ Layout (``FATHOM_DATA``, default ``~/.fathom``; Docker uses ``/data``)::
     <data>/projects/<name>/files/<att-id>/   attachments (photos, documents, floor plans)
     <data>/projects/<name>/history/          revision log (see ``history.py``)
     <data>/builds/<name>/<stamp>_<slug>/     rendered snapshots (index.html, svg, csv, pdf ...)
+    <data>/trash/<name>/                     a deleted project (its folder moved whole, builds under .builds/)
+    <data>/trash/<name>/.trashed             {"at": ISO-8601 UTC, "by": username, "name": original name}
 
 ``project.json`` is the canonical format. Hand-written projects may also be
 ``.jsonc`` (comments, trailing commas), ``.toml`` (Python 3.11+) or
@@ -28,7 +30,7 @@ import secrets
 import shutil
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
@@ -322,15 +324,212 @@ def project_info_v2(name: str) -> Dict[str, Any]:
     return info
 
 
-def delete_project(name: str) -> None:
+def delete_project(name: str, purge: bool = False, by: str = "") -> None:
+    """Move a project to the trash (§4.10, FR-INV-07); ``purge=True`` deletes it for good."""
     if not safe_name(name):
         raise SystemExit("error: bad project name")
+    if not purge:
+        trash_project(name, by=by)
+        return
     pdir = projects_root() / name
     if pdir.is_dir():
         shutil.rmtree(pdir)
     bdir = builds_root() / name
     if bdir.is_dir():
         shutil.rmtree(bdir)
+
+
+# ------------------------------------------------------------------- trash
+
+TRASH_RETENTION_DAYS = 30
+TRASH_MARKER = ".trashed"
+
+
+class ProjectExists(Exception):
+    """A live project with that name is in the way (restore)."""
+
+
+def trash_root() -> Path:
+    return data_root() / "trash"
+
+
+def _trash_entry(tdir: Path) -> Optional[Dict[str, Any]]:
+    marker = tdir / TRASH_MARKER
+    if not tdir.is_dir() or not marker.is_file():
+        return None
+    try:
+        meta = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        meta = {}
+    if not isinstance(meta, dict):
+        meta = {}
+    rooms = devices = 0
+    pf = find_project_file(tdir)
+    if pf is not None:
+        try:
+            d = load_dict(pf)
+            if isinstance(d, dict):
+                if d.get("fathom") == 2:
+                    rooms = len(d.get("rooms") or [])
+                    devices = len(d.get("devices") or [])
+                else:
+                    rooms = 1
+                    devices = len(d.get("nodes") or [])
+        except Exception:  # pragma: no cover - unreadable file still listed
+            pass
+    return {"name": str(meta.get("name") or tdir.name), "trashed_at": str(meta.get("at") or ""), "trashed_by": str(meta.get("by") or ""),
+            "dir": tdir.name, "rooms": rooms, "devices": devices}
+
+
+def trash_info(tname: str) -> Optional[Dict[str, Any]]:
+    """The trash entry whose directory is ``tname`` (``None`` when unknown)."""
+    if not safe_name(tname):
+        return None
+    return _trash_entry(trash_root() / tname)
+
+
+def trash_project(name: str, by: str = "") -> Dict[str, Any]:
+    """Move ``projects/<name>`` (and its builds) to ``trash/<name>/`` with a ``.trashed`` marker."""
+    from .history import utc_now
+
+    if not safe_name(name):
+        raise ValueError("bad project name")
+    pdir = projects_root() / name
+    if not pdir.is_dir():
+        raise FileNotFoundError(f"project '{name}' not found")
+    troot = trash_root()
+    troot.mkdir(parents=True, exist_ok=True)
+    with project_lock(pdir):
+        dest = troot / name
+        if dest.exists():
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+            dest = troot / f"{name[:64 - len(stamp) - 1]}-{stamp}"
+            n = 2
+            while dest.exists():
+                dest = troot / f"{name[:64 - len(stamp) - 3]}-{stamp}{n}"
+                n += 1
+        shutil.move(str(pdir), str(dest))
+        bdir = builds_root() / name
+        if bdir.is_dir():
+            shutil.move(str(bdir), str(dest / ".builds"))
+        _atomic_write_json(dest / TRASH_MARKER, {"at": utc_now(), "by": by or "", "name": name})
+    info = _trash_entry(dest)
+    return info or {"name": name, "trashed_at": "", "trashed_by": by or "", "dir": dest.name, "rooms": 0, "devices": 0}
+
+
+def list_trashed() -> List[Dict[str, Any]]:
+    """Trash entries, newest first. Entries past the retention period are purged first."""
+    purge_expired()
+    troot = trash_root()
+    out: List[Dict[str, Any]] = []
+    if not troot.is_dir():
+        return out
+    for p in sorted(troot.iterdir()):
+        e = _trash_entry(p)
+        if e is not None:
+            out.append(e)
+    out.sort(key=lambda e: (e["trashed_at"], e["dir"]), reverse=True)
+    return out
+
+
+def restore_project(tname: str) -> None:
+    """Move ``trash/<tname>`` back to ``projects/<original name>`` (``ProjectExists`` when that name is live)."""
+    info = trash_info(tname)
+    if info is None:
+        raise FileNotFoundError(f"nothing in the trash named '{tname}'")
+    name = info["name"] if safe_name(info["name"]) else tname
+    target = projects_root() / name
+    if target.exists():
+        raise ProjectExists(f"a project named '{name}' already exists")
+    tdir = trash_root() / tname
+    projects_root().mkdir(parents=True, exist_ok=True)
+    builds = tdir / ".builds"
+    if builds.is_dir():
+        bdest = builds_root() / name
+        if bdest.exists():
+            for run in builds.iterdir():
+                shutil.move(str(run), str(bdest / run.name))
+            shutil.rmtree(builds, ignore_errors=True)
+        else:
+            builds_root().mkdir(parents=True, exist_ok=True)
+            shutil.move(str(builds), str(bdest))
+    try:
+        (tdir / TRASH_MARKER).unlink()
+    except OSError:
+        pass
+    shutil.move(str(tdir), str(target))
+
+
+def purge_project(tname: str) -> None:
+    """Delete a trashed project for good."""
+    if trash_info(tname) is None:
+        raise FileNotFoundError(f"nothing in the trash named '{tname}'")
+    shutil.rmtree(trash_root() / tname)
+
+
+def purge_expired(days: int = TRASH_RETENTION_DAYS) -> List[str]:
+    """Delete trash entries older than ``days``; returns their directory names."""
+    troot = trash_root()
+    gone: List[str] = []
+    if not troot.is_dir():
+        return gone
+    cutoff = time.time() - max(0, int(days)) * 86400
+    for p in sorted(troot.iterdir()):
+        e = _trash_entry(p)
+        if e is None:
+            continue
+        at = _parse_utc(e["trashed_at"])
+        if at is None:
+            try:
+                at = (p / TRASH_MARKER).stat().st_mtime
+            except OSError:
+                continue
+        if at < cutoff:
+            shutil.rmtree(p, ignore_errors=True)
+            gone.append(p.name)
+    return gone
+
+
+def _parse_utc(text: str) -> Optional[float]:
+    s = (text or "").strip()
+    if not s:
+        return None
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
+# ------------------------------------------------------------- short codes
+
+
+def find_by_short_code(code: str) -> Optional[Dict[str, Any]]:
+    """Scan every live project for a device with ``short_code`` (any case, with or without the dash)."""
+    from . import schema
+
+    want = schema.parse_short_code(code)
+    if not want:
+        return None
+    for name in list_projects():
+        pf = find_project_file(projects_root() / name)
+        if pf is None:
+            continue
+        try:
+            d = load_dict(pf)
+        except Exception:
+            continue
+        if not isinstance(d, dict) or d.get("fathom") != 2:
+            continue
+        for dev in d.get("devices") or []:
+            if isinstance(dev, dict) and schema.parse_short_code(dev.get("short_code")) == want and dev.get("id"):
+                return {"project": name, "device": str(dev["id"]), "name": str(dev.get("name") or dev["id"]),
+                        "room": str(dev.get("room") or ""), "kind": str(dev.get("kind") or "")}
+    return None
 
 
 # ------------------------------------------------------------------ builds
@@ -434,7 +633,28 @@ def new_project(name_or_path: str, template: str = "blank", org: str = "", force
             data = load_dict(pf)
             data.setdefault("meta", {})["org"] = org
             (project_dir / "project.json").write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        _assign_codes_in_place(project_dir)
     return project_dir
+
+
+def _assign_codes_in_place(project_dir: Path) -> int:
+    """Give a freshly created (sample-copied) v2 ``project.json`` its device short
+    codes without opening a revision. v1 files get theirs on the first v2 save."""
+    from . import schema
+
+    pf = project_dir / "project.json"
+    if not pf.is_file():
+        return 0
+    try:
+        data = load_dict(pf)
+    except Exception:  # pragma: no cover - corrupt sample
+        return 0
+    if not isinstance(data, dict) or schema.doc_version(data) != 2 or not schema.short_codes_enabled(data):
+        return 0
+    n = schema.ensure_short_codes(data)
+    if n:
+        _atomic_write_json(pf, data)
+    return n
 
 
 def display_path(path: Path) -> str:
@@ -661,16 +881,44 @@ def _conflict(state: _State, base: int, refs: Set[str]) -> ConflictError:
                          revision=state.rev, conflicts=sorted(refs), by=by)
 
 
+def _short_code_ops(doc: Doc, stored: Optional[Doc]) -> List[Op]:
+    """Give every device a ``short_code`` in place (FR-INV-09): a device that
+    arrives without one keeps the code it already has in the stored doc (a
+    client editing from a copy that predates the code must not re-roll it),
+    anything still missing gets a fresh one. Returns the ``merge`` ops that
+    record the codes so history replay matches the stored doc.
+    ``settings.short_codes: false`` opts a project out."""
+    from . import schema
+
+    if not schema.short_codes_enabled(doc):
+        return []
+    devs = [d for d in doc.get("devices") or [] if isinstance(d, dict) and isinstance(d.get("id"), str)]
+    before = {d["id"]: d.get("short_code") for d in devs}
+    kept = {d["id"]: schema.parse_short_code(d.get("short_code")) for d in (stored or {}).get("devices") or []
+            if isinstance(d, dict) and isinstance(d.get("id"), str)}
+    present = {schema.parse_short_code(d.get("short_code")) for d in devs} - {None}
+    for d in devs:
+        old = kept.get(d["id"])
+        if old and not schema.parse_short_code(d.get("short_code")) and old not in present:
+            d["short_code"] = old
+            present.add(old)
+    schema.ensure_short_codes(doc)
+    return [{"op": "merge", "coll": "devices", "id": d["id"], "value": {"short_code": d["short_code"]}}
+            for d in devs if d.get("short_code") != before.get(d["id"])]
+
+
 def _commit(state: _State, new_doc: Doc, ops: List[Op], *, rebased: bool, author: str, summary: str, source: str) -> Dict[str, Any]:
     from . import history, schema
 
     new_doc = schema.normalize(new_doc)
+    code_ops = _short_code_ops(new_doc, state.doc)
     problems = schema.validate_doc(new_doc)
     old_errs = _err_keys(schema.validate_doc(state.doc)) if schema.errors(problems) else set()
     fresh = [p for p in schema.errors(problems) if (p.get("code", ""), p.get("ref", ""), p.get("path", "")) not in old_errs]
     if fresh:
         raise ValidationError(problems)
-    touched = schema.touched_refs(ops)
+    touched = schema.touched_refs(ops)  # code bookkeeping never counts as "someone else changed it"
+    ops = list(ops) + code_ops
     new_rev = state.rev + 1
     new_doc["revision"] = new_rev
     if state.version < 2:

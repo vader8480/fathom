@@ -10,23 +10,33 @@ import {h, on} from './dom.js';
 import {createTable} from './datatable.js';
 import {confirmScope, emptyState, reviewBadge, skeleton} from './feedback.js';
 import {bulkAdd} from './wizard.js';
+import {conditionsOf, containerDevices, isAccessory} from './model-core.js';
+import {formatShortCode} from './search-core.js';
 
 const STATUSES = ['installed', 'planned', 'spare', 'retired'];
 
 export const INV_COLUMNS = [
   ['name', 'Name'], ['room', 'Room'], ['location', 'Location'], ['system', 'System'], ['kind', 'Kind'], ['discipline', 'Discipline'],
-  ['manufacturer', 'Manufacturer'], ['model', 'Model'], ['status', 'Status'], ['serial', 'Serial'], ['asset_tag', 'Asset tag'],
+  ['manufacturer', 'Manufacturer'], ['model', 'Model'], ['status', 'Status'], ['condition', 'Condition'], ['container', 'Container'],
+  ['code', 'Code'], ['serial', 'Serial'], ['asset_tag', 'Asset tag'],
   ['firmware', 'Firmware'], ['purchase_date', 'Purchased'], ['warranty_until', 'Warranty until'], ['vendor', 'Vendor'],
   ['cost', 'Cost'], ['currency', 'Currency'], ['po', 'PO'], ['rack', 'Rack'], ['ru', 'RU'], ['ips', 'IPs'], ['notes', 'Notes'], ['id', 'Id'],
 ];
-const DEFAULT_VISIBLE = ['name', 'room', 'location', 'kind', 'model', 'status', 'serial', 'asset_tag', 'warranty_until', 'cost', 'rack', 'ru', 'ips'];
-const CSV_KEYS = ['id', 'name', 'room', 'location', 'kind', 'discipline', 'manufacturer', 'model', 'status', 'serial', 'asset_tag', 'firmware',
+const DEFAULT_VISIBLE = ['name', 'room', 'location', 'kind', 'model', 'status', 'condition', 'container', 'code', 'serial', 'asset_tag', 'warranty_until', 'cost', 'rack', 'ru', 'ips'];
+const CSV_KEYS = ['id', 'name', 'room', 'location', 'kind', 'discipline', 'manufacturer', 'model', 'status', 'condition', 'container', 'code', 'serial', 'asset_tag', 'firmware',
   'purchase_date', 'warranty_until', 'vendor', 'cost', 'currency', 'po', 'rack', 'ru', 'ips', 'notes'];
-const MOBILE_COLUMNS = ['name', 'status', 'room'];
-const FILTER_IDS = {room: 'inv-room', status: 'inv-status', location: 'inv-location', kind: 'inv-kind', system: 'inv-system'};
-const QUICK = ['warranty', 'serial'];
+const MOBILE_COLUMNS = ['name', 'kind', 'status', 'condition', 'container', 'code'];
+const FILTER_IDS = {room: 'inv-room', status: 'inv-status', condition: 'inv-condition', container: 'inv-container', location: 'inv-location', kind: 'inv-kind', system: 'inv-system'};
+const QUICK = ['warranty', 'serial', 'accessories', 'contained', 'containers'];
+const QUICK_LABELS = {warranty: 'Warranty < 90 days', serial: 'Missing serial', accessories: 'Accessories', contained: 'In containers', containers: 'Containers'};
+// Custom fields (FR-INV-11) become `field:<key>` columns; only the first few show by default.
+const FIELD_PREFIX = 'field:';
+const FIELD_VISIBLE_DEFAULT = 3;
 const NO_LOCATION = 'No location';
+const NO_CONTAINER = 'None';
 const DEVICE_NOUN = {one: 'device', many: 'devices'};
+// Condition chips reuse the status-pill geometry (.inv-status in plan.css) with their own colours.
+const CONDITION_CLASS = {new: 'inv-cond-new', good: 'inv-cond-good', fair: 'inv-cond-fair', poor: 'inv-cond-poor', broken: 'inv-cond-broken'};
 
 function list(v) { return Array.isArray(v) ? v : []; }
 
@@ -51,27 +61,46 @@ function daysUntil(dateStr, today) {
   return Math.round((t - today) / 86400000);
 }
 
+// Custom field keys of a document, in first-seen order (FR-INV-11).
+export function fieldKeys(doc) {
+  const out = [];
+  list(doc && doc.devices).forEach(function (d) {
+    const f = d && !d.auto && d.inventory && d.inventory.fields;
+    if (!f || typeof f !== 'object') return;
+    Object.keys(f).forEach(function (k) { if (k && out.indexOf(k) < 0) out.push(k); });
+  });
+  return out;
+}
+
 // One flattened row per device (also the local CSV, FR-INV-04).
 export function inventoryRows(doc, vocab) {
   const rooms = byId(doc.rooms);
   const locs = byId(doc.locations);
   const racks = byId(doc.racks);
   const systems = byId(doc.systems);
+  const devs = byId(doc.devices);
   const cur = (doc.settings && doc.settings.currency) || 'USD';
   return list(doc.devices).filter(function (d) { return !d.auto; }).map(function (d) {
     const inv = d.inventory || {};
     const rk = d.rack && d.rack.id ? racks[d.rack.id] : null;
-    return {
+    const box = d.container ? devs[d.container] : null;
+    const row = {
       id: d.id, name: d.name, room: d.room ? (rooms[d.room] ? rooms[d.room].name : d.room) : 'Shared', room_id: d.room || '',
       location: d.location ? (locs[d.location] ? locs[d.location].name : d.location) : '', location_id: d.location || '',
       system: d.system ? (systems[d.system] ? systems[d.system].name : d.system) : '', system_id: d.system || '',
       kind: d.kind, discipline: disciplineOf(d, vocab), manufacturer: d.manufacturer || '', model: d.model || '',
-      status: d.status || 'installed', serial: inv.serial || '', asset_tag: inv.asset_tag || '', firmware: inv.firmware || '',
+      status: d.status || 'installed', condition: inv.condition || '',
+      container: d.container ? (box ? box.name || box.id : d.container) : '', container_id: d.container || '',
+      code: d.short_code ? formatShortCode(d.short_code) : '', is_container: d.kind === 'container', accessory: isAccessory(d),
+      serial: inv.serial || '', asset_tag: inv.asset_tag || '', firmware: inv.firmware || '',
       purchase_date: inv.purchase_date || '', warranty_until: inv.warranty_until || '', vendor: inv.vendor || '',
       cost: inv.cost == null ? '' : inv.cost, currency: inv.cost == null ? '' : (inv.currency || cur), po: inv.po || '',
       rack: d.rack && d.rack.id ? (rk ? rk.name : d.rack.id) : '', rack_id: d.rack && d.rack.id ? d.rack.id : '', ru: d.rack && d.rack.u ? d.rack.u : '',
       ips: list(d.interfaces).map(function (i) { return i.ip; }).filter(Boolean).join(';'), notes: inv.notes || '',
     };
+    const f = inv.fields && typeof inv.fields === 'object' ? inv.fields : {};
+    Object.keys(f).forEach(function (k) { row[FIELD_PREFIX + k] = f[k] == null ? '' : String(f[k]); });
+    return row;
   });
 }
 
@@ -95,7 +124,9 @@ function quickString(arr) {
 
 function cssEsc(s) { return String(s).replace(/["\\]/g, '\\$&'); }
 
-export function invColumns(vocab) {
+// opts: {fields: [key], codeLink(code) -> url, onCopy(url, row), onContainer(id)}; all optional.
+export function invColumns(vocab, opts) {
+  const o = opts || {};
   const today = Date.now();
   const cols = INV_COLUMNS.map(function (c) {
     const key = c[0];
@@ -111,6 +142,32 @@ export function invColumns(vocab) {
       };
     } else if (key === 'status') {
       col.cell = function (r) { return h('span', {class: 'inv-status inv-' + r.status, text: r.status}); };
+    } else if (key === 'condition') {
+      col.cell = function (r) {
+        if (!r.condition) return '';
+        return h('span', {class: 'inv-status inv-cond ' + (CONDITION_CLASS[r.condition] || 'inv-cond-other'), 'data-condition': r.condition, text: r.condition});
+      };
+    } else if (key === 'container') {
+      col.cell = function (r) {
+        if (!r.container_id) return '';
+        return h('button', {
+          type: 'button', class: 'inv-link inv-container-link', 'data-container': r.container_id, text: r.container,
+          title: 'Select ' + r.container,
+          onclick: function (e) { e.stopPropagation(); if (typeof o.onContainer === 'function') o.onContainer(r.container_id); },
+        });
+      };
+    } else if (key === 'code') {
+      col.cell = function (r) {
+        if (!r.code) return h('span', {class: 'inv-muted', 'aria-label': 'No code yet', text: '\u2014'});
+        const url = typeof o.codeLink === 'function' ? o.codeLink(r.code) : '';
+        return h('span', {class: 'inv-code'}, [
+          h('code', {class: 'inv-code-text', text: r.code}),
+          url ? h('button', {
+            type: 'button', class: 'inv-btn inv-copy', 'data-copy': url, 'aria-label': 'Copy link for ' + (r.name || r.id), title: url, text: 'Copy link',
+            onclick: function (e) { e.stopPropagation(); if (typeof o.onCopy === 'function') o.onCopy(url, r); },
+          }) : null,
+        ]);
+      };
     } else if (key === 'warranty_until') {
       col.cell = function (r) {
         if (!r.warranty_until) return '';
@@ -125,13 +182,16 @@ export function invColumns(vocab) {
     }
     return col;
   });
+  list(o.fields).forEach(function (k, i) {
+    cols.push({key: FIELD_PREFIX + k, header: k, hidden: i >= FIELD_VISIBLE_DEFAULT, hideOnMobile: true, filterable: false});
+  });
   return cols;
 }
 
 export function mount(el, ctx) {
   const store = ctx.store;
   const vocab = ctx.vocab || store.vocab || {};
-  const S = {scope: 'current', group: false, quick: [], csvAllUrl: '', editing: null, destroyed: false};
+  const S = {scope: 'current', group: false, quick: [], csvAllUrl: '', editing: null, destroyed: false, fieldSig: ''};
   const offs = [];
   let table = null;
   let tableOpts = null;
@@ -173,8 +233,9 @@ export function mount(el, ctx) {
   el.appendChild(root);
 
   const scopeSel = h('select', {id: 'inv-scope', class: 'inv-scope', 'aria-label': 'Rooms shown'});
-  const qWarranty = h('button', {id: 'inv-q-warranty', type: 'button', class: 'inv-btn inv-chip', 'data-quick': 'warranty', 'aria-pressed': 'false', text: 'Warranty < 90 days'});
-  const qSerial = h('button', {id: 'inv-q-serial', type: 'button', class: 'inv-btn inv-chip', 'data-quick': 'serial', 'aria-pressed': 'false', text: 'Missing serial'});
+  const quickBtns = QUICK.map(function (k) {
+    return h('button', {id: 'inv-q-' + k, type: 'button', class: 'inv-btn inv-chip', 'data-quick': k, 'aria-pressed': 'false', text: QUICK_LABELS[k]});
+  });
   const groupCb = h('input', {id: 'inv-group', type: 'checkbox'});
   const groupBox = h('span', {class: 'inv-check inv-chip'}, [groupCb, h('label', {for: 'inv-group', text: 'Group by location'})]);
   const bulkAddBtn = h('button', {id: 'inv-bulk-add', type: 'button', class: 'inv-btn inv-primary', text: 'Bulk add\u2026', title: 'Add many devices from pasted spreadsheet rows'});
@@ -185,9 +246,11 @@ export function mount(el, ctx) {
     h('summary', {class: 'inv-btn inv-more-btn', 'aria-label': 'More inventory actions', title: 'More'}, [h('span', {'aria-hidden': 'true', text: '\u22EF'})]),
     h('div', {class: 'inv-menu', role: 'menu'}, [csvAll]),
   ]);
-  const quickBar = h('div', {class: 'inv-quick', role: 'group', 'aria-label': 'Quick filters'}, [scopeSel, qWarranty, qSerial, groupBox]);
+  const quickBar = h('div', {class: 'inv-quick', role: 'group', 'aria-label': 'Quick filters'}, [scopeSel].concat(quickBtns, [groupBox]));
 
   const bulkStatus = h('select', {id: 'inv-bulk-status', 'aria-label': 'Set status of selected devices'});
+  const bulkCondition = h('select', {id: 'inv-bulk-condition', 'aria-label': 'Set condition of selected devices'});
+  const bulkContainer = h('select', {id: 'inv-bulk-container', 'aria-label': 'Put selected devices in a container'});
   const bulkRoom = h('select', {id: 'inv-bulk-room', 'aria-label': 'Move selected devices to room'});
   const bulkLoc = h('select', {id: 'inv-bulk-location', 'aria-label': 'Set location of selected devices'});
   const markInstalled = h('button', {id: 'inv-mark-installed', type: 'button', class: 'inv-btn', text: 'Mark installed'});
@@ -204,10 +267,11 @@ export function mount(el, ctx) {
     const d = doc();
     const curRoom = store.room && store.room !== '*' ? (byId(d.rooms)[store.room] || {}).name || store.room : '';
     fillSelect(scopeSel, [['current', curRoom ? 'Room: ' + curRoom : 'Current room'], ['*', 'All rooms'], ['__shared', 'Shared inventory']], S.scope, null);
-    qWarranty.setAttribute('aria-pressed', S.quick.indexOf('warranty') >= 0 ? 'true' : 'false');
-    qSerial.setAttribute('aria-pressed', S.quick.indexOf('serial') >= 0 ? 'true' : 'false');
+    quickBtns.forEach(function (b) { b.setAttribute('aria-pressed', S.quick.indexOf(b.getAttribute('data-quick')) >= 0 ? 'true' : 'false'); });
     groupCb.checked = S.group;
     fillSelect(bulkStatus, STATUSES.map(function (s) { return [s, s]; }), '', 'Set status\u2026');
+    fillSelect(bulkCondition, conditionsOf(vocab, ctx.meta).map(function (s) { return [s, s]; }).concat([['__none', 'No condition']]), '', 'Set condition\u2026');
+    fillSelect(bulkContainer, [['__none', NO_CONTAINER]].concat(containerDevices(d).map(function (c) { return [c.id, c.name || c.id]; })), '', 'Put in container\u2026');
     fillSelect(bulkRoom, [['__shared', 'Shared inventory']].concat(list(d.rooms).map(function (r) { return [r.id, r.name]; })), '', 'Move to room\u2026');
     fillSelect(bulkLoc, [['__none', NO_LOCATION]].concat(list(d.locations).map(function (l) { return [l.id, l.name]; })), '', 'Set location\u2026');
     bulkAddBtn.hidden = readOnly();
@@ -232,13 +296,39 @@ export function mount(el, ctx) {
         const dd = daysUntil(row.warranty_until, today);
         if (dd == null || dd >= 90) return false;
       }
+      if (S.quick.indexOf('accessories') >= 0 && !row.accessory) return false;
+      if (S.quick.indexOf('contained') >= 0 && !row.container_id) return false;
+      if (S.quick.indexOf('containers') >= 0 && !row.is_container) return false;
       return true;
     });
   }
 
+  function fieldSig() { return fieldKeys(doc()).join('\u0000'); }
+
   function refreshRows() {
     renderControls();
-    if (table) table.setRows(rows());
+    if (!table) return;
+    // A new custom-field key means a new column: rebuild the table (its state is persisted).
+    if (fieldSig() !== S.fieldSig) { build(); return; }
+    table.setRows(rows());
+  }
+
+  function copyLink(url) {
+    const done = function () { ctx.toast('Link copied: ' + url, 'ok'); };
+    const fail = function () { ctx.toast('Could not copy. The link is ' + url, 'warn'); };
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done, fail);
+        return;
+      }
+    } catch (e) { /* fall through */ }
+    fail();
+  }
+
+  function selectContainer(id) {
+    const sel = {type: 'device', id: id};
+    if (typeof ctx.select === 'function') ctx.select(sel);
+    if (typeof ctx.openDrawer === 'function') ctx.openDrawer(sel, {section: 'inventory'});
   }
 
   function renderCsvAll() {
@@ -313,19 +403,27 @@ export function mount(el, ctx) {
     const ro = readOnly();
     builtReadOnly = ro;
     const q = query();
+    S.fieldSig = fieldSig();
+    const colOpts = {
+      fields: fieldKeys(doc()),
+      codeLink: ctx.api && ctx.api.codeLink ? function (code) { return ctx.api.codeLink(code); } : null,
+      onCopy: copyLink,
+      onContainer: selectContainer,
+    };
     tableOpts = {
       key: 'inventory',
       scope: ctx.project || '',
       caption: 'Inventory',
-      columns: invColumns(vocab).concat([editCol]),
+      columns: invColumns(vocab, colOpts).concat([editCol]),
       rows: [],
       rowAttrs: function (r) { return {'data-device': r.id}; },
       rowClass: function (r) { return r.status === 'planned' ? 'inv-planned' : ''; },
       groupBy: null,
       groupOrder: groupOrder,
       selectable: !ro,
+      cards: true,
       noun: DEVICE_NOUN,
-      bulkActions: ro ? [] : [bulkStatus, bulkRoom, bulkLoc, markInstalled, mergeSel],
+      bulkActions: ro ? [] : [bulkStatus, bulkCondition, bulkContainer, bulkRoom, bulkLoc, markInstalled, mergeSel],
       actions: [quickBar, bulkAddBtn, dupsBtn, dupsReview, more].filter(Boolean),
       ids: {table: 'inv-table', columns: 'inv-columns', csv: 'inv-csv', search: 'inv-filter', selectAll: 'inv-select-all', filters: FILTER_IDS},
       url: urlBinding(),
@@ -433,6 +531,21 @@ export function mount(el, ctx) {
       label = 'Set location of ' + plural(ops.length, DEVICE_NOUN);
       verb = 'Set location of';
       detail = 'New location: ' + (l ? (byId(d.locations)[l] || {}).name || l : NO_LOCATION) + '.';
+    } else if (field === 'condition') {
+      const c = value === '__none' ? null : value;
+      ops = ids.filter(function (id) { return devs[id] && ((devs[id].inventory || {}).condition || null) !== c; })
+        .map(function (id) { return {op: 'merge', coll: 'devices', id: id, value: {inventory: {condition: c}}}; });
+      label = 'Set condition of ' + plural(ops.length, DEVICE_NOUN) + (c ? ' to ' + c : '');
+      verb = 'Set condition of';
+      detail = c ? 'New condition: ' + c + '.' : 'The condition is cleared.';
+    } else if (field === 'container') {
+      const box = value === '__none' ? null : value;
+      ops = ids.filter(function (id) { return devs[id] && id !== box && (devs[id].container || null) !== box; })
+        .map(function (id) { return {op: 'merge', coll: 'devices', id: id, value: {container: box}}; });
+      const bn = box ? (devs[box] || {}).name || box : null;
+      label = box ? 'Put ' + plural(ops.length, DEVICE_NOUN) + ' in ' + bn : 'Took ' + plural(ops.length, DEVICE_NOUN) + ' out of their containers';
+      verb = box ? 'Put in ' + bn + ':' : 'Take out of container:';
+      detail = box ? 'They are stored in ' + bn + '.' : 'They are no longer stored in a container.';
     }
     if (!ops.length) { ctx.toast('Nothing to change.', 'info'); return Promise.resolve(false); }
     return confirmBulk(ids.length, verb, ops.length, detail).then(function (ok) {
@@ -489,8 +602,13 @@ export function mount(el, ctx) {
     form.appendChild(h('p', {class: 'inv-hint', text: ((dev.manufacturer || '') + ' ' + (dev.model || '')).trim() || dev.kind}));
     const grid = h('div', {class: 'inv-grid'});
     grid.appendChild(field('status', 'Status', sel(STATUSES.map(function (s) { return [s, s]; }), dev.status || 'installed')));
+    grid.appendChild(field('condition', 'Condition', sel([['', '\u2014']].concat(conditionsOf(vocab, ctx.meta).map(function (c) { return [c, c]; })), inv.condition || '')));
     grid.appendChild(field('room', 'Room', sel(roomItems, dev.room || '')));
     grid.appendChild(field('location', 'Location', sel(locItems, dev.location || '')));
+    if (dev.kind !== 'container') {
+      const boxItems = [['', NO_CONTAINER]].concat(containerDevices(d).map(function (c) { return [c.id, c.name || c.id]; }));
+      grid.appendChild(field('container', 'Stored in', sel(boxItems, dev.container || '')));
+    }
     grid.appendChild(field('serial', 'Serial', text(inv.serial)));
     grid.appendChild(field('asset_tag', 'Asset tag', text(inv.asset_tag)));
     grid.appendChild(field('firmware', 'Firmware', text(inv.firmware)));
@@ -606,11 +724,14 @@ export function mount(el, ctx) {
         if (!(c >= 0)) { err.textContent = 'Cost must be a number.'; form.querySelector('[data-field="cost"]').setAttribute('aria-describedby', 'inv-form-error'); return; }
         if (c !== oldCost) { invPatch.cost = c; changed = true; }
       }
+      const cond = v('condition');
+      if (cond !== ((fresh.inventory || {}).condition || '')) { invPatch.condition = cond || null; changed = true; }
       if (Object.keys(invPatch).length) value.inventory = invPatch;
       const st = v('status');
       if (st !== (fresh.status || 'installed')) { value.status = st; changed = true; }
       if (v('room') !== (fresh.room || '')) { value.room = v('room'); changed = true; }
       if (v('location') !== (fresh.location || '')) { value.location = v('location') || null; changed = true; }
+      if (form.querySelector('[data-field="container"]') && v('container') !== (fresh.container || '')) { value.container = v('container') || null; changed = true; }
       const rk = v('rack');
       const fr = fresh.rack || {};
       if (!rk) { if (fr.id) { value.rack = null; changed = true; } }
@@ -653,8 +774,9 @@ export function mount(el, ctx) {
   };
   // ------------------------------------------------------------ events
   offs.push(on(scopeSel, 'change', function () { S.scope = scopeSel.value || 'current'; setExtra(); refreshRows(); scopeSel.focus(); }));
-  offs.push(on(qWarranty, 'click', function () { toggleQuick('warranty'); qWarranty.focus(); }));
-  offs.push(on(qSerial, 'click', function () { toggleQuick('serial'); qSerial.focus(); }));
+  quickBtns.forEach(function (b) {
+    offs.push(on(b, 'click', function () { toggleQuick(b.getAttribute('data-quick')); b.focus(); }));
+  });
   offs.push(on(groupCb, 'change', function () { S.group = groupCb.checked; setExtra(); groupCb.focus(); }));
   offs.push(on(bulkAddBtn, 'click', startBulkAdd));
   if (dupsBtn) offs.push(on(dupsBtn, 'click', function () { openDuplicatesDialog(ctx); }));
@@ -663,7 +785,7 @@ export function mount(el, ctx) {
     if (e.key === 'Escape' && more.open) { e.preventDefault(); e.stopPropagation(); more.open = false; more.querySelector('summary').focus(); }
   }));
   offs.push(on(document, 'pointerdown', function (e) { if (more.open && !more.contains(e.target)) more.open = false; }, true));
-  [[bulkStatus, 'status'], [bulkRoom, 'room'], [bulkLoc, 'location']].forEach(function (b) {
+  [[bulkStatus, 'status'], [bulkCondition, 'condition'], [bulkContainer, 'container'], [bulkRoom, 'room'], [bulkLoc, 'location']].forEach(function (b) {
     offs.push(on(b[0], 'change', function () {
       const v = b[0].value;
       bulkApply(b[1], v).then(function () { b[0].value = ''; });
