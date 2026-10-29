@@ -1,4 +1,4 @@
-"""Rack contract (docs/notes/rackula.md sections B-C) against fathom.racks.
+"""Rack contract (docs/SPEC.md §4.3.7, §4.4.7) against fathom.racks.
 
 Data-driven from tests/fixtures/rack_contract.json, shared with
 tests/js/rack-contract.test.mjs. One test per case and expect key; a test

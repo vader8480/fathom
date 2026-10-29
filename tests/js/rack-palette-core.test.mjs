@@ -1,4 +1,4 @@
-// js/rack-palette-core.js (docs/notes/rackula.md PAL): entries, ranking, categories, prefs and
+// js/rack-palette-core.js (docs/SPEC.md §6.13.11): entries, ranking, categories, prefs and
 // deviceFromTemplate. The expected device in DEVICE_FROM_PYTHON was produced once by
 // fathom.library.instantiate (port groups expanded by fathom.library.expand_port_groups).
 import { test } from 'node:test';

@@ -1,4 +1,4 @@
-"""LAND: the racks landing toolbar and workflows (docs/notes/rackula.md, wave 2).
+"""LAND: the racks landing toolbar and workflows (docs/SPEC.md §6.7.2).
 
 The face / display / annotate controls persist across a reload; the Library panel adds a catalog
 device at the first free RU in one commit; the accessory menu adds an item; "New rack from

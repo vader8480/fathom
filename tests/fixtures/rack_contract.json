@@ -1,5 +1,5 @@
 {
-  "about": "Rack contract vectors (docs/notes/rackula.md sections B-D), shared by tests/test_rack_contract.py and tests/js/rack-contract.test.mjs. Each case has a doc, the rack under test and optional expect keys: labels {u: label}, width_px, collisions [{a, b, u, face}] (sorted), fits [{device|item, rack?, u, opts|spec, ok, reason, conflicts}] (conflicts compared as sets), shelf {item, cells}, totals, problems (Python: set of rack_* codes from validate_racks), annotations {deviceId: {field: value}}, rows (JS racksByRow ids per group), add_item {spec, id, u} (JS addItemOps; u null when nothing fits).",
+  "about": "Rack contract vectors (docs/SPEC.md §4.4.7), shared by tests/test_rack_contract.py and tests/js/rack-contract.test.mjs. Each case has a doc, the rack under test and optional expect keys: labels {u: label}, width_px, collisions [{a, b, u, face}] (sorted), fits [{device|item, rack?, u, opts|spec, ok, reason, conflicts}] (conflicts compared as sets), shelf {item, cells}, totals, problems (Python: set of rack_* codes from validate_racks), annotations {deviceId: {field: value}}, rows (JS racksByRow ids per group), add_item {spec, id, u} (JS addItemOps; u null when nothing fits).",
   "cases": [
     {
       "name": "labels-start-u-0-bottom-up-10in",

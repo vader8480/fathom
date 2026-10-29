@@ -1,5 +1,5 @@
 // Rack display core (pure): block colours, device images, annotations and airflow glyphs for
-// the rack elevation, export and viewer (Rackula features, docs/notes/rackula.md B, C and G).
+// the rack elevation, export and viewer (Rackula features, docs/SPEC.md §4.4.7 and §6.13.11).
 // `info` is the device's template summary (`GET /api/v2/library?ids=` or `doc.templates`); a
 // `{templateId: summary}` map, as `rack-display.loadTemplateInfo` resolves, is accepted too.
 

@@ -1,4 +1,4 @@
-// Rack library palette (docs/notes/rackula.md G, PAL): a searchable, categorised list of rack-mountable
+// Rack library palette (docs/SPEC.md §6.13.11): a searchable, categorised list of rack-mountable
 // templates with favourites and recents. The host owns placement: Add / Enter call onPick(entry,
 // template) with the full template, a pointer drag on a row calls onDragStart(entry, event). A palette
 // list (D9 picker exemption), not a datatable. Prefs live in localStorage `fathom.ui.rack.palette`.

@@ -1,4 +1,4 @@
-// Rack contract (docs/notes/rackula.md sections B-D) against js/rack-core.js and js/rack-display-core.js.
+// Rack contract (docs/SPEC.md §4.3.7, §4.4.7) against js/rack-core.js and js/rack-display-core.js.
 // Data-driven from tests/fixtures/rack_contract.json, shared with tests/test_rack_contract.py.
 // One test per case and expect key; a test skips only while the export it exercises is missing.
 import { test } from 'node:test';

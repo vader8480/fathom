@@ -1,5 +1,5 @@
 // js/rack-core.js: rack items, shelves, totals, rows, width and start_u
-// (docs/notes/rackula.md contract sections B, C and D).
+// (docs/SPEC.md §4.3.7, §4.4.7 and §6.7).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadModule, clone } from './fixtures/helpers.mjs';

@@ -1,5 +1,5 @@
 // Rack display (DOM side): template summaries for the rack views, fetched from the library in
-// batches and cached per project and id (docs/notes/rackula.md G). Pure parts: rack-display-core.js.
+// batches and cached per project and id (docs/SPEC.md §6.13.11). Pure parts: rack-display-core.js.
 
 export const CHUNK = 100;
 

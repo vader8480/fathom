@@ -1,7 +1,7 @@
 // XPT: js/rack-export-core.js (rack export SVG, filenames, remembered choices).
 // The items / shelf / rows cases use rack-core's own itemBlocks,
 // shelfChildBlocks and racksByRow when it exports them, else stand-ins passed
-// through opts.core with the contract shapes (docs/notes/rackula.md D, RJS).
+// through opts.core with the contract shapes (docs/SPEC.md §4.4.7 and §6.7, rack-core).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadModule, loadFixtureDoc, loadVocab, clone } from './fixtures/helpers.mjs';

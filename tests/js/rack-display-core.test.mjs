@@ -1,5 +1,5 @@
 // Rackula DSP: js/rack-display-core.js and js/rack-display.js loadTemplateInfo against
-// docs/notes/rackula.md contract B (category colours), C (annotations) and G (display modules).
+// docs/SPEC.md §4.4.7 (category colours, annotations) and §6.13.11 (display modules).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadModule, loadVocab, clone } from './fixtures/helpers.mjs';

@@ -210,7 +210,7 @@ def _components() -> Dict[str, Any]:
                        "properties": {"text": {"type": "string", "description": "Rackula layout YAML or JSON"},
                                       "zip_b64": {"type": "string", "description": "a .Rackula.zip, base64"},
                                       "url": {"type": "string", "description": "a count.racku.la share link or its encoded string"},
-                                      "room": {"type": "string", "description": "room id for the new racks and devices (404 if unknown); default: the first room"},
+                                      "room": {"type": "string", "description": "room id for the new racks and devices (404 if unknown); default: settings.default_room, else the first room"},
                                       "apply": {"type": "boolean", "default": False, "description": "commit the ops (needs base_revision)"},
                                       "base_revision": {"type": "integer"}}},
         "RackImportPreview": {"type": "object", "properties": {

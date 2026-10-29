@@ -1,7 +1,7 @@
 // Racks view: mount(el, ctx) (§6.4, §6.7). `racks` with no id is the all-racks
 // landing: the toolbar, the rack form, the unracked-devices explorer and the
 // library panel built here around the elevation from rack-elevation.js.
-// `racks/<id>[/<tab>[/front|rear]]` is the rack page (page-rack.js,
+// `racks/<id>[/<tab>[/front|rear|both]]` is the rack page (page-rack.js,
 // docs/ui-audit.md B.3 RK), which embeds one elevation through the
 // createElevation passed to it.
 import { h, on } from './dom.js';
