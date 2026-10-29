@@ -7,9 +7,9 @@
 
 import {
   createStore, canConnect, devicePorts, portLabel, deviceTitle, disciplineOf, mediumInfo,
-  filterDevices, parsePortRef, slug, deepClone,
+  filterDevices, parsePortRef, slug, deepClone, isLocked,
 } from './model-core.js';
-import { createApi, ChangeQueue, ApiError } from './api.js';
+import { createApi, ChangeQueue, ApiError, isLockedError } from './api.js';
 import { h, esc } from './dom.js';
 import {
   layoutFor, DEFAULT_VIEW, SECTIONS, sectionOf, sectionsFor, canSee, parseRoute, buildRoute, withQuery, mergeRoute,
@@ -19,8 +19,75 @@ import { createDrawer } from './drawer.js';
 import { parseDrawer, selectionOpensDrawer } from './drawer-core.js';
 import { openSearch } from './search.js';
 import { createNotices, mountBell, skeleton, inlineError } from './feedback.js';
+import { relTime } from './feedback-core.js';
 
 export { h, esc, selToString, selFromString };
+
+// ------------------------------------------------------------ theme (FR-UX-15)
+// Applied before anything renders: `fathom.ui.theme` (local) is dark (default), light or system;
+// `?theme=` (search or hash query) overrides for one page load without persisting.
+
+const THEME_KEY = 'fathom.ui.theme';
+export const THEMES = ['dark', 'light', 'system'];
+const THEME_LABELS = { dark: 'Dark', light: 'Light', system: 'System' };
+const THEME_COLORS = { dark: '#0b1020', light: '#f6f7fb' };
+
+function themeParam() {
+  if (typeof location === 'undefined') return null;
+  const s = new URLSearchParams(location.search);
+  if (THEMES.indexOf(s.get('theme')) >= 0) return s.get('theme');
+  const hq = location.hash.indexOf('?');
+  if (hq >= 0) {
+    const v = new URLSearchParams(location.hash.slice(hq + 1)).get('theme');
+    if (THEMES.indexOf(v) >= 0) return v;
+  }
+  return null;
+}
+
+export function readTheme() {
+  const o = themeParam();
+  if (o) return o;
+  try {
+    const v = window.localStorage.getItem(THEME_KEY);
+    return THEMES.indexOf(v) >= 0 ? v : 'dark';
+  } catch (e) { return 'dark'; }
+}
+
+function prefersLight() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+}
+
+export function resolvedScheme(theme) {
+  return theme === 'light' || (theme === 'system' && prefersLight()) ? 'light' : 'dark';
+}
+
+export function applyTheme(theme) {
+  if (THEMES.indexOf(theme) < 0) theme = 'dark';
+  document.documentElement.setAttribute('data-theme', theme);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', THEME_COLORS[resolvedScheme(theme)]);
+  return theme;
+}
+
+export function setTheme(theme, persist) {
+  const t = applyTheme(theme);
+  if (persist !== false) { try { window.localStorage.setItem(THEME_KEY, t); } catch (e) { /* private mode */ } }
+  return t;
+}
+
+export function nextTheme(theme) {
+  return THEMES[(Math.max(0, THEMES.indexOf(theme)) + 1) % THEMES.length];
+}
+
+if (typeof document !== 'undefined' && document.documentElement) {
+  applyTheme(readTheme());
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const onScheme = function () { applyTheme(document.documentElement.getAttribute('data-theme') || 'dark'); };
+    if (mq.addEventListener) mq.addEventListener('change', onScheme);
+    else if (mq.addListener) mq.addListener(onScheme);
+  }
+}
 
 const PAGE_CSS = ['entity-header.css', 'datatable.css', 'explorer.css'];
 const ADMIN_CSS = ['datatable.css', 'admin.css'];
@@ -613,7 +680,12 @@ export function makeCtx(store, extras) {
     env: (typeof window !== 'undefined') ? detectEnv() : { touch: false, narrow: false, platform: 'other', online: true, secure: false },
     commit: function (ops, label) {
       if (!ops || !ops.length) return null;
-      if (ctx.store.readOnly) { ctx.toast('Read-only: this change was not made', 'warn'); return null; }
+      if (ctx.store.readOnly) {
+        // The lock itself may always be toggled by an editor (Settings › Project lock card).
+        if (A.locked && A.store === ctx.store && !baseReadOnly() && isLockOnlyOps(ops)) { setLocked(ops[0].value.locked); return null; }
+        ctx.toast(A.locked && A.store === ctx.store ? 'Editing is locked \u2014 this change was not made' : 'Read-only: this change was not made', 'warn');
+        return null;
+      }
       try {
         const d = ctx.store.commit(ops, label);
         announce(label);
@@ -702,6 +774,7 @@ const A = {
   route: copyRoute(EMPTY_ROUTE), layout: 'lg', nav: null, drawer: null, drawerOpen: false, intent: null, pendingSection: '',
   applyingRoute: false, subs: {}, recent: null, notices: null, bell: null, overlayInfo: { fetchedAt: null, revision: null },
   saveTrack: { last: '', offlineMax: 0 }, noteSig: '', focusing: false, projectsError: null, projectsLoading: false,
+  locked: false, tour: null, tourChecked: false,
 };
 
 function focusView(sel) {
@@ -937,6 +1010,7 @@ function saveLabel(d) {
   const n = (d && d.pending) || (A.queue ? A.queue.pending : 0);
   const st = d ? d.state : 'saved';
   if (A.travel) return 'Viewing r' + A.travel.rev;
+  if (A.store && A.locked && !baseReadOnly() && !n) return 'Locked \u00b7 r' + rev;
   if (A.store && A.store.readOnly && !n) return (A.offline ? 'Offline \u00b7 ' : 'Read-only \u00b7 ') + 'r' + rev;
   if (st === 'saving') return 'Saving\u2026';
   if (st === 'pending') return n + ' pending';
@@ -1001,8 +1075,77 @@ function refreshBanner() {
   }
   if (A.offline) { setBanner('warn', 'Offline copy \u00b7 read-only. Edits come back when the server is reachable.'); return; }
   if (navigator.onLine === false || (q && q.state === 'offline')) { setBanner('warn', 'Offline \u00b7 ' + (q ? q.pending : 0) + ' pending edits. They are kept on this device and sent when you reconnect.'); return; }
-  if (A.store && A.store.readOnly) { setBanner('info', 'Read-only access. You can browse, search and trace.'); return; }
+  if (A.store && A.store.readOnly && baseReadOnly()) { setBanner('info', 'Read-only access. You can browse, search and trace.'); return; }
   setBanner('', null);
+}
+
+// ---- project lock (FR-UX-17): settings.locked makes the store read-only for everyone; views get
+// ctx.role 'viewer' except Settings (which holds the lock toggle); editors may unlock from #app-lock.
+
+function baseReadOnly() {
+  return A.role === 'viewer' || A.offline;
+}
+
+function lockInfo() {
+  const doc = A.store ? A.store.doc : null;
+  const s = (doc && doc.settings) || {};
+  return { locked: isLocked(doc), by: s.locked_by ? String(s.locked_by) : '', at: s.locked_at ? String(s.locked_at) : '' };
+}
+
+function renderLock(li) {
+  const el = $('app-lock');
+  if (!el) return;
+  if (!li.locked || A.travel) { el.hidden = true; el.innerHTML = ''; return; }
+  const ms = li.at ? Date.parse(li.at) : NaN;
+  const when = isNaN(ms) ? '' : relTime(ms, Date.now());
+  el.innerHTML = '';
+  el.appendChild(h('span', { class: 'app-lock-text' }, [
+    h('b', null, 'Editing is locked'), ' by ' + (li.by || 'another user') + (when ? ' \u00b7 ' + when : ''),
+  ]));
+  if (!baseReadOnly()) el.appendChild(h('button', { type: 'button', class: 'small', id: 'app-unlock', onclick: function () { setLocked(false); } }, 'Unlock'));
+  el.hidden = false;
+}
+
+// Re-reads settings.locked from the doc; `initial` skips the view re-mount of the first load.
+function applyLock(initial) {
+  const store = A.store;
+  if (!store) { A.locked = false; renderLock({ locked: false }); return; }
+  const li = lockInfo();
+  const was = A.locked;
+  A.locked = li.locked;
+  const want = baseReadOnly() || li.locked;
+  if (!A.travel && store.readOnly !== want) store.setReadOnly(want);
+  renderLock(li);
+  if (initial || was === li.locked) return;
+  refreshBanner();
+  updateSave(null);
+  announce(li.locked ? 'Editing is locked' : 'Editing is unlocked');
+  // Views read ctx.role when they mount; Settings keeps the real role and follows store 'mode' itself.
+  if (A.view && A.view !== 'settings' && A.viewHandle) {
+    const v = A.view;
+    setTimeout(function () { if (A.store === store && A.view === v) mountView(v); }, 0);
+  }
+}
+
+function isLockOnlyOps(ops) {
+  if (!ops || ops.length !== 1) return false;
+  const o = ops[0];
+  if (!o || o.op !== 'root' || o.key !== 'settings' || !o.value || typeof o.value !== 'object') return false;
+  return Object.keys(o.value).every(function (k) { return k === 'locked' || k === 'locked_by' || k === 'locked_at'; }) && typeof o.value.locked === 'boolean';
+}
+
+// One op through the normal pipeline; the server fills locked_by / locked_at.
+function setLocked(on) {
+  const store = A.store;
+  if (!store || !A.ctx || A.travel || baseReadOnly()) return;
+  const ops = [{ op: 'root', key: 'settings', value: { locked: !!on } }];
+  if (store.readOnly) store.setReadOnly(false);
+  try {
+    store.commit(ops, on ? 'Lock editing' : 'Unlock editing');
+  } catch (e) {
+    toast(errMsg(e), 'err');
+  }
+  applyLock(false);
 }
 
 function afterResync() {
@@ -1482,7 +1625,7 @@ function openMenu(anchor, items) {
   items.forEach(function (it) {
     if (it.sep) { menu.appendChild(h('div', { class: 'sep', role: 'separator' })); return; }
     if (it.info) { menu.appendChild(h('div', { class: 'lbl' }, it.info)); return; }
-    menu.appendChild(h('button', { type: 'button', role: 'menuitem', disabled: !!it.disabled, 'aria-current': it.current ? 'page' : null, onclick: function () { close(); it.action(); } }, it.label));
+    menu.appendChild(h('button', { type: 'button', role: 'menuitem', id: it.id || null, disabled: !!it.disabled, 'aria-current': it.current ? 'page' : null, onclick: function () { close(); it.action(); } }, it.label));
   });
   document.body.appendChild(menu);
   const r = anchor.getBoundingClientRect();
@@ -1506,7 +1649,10 @@ function openMenu(anchor, items) {
       if (n) n.focus();
     }
   }
-  setTimeout(function () { document.addEventListener('pointerdown', outside, true); document.addEventListener('keydown', key, true); }, 0);
+  // Keys bind at once so an immediate Esc is not lost; pointerdown waits a tick
+  // so the pointer that opened the menu cannot also close it.
+  document.addEventListener('keydown', key, true);
+  setTimeout(function () { document.addEventListener('pointerdown', outside, true); }, 0);
 }
 
 function userMenu() {
@@ -1529,8 +1675,14 @@ function userMenu() {
     if (A.role !== 'viewer') items.push({ label: 'New project\u2026', action: newProjectDialog });
     items.push({ sep: true });
   }
+  const theme = readTheme();
+  items.push({ label: 'Theme: ' + THEME_LABELS[theme] + ' \u25B8 ' + THEME_LABELS[nextTheme(theme)], id: 'app-menu-theme', action: function () { setTheme(nextTheme(readTheme())); } });
   items.push({ label: 'Make available offline', action: makeOffline });
   items.push({ label: 'Keyboard shortcuts', action: shortcutsDialog });
+  // The menu is gone by the time these open; focus the button first so Esc returns there.
+  items.push({ label: 'Take the tour', id: 'app-menu-tour', disabled: !A.store, action: function () { $('app-user').focus(); runTour(); } });
+  if (A.store && !baseReadOnly() && !A.travel && !A.locked) items.push({ label: 'Lock editing', id: 'app-menu-lock', action: function () { setLocked(true); } });
+  items.push({ label: 'Suggest an improvement\u2026', id: 'app-menu-suggest', disabled: !A.ctx, action: function () { $('app-user').focus(); suggestImprovement(); } });
   if (s.auth_enabled && u) {
     items.push({ label: 'Change password', action: changePasswordDialog });
     items.push({ sep: true });
@@ -1541,7 +1693,73 @@ function userMenu() {
 
 function shortcutsDialog() {
   const rows = [['Cmd/Ctrl+K', 'Search'], ['Cmd/Ctrl+J', 'Helper (assistant)'], ['Cmd/Ctrl+S', 'Save now'], ['Cmd/Ctrl+Z', 'Undo'], ['Shift+Cmd/Ctrl+Z, Ctrl+Y', 'Redo'], ['Esc', 'Close dialogs, panels and highlights']];
-  openDialog({ title: 'Keyboard shortcuts', body: h('table', { class: 'adm-table' }, h('tbody', null, rows.map(function (r) { return h('tr', null, [h('th', { scope: 'row' }, r[0]), h('td', null, r[1])]); }))), buttons: [{ label: 'Close', value: null, primary: true }] });
+  openDialog({
+    title: 'Keyboard shortcuts',
+    body: h('table', { class: 'adm-table' }, h('tbody', null, rows.map(function (r) { return h('tr', null, [h('th', { scope: 'row' }, r[0]), h('td', null, r[1])]); }))),
+    buttons: [{ label: 'Take the tour', value: 'tour' }, { label: 'Close', value: null, primary: true }],
+  }).then(function (v) { if (v === 'tour') runTour(); });
+}
+
+// ---- first-run tour (FR-UX-16; tour.js). Runs once after the first project loads when
+// fathom.ui.tour is unset, then stores {done, at}. ?tour=0 never auto-starts, ?tour=1 always does
+// (also under ?smoke=1, where it otherwise stays off so smoke runs see the plain shell).
+
+const TOUR_KEY = 'fathom.ui.tour';
+
+function tourSteps() {
+  return [
+    { target: '#app-project, #app-room', title: 'Project and room', text: 'Switch projects and rooms here. "All rooms" shows the whole project at once.' },
+    { target: '#app-views, #app-tabbar', title: 'Sections', text: 'Patch, Rooms, Devices, Schedules, SOPs, Data and Settings. Right-click or long-press a section for its views.' },
+    { target: '#app-search', title: 'Search everything', text: 'Devices, cables, rooms, racks and procedures. Cmd/Ctrl+K opens it from anywhere.' },
+    { target: '#app-assistant-btn', title: 'Helper', text: 'Ask how a signal gets from A to B or where a device lives; the Helper answers from this project.' },
+    { target: '#app-user', title: 'Save state and your menu', text: 'Edits save on their own; the dot next to this button shows the state. Theme, offline copy, lock and suggestions live in this menu.' },
+  ];
+}
+
+function tourSeen() {
+  let raw = null;
+  try { raw = window.localStorage.getItem(TOUR_KEY); } catch (e) { return false; }
+  if (!raw) return false;
+  try {
+    const o = JSON.parse(raw);
+    return !!(o && typeof o === 'object');
+  } catch (e) { return true; }
+}
+
+function tourStore(result) {
+  try { window.localStorage.setItem(TOUR_KEY, JSON.stringify({ done: true, at: new Date().toISOString(), reason: result && result.reason })); } catch (e) { /* private mode */ }
+}
+
+function runTour() {
+  if (A.tour && A.tour.isOpen()) return Promise.resolve(A.tour);
+  return Promise.all([ensureCss('tour.css'), importModule('./tour.js')]).then(function (r) {
+    const m = r[1];
+    A.tour = m.startTour(tourSteps(), { onClose: function (res) { A.tour = null; tourStore(res); } });
+    return A.tour;
+  }).catch(function (e) { toast(errMsg(e), 'err'); return null; });
+}
+
+function maybeStartTour() {
+  if (A.tourChecked || !A.store) return;
+  A.tourChecked = true;
+  const p = urlParam('tour');
+  if (p === '0') return;
+  if (p !== '1' && (urlParam('smoke') === '1' || tourSeen())) return;
+  setTimeout(function () { if (A.store) runTour(); }, 350);
+}
+
+// ---- "Suggest an improvement" (FR-UX-18; improve-ui.js)
+
+function suggestImprovement() {
+  const ctx = A.ctx;
+  if (!ctx) { toast('Open a project first', 'warn'); return; }
+  const u = A.session && A.session.user;
+  const view = VIEWS[A.view] ? VIEWS[A.view].label : '';
+  const room = A.store && A.store.room ? roomName(A.store.room) : '';
+  const about = [A.project, view, room].filter(Boolean).join(' \u00b7 ');
+  return Promise.all([importModule('./improve-ui.js')]).then(function (r) {
+    return r[0].openImproveDialog(ctx, { about: about, name: u ? u.username : '', url: location.href });
+  }).catch(function (e) { toast(errMsg(e), 'err'); });
 }
 
 function changePasswordDialog() {
@@ -1614,6 +1832,7 @@ function startTimeTravel(rev) {
     A.travel.rev = rev;
     A.store.setReadOnly(true);
     A.store.replaceDoc(r.doc, A.travel.revision, 'history');
+    renderLock(lockInfo());
     refreshBanner();
     updateSave(null);
   }).catch(function (e) { toast(errMsg(e), 'err'); });
@@ -1625,6 +1844,7 @@ function endTimeTravel() {
   A.travel = null;
   A.store.replaceDoc(t.doc, t.revision, 'load');
   A.store.setReadOnly(t.readOnly);
+  applyLock(true);
   refreshBanner();
   updateSave(null);
 }
@@ -1688,6 +1908,8 @@ function teardown() {
   A.travel = null;
   A.ctx = null;
   A.store = null;
+  A.locked = false;
+  renderLock({ locked: false });
   A.view = '';
   A.pendingSection = '';
   A.overlayInfo = { fetchedAt: null, revision: null };
@@ -1878,7 +2100,9 @@ function loadProject(name, route) {
     }
     const recent = A.recent;
     const ctx = makeCtx(store, {
-      api: noticeApi(A.api, name), project: name, meta: A.meta, role: A.role, session: A.session,
+      api: noticeApi(A.api, name), project: name, meta: A.meta, session: A.session,
+      // Locked project: every view is a viewer except Settings, which holds the lock toggle.
+      get role() { return A.locked && A.view !== 'settings' ? 'viewer' : A.role; },
       navigate: navigate,
       openInspector: openDrawer,
       closeInspector: closeDrawer,
@@ -1924,6 +2148,7 @@ function loadProject(name, route) {
       if (d.touched && d.touched.some(function (r) { return r.indexOf('rooms/') === 0 || r.indexOf('venues/') === 0; })) renderPickers();
       if (d.source === 'load') renderPickers();
       if (d.source !== 'local' && d.touched && d.touched.some(function (r) { return r.indexOf('problems/') === 0; })) checkProblemReports(false);
+      if (d.source === 'load' || (d.touched && d.touched.indexOf('settings') >= 0)) applyLock(false);
       updateSave(null);
       refreshSelbar();
     });
@@ -1941,11 +2166,15 @@ function loadProject(name, route) {
     });
     on(store, 'error', function (e) { toast(errMsg(e.detail && e.detail.error), 'err'); });
     on(queue, 'state', function (e) { updateSave(e.detail); refreshBanner(); trackSave(e.detail); });
-    on(queue, 'dropped', function (e) { toast('Change rejected by the server: ' + errMsg(e.detail.error) + '. Reloaded the project.', 'err'); });
+    on(queue, 'dropped', function (e) {
+      if (isLockedError(e.detail.error)) { toast('Someone locked editing \u2014 your last change was not saved', 'err'); return; }
+      toast('Change rejected by the server: ' + errMsg(e.detail.error) + '. Reloaded the project.', 'err');
+    });
     on(queue, 'problems', function (e) { A.problems = e.detail || []; emit('problems', A.problems); });
     on(window, 'online', function () { refreshBanner(); queue.flush(); });
     on(window, 'offline', refreshBanner);
     on(window, 'beforeunload', function (e) { if (queue.pending && navigator.onLine !== false) { queue.flush(); e.preventDefault(); e.returnValue = ''; } });
+    applyLock(true);
     renderPickers();
     refreshBanner();
     updateSave(null);
@@ -1953,7 +2182,7 @@ function loadProject(name, route) {
     checkProblemReports(true);
     A.loading = '';
     const cur = parseRoute(location.hash);
-    return applyRoute(cur.project === name ? cur : route);
+    return applyRoute(cur.project === name ? cur : route).then(function (r) { maybeStartTour(); return r; });
   }).catch(function (e) {
     A.loading = '';
     const main = $('app-main');

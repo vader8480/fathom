@@ -223,7 +223,11 @@ T('6. SECTIONS, roles: sectionsFor / canSee / sectionOf / sectionRoot', () => {
   assert.equal(rc.SECTIONS.find((s) => s.key === 'home').glyph, '\u2302');
   for (const s of rc.SECTIONS) assert.deepEqual(Object.keys(s), ['key', 'label', 'glyph', 'views', 'nav'], s.key);
   for (const s of rc.SECTIONS) for (const v of s.views) assert.equal(rc.VIEW_ROLES[v], 'viewer', v);
-  assert.deepEqual(rc.TAB_ROLES, { settings: { users: 'admin', backups: 'admin', sharing: 'editor', trash: 'admin' } });
+  assert.deepEqual(rc.TAB_ROLES, { settings: { users: 'admin', invites: 'admin', backups: 'admin', sharing: 'editor', suggestions: 'admin', trash: 'admin' } });
+  assert.equal(canSee('settings', 'editor', 'invites'), false, 'P2C: invites are admin only');
+  assert.equal(canSee('settings', 'editor', 'suggestions'), false, 'P2C: suggestions are admin only');
+  assert.equal(canSee('settings', 'admin', 'invites'), true);
+  assert.equal(canSee('settings', 'admin', 'suggestions'), true);
   assert.deepEqual(rc.SECTIONS.find((s) => s.key === 'devices').views, ['devices', 'inventory', 'files'], 'P1C: the Files view sits in the devices section');
 
   for (const role of ['viewer', 'editor', 'admin']) assert.equal(sectionsFor(role).length, 8, role);

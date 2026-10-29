@@ -23,6 +23,7 @@ const PRECACHE = [
   'static/js/home.js', 'static/js/home-core.js', 'static/js/feedback.js', 'static/js/feedback-core.js',
   'static/js/wizard.js', 'static/js/wizard-core.js', 'static/js/page-device.js', 'static/js/page-room.js',
   'static/js/page-rack.js', 'static/js/views-discovery.js', 'static/js/merge-ui.js',
+  'static/js/tour.js', 'static/css/tour.css', 'static/js/improve-ui.js',
   'static/css/explorer.css', 'static/css/entity-header.css', 'static/css/datatable.css', 'static/css/drawer.css',
   'static/css/search.css', 'static/css/home.css', 'static/css/feedback.css', 'static/css/wizard.css',
   'static/css/page-device.css', 'static/css/page-room.css', 'static/css/rack.css', 'static/css/inventory.css',

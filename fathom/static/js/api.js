@@ -14,6 +14,12 @@ export class ApiError extends Error {
   }
 }
 
+// A `/changes` batch refused because the project is locked (settings.locked, §3.28 FR-UX-17):
+// the server answers 423 with code "locked".
+export function isLockedError(e) {
+  return !!e && (e.code === 'locked' || e.status === 423);
+}
+
 function qs(params) {
   if (!params) return '';
   const parts = [];
@@ -198,6 +204,8 @@ export function createApi(opts) {
     problems: function (name, params) { return get(proj(name) + '/problems', params); },
     // body: a plain object (JSON) or a FormData with text/device/page/name/device_status and an optional photo
     reportProblem: function (name, body) { return send('POST', proj(name) + '/problems', body); },
+    // "Suggest an improvement" (FR-UX-18): a problem report with kind "suggestion"; body {text, name?, url?, device?, page?}
+    reportSuggestion: function (name, body) { return send('POST', proj(name) + '/problems', Object.assign({}, body || {}, { kind: 'suggestion' })); },
     patchProblem: function (name, id, patch) { return send('PATCH', proj(name) + '/problems/' + enc(id), patch); },
     shares: function (name) { return get(proj(name) + '/shares'); },
     createShare: function (name, o) { return send('POST', proj(name) + '/shares', o || {}); },
@@ -361,6 +369,18 @@ export class ChangeQueue extends EventTarget {
         self._emit(err && err.status ? 'error' : 'offline', { retryIn: delay });
         self._schedule(delay);
         return null;
+      }
+      // Someone locked editing (423): every queued op would be refused too, so the whole queue is
+      // dropped at once instead of one batch per retry; the shell shows the lock banner after resync.
+      if (isLockedError(err)) {
+        let all = [];
+        self._items.forEach(function (it) { all = all.concat(it.ops); });
+        self._items = [];
+        self._persist();
+        self._error = err.message;
+        self._emit('error', { dropped: all.length, locked: true });
+        self.dispatchEvent(makeEvent('dropped', { error: err, ops: all, locked: true }));
+        return self.resync().catch(function () { return null; });
       }
       // validation / permission errors: drop this batch so the queue does not wedge
       self._items.splice(0, batch.count);

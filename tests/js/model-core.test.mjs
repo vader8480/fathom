@@ -705,3 +705,21 @@ T('containerDevices / containerContents / isAccessory', () => {
   assert.equal(mc.isAccessory(doc.devices.find((d) => d.id === 'atem-mini')), false, 'devices with ports are not accessories');
   assert.equal(mc.isAccessory(null), false);
 });
+
+// ---- P2B: project lock (FR-UX-17)
+
+T('isLocked reads settings.locked strictly', () => {
+  const isLocked = need(mc, 'isLocked', 'FR-UX-17', S);
+  const doc = fx();
+  assert.equal(isLocked(doc), false, 'fixture is unlocked');
+  doc.settings = Object.assign({}, doc.settings, { locked: true, locked_by: 'sam' });
+  assert.equal(isLocked(doc), true);
+  doc.settings.locked = 'yes';
+  assert.equal(isLocked(doc), false, 'only boolean true locks');
+  doc.settings.locked = 1;
+  assert.equal(isLocked(doc), false);
+  assert.equal(isLocked({ settings: null }), false);
+  assert.equal(isLocked({}), false);
+  assert.equal(isLocked(null), false);
+  assert.equal(isLocked(undefined), false);
+});

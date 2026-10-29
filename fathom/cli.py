@@ -539,6 +539,41 @@ def cmd_user(a: argparse.Namespace) -> None:
         _die(str(exc).strip("'\""))
 
 
+def cmd_invite(a: argparse.Namespace) -> None:
+    from . import users
+
+    try:
+        if a.action == "create":
+            projects = {}
+            for item in a.project or []:
+                name, sep, role = item.partition("=")
+                if not sep or not name.strip():
+                    _die(f"--project expects name=role, got '{item}'")
+                projects[name.strip()] = role.strip()
+            inv = users.create_invite(a.role or "editor", projects or None, created_by="cli", ttl_hours=a.hours, note=a.note or "")
+            print(f"/invite/{inv['token']}")
+            print(f"  role: {inv['role']}" + (f"  projects: {', '.join(f'{k}:{v}' for k, v in sorted(inv['projects'].items()))}" if inv.get("projects") else ""))
+            print(f"  expires: {inv['expires']}  (open the path on the server's URL; the link works once)")
+            return
+        if a.action == "list":
+            rows = users.list_invites(include_used=a.all)
+            if not rows:
+                print("no open invites")
+            for inv in rows:
+                state = f"used by {inv['used_by']} {inv.get('used_at') or ''}".rstrip() if inv.get("used_by") else f"expires {inv.get('expires')}"
+                proj = ", ".join(f"{k}:{v}" for k, v in sorted((inv.get("projects") or {}).items()))
+                print(f"{inv['token']}\t{inv.get('role', '')}\t{state}{chr(9) + proj if proj else ''}{chr(9) + inv['note'] if inv.get('note') else ''}")
+            return
+        if a.action == "revoke":
+            if not a.token:
+                _die("invite revoke <token>")
+            if not users.revoke_invite(a.token):
+                _die(f"invite '{a.token}' not found")
+            print(f"ok: revoked {a.token}")
+    except (ValueError, KeyError, LookupError) as exc:
+        _die(str(exc).strip("'\""))
+
+
 def cmd_backup(a: argparse.Namespace) -> None:
     from . import backup as B
 
@@ -1056,6 +1091,16 @@ def main(argv=None) -> None:
     s.add_argument("--role", choices=["viewer", "editor", "admin"])
     s.add_argument("--password-stdin", action="store_true", help="read the password from stdin")
     s.set_defaults(func=cmd_user)
+
+    s = sub.add_parser("invite", help="one-time invite links (FATHOM_DATA/invites.json)")
+    s.add_argument("action", choices=["create", "list", "revoke"])
+    s.add_argument("token", nargs="?", help="revoke: the inv-… token")
+    s.add_argument("--role", choices=["viewer", "editor", "admin"], help="create: role of the invited user (default editor)")
+    s.add_argument("--project", action="append", metavar="NAME=ROLE", help="create: per-project override (viewer|editor); repeatable")
+    s.add_argument("--hours", type=float, default=72.0, help="create: hours until the link expires (default 72)")
+    s.add_argument("--note", help="create: a note shown in the invite list")
+    s.add_argument("--all", action="store_true", help="list: include used invites")
+    s.set_defaults(func=cmd_invite)
 
     s = sub.add_parser("backup", help="whole-server backups (FATHOM_DATA/backups)")
     s.add_argument("action", choices=["create", "list", "restore"])

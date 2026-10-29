@@ -13,7 +13,7 @@
 .fp-root select, .rk-root select, .sch-root select, .inv-root select,
 .fp-root input[type=text], .fp-root input[type=number], .rk-root input, .sch-root input[type=search], .sch-root input[type=text],
 .inv-root input[type=search], .inv-root input[type=text], .inv-root input[type=date], .inv-root textarea {
-  font: inherit; color: var(--text, #e6eaf4); background: #161d2e; border: 1px solid var(--border, rgba(255,255,255,.09));
+  font: inherit; color: var(--text, #e6eaf4); background: var(--panel-2, #161d2e); border: 1px solid var(--border, rgba(255,255,255,.09));
   border-radius: 6px; padding: 5px 9px; min-height: 30px;
 }
 .fp-btn, .rk-btn, .sch-btn, .inv-btn {
@@ -292,7 +292,7 @@
 .inv-check { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; }
 .inv-columns { position: relative; }
 .inv-columns > summary {
-  list-style: none; cursor: pointer; border: 1px solid var(--border, rgba(255,255,255,.09)); background: #161d2e; border-radius: 6px; padding: 5px 9px; min-height: 30px;
+  list-style: none; cursor: pointer; border: 1px solid var(--border, rgba(255,255,255,.09)); background: var(--panel-2, #161d2e); border-radius: 6px; padding: 5px 9px; min-height: 30px;
 }
 .inv-columns > summary::-webkit-details-marker { display: none; }
 .inv-colslist {

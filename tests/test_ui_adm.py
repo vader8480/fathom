@@ -18,11 +18,33 @@ except ImportError:  # pragma: no cover
 
 P = "#/campus-demo/main/"
 SIZES3 = ("d", "t", "m")
-ALL_TABS = ["project", "rooms", "systems", "locations", "networks", "templates", "users", "backups", "sharing", "offline", "trash"]
+ALL_TABS = ["project", "rooms", "systems", "locations", "networks", "templates", "users", "invites", "backups", "sharing", "suggestions", "offline", "trash"]
 TRASH_ITEMS = {"items": [
     {"name": "chapel-2024", "trashed_at": "2026-10-27T09:12:00Z", "trashed_by": "admin", "rooms": 1, "devices": 18},
     {"name": "old-broadcast", "trashed_at": "2026-10-21T16:40:00Z", "trashed_by": "jordan", "rooms": 2, "devices": 41},
 ], "retention_days": 30}
+# P2C: the invite and suggestion endpoints belong to the P2A backend; the UI is exercised against stubs.
+INVITE_OLD = {"token": "inv-old0000000000", "role": "viewer", "projects": {}, "created_by": "admin", "created": "2026-10-20T10:00:00Z",
+              "expires": "2026-10-27T10:00:00Z", "note": "front desk"}
+INVITE_NEW = {"token": "inv-new0000000000", "role": "editor", "projects": {"campus-demo": "viewer"}, "created_by": "admin",
+              "created": "2026-10-28T10:00:00Z", "expires": "2026-10-31T10:00:00Z", "note": "Jordan", "url": "/invite/inv-new0000000000"}
+SUGGESTIONS = {"problems": [
+    {"id": "pr-0000a001", "kind": "suggestion", "text": "Add a Dante name column to the patch table", "by": "jordan", "created": "2026-10-27T09:12:00Z",
+     "status": "open", "device": "foh-cl5", "device_name": "FOH CL5", "via": "app"},
+    {"id": "pr-0000a002", "kind": "suggestion", "text": "Link the power-up page from the lobby QR", "by": "sam", "created": "2026-10-21T16:40:00Z",
+     "status": "resolved", "resolved": "2026-10-22T08:00:00Z", "resolved_by": "admin", "page": "power-up", "page_title": "Power up", "via": "app"},
+    {"id": "pr-0000a003", "kind": "problem", "text": "Hum on the lectern mic", "by": "pat", "created": "2026-10-26T09:00:00Z", "status": "open", "via": "app"},
+], "open": 2, "revision": 3}
+SUGGESTIONS_ALL = {"items": [
+    {"project": "sunday-demo", "id": "pr-0000b001", "kind": "suggestion", "text": "Rename the stage box", "by": "lee", "created": "2026-10-25T12:00:00Z", "status": "open"},
+    {"project": "campus-demo", "id": "pr-0000a001", "kind": "suggestion", "text": "Add a Dante name column to the patch table", "by": "jordan",
+     "created": "2026-10-27T09:12:00Z", "status": "open", "device": "foh-cl5", "device_name": "FOH CL5"},
+]}
+
+
+def api_get(base: str, path: str) -> dict:
+    with urllib.request.urlopen(base + path, timeout=30) as r:
+        return json.loads(r.read().decode() or "{}")
 
 
 def seed_history(data: str) -> None:
@@ -282,6 +304,165 @@ class AdmUi(UiCase):
             pg.press("Escape")
             pg.wait_for("!document.querySelector('.app-dialog')")
 
+    # ----------------------------------------------------------- lock editing (P2C)
+
+    def test_lock_card_toggles_settings_locked(self):
+        """The Lock editing card commits one settings.locked op; the server doc flips with it."""
+        card = "[data-card=lock]"
+        btn = card + " button[data-act=lock-toggle]"
+        for size in ("d", "m"):
+            with self.subTest(size=size), self.open(P + "settings/project", size) as pg:
+                self.view(pg, "adm-settings")
+                pg.wait_for("!!document.querySelector(%s)" % json.dumps(btn))
+                self.assertEqual(pg.js("document.querySelector(%s).getAttribute('data-locked')" % json.dumps(card + " .adm-lock-status")), "false")
+                self.assertEqual(pg.js("document.querySelector(%s).textContent" % json.dumps(btn)), "Lock editing")
+                self.assertIn("Builds, files and procedures are unaffected.", pg.js("document.querySelector(%s).textContent" % json.dumps(card + " .adm-lock-hint")))
+                pg.click(btn)
+                pg.wait_for("document.querySelector(%s).getAttribute('data-locked') === 'true'" % json.dumps(card + " .adm-lock-status"))
+                self.assertEqual(pg.js("document.querySelector(%s).textContent" % json.dumps(btn)), "Unlock editing")
+                self.assertIn("Locked", pg.js("document.querySelector(%s).textContent" % json.dumps(card + " .adm-lock-status")))
+                pg.wait_for("fetch('/api/v2/projects/campus-demo').then(function (r) { return r.json(); }).then(function (d) { return d.doc.settings.locked === true; })")
+                self.assertLessEqual(pg.page_hscroll(), 0)
+                pg.shot("adm-lock-%s" % size)
+                pg.click(btn)
+                pg.wait_for("document.querySelector(%s).getAttribute('data-locked') === 'false'" % json.dumps(card + " .adm-lock-status"))
+                pg.wait_for("fetch('/api/v2/projects/campus-demo').then(function (r) { return r.json(); }).then(function (d) { return d.doc.settings.locked === false; })")
+                self.assertEqual(pg.smoke["errors"], [])
+
+    # ---------------------------------------------------------------- invites (P2C)
+
+    def test_invites_tab_without_the_endpoint_is_empty(self):
+        with self.open(P + "settings/invites", "d", intercepts=[("/api/v2/invites*", 404, {"error": "not found"}, "GET")]) as pg:
+            self.view(pg, "adm-settings")
+            self.assertEqual(selected_tab(pg), "invites")
+            pg.wait_for("!!document.querySelector('.adm-panel .fb-empty')")
+            self.assertIn("No open invites.", pg.js("document.querySelector('.adm-panel .fb-empty').textContent"))
+            self.assertFalse(pg.js("!!document.querySelector('.adm-panel .fb-error')"), "a missing endpoint is an empty list, not an error")
+            self.assertEqual(pg.smoke["errors"], [])
+
+    def test_invites_form_creates_a_link_and_lists_open_invites(self):
+        for size in ("d", "m"):
+            with self.subTest(size=size), self.open(P + "settings/invites", size, intercepts=[
+                ("/api/v2/invites*", 200, {"invites": [INVITE_OLD], "accept_url": "/invite/"}, "GET"),
+            ]) as pg:
+                self.view(pg, "adm-settings")
+                pg.wait_for("document.querySelectorAll('.adm-panel tr.dt-row').length === 1")
+                cols = pg.js("Array.prototype.map.call(document.querySelectorAll('.adm-panel thead th[data-col]'), function (th) { return th.getAttribute('data-col'); })")
+                self.assertEqual(cols, ["role", "projects", "created_by", "expires", "note", "actions"])
+                row = ".adm-panel tr.dt-row[data-invite=%s]" % INVITE_OLD["token"]
+                self.assertEqual(pg.js("document.querySelector(%s).textContent" % json.dumps(row + " td[data-col=note]")), "front desk")
+                self.assertEqual(pg.js("document.querySelector(%s).textContent" % json.dumps(row + " td[data-col=projects]")), "\u2014")
+                self.assertEqual(pg.js("document.querySelector(%s).textContent" % json.dumps(row + " td[data-col=actions] button[data-act=revoke]")), "Revoke")
+                # the form: role, per-project rows, expiry, note
+                self.assertEqual(pg.js("document.querySelector('#adm-inv-role').value"), "editor")
+                self.assertEqual(pg.js("Array.prototype.map.call(document.querySelectorAll('#adm-inv-ttl option'), function (o) { return o.textContent; })"), ["24 hours", "72 hours", "7 days"])
+                self.assertEqual(pg.js("document.querySelectorAll('.adm-inv-form .adm-pr-row').length"), 0)
+                set_value(pg, "#adm-inv-role", "admin", "change")
+                self.assertTrue(pg.js("document.querySelector('.adm-inv-form .adm-pr').hidden"))
+                self.assertEqual(pg.js("document.querySelector('.adm-inv-form .adm-access-admin').textContent"), "Admins have full access everywhere.")
+                set_value(pg, "#adm-inv-role", "editor", "change")
+                self.assertFalse(pg.js("document.querySelector('.adm-inv-form .adm-pr').hidden"))
+                pg.click(".adm-inv-form .adm-pr-add")
+                pg.wait_for("document.querySelectorAll('.adm-inv-form .adm-pr-row').length === 1")
+                opts = pg.js("Array.prototype.map.call(document.querySelectorAll('.adm-inv-form .adm-pr-proj option'), function (o) { return o.value; })")
+                self.assertIn("campus-demo", opts)
+                self.assertIn("sunday-demo", opts)
+                set_value(pg, ".adm-inv-form .adm-pr-proj", "campus-demo", "change")
+                set_value(pg, ".adm-inv-form .adm-pr-role", "viewer", "change")
+                set_value(pg, "#adm-inv-note", "Jordan")
+                pg.clear_intercepts()
+                pg.intercept("/api/v2/invites*", 200, {"invites": [INVITE_OLD, INVITE_NEW], "accept_url": "/invite/"}, "GET")
+                created = pg.intercept("/api/v2/invites", 201, INVITE_NEW, "POST")
+                pg.click(".adm-inv-form button[data-act=create-invite]")
+                pg.wait_for("!!document.querySelector('.adm-inv-out .adm-inv-url')")
+                self.assertEqual(created["hits"], 1)
+                url = pg.js("document.querySelector('.adm-inv-out .adm-inv-url').value")
+                self.assertTrue(url.startswith("http"), url)
+                self.assertTrue(url.endswith("/invite/" + INVITE_NEW["token"]), url)
+                self.assertTrue(pg.js("document.querySelector('.adm-inv-out .adm-inv-url').readOnly"))
+                self.assertIn("Send this link yourself", pg.js("document.querySelector('.adm-inv-out .adm-inv-hint').textContent"))
+                self.assertIn("works once", pg.js("document.querySelector('.adm-inv-out .adm-inv-hint').textContent"))
+                pg.wait_for("document.querySelectorAll('.adm-panel tr.dt-row').length === 2")
+                self.assertEqual(pg.js("document.querySelectorAll('.adm-panel tr.dt-hl[data-invite=%s]').length" % INVITE_NEW["token"]), 1)
+                self.assertEqual(pg.js("document.querySelector(%s).textContent" % json.dumps(".adm-panel tr.dt-row[data-invite=%s] td[data-col=projects]" % INVITE_NEW["token"])), "campus-demo: viewer")
+                pg.click(".adm-inv-out button[data-act=copy-invite]")
+                pg.wait_for("document.querySelectorAll('.app-toast').length > 1")
+                if size == "m":
+                    self.assertLessEqual(pg.offscreen(".adm-inv-out button[data-act=copy-invite]", "x"), 0)
+                    self.assertTrue(pg.js("!!document.querySelector('.adm-panel .dt-root.dt-cards')"), "cards at sm")
+                    h = pg.js("document.querySelector('.adm-inv-form button[data-act=create-invite]').getBoundingClientRect().height")
+                    self.assertGreaterEqual(h, 44)
+                self.assertLessEqual(pg.page_hscroll(), 0)
+                pg.shot("adm-invites-%s" % size)
+                # Revoke asks first, then DELETEs the token
+                revoke = pg.intercept("/api/v2/invites/" + INVITE_OLD["token"], 204, "", "DELETE")
+                pg.click(row + " td[data-col=actions] button[data-act=revoke]")
+                pg.wait_for("!!document.querySelector('.app-dialog')")
+                self.assertIn("front desk", pg.js("document.querySelector('.app-dialog').textContent"))
+                pg.click(".app-dialog footer button:last-child")
+                pg.wait_for("!document.querySelector('.app-dialog')")
+                deadline = 30
+                while revoke["hits"] < 1 and deadline > 0:
+                    pg.js("new Promise(function (r) { setTimeout(r, 100); })")
+                    deadline -= 1
+                self.assertEqual(revoke["hits"], 1)
+                self.assertEqual(pg.smoke["errors"], [])
+
+    # ------------------------------------------------------------ suggestions (P2C)
+
+    def test_suggestions_empty_state(self):
+        for size in ("d", "m"):
+            with self.subTest(size=size), self.open(P + "settings/suggestions", size, intercepts=[("/api/v2/projects/campus-demo/problems*", 200, {"problems": [], "open": 0}, "GET")]) as pg:
+                self.view(pg, "adm-settings")
+                self.assertEqual(selected_tab(pg), "suggestions")
+                pg.wait_for("!!document.querySelector('.adm-panel .fb-empty')")
+                text = pg.js("document.querySelector('.adm-panel .fb-empty').textContent")
+                self.assertIn("No suggestions yet.", text)
+                self.assertIn("Anyone can send one from the user menu.", text)
+                self.assertFalse(pg.js("document.querySelector('#adm-sug-all').checked"))
+                self.assertLessEqual(pg.page_hscroll(), 0)
+                self.assertEqual(pg.smoke["errors"], [])
+
+    def test_suggestions_rows_resolve_and_all_projects(self):
+        for size in ("d", "m"):
+            with self.subTest(size=size), self.open(P + "settings/suggestions", size, intercepts=[
+                ("/api/v2/projects/campus-demo/problems*", 200, SUGGESTIONS, "GET"),
+                ("/api/v2/suggestions*", 200, SUGGESTIONS_ALL, "GET"),
+            ]) as pg:
+                self.view(pg, "adm-settings")
+                pg.wait_for("document.querySelectorAll('.adm-panel tr.dt-row').length === 2", 20)
+                ids = pg.js("Array.prototype.map.call(document.querySelectorAll('.adm-panel tr.dt-row'), function (tr) { return tr.getAttribute('data-suggestion'); })")
+                self.assertEqual(sorted(ids), ["pr-0000a001", "pr-0000a002"], "only kind=suggestion rows are shown")
+                cols = pg.js("Array.prototype.map.call(document.querySelectorAll('.adm-panel thead th[data-col]'), function (th) { return th.getAttribute('data-col'); })")
+                self.assertEqual(cols, ["text", "project", "by", "created", "about", "status", "actions"])
+                r1 = ".adm-panel tr.dt-row[data-suggestion=pr-0000a001]"
+                r2 = ".adm-panel tr.dt-row[data-suggestion=pr-0000a002]"
+                self.assertEqual(pg.js("document.querySelector(%s).textContent" % json.dumps(r1 + " td[data-col=by]")), "jordan")
+                self.assertEqual(pg.js("document.querySelector(%s).textContent" % json.dumps(r1 + " a.adm-sug-about[data-device=foh-cl5]")), "FOH CL5")
+                self.assertIn("/campus-demo/*/devices/foh-cl5", pg.js("document.querySelector(%s).getAttribute('href')" % json.dumps(r1 + " a.adm-sug-about")))
+                self.assertIn("page=power-up", pg.js("document.querySelector(%s).getAttribute('href')" % json.dumps(r2 + " a.adm-sug-about[data-page=power-up]")))
+                self.assertEqual(pg.js("document.querySelector(%s).textContent" % json.dumps(r1 + " td[data-col=status]")), "Open")
+                self.assertEqual(pg.js("document.querySelector(%s).textContent" % json.dumps(r2 + " td[data-col=status]")), "Resolved")
+                self.assertEqual(pg.js("document.querySelector(%s).textContent" % json.dumps(r1 + " button[data-act=resolve]")), "Resolve")
+                self.assertEqual(pg.js("document.querySelector(%s).textContent" % json.dumps(r2 + " button[data-act=reopen]")), "Reopen")
+                self.assertIn("1 open", pg.js("document.querySelector('.adm-sug-summary').textContent"))
+                self.assertLessEqual(pg.page_hscroll(), 0)
+                if size == "m":
+                    self.assertTrue(pg.js("!!document.querySelector('.adm-panel .dt-root.dt-cards')"), "cards at sm")
+                pg.shot("adm-suggestions-%s" % size)
+                patched = pg.intercept("/api/v2/projects/campus-demo/problems/pr-0000a001", 200, {"problem": dict(SUGGESTIONS["problems"][0], status="resolved")}, "PATCH")
+                pg.click(r1 + " button[data-act=resolve]")
+                pg.wait_for("document.querySelectorAll('.app-toast').length > 0")
+                self.assertEqual(patched["hits"], 1, "Resolve reuses PATCH …/problems/<pid>")
+                pg.wait_for("document.querySelectorAll('.adm-panel tr.dt-row').length === 2", 20)
+                # All projects switches the source
+                pg.click(".adm-sug-all", force=True)
+                pg.wait_for("document.querySelector('#adm-sug-all').checked")
+                pg.wait_for("document.querySelectorAll('.adm-panel tr.dt-row[data-project=sunday-demo]').length === 1", 20)
+                self.assertEqual(pg.js("document.querySelectorAll('.adm-panel tr.dt-row').length"), 2)
+                self.assertEqual(pg.js("document.querySelector('.adm-panel tr.dt-row[data-project=sunday-demo] td[data-col=project]').textContent"), "sunday-demo")
+                self.assertEqual(pg.smoke["errors"], [])
+
     # ------------------------------------------------------------------- history
 
     def test_history_revision_is_in_the_url(self):
@@ -424,6 +605,8 @@ class AdmRoles(UiCase):
 
         for name, role in (("admin1", "admin"), ("editor1", "editor"), ("viewer1", "viewer")):
             users.add_user(name, name + "-password-1", role=role)
+        # P2C: an editor who is only a viewer in campus-demo
+        users.add_user("sam", "sam-password-1", role="editor", projects={"campus-demo": "viewer"})
 
     def signed_in(self, name: str, path: str, size: str = "d"):
         from fathom import users
@@ -471,5 +654,79 @@ class AdmRoles(UiCase):
         pg.wait_for("!!document.querySelector('#app-main .adm-settings')")
         self.assertEqual(tabs(pg), ALL_TABS)
         self.assertEqual(selected_tab(pg), "users")
-        pg.wait_for("document.querySelectorAll('.adm-panel tr.dt-row').length === 3")
+        pg.wait_for("document.querySelectorAll('.adm-panel tr.dt-row').length === 4")
         self.assertLessEqual(pg.page_hscroll(), 0)
+
+    # ---------------------------------------------------- per-project access (P2C)
+
+    def test_user_access_rows_and_patch(self):
+        """The Projects column counts overrides; the Access editor lists them and PATCHes the whole map."""
+        from fathom import users
+
+        for size, new_role in (("d", "editor"), ("m", "viewer")):
+            with self.subTest(size=size):
+                pg = self.signed_in("admin1", "/#/campus-demo/main/settings/users", size)
+                pg.wait_for("!!document.querySelector('#app-main .adm-settings')")
+                pg.wait_for("document.querySelectorAll('.adm-panel tr.dt-row').length === 4")
+                cols = pg.js("Array.prototype.map.call(document.querySelectorAll('.adm-panel thead th[data-col]'), function (th) { return th.getAttribute('data-col'); })")
+                self.assertEqual(cols, ["username", "role", "projects", "disabled", "created", "actions"])
+                self.assertEqual(pg.js("document.querySelector('.adm-panel tr.dt-row[data-user=sam] td[data-col=projects]').textContent"), "1 override")
+                self.assertEqual(pg.js("document.querySelector('.adm-panel tr.dt-row[data-user=admin1] td[data-col=projects]').textContent"), "\u2014")
+                acts = pg.js("Array.prototype.map.call(document.querySelectorAll('.adm-panel tr.dt-row[data-user=sam] .adm-acts button'), function (b) { return b.textContent; })")
+                self.assertEqual(acts, ["Access", "Reset password", "Remove"])
+                if size == "m":
+                    self.assertTrue(pg.js("!!document.querySelector('.adm-panel .dt-root.dt-cards')"), "cards at sm")
+                pg.click(".adm-panel tr.dt-row[data-user=sam] button[data-act=access]")
+                pg.wait_for("!!document.querySelector('.app-dialog .adm-access[data-user=sam]')")
+                self.assertEqual(pg.js("document.querySelectorAll('.app-dialog .adm-pr-row').length"), 1)
+                self.assertEqual(pg.js("document.querySelector('.app-dialog .adm-pr-proj').value"), "campus-demo")
+                self.assertEqual(pg.js("document.querySelector('.app-dialog .adm-pr-role').value"), users.get_user("sam")["projects"]["campus-demo"])
+                self.assertFalse(pg.js("!!document.querySelector('.app-dialog .adm-pr-hint:not([hidden])')"))
+                self.assertLessEqual(pg.offscreen(".app-dialog .adm-pr-row select", "x"), 0)
+                pg.shot("adm-user-access-%s" % size)
+                # a second row for the same project is refused; Save stays in the dialog
+                pg.click(".app-dialog .adm-pr-add")
+                pg.wait_for("document.querySelectorAll('.app-dialog .adm-pr-row').length === 2")
+                set_value(pg, ".app-dialog .adm-pr-row:nth-child(2) .adm-pr-proj", "campus-demo", "change")
+                pg.click(".app-dialog footer button.primary")
+                self.assertTrue(pg.js("!!document.querySelector('.app-dialog')"))
+                self.assertEqual(pg.js("document.querySelectorAll('.app-dialog .adm-pr-row.adm-pr-dup').length"), 2)
+                self.assertIn("listed twice", pg.js("document.querySelector('.app-dialog .adm-pr-err').textContent"))
+                # a different project is fine; the saved map carries both rows
+                set_value(pg, ".app-dialog .adm-pr-row:nth-child(2) .adm-pr-proj", "sunday-demo", "change")
+                set_value(pg, ".app-dialog .adm-pr-row:nth-child(2) .adm-pr-role", "editor", "change")
+                self.assertEqual(pg.js("document.querySelectorAll('.app-dialog .adm-pr-row.adm-pr-dup').length"), 0)
+                set_value(pg, ".app-dialog .adm-pr-row:nth-child(1) .adm-pr-role", new_role, "change")
+                pg.click(".app-dialog footer button.primary")
+                pg.wait_for("!document.querySelector('.app-dialog')")
+                pg.wait_for("document.querySelector('.adm-panel tr.dt-row[data-user=sam] td[data-col=projects]').textContent === '2 overrides'")
+                self.assertEqual(users.get_user("sam")["projects"], {"campus-demo": new_role, "sunday-demo": "editor"})
+                # removing a row drops it from the map
+                pg.click(".adm-panel tr.dt-row[data-user=sam] button[data-act=access]")
+                pg.wait_for("document.querySelectorAll('.app-dialog .adm-pr-row').length === 2")
+                pg.click(".app-dialog .adm-pr-row:nth-child(2) .adm-pr-rm")
+                pg.wait_for("document.querySelectorAll('.app-dialog .adm-pr-row').length === 1")
+                pg.click(".app-dialog footer button.primary")
+                pg.wait_for("!document.querySelector('.app-dialog')")
+                pg.wait_for("document.querySelector('.adm-panel tr.dt-row[data-user=sam] td[data-col=projects]').textContent === '1 override'")
+                self.assertEqual(users.get_user("sam")["projects"], {"campus-demo": new_role})
+                # admins have nothing to override
+                pg.click(".adm-panel tr.dt-row[data-user=admin1] button[data-act=access]")
+                pg.wait_for("!!document.querySelector('.app-dialog .adm-access[data-user=admin1]')")
+                self.assertEqual(pg.js("document.querySelector('.app-dialog .adm-access-admin').textContent"), "Admins have full access everywhere.")
+                self.assertEqual(pg.js("document.querySelectorAll('.app-dialog .adm-pr-row, .app-dialog .adm-pr-add').length"), 0)
+                self.assertEqual(pg.js("Array.prototype.map.call(document.querySelectorAll('.app-dialog footer button'), function (b) { return b.textContent; })"), ["Close"])
+                pg.press("Escape")
+                pg.wait_for("!document.querySelector('.app-dialog')")
+                self.assertEqual(pg.smoke["errors"], [])
+
+    def test_editor_and_viewer_see_no_invites_or_suggestions(self):
+        for name in ("editor1", "viewer1"):
+            pg = self.signed_in(name, "/#/campus-demo/main/settings/invites")
+            pg.wait_for("!!document.querySelector('#app-main .adm-settings')")
+            self.assertEqual([t for t in tabs(pg) if t in ("invites", "suggestions")], [])
+            self.assertEqual(selected_tab(pg), "project")
+            pg.wait_for("location.hash.indexOf('/settings/invites') < 0")
+            pg.wait_for("!!document.querySelector('[data-card=lock] .adm-lock-status')")
+            has_toggle = pg.js("!!document.querySelector('[data-card=lock] button[data-act=lock-toggle]')")
+            self.assertEqual(has_toggle, name == "editor1", "any editor may lock; viewers only see the status")
