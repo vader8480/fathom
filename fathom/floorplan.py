@@ -1168,10 +1168,72 @@ def _attachment_path(doc: Doc, att_id: str, project_dir: Path) -> Optional[Path]
 _MIME = {"png": "image/png", "jpg": "image/jpeg", "svg": "image/svg+xml"}
 
 
-def plan_svg(doc: Doc, floorplan_id: str, project_dir: Path) -> str:
-    """Standalone SVG of a plan: the image, one ``<g data-device>`` per marker, and a legend."""
+#: stroke colours of the shared-path kinds in ``plan_svg(runs=True)`` (FR-PLAN-16)
+_PATH_COLORS = {"tray": "#6b7a90", "catwalk": "#8a6d3b", "trench": "#5b7f5b", "conduit": "#7a6b90", "floor": "#9a8f6b", "other": "#8a93a6"}
+
+
+def _runs_layer(doc: Doc, fp: Dict[str, Any], w: float, h: float, r: float, fs: float) -> Tuple[List[str], str]:
+    """``<g class="paths">`` + ``<g class="runs">`` markup for a plan and the legend line (FR-PLAN-16)."""
+    from .runs import plan_runs
+    from .vocab import DISCIPLINES, medium_discipline
+
+    data = plan_runs(doc, str(fp.get("id")))
+    unit = "m" if data["unit"] == "m" else "px"
+    out: List[str] = ['<g class="paths" fill="none" stroke-linecap="round" stroke-linejoin="round">']
+    for p in data["paths"]:
+        pts = [(float(q[0]) * w, float(q[1]) * h) for q in p.get("points") or [] if isinstance(q, (list, tuple)) and len(q) >= 2]
+        if len(pts) < 2:
+            continue
+        kind = str(p.get("kind") or "other")
+        color = str(p.get("color") or _PATH_COLORS.get(kind, _PATH_COLORS["other"]))
+        out.append(f'<polyline data-path="{_esc(p["id"])}" class="path path-{_esc(kind)}" points="{" ".join(f"{_f(x)},{_f(y)}" for x, y in pts)}" '
+                   f'stroke="{_esc(color)}" stroke-width="{_f(r * 0.9)}" stroke-opacity="0.55"/>')
+        label = str(p.get("name") or p["id"])
+        x0, y0 = pts[0]
+        out.append(f'<text x="{_f(x0 + r * 0.6)}" y="{_f(y0 - r * 0.6)}" font-size="{_f(fs * 0.85)}" fill="{_esc(color)}" stroke="#ffffff" '
+                   f'stroke-width="{_f(fs / 6)}" paint-order="stroke" font-style="italic">{_esc(label)}</text>')
+    out.append("</g>")
+    out.append('<g class="runs" fill="none" stroke-linecap="round" stroke-linejoin="round">')
+    for run in data["runs"]:
+        pts = [(float(q[0]) * w, float(q[1]) * h) for q in run["points"]]
+        if len(pts) < 2:
+            continue
+        disc = medium_discipline(str(run.get("medium") or "other"))
+        color = DISCIPLINES.get(disc, DISCIPLINES["other"])["color"]
+        dash = f' stroke-dasharray="{_f(r)} {_f(r * 0.7)}"' if run.get("auto") else ""
+        # label at the arc-length midpoint
+        cum = [0.0]
+        for a, b in zip(pts, pts[1:]):
+            cum.append(cum[-1] + math.hypot(b[0] - a[0], b[1] - a[1]))
+        half = cum[-1] / 2
+        mx, my = pts[-1]
+        for i in range(len(pts) - 1):
+            if cum[i] <= half <= cum[i + 1]:
+                seg = cum[i + 1] - cum[i]
+                u = (half - cum[i]) / seg if seg else 0.0
+                mx, my = pts[i][0] + (pts[i + 1][0] - pts[i][0]) * u, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * u
+                break
+        text = f'{_f(run["length_m"])} {unit}'
+        out.append(f'<g data-cable="{_esc(run["cable"])}" data-length="{_f(run["length_m"])}" data-estimate="{_f(run["estimate_m"])}">'
+                   f'<polyline points="{" ".join(f"{_f(x)},{_f(y)}" for x, y in pts)}" stroke="{color}" stroke-width="{_f(r / 3)}"{dash}/>'
+                   f'<text x="{_f(mx)}" y="{_f(my - r * 0.4)}" text-anchor="middle" font-size="{_f(fs * 0.8)}" fill="#0b0f17" stroke="#ffffff" '
+                   f'stroke-width="{_f(fs / 6)}" paint-order="stroke">{_esc(text)}</text></g>')
+    out.append("</g>")
+    n = data["totals"]["runs"]
+    legend = f'Runs: {n} \u00b7 total {_f(data["totals"]["estimate_m"])} {unit} (estimated)'
+    return out, legend
+
+
+def plan_svg(doc: Doc, floorplan_id: str, project_dir: Path, *, runs: bool = False, scene: Optional[str] = None) -> str:
+    """Standalone SVG of a plan: the image, one ``<g data-device>`` per marker, and a legend.
+    ``runs=True`` adds the shared paths and the cable runs with their lengths (FR-PLAN-16);
+    ``scene`` renders that scene's markers and patch (``None`` = the live doc)."""
     from .vocab import DISCIPLINES, kind_discipline
 
+    if scene:
+        from .runs import scene_doc
+
+        doc = scene_doc(doc, scene)
     fp = next((f for f in doc.get("floorplans") or [] if f.get("id") == floorplan_id), None)
     if fp is None:
         raise KeyError(floorplan_id)
@@ -1215,8 +1277,13 @@ def plan_svg(doc: Doc, floorplan_id: str, project_dir: Path) -> str:
             f'<circle r="{_f(r)}" fill="{color}" stroke="#0b0f17" stroke-width="{_f(r / 4)}"{planned}/>'
             f'<text x="{_f(r * 1.4)}" y="{_f(fs * 0.35)}" font-size="{_f(fs)}" fill="#0b0f17" stroke="#ffffff" stroke-width="{_f(fs / 5)}" paint-order="stroke">{_esc(label)}</text></g>'
         )
+    runs_markup: List[str] = []
+    runs_legend = ""
+    if runs:
+        runs_markup, runs_legend = _runs_layer(doc, fp, w, h, r, fs)
     lh = fs * 2.2
-    legend_h = lh * (1 + max(1, len(used))) if used else 0
+    legend_rows = len(used) + (1 if runs_legend else 0)
+    legend_h = lh * (1 + max(1, legend_rows)) if legend_rows else 0
     total_h = h + legend_h
     out = [f'<svg xmlns="{SVG_NS}" width="{_f(w)}" height="{_f(total_h)}" viewBox="0 0 {_f(w)} {_f(total_h)}" font-family="Helvetica, Arial, sans-serif" data-floorplan="{_esc(floorplan_id)}">']
     out.append(f"<title>{_esc(fp.get('name', floorplan_id))}</title>")
@@ -1226,12 +1293,16 @@ def plan_svg(doc: Doc, floorplan_id: str, project_dir: Path) -> str:
     out.append('<g class="markers">')
     out.extend(marks)
     out.append("</g>")
-    if used:
+    out.extend(runs_markup)
+    if legend_rows:
         out.append(f'<g class="legend" transform="translate({_f(fs)} {_f(h + lh * 0.6)})">')
         out.append(f'<text y="{_f(fs)}" font-size="{_f(fs)}" font-weight="bold" fill="#0b0f17">{_esc(fp.get("name", ""))} · legend</text>')
         for i, disc in enumerate(used, 1):
             d = DISCIPLINES.get(disc, DISCIPLINES["other"])
             out.append(f'<circle cx="{_f(r)}" cy="{_f(i * lh + fs * 0.6)}" r="{_f(r)}" fill="{d["color"]}"/><text x="{_f(r * 3)}" y="{_f(i * lh + fs)}" font-size="{_f(fs)}" fill="#0b0f17">{_esc(d["label"])}</text>')
+        if runs_legend:
+            i = len(used) + 1
+            out.append(f'<text class="runs-legend" x="{_f(r * 3)}" y="{_f(i * lh + fs)}" font-size="{_f(fs)}" fill="#0b0f17">{_esc(runs_legend)}</text>')
         out.append("</g>")
     out.append("</svg>")
     return "\n".join(out)

@@ -28,8 +28,9 @@ PV_IDS = ["pv-add", "pv-fit", "pv-zoom-out", "pv-zoom-in", "pv-undo", "pv-redo",
           "pv-filter-status", "pv-arrange", "pv-save-arrangement"]
 # Visible in the toolbar row itself, per layout.
 ROW_WIDE = ["#pv-add", "#pv-fit", "#pv-zoom-out", "#pv-zoom-in", "#pv-undo", "#pv-redo", "#pv-filter-text",
-            ".pv-menu-view", ".pv-menu-arrange"]
+            ".pv-menu-view", ".pv-menu-arrange", ".pv-menu-more"]  # More carries Export at every width (phase5 P5C)
 ROW_SM = ["#pv-add", "#pv-fit", ".pv-search-toggle", ".pv-menu-more"]
+EXPORT_IDS = ["pv-export-svg", "pv-export-png", "pv-export-pdf", "pv-print"]
 
 VISIBLE_JS = "(function (s) { var e = document.querySelector(s); if (!e) return false; var r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; })(%s)"
 CARDS_JS = "document.querySelectorAll('.pv-card').length > 0"
@@ -180,7 +181,7 @@ class PatchViewUi(UiCase):
                     if sel != "#pv-filter-text":
                         floor = 44 if size != "d" else 40
                         self.assertGreaterEqual(r["height"], floor - 0.5, "%s target height at %s" % (sel, size))
-                hidden = [".pv-menu-view", ".pv-menu-arrange", "#pv-filter-text", "#pv-zoom-in"] if size == "m" else [".pv-menu-more", ".pv-search-toggle"]
+                hidden = [".pv-menu-view", ".pv-menu-arrange", "#pv-filter-text", "#pv-zoom-in"] if size == "m" else [".pv-search-toggle"]
                 for sel in hidden:
                     self.assertFalse(self.visible(pg, sel), "%s hidden at %s" % (sel, size))
                 pg.shot("patch-" + size)
@@ -338,6 +339,95 @@ class PatchViewUi(UiCase):
                 else:
                     self.assertTrue(self.visible(pg, "#pv-fit"))
                 self.assertEqual(pg.js("window.__fathomErrors"), [])
+
+    # ---- Export group in the More menu (phase5 P5C, FR-EXP-06, §5.9)
+
+    EXPORT_JS = """Array.prototype.map.call(document.querySelectorAll('.pv-pane-export .pv-export'), function (a) {
+      return {id: a.id, href: a.getAttribute('href'), download: a.getAttribute('download'), disabled: a.getAttribute('aria-disabled') === 'true', title: a.title};
+    })"""
+
+    def _open_more(self, pg):
+        pg.click(".pv-menu-more")
+        pg.wait_for("document.querySelector('.pv-menu-more').getAttribute('aria-expanded') === 'true'")
+        pg.js("document.getElementById('pv-print').scrollIntoView({block: 'end'}); 1")
+
+    def test_export_menu(self):
+        for size in ("d", "m"):
+            with self.subTest(size=size), self.open(CAMPUS, size) as pg:
+                pg.wait_for(CARDS_JS)
+                for ident in EXPORT_IDS:
+                    self.assertEqual(pg.js("document.querySelectorAll('#%s').length" % ident), 1, "#%s once at %s" % (ident, size))
+                self._open_more(pg)
+                pg.wait_for("sessionStorage.getItem('fathom.pv.raster') === 'ok'", 10)
+                items = pg.js(self.EXPORT_JS)
+                self.assertEqual([i["id"] for i in items], ["pv-export-svg", "pv-export-png", "pv-export-pdf"])
+                for i in items:
+                    ext = i["id"].split("-")[-1]
+                    self.assertTrue(i["href"].endswith("/api/v2/projects/campus-demo/rooms/main/patch." + ext), (size, i))
+                    self.assertEqual(i["download"], "campus-demo-main-patch." + ext)
+                    self.assertFalse(i["disabled"], "Chrome is on this server: %s stays live" % i["id"])
+                    self.assertEqual(pg.js("document.getElementById(%s).tagName" % json.dumps(i["id"])), "A", "plain anchors so iOS downloads work")
+                self.assertEqual(pg.js("document.getElementById('pv-print').tagName"), "BUTTON")
+                floor = 44 if size != "d" else 40
+                for ident in EXPORT_IDS:
+                    self.assertTrue(self.visible(pg, "#" + ident), "#%s visible in the More popover at %s" % (ident, size))
+                    self.assertEqual(pg.offscreen("#" + ident), 0, "#%s off-screen at %s" % (ident, size))
+                    self.assertGreaterEqual(pg.rect("#" + ident)["height"], floor - 0.5, "#%s target height at %s" % (ident, size))
+                self.assertLessEqual(pg.page_hscroll(), 0)
+                # the SVG link really answers
+                status = pg.js("fetch(document.getElementById('pv-export-svg').href, {credentials: 'same-origin'}).then(function (r) { return r.status + ' ' + r.headers.get('Content-Type'); })")
+                self.assertTrue(status.startswith("200 image/svg+xml"), status)
+                pg.shot("patch-export-" + size)
+                pg.press("Escape")
+                self.assertEqual(pg.js("window.__fathomErrors"), [])
+        # a scene active in the shell -> ?scene= on every href (Phase 3 scenes API)
+        r = _post_json(self.base + "/api/v2/projects/campus-demo/scenes", {"name": "Export scene", "activate": True})
+        sid = r["scene"]["id"]
+        try:
+            with self.open(CAMPUS, "d") as pg:
+                pg.wait_for(CARDS_JS)
+                self._open_more(pg)
+                for i in pg.js(self.EXPORT_JS):
+                    self.assertTrue(i["href"].endswith("?scene=" + sid), i)
+        finally:
+            _post_json(self.base + "/api/v2/projects/campus-demo/scenes/base/activate", {})
+
+    def test_export_menu_without_chrome(self):
+        # the HEAD probe answers 400 chrome_missing: PNG and PDF grey out with the hint, SVG stays live
+        with self.open(CAMPUS, "d", intercepts=[("/api/v2/projects/campus-demo/rooms/main/patch.png*", 400,
+                                                   {"error": "chrome_missing", "message": "PNG/PDF export needs Google Chrome on the server (SVG export always works)"}, "HEAD")]) as pg:
+            pg.wait_for(CARDS_JS)
+            self._open_more(pg)
+            pg.wait_for("sessionStorage.getItem('fathom.pv.raster') === 'missing'", 10)
+            items = dict((i["id"], i) for i in pg.js(self.EXPORT_JS))
+            self.assertFalse(items["pv-export-svg"]["disabled"])
+            self.assertTrue(items["pv-export-svg"]["href"].endswith("/rooms/main/patch.svg"))
+            for ident in ("pv-export-png", "pv-export-pdf"):
+                self.assertTrue(items[ident]["disabled"], ident)
+                self.assertIsNone(items[ident]["href"], "a greyed-out export is not a link")
+                self.assertEqual(items[ident]["title"], "Needs Chrome on the server")
+            self.assertEqual(pg.js("document.querySelectorAll('[aria-disabled=true]').length"), 2)
+            pg.shot("patch-export-nochrome-d")
+            # one probe per session: with the stub gone (this server has Chrome) a remount still reads the cached answer
+            pg.clear_intercepts()
+            pg.goto("#/campus-demo/main/table")
+            pg.goto(CAMPUS)
+            pg.wait_for(CARDS_JS)
+            self._open_more(pg)
+            time.sleep(0.5)
+            self.assertTrue(pg.js("document.getElementById('pv-export-pdf').getAttribute('aria-disabled') === 'true'"), "cached answer applied on remount")
+            self.assertEqual(pg.js("sessionStorage.getItem('fathom.pv.raster')"), "missing")
+            # Print… fits the canvas to the page while the dialog is up and restores the view afterwards
+            before = pg.js("document.querySelector('.pv-world').style.transform")
+            pg.js("window.print = function () { window.__printed = (window.__printed || 0) + 1; }; 1")
+            pg.click("#pv-print")
+            self.assertEqual(pg.js("window.__printed"), 1)
+            self.assertTrue(pg.js("document.querySelector('.pv-root').classList.contains('pv-printing')"))
+            self.assertFalse(pg.js("!!document.querySelector('.pv-pop-wrap.pv-open')"), "Print… closes the popover")
+            pg.js("window.dispatchEvent(new Event('afterprint')); 1")
+            self.assertFalse(pg.js("document.querySelector('.pv-root').classList.contains('pv-printing')"))
+            self.assertEqual(pg.js("document.querySelector('.pv-world').style.transform"), before, "the view is restored after printing")
+            self.assertEqual(pg.js("window.__fathomErrors"), [])
 
 
 if __name__ == "__main__":

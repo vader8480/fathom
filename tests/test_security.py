@@ -98,6 +98,9 @@ SPEC_ROLES = {
     ("GET", "/api/v2/projects/{}/sop/bundle.zip"): "editor", ("POST", "/api/v2/projects/{}/problems"): "viewer",
     ("GET", "/api/v2/projects/{}/problems"): "viewer", ("PATCH", "/api/v2/projects/{}/problems/{}"): "editor",
     ("GET", "/api/v2/projects/{}/qr/page/{}.svg"): "viewer", ("GET", "/api/v2/projects/{}/qr/pages.html"): "viewer",
+    # phase5 P5C
+    ("GET", "/api/v2/projects/{}/rooms/{}/patch.svg"): "viewer", ("GET", "/api/v2/projects/{}/rooms/{}/patch.{}"): "viewer",
+    ("GET", "/api/v2/projects/{}/floorplans/{}.{}"): "viewer",
     ("POST", "/api/v2/projects/{}/builds"): "editor", ("GET", "/api/v2/projects/{}/builds"): "viewer",
     ("DELETE", "/api/v2/projects/{}/builds/{}"): "editor", ("GET", "/builds/{}/{}/{}"): "viewer",
     ("GET", "/api/meta"): "viewer", ("GET", "/api/projects"): "viewer", ("POST", "/api/projects"): "editor",
@@ -111,7 +114,10 @@ SPEC_ROLES = {
     ("POST", "/p/{}/problems"): "viewer", ("POST", "/s/{}/problems"): "public",
     ("GET", "/p/{}/files/{}/{}"): "viewer", ("GET", "/s/{}"): "public", ("GET", "/s/{}/{}"): "public", ("GET", "/static/{}"): "public",
     ("GET", "/sw.js"): "public", ("GET", "/manifest.webmanifest"): "public", ("GET", "/favicon.ico"): "public",
-    ("GET", "/apple-touch-icon.png"): "public", ("GET", "/api/openapi.json"): "public", ("GET", "/api/docs"): "public",
+    ("GET", "/apple-touch-icon.png"): "public",     ("GET", "/api/openapi.json"): "public", ("GET", "/api/docs"): "public",
+    # phase5 P5A
+    ("GET", "/api/v2/projects/{}/floorplans/{}/runs"): "viewer", ("POST", "/api/v2/projects/{}/floorplans/{}/runs/snap"): "viewer",
+    ("POST", "/api/v2/projects/{}/floorplans/{}/runs/estimate"): "editor",
 }
 RANK = {"viewer": 1, "editor": 2, "admin": 3}
 SAMPLES = ["proj", "main", "atem-mini", "rk-foh", "cables", "1", "nobody", "imp-0001", "att-000000000000", "sh-abc123", "fp-none",
@@ -121,7 +127,8 @@ PARAM_HINTS = {"name": "proj", "room": "main", "device": "atem-mini", "rack": "r
                "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip", "table": "devices", "slug": "power-up",
                "rid": "run-20260101-000000-0000", "pid": "pr-00000000", "code": "ABCD2345", "tname": "proj",
                "invite": "inv-000000000000000000000000",  # phase2 P2A
-               "sid": "sc-00000000"}  # phase3 P3A
+               "sid": "sc-00000000",  # phase3 P3A
+               "fmt": "png"}  # phase5 P5C
 DISCOVERY_FIXTURES = str(Path(__file__).parent / "fixtures" / "discovery")
 
 

@@ -3133,17 +3133,97 @@ def r_floorplan_image(req: Request) -> Response:
     return _serve_user_file(path, str(img.get("mime") or _PLAN_MIME.get(str((fp.get("image") or {}).get("kind")), "")), path.name)
 
 
-@route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")\.svg", role="viewer", summary="Floor plan export SVG with markers", tags=["floorplans"], page="file")
+@route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")\.svg", role="viewer", summary="Floor plan export SVG with markers (?runs=1 adds paths and cable runs, ?scene=)", tags=["floorplans"], page="file")
 def r_floorplan_svg(req: Request) -> Response:
-    from .floorplan import plan_svg
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    fid = req.params["fp"]
+    _floorplan(doc, fid)
+    r = Response.text(_plan_svg_text(req, pdir, doc, fid), "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
+    r.csp = FILE_CSP
+    return r
+
+
+# ---- cable runs on floor plans (phase 5 P5A: FR-PLAN-14..17, §5.7, §6.9.9)
+
+
+def _plan_scene(req: Request) -> Optional[str]:
+    sid = str(req.query.get("scene") or "").strip()
+    return sid or None
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")/runs", role="viewer",
+       summary="Cable runs on a floor plan with lengths (?scene=): paths, runs, totals, unplaced", tags=["floorplans"])
+def r_floorplan_runs(req: Request) -> Response:
+    from .runs import plan_runs
 
     pdir = _project_dir(req.params["name"])
     doc, _ = _load(pdir)
     fid = req.params["fp"]
     _floorplan(doc, fid)
-    r = Response.text(plan_svg(doc, fid, pdir), "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
-    r.csp = FILE_CSP
-    return r
+    try:
+        out = plan_runs(doc, fid, _plan_scene(req))
+    except KeyError as exc:
+        raise ApiError(404, f"scene or floor plan {exc} not found", "not_found")
+    out["revision"] = _rev(doc)
+    return Response.json(out)
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")/runs/snap", role="viewer",
+       summary="Nearest point on a shared path ({point: [x, y], max: 0.02}) → {path, point} or {path: null}", tags=["floorplans"], body="RunSnap")
+def r_floorplan_runs_snap(req: Request) -> Response:
+    from .runs import SNAP_DIST, snap
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    fp = _floorplan(doc, req.params["fp"])
+    body = req.json()
+    pt = body.get("point")
+    if not (isinstance(pt, list) and len(pt) == 2 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in pt)):
+        raise ApiError(400, "point must be [x, y] in normalised plan coordinates")
+    mx = body.get("max", SNAP_DIST)
+    if isinstance(mx, bool) or not isinstance(mx, (int, float)) or mx < 0:
+        raise ApiError(400, "max must be a non-negative number (normalised plan units)")
+    hit = snap(fp, pt, float(mx))
+    return Response.json(hit if hit is not None else {"path": None, "point": None})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")/runs/estimate", role="editor",
+       summary="Write estimated cable lengths from the plan's runs ({cables: [ids] | all: true, base_revision, round_to: 0.5}) as one revision", tags=["floorplans"], body="RunEstimate")
+def r_floorplan_runs_estimate(req: Request) -> Response:
+    from .runs import estimate_plan
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    fp = _floorplan(doc, req.params["fp"])
+    body = req.json()
+    if body.get("base_revision") is None:
+        raise ApiError(428, "base_revision is required", "precondition_required")
+    cables = body.get("cables")
+    if cables is None and body.get("all"):
+        ids: Optional[List[str]] = None
+    elif isinstance(cables, list) and all(isinstance(c, str) for c in cables):
+        ids = cables
+    else:
+        raise ApiError(400, "send cables: [ids] or all: true")
+    round_to = body.get("round_to", 0.5)
+    if isinstance(round_to, bool) or not isinstance(round_to, (int, float)) or round_to < 0:
+        raise ApiError(400, "round_to must be a non-negative number of metres")
+    settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    if settings.get("locked") is True:
+        raise _locked_error(settings)
+    plan = estimate_plan(doc, fp["id"], ids, round_to=float(round_to))
+    base = _int(body.get("base_revision"), -1)
+    out: Dict[str, Any] = {"updated": plan["updated"], "skipped": plan["skipped"]}
+    if not plan["ops"]:  # nothing differs: no revision, nothing to conflict with
+        out["revision"] = _rev(doc)
+        return Response.json(out, headers={"ETag": f'"r{out["revision"]}"'})
+    ops = _lock_guard_ops(req, doc, plan["ops"])
+    n = len(plan["updated"])
+    res = _changes(req, pdir, ops, base, f"Estimated cable lengths from {fp.get('name') or fp['id']} ({n} cable{'s' if n != 1 else ''})", "plan")
+    out["revision"] = res["revision"]
+    out["problems"] = res.get("problems") or []
+    return Response.json(out, headers={"ETag": f'"r{res["revision"]}"'})
 
 
 # ---- schedules, analysis, trace, search, QR
@@ -3253,6 +3333,125 @@ def r_rack_svg(req: Request) -> Response:
     r = Response.text(rack_svg(doc, rid, face=face), "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
     r.csp = FILE_CSP
     return r
+
+
+# ---- patch canvas and plan exports (phase 5 P5C, §3.23 FR-EXP-06/07, §5.7 / §5.9, §6.9.10)
+
+_RASTER_MIME = {"png": "image/png", "pdf": "application/pdf"}
+_CHROME_MISSING_MSG = "PNG/PDF export needs Google Chrome on the server (SVG export always works)"
+
+
+def _chrome_missing_response() -> Response:
+    """400 ``chrome_missing`` (``error`` carries the code so a HEAD probe and a fetch read the same thing)."""
+    r = Response.json({"error": "chrome_missing", "code": "chrome_missing", "message": _CHROME_MISSING_MSG}, 400)
+    r.csp = FILE_CSP
+    return r
+
+
+def _raster_response(req: Request, fmt: str, filename: str, render: Callable[[], str]) -> Response:
+    """Rasterise ``render()`` (an SVG) as ``fmt`` (``png`` | ``pdf``) through :mod:`fathom.raster`.
+
+    ``HEAD`` answers 200 (Chrome present) or 400 ``chrome_missing`` without rendering so the client can grey out
+    menu items; ``?width=`` (PNG, ≤ 6000) and ``?paper=`` / ``?orientation=`` (PDF; default A3, orientation from the
+    drawing's aspect ratio) tune the output; 502 ``chrome_failed`` carries a redacted ``details.detail``."""
+    from . import raster
+
+    if fmt not in _RASTER_MIME:
+        raise ApiError(404, "not found")
+    headers = {"Cache-Control": "no-cache", "Content-Disposition": f'attachment; filename="{_safe_filename(filename)}"'}
+    if not raster.available():
+        return _chrome_missing_response()
+    if req.is_head:
+        r = Response(b"", 200, _RASTER_MIME[fmt], headers)
+        r.csp = FILE_CSP
+        return r
+    svg = render()
+    width = _int(req.query.get("width"), 2000, 200, raster.MAX_PNG_WIDTH)
+    paper = req.query.get("paper") or "A3"
+    if paper not in raster.PAPERS:
+        raise ApiError(400, "paper must be A4, A3, letter or tabloid")
+    orient = req.query.get("orientation") or "auto"
+    if orient not in ("auto", "landscape", "portrait"):
+        raise ApiError(400, "orientation must be auto, landscape or portrait")
+    vw, vh = raster.viewbox_size(svg)
+    landscape = vw >= vh if orient == "auto" else orient == "landscape"
+    try:
+        data = raster.render_bytes(svg, fmt, width=width, paper=paper, landscape=landscape)
+    except raster.RasterError as exc:
+        if exc.code == "chrome_missing":
+            return _chrome_missing_response()
+        raise ApiError(502, "PNG/PDF rendering failed on the server", "chrome_failed", {"detail": exc.detail})
+    r = Response(data, 200, _RASTER_MIME[fmt], headers)
+    r.csp = FILE_CSP
+    return r
+
+
+def _patch_svg_text(req: Request, pdir: Path, doc: Dict[str, Any], room: str) -> str:
+    from .patch_svg import patch_svg
+
+    state = req.query.get("state") or "all"
+    if state not in ("all", "planned", "as_built", "everything"):
+        raise ApiError(400, "state must be all, planned, as_built or everything")
+    sid = str(req.query.get("scene") or "").strip()
+    if sid:
+        _scene_or_404(doc, sid)
+    return patch_svg(doc, room, overlay=_overlay(doc, pdir, strict=False), scene=sid or None, filter={"state": state})
+
+
+def _patch_room(req: Request) -> Tuple[Path, Dict[str, Any], str]:
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    room = req.params["room"]
+    if room not in _room_ids(doc):
+        raise ApiError(404, f"room '{room}' not found")
+    return pdir, doc, room
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/rooms/(?P<room>" + _EID + r")/patch\.svg", role="viewer",
+       summary="Patch canvas of a room as SVG (?scene=<sid>, ?state=as_built|planned|all)", tags=["schedules"], page="file")
+def r_patch_svg(req: Request) -> Response:
+    pdir, doc, room = _patch_room(req)
+    r = Response.text(_patch_svg_text(req, pdir, doc, room), "image/svg+xml; charset=utf-8",
+                      headers={"Cache-Control": "no-cache", "Content-Disposition": f'inline; filename="{_safe_filename(pdir.name + "-" + room + "-patch.svg")}"'})
+    r.csp = FILE_CSP
+    return r
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/rooms/(?P<room>" + _EID + r")/patch\.(?P<fmt>png|pdf)", role="viewer",
+       summary="Patch canvas of a room as PNG (?width= ≤ 6000) or PDF (?paper=, ?orientation=), rendered with Chrome; ?scene=, ?state= as the SVG; "
+               "400 chrome_missing without Chrome; HEAD probes without rendering", tags=["schedules"], page="file")
+def r_patch_raster(req: Request) -> Response:
+    pdir, doc, room = _patch_room(req)
+    fmt = req.params["fmt"]
+    return _raster_response(req, fmt, f"{pdir.name}-{room}-patch.{fmt}", lambda: _patch_svg_text(req, pdir, doc, room))
+
+
+def _plan_svg_text(req: Request, pdir: Path, doc: Dict[str, Any], fid: str) -> str:
+    """``floorplan.plan_svg`` for the route's ``?runs=1``, ``?scene=`` and ``?hide=L1,L2`` (``hide`` overrides the plan's hidden layers)."""
+    from .floorplan import plan_svg
+
+    sid = str(req.query.get("scene") or "").strip()
+    if sid:
+        doc = _scene_view(doc, sid)  # applies the scene (404 when unknown), so plan_svg gets scene=None
+    want_runs = str(req.query.get("runs") or "").strip().lower() in ("1", "true", "yes")
+    hide = [x for x in (req.query.get("hide") or "").split(",") if x]
+    if hide:
+        doc = dict(doc)
+        doc["floorplans"] = [dict(f, hidden_layers=hide) if isinstance(f, dict) and f.get("id") == fid else f for f in doc.get("floorplans") or []]
+    return plan_svg(doc, fid, pdir, runs=want_runs)
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")\.(?P<fmt>png|pdf)", role="viewer",
+       summary="Floor plan export as PNG (?width= ≤ 6000) or PDF (?paper=, ?orientation=) rendered with Chrome; ?runs=1 draws shared paths and cable runs, "
+               "?scene=, ?hide= as the image route; 400 chrome_missing without Chrome; HEAD probes without rendering", tags=["floorplans"], page="file")
+def r_floorplan_raster(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    fid = req.params["fp"]
+    _floorplan(doc, fid)
+    fmt = req.params["fmt"]
+    suffix = "-runs" if req.query.get("runs") == "1" else ""
+    return _raster_response(req, fmt, f"{pdir.name}-{fid}{suffix}.{fmt}", lambda: _plan_svg_text(req, pdir, doc, fid))
 
 
 # ---- device labels for the Brady M511 (phase 1 P1B, §3.24 FR-QR-03..05, §5.8)

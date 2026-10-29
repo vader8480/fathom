@@ -25,7 +25,7 @@ CAMPUS = "#/campus-demo/main/"
 SUNDAY = "#/sunday-demo/main/"
 HARNESS = "/static/dev/schedules.html"
 TABLE_KINDS = ("cables", "ip", "dmx", "bom", "patch", "racks")
-CABLE_HEADER = ("Tag,From room,From device,From port,To room,To device,To port,Medium,Type,Length,Unit,Color,"
+CABLE_HEADER = ("Tag,From room,From device,From port,To room,To device,To port,Medium,Type,Length,Unit,Est. m,Color,"
                 "Channels,Signal,Status,Bundle,Note,Id")
 MOBILE_COLS = {
     "cables": ["tag", "from_device", "from_port", "to_device", "to_port"],
