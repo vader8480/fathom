@@ -639,6 +639,13 @@ def answer(doc: Doc, question: str, *, room: Optional[str] = None, overlay: Opti
     q = (question or "").strip()
     if not q:
         raise ValueError("empty question")
+    if (ctx or {}).get("mode") == "draft":
+        # Draft a room (§6.9.5b): the text is a room description, not a question; the deterministic drafter
+        # (or the tool loop in draft mode) returns one add_device + connect proposal instead of the pipeline below.
+        from .assistant_draft import answer_draft
+
+        return answer_draft(doc, q, str(room or ""), use_llm=use_llm, history=history, base_revision=base_revision,
+                            ctx=dict(ctx or {}, overlay=overlay))
     cl = load_checklists()
     index = S.build_index(doc, overlay)
     intent, det = _parse(doc, q, room, index, cl, overlay)

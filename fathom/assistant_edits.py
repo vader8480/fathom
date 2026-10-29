@@ -352,7 +352,10 @@ def _connect(work: Doc, change: Dict[str, Any], problems: List[str], summary: Li
     if change.get("tag"):
         cable["tag"] = str(change["tag"])
     else:
-        probe = dict(work, cables=list(work.get("cables") or []) + [cable])
+        # Only this cable is untagged in the probe: otherwise every untagged cable already in the project
+        # takes a number first and the new tags jump (A-053, A-073, …) instead of running consecutively.
+        tagged = [c for c in work.get("cables") or [] if isinstance(c, dict) and c.get("tag")]
+        probe = dict(work, cables=tagged + [cable])
         for op in assign_tags_ops(probe, scope="missing"):
             if op.get("coll") == "cables" and op.get("id") == cable["id"]:
                 cable["tag"] = op["value"]["tag"]

@@ -1986,6 +1986,15 @@ function registerSW() {
 
 // ---- assistant panel
 
+// Views ask for the Helper with `fathom:assistant-open` {detail: {mode, room}} (page-room.js "Describe a room…").
+// assistant-ui.js handles the event itself once loaded; before that, load it here and hand the detail over.
+document.addEventListener('fathom:assistant-open', function (e) {
+  if (A.assistant || !A.ctx) return;
+  const detail = e && e.detail;
+  toggleAssistant(true);
+  A.assistantOpenDetail = detail;
+});
+
 function toggleAssistant(force) {
   const el = $('app-assistant');
   if (!el || !A.ctx) return;
@@ -1998,6 +2007,7 @@ function toggleAssistant(force) {
     importModule('./assistant-ui.js').then(function (m) {
       el.innerHTML = '';
       A.assistant = m.mountAssistant(el, Object.assign({}, A.ctx, { closePanel: function () { toggleAssistant(false); } })) || { destroy: function () {} };
+      if (A.assistantOpenDetail && m.openAssistant) { m.openAssistant(A.assistantOpenDetail); A.assistantOpenDetail = null; }
       if (A.assistant.focus) A.assistant.focus();
     }, function (e) {
       el.innerHTML = '';
@@ -2053,7 +2063,9 @@ function restoreRevision(rev) {
 function newProjectDialog() {
   const name = h('input', { id: 'np-name', placeholder: 'e.g. riverside', autocapitalize: 'none', autocomplete: 'off' });
   const org = h('input', { id: 'np-org', placeholder: 'Organization' });
-  const tpl = h('select', { id: 'np-template' }, [h('option', { value: 'blank' }, 'Blank')].concat(((A.meta && A.meta.samples) || []).map(function (s) { return h('option', { value: s }, 'Sample: ' + s); })));
+  const tpl = h('select', { id: 'np-template' }, [h('option', { value: 'blank' }, 'Blank')]
+    .concat(((A.meta && A.meta.samples) || []).map(function (s) { return h('option', { value: s }, 'Sample: ' + s); }))
+    .concat(((A.meta && A.meta.user_starters) || []).map(function (s) { return h('option', { value: s.id }, 'Starter: ' + (s.label || s.id)); })));
   name.addEventListener('input', function () { if (!org.value) org.placeholder = name.value ? name.value : 'Organization'; });
   return openDialog({
     title: 'New project',

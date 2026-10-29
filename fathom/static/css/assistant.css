@@ -59,6 +59,27 @@
 .ast-proposal[data-state=expired]{border-style:dashed;opacity:.85}
 .ast-undo{margin-left:10px;font-weight:600}
 
+/* ---- Ask | Draft a room (P6B, §6.9.5b): segmented control + room select above the composer */
+.ast-modes{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:0 14px 8px}
+.ast-mode{display:inline-flex;border:1px solid var(--border-2);border-radius:999px;padding:2px;background:rgba(255,255,255,.03)}
+.ast-mode-btn{border:0;background:transparent;color:var(--muted);border-radius:999px;min-height:32px;padding:0 12px;font-size:12.5px;cursor:pointer}
+.ast-mode-btn.on,.ast-mode-btn[aria-checked=true]{background:rgba(142,162,255,.18);color:var(--text);font-weight:600}
+.ast-mode-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.ast-room-wrap{display:flex;align-items:center;gap:6px;flex:1 1 160px;min-width:0;font-size:12px;color:var(--muted)}
+.ast-room-wrap[hidden]{display:none}
+.ast-room{flex:1;min-width:0;min-height:32px;border-radius:10px;padding:4px 8px;font-size:12.5px}
+.ast-draft-example{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---- draft card (recognised chips, unknown list) and the proposal hint */
+.ast-draft{border:1px solid rgba(142,162,255,.4);background:rgba(142,162,255,.06);border-radius:12px;padding:11px 13px}
+.ast-draft h4{margin:0 0 8px;color:var(--accent);font-size:13px}
+.ast-draft-list{display:flex;flex-wrap:wrap;gap:6px}
+.ast-draft-chip{font-size:12px;min-height:26px;max-width:100%;white-space:normal;text-align:left;line-height:1.3}
+.ast-draft-unknown{color:var(--warn);font-size:12px;margin-top:8px}
+.ast-draft-none{margin:0;font-size:12.5px}
+.ast-draft-hint{margin:8px 0 0;font-size:12px}
+.ast-q-draft{font-size:11px}
+
 /* ---- voice input */
 .ast-mic{border-radius:12px;min-width:44px;font-size:16px;line-height:1}
 .ast-mic.listening{border-color:var(--err);color:var(--err);animation:ast-pulse 1.2s ease-in-out infinite}
@@ -75,12 +96,19 @@ html[data-theme="light"] .ast-proposal button.yes{background:#1f2a5a;color:#fff;
 @media (max-width:699px){
   .ast-pick{max-height:60vh}
   .ast-proposal .row button{flex:1 1 auto}
+  .ast-modes{flex-direction:column;align-items:stretch}
+  .ast-mode{align-self:flex-start}
+  .ast-mode-btn{min-height:40px;flex:1 1 auto}
+  .ast-mode{display:flex;align-self:stretch}
+  .ast-room-wrap{flex:1 1 auto;width:100%}
+  .ast-room{min-height:40px}
 }
 
 @media (pointer:coarse){
   .ast-ctx-acts button,.ast-mic{min-height:44px}
   .ast-pick-row{min-height:44px}
   .ast-chip-x{min-height:28px;min-width:28px}
+  .ast-mode-btn,.ast-room{min-height:44px}
 }
 
 @media (prefers-reduced-motion:reduce){

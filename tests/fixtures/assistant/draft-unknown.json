@@ -1,0 +1,13 @@
+{
+  "name": "scripted draft mode: the model names nothing the library or presets know; no proposal, the unknown list comes back",
+  "model": "fake-tools",
+  "steps": [
+    {"tool_calls": [{"id": "call_1", "name": "draft_room", "arguments": {
+      "room": "chapel",
+      "devices": [
+        {"text": "frobnicator 9000", "model": "Frobnicator 9000", "count": 1},
+        {"text": "3 widgets", "count": 3}
+      ]}}]},
+    {"text": "I could not place **frobnicator 9000** or **widgets** in the equipment library, so there is nothing to draft yet. Tell me the kind of each (mixer, wireless, speaker…) or a model the library knows.", "finish": "stop"}
+  ]
+}

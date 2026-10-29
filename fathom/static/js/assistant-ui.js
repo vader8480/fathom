@@ -4,11 +4,17 @@
 // P4C adds the model status line and used-tools row, the "Proposed changes"
 // card (Yes applies through POST …/assistant/apply), attachments and pasted
 // manual text for the next question, and voice input (speech.js).
+// P6B adds the Ask | Draft a room toggle (§6.9.5b): in Draft mode the composer
+// takes a room description, the request carries mode: 'draft' + room, and the
+// answer renders a Draft card (recognised chips, unknown list) above the usual
+// proposal card. `fathom:assistant-open` {detail: {mode, room}} opens it.
 
 import { searchLocal, devicePorts, portLabel, invertOps } from './model-core.js';
+import { normaliseMode, placeholderFor, recognisedLabel, unknownLine, roomOptions, roomName, resolveRoom, buildPayload, DRAFT_EXAMPLE, DRAFT_HINT } from './assistant-core.js';
 
 const MANUAL_MAX = 20 * 1024;
-const TOOL_LABELS = { search: 'search', trace: 'trace', manual: 'manual', attachments: 'attachments', web: 'web lookup' };
+const TOOL_LABELS = { search: 'search', trace: 'trace', manual: 'manual', attachments: 'attachments', web: 'web lookup', draft_room: 'draft' };
+const OPEN_EVENT = 'fathom:assistant-open';
 
 function h(tag, attrs, children) {
   const el = document.createElement(tag);
@@ -41,6 +47,39 @@ export function renderBold(text) {
 }
 
 const transcripts = {};
+// Draft mode is remembered per project for the session (not stored in the browser): {mode, room}.
+const modes = {};
+// The mounted panel, and an open request that arrived before the panel was mounted (the shell mounts it
+// asynchronously after the toolbar button click that the event triggers).
+let active = null;
+let pendingOpen = null;
+
+function openDetail(detail) {
+  const d = detail || {};
+  return { mode: normaliseMode(d.mode), room: d.room === undefined || d.room === null ? '' : String(d.room) };
+}
+
+// Open the Helper (optionally in Draft mode for a room). Views dispatch
+// document.dispatchEvent(new CustomEvent('fathom:assistant-open', {detail: {mode: 'draft', room: 'main'}}));
+// the same call is exported for modules that already import this one.
+export function openAssistant(detail) {
+  const want = openDetail(detail);
+  if (typeof document !== 'undefined') {
+    const btn = document.getElementById('app-assistant-btn');
+    const panel = document.getElementById('app-assistant');
+    if (btn && (!panel || !panel.classList.contains('open'))) btn.click();
+  }
+  if (active && active.setMode) {
+    active.setMode(want.mode, want.room);
+    active.focus();
+  } else {
+    pendingOpen = want;
+  }
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener(OPEN_EVENT, function (e) { openAssistant(e && e.detail); });
+}
 
 function exampleQuestions(doc, room) {
   const devs = (doc.devices || []).filter(function (d) { return !room || room === '*' || (d.room || '') === room; });
@@ -99,6 +138,50 @@ export function mountAssistant(el, ctx) {
   const logEl = h('div', { class: 'ast-log', role: 'log', 'aria-live': 'polite', 'aria-label': 'Assistant conversation' });
   const input = h('input', { type: 'text', placeholder: 'Ask about your system\u2026', 'aria-label': 'Ask the assistant', enterkeyhint: 'send', autocomplete: 'off' });
   const send = h('button', { type: 'submit', class: 'primary', 'aria-label': 'Send' }, '\u2191');
+  // ---- Ask | Draft a room (P6B): segmented control + room select; state lives in `modes[key]` for the session
+  const state = modes[key] = modes[key] || { mode: 'ask', room: '' };
+  const modeBtns = { ask: null, draft: null };
+  function modeBtn(mode, label) {
+    const b = h('button', { type: 'button', class: 'ast-mode-btn', 'data-mode': mode, role: 'radio', 'aria-checked': 'false', onclick: function () { setMode(mode); input.focus(); } }, label);
+    modeBtns[mode] = b;
+    return b;
+  }
+  const modeSeg = h('div', { class: 'ast-mode', role: 'radiogroup', 'aria-label': 'Helper mode' }, [modeBtn('ask', 'Ask'), modeBtn('draft', 'Draft a room')]);
+  const roomSel = h('select', { class: 'ast-room', 'aria-label': 'Room to draft' });
+  const roomWrap = h('label', { class: 'ast-room-wrap' }, [h('span', { class: 'ast-room-label' }, 'Room'), roomSel]);
+  const modeRow = h('div', { class: 'ast-modes', 'data-mode': 'ask' }, [modeSeg, roomWrap]);
+  roomSel.addEventListener('change', function () { state.room = roomSel.value; });
+  function fillRooms(want) {
+    const opt = roomOptions(store.doc, want || state.room || (store.room === '*' ? '' : store.room));
+    roomSel.innerHTML = '';
+    opt.rooms.forEach(function (r) {
+      const o = h('option', { value: r.id }, r.name);
+      if (r.id === opt.selected) o.selected = true;
+      roomSel.appendChild(o);
+    });
+    roomSel.disabled = !opt.rooms.length;
+    state.room = opt.selected;
+  }
+  function isDraft() { return state.mode === 'draft'; }
+  function setMode(mode, room) {
+    state.mode = normaliseMode(mode);
+    if (room !== undefined && room !== null && room !== '') {
+      const rid = resolveRoom(store.doc, room);
+      if (rid) state.room = rid;
+    }
+    fillRooms(state.room);
+    modeRow.setAttribute('data-mode', state.mode);
+    root.setAttribute('data-mode', state.mode);
+    Object.keys(modeBtns).forEach(function (m) {
+      modeBtns[m].setAttribute('aria-checked', m === state.mode ? 'true' : 'false');
+      modeBtns[m].classList.toggle('on', m === state.mode);
+    });
+    roomWrap.hidden = !isDraft();
+    input.setAttribute('aria-label', isDraft() ? 'Describe the room' : 'Ask the assistant');
+    if (!voice) input.placeholder = placeholderFor(state.mode);
+    fillChips();
+    if (!log.length) redraw();
+  }
   // speech.js is loaded on demand (it is not in the offline shell cache): the mic button appears once
   // the module is in and the browser has a recogniser; data-voice on the form tells tests which.
   let speech = null;
@@ -120,7 +203,7 @@ export function mountAssistant(el, ctx) {
     h('div', { class: 'ast-head' }, [h('span', { class: 'live', 'aria-hidden': 'true' }), h('h2', null, 'Fathom Helper'),
       h('button', { type: 'button', class: 'small ghost', onclick: function () { log.length = 0; redraw(); } }, 'Clear'),
       h('button', { type: 'button', class: 'icon ghost', 'aria-label': 'Close assistant', onclick: function () { if (ctx.closePanel) ctx.closePanel(); } }, '\u00d7')]),
-    logEl, chips, ctxRow, voiceHint, form, status,
+    logEl, chips, modeRow, ctxRow, voiceHint, form, status,
   ]);
   el.appendChild(root);
 
@@ -243,7 +326,7 @@ export function mountAssistant(el, ctx) {
     mic.setAttribute('data-state', on ? 'listening' : 'idle');
     input.classList.toggle('ast-listening', on);
     if (on) input.placeholder = 'Listening\u2026';
-    else input.placeholder = 'Ask about your system\u2026';
+    else input.placeholder = placeholderFor(state.mode);
   }
   function stopVoice() {
     if (speech) speech.stop();
@@ -291,6 +374,10 @@ export function mountAssistant(el, ctx) {
 
   function fillChips() {
     chips.innerHTML = '';
+    if (isDraft()) {
+      chips.appendChild(h('button', { type: 'button', class: 'small ast-draft-example', onclick: function () { input.value = DRAFT_EXAMPLE; input.focus(); } }, 'Example: ' + DRAFT_EXAMPLE));
+      return;
+    }
     exampleQuestions(store.doc, store.room).forEach(function (q) {
       chips.appendChild(h('button', { type: 'button', class: 'small', onclick: function () { ask(q); } }, q));
     });
@@ -356,6 +443,25 @@ export function mountAssistant(el, ctx) {
     return box;
   }
 
+  // Draft card (§6.9.5b): what the drafter understood, what it could not place; the proposal card follows.
+  function draftEl(entry) {
+    const d = entry.answer && entry.answer.draft;
+    if (!entry.draft || !d) return null;
+    const rec = Array.isArray(d.recognised) ? d.recognised : [];
+    const unk = Array.isArray(d.unknown) ? d.unknown : [];
+    const card = h('div', { class: 'ast-draft', role: 'group', 'aria-label': 'Draft of ' + roomName(store.doc, entry.room), 'data-recognised': String(rec.length), 'data-unknown': String(unk.length) });
+    card.appendChild(h('h4', null, 'Draft \u00b7 ' + roomName(store.doc, entry.room)));
+    if (rec.length) {
+      card.appendChild(h('div', { class: 'ast-draft-list', 'aria-label': 'Recognised equipment' }, rec.map(function (r) {
+        return h('span', { class: 'chip ast-draft-chip', 'data-kind': r.kind || '', 'data-template': r.template || r.preset || '', title: r.text || '' }, recognisedLabel(r, ctx.vocab));
+      })));
+    } else {
+      card.appendChild(h('p', { class: 'muted ast-draft-none' }, 'Nothing recognised yet \u2014 name models or kinds, separated by commas.'));
+    }
+    if (unk.length) card.appendChild(h('div', { class: 'ast-draft-unknown', role: 'note' }, unknownLine(unk)));
+    return card;
+  }
+
   function suggestionEl(entry) {
     const s = entry.answer && entry.answer.suggestion;
     if (!s || !s.ops || !s.ops.length || entry.suggestionState === 'no') return null;
@@ -412,8 +518,8 @@ export function mountAssistant(el, ctx) {
       return card;
     }
     const applicable = p.applicable !== false && ops.length > 0;
-    const yes = h('button', { type: 'button', id: 'ast-proposal-yes', class: 'yes', disabled: applicable ? null : true, title: applicable ? '' : 'This proposal cannot be applied as is.' }, 'Yes, apply');
-    const no = h('button', { type: 'button', id: 'ast-proposal-no' }, 'No, leave it');
+    const yes = h('button', { type: 'button', id: 'ast-proposal-yes', class: 'yes', disabled: applicable ? null : true, title: applicable ? '' : 'This proposal cannot be applied as is.' }, entry.draft ? 'Apply' : 'Yes, apply');
+    const no = h('button', { type: 'button', id: 'ast-proposal-no' }, entry.draft ? 'Not now' : 'No, leave it');
     yes.addEventListener('click', function () {
       if (!ctx.api || !ctx.api.applyProposal) return;
       yes.disabled = true;
@@ -452,6 +558,7 @@ export function mountAssistant(el, ctx) {
     });
     no.addEventListener('click', function () { entry.proposalState = 'no'; redraw(true); });
     card.appendChild(h('div', { class: 'row' }, [yes, no]));
+    if (entry.draft) card.appendChild(h('p', { class: 'ast-draft-hint muted' }, DRAFT_HINT));
     return card;
   }
 
@@ -462,19 +569,23 @@ export function mountAssistant(el, ctx) {
     let lastQ = null;
     logEl.innerHTML = '';
     if (!log.length) {
-      logEl.appendChild(h('div', { class: 'ast-a' }, [h('div', null, 'Ask about this system: what feeds a screen, why the stream has no audio, where a spare lives. Answers trace the actual cables and ports.'),
-        h('div', { class: 'ast-notes' }, 'Room: ' + (store.room === '*' ? 'all rooms' : (((store.doc.rooms || []).filter(function (r) { return r.id === store.room; })[0] || {}).name || store.room)))]));
+      logEl.appendChild(isDraft()
+        ? h('div', { class: 'ast-a ast-intro-draft' }, [h('div', null, 'Describe the room \u2014 type it, dictate it or paste a list \u2014 and the Helper drafts the devices and a first patch for you to review. Nothing is changed until you apply.'),
+          h('div', { class: 'ast-notes' }, 'Room: ' + roomName(store.doc, state.room))])
+        : h('div', { class: 'ast-a' }, [h('div', null, 'Ask about this system: what feeds a screen, why the stream has no audio, where a spare lives. Answers trace the actual cables and ports.'),
+          h('div', { class: 'ast-notes' }, 'Room: ' + (store.room === '*' ? 'all rooms' : (((store.doc.rooms || []).filter(function (r) { return r.id === store.room; })[0] || {}).name || store.room)))]));
     }
     log.forEach(function (entry) {
-      lastQ = h('div', { class: 'ast-q' }, [entry.question,
-        (entry.attachments && entry.attachments.length) || entry.manual
-          ? h('div', { class: 'ast-q-ctx' }, (entry.attachments || []).map(function (id) { return h('span', { class: 'chip ast-q-att', 'data-att': id }, attName(id)); })
-            .concat(entry.manual ? [h('span', { class: 'chip ast-q-manual' }, 'Manual text')] : []))
-          : null]);
+      const qctx = (entry.attachments || []).map(function (id) { return h('span', { class: 'chip ast-q-att', 'data-att': id }, attName(id)); })
+        .concat(entry.manual ? [h('span', { class: 'chip ast-q-manual' }, 'Manual text')] : [])
+        .concat(entry.draft ? [h('span', { class: 'chip ast-q-draft', 'data-room': entry.room || '' }, 'Draft a room \u00b7 ' + roomName(store.doc, entry.room))] : []);
+      lastQ = h('div', { class: 'ast-q', 'data-mode': entry.draft ? 'draft' : 'ask' }, [entry.question, qctx.length ? h('div', { class: 'ast-q-ctx' }, qctx) : null]);
       logEl.appendChild(lastQ);
-      if (entry.pending) logEl.appendChild(h('div', { class: 'ast-typing' }, 'Tracing\u2026'));
+      if (entry.pending) logEl.appendChild(h('div', { class: 'ast-typing' }, entry.draft ? 'Drafting\u2026' : 'Tracing\u2026'));
       else {
         logEl.appendChild(answerEl(entry));
+        const dr = draftEl(entry);
+        if (dr) logEl.appendChild(dr);
         const s = suggestionEl(entry);
         if (s) logEl.appendChild(s);
         const pr = proposalEl(entry);
@@ -521,6 +632,12 @@ export function mountAssistant(el, ctx) {
     if (voice) stopVoice();
     const hist = history(log);
     const entry = { question: question, pending: true };
+    if (isDraft()) {
+      // Draft a room: the description goes with the chosen room; the answer renders the Draft card
+      entry.draft = true;
+      entry.room = roomSel.value || state.room;
+      if (!entry.room) { ctx.toast('Add a room to the project before drafting one.', 'warn'); return; }
+    }
     // the chosen files and pasted text go with this question only (the entry remembers them for history)
     if (pending.attachments.length) entry.attachments = pending.attachments.slice();
     if (pending.manual) entry.manual = pending.manual;
@@ -531,7 +648,7 @@ export function mountAssistant(el, ctx) {
     redraw();
     const room = store.room === '*' ? undefined : store.room;
     if (!ctx.api || navigator.onLine === false) { entry.pending = false; offlineAnswer(entry); redraw(); return; }
-    const payload = { question: question, room: room, use_llm: useLlm, history: hist };
+    const payload = buildPayload(entry.draft ? 'draft' : 'ask', question, { room: room, draftRoom: entry.room, useLlm: useLlm, history: hist });
     if (entry.attachments) {
       // P4B reads attachment ids from history[].attachments: this turn is appended there too
       payload.history = hist.concat([{ role: 'user', text: question, attachments: entry.attachments.slice() }]);
@@ -567,11 +684,22 @@ export function mountAssistant(el, ctx) {
   el.addEventListener('keydown', onKey);
   function onRoom() { fillChips(); }
   store.addEventListener('room', onRoom);
-  fillChips();
-  redraw();
-  return {
-    destroy: function () { if (voice) stopVoice(); el.removeEventListener('keydown', onKey); store.removeEventListener('room', onRoom); el.innerHTML = ''; },
+  const handle = {
+    destroy: function () { if (voice) stopVoice(); el.removeEventListener('keydown', onKey); store.removeEventListener('room', onRoom); if (active === handle) active = null; el.innerHTML = ''; },
     focus: function () { setTimeout(function () { input.focus(); }, 60); },
     ask: ask,
+    setMode: setMode,
+    mode: function () { return state.mode; },
   };
+  active = handle;
+  if (pendingOpen) {
+    // an open request (fathom:assistant-open) that arrived while the shell was still mounting the panel
+    const want = pendingOpen;
+    pendingOpen = null;
+    setMode(want.mode, want.room);
+  } else {
+    setMode(state.mode, state.room);
+  }
+  redraw();
+  return handle;
 }
