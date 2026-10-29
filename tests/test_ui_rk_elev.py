@@ -174,6 +174,24 @@ class ElevationUi(UiCase):
         self.assertIsNotNone(r, "no element " + sel)
         return r
 
+    def show_rack(self, pg, rack):
+        """At sm the landing pages one rack at a time (.rkt-pager): page until ``rack`` is the shown one."""
+        shown = "!document.querySelector('.rk-rack[data-rack=%s]').hidden" % rack
+        if pg.js(shown):
+            return
+        order = pg.js("Array.prototype.map.call(document.querySelectorAll('.rk-rack[data-rack]'), function (s) { return s.getAttribute('data-rack'); })")
+        for step in ("#rk-next", "#rk-prev"):
+            for _ in range(len(order)):
+                if pg.js(shown) or pg.js("document.querySelector(%s).disabled" % json.dumps(step)):
+                    break
+                pg.click(step)
+                time.sleep(0.15)
+            if pg.js(shown):
+                break
+        pg.wait_for(shown)
+        pg.wait_for("document.querySelector('.rkt-pager-label').textContent.indexOf(%s) >= 0"
+                    % json.dumps(pg.js("document.querySelector('.rk-rack[data-rack=%s]').getAttribute('aria-label')" % rack)))
+
     def ru_y(self, pg, slots_sel, units, u, height=1):
         """Client y of the middle of a block at U ``u`` (bottom-up numbering)."""
         r = pg.js("""(function (sel) {
@@ -217,6 +235,8 @@ class ElevationUi(UiCase):
                 name = self.seed("elev-img-" + size)
                 pg = self.landing(name, size)
                 pg.js(API + ".setOptions({display: 'image'})")
+                if size == "m":
+                    self.show_rack(pg, "rk-net")
                 pg.js("document.querySelector('.rk-rack[data-rack=rk-net]').scrollIntoView({block: 'start'})")   # photos load lazily
                 pg.wait_for("Array.prototype.every.call(document.querySelectorAll('.rk-block[data-rack=rk-net] img.rk-img'), function (i) {"
                             " return i.complete && i.naturalWidth > 0; }) && document.querySelectorAll('.rk-block[data-rack=rk-net] img.rk-img').length === 5")
@@ -304,10 +324,20 @@ class ElevationUi(UiCase):
             with self.subTest(size=size):
                 name = self.seed("elev-ten-" + size)
                 pg = self.landing(name, size)
+                if size == "m":   # one rack at a time: measure each while it is the shown one
+                    self.show_rack(pg, "rk-foh")
+                foh = pg.js("document.querySelector('.rk-slots[data-rack=rk-foh]').getBoundingClientRect().width")
+                if size == "m":
+                    self.assertGreater(pg.rect(".rk-rack[data-rack=rk-foh] .rk-item[data-type=blank]")["height"], 43.5,
+                                       "44 px targets under a coarse pointer")
+                    self.show_rack(pg, "rk-ten")
                 w = pg.js("[document.querySelector('.rk-slots[data-rack=rk-ten]').getBoundingClientRect().width,"
-                          " document.querySelector('.rk-slots[data-rack=rk-foh]').getBoundingClientRect().width,"
                           " document.querySelector('.rk-block[data-device=ten-sw]').getBoundingClientRect().width,"
                           " document.querySelector('.rk-rack[data-rack=rk-ten] .rk-item[data-type=drawer]').getBoundingClientRect().width]")
+                if size == "m":   # the shown rack is fitted alone: compare with the 19" slot width now in force
+                    foh = pg.js("parseFloat(document.querySelector('.rk-root').style.getPropertyValue('--rk-w')) || 320")
+                w.insert(1, foh)
+                self.assertGreater(w[0], 0)
                 self.assertAlmostEqual(w[0] / w[1], 168.0 / 320.0, delta=0.01, msg="a 10\" rack is 168/320 of a 19\" one")
                 self.assertAlmostEqual(w[2], w[0], delta=1.5, msg="a full-width block fills its 10\" rack")
                 self.assertAlmostEqual(w[3], w[0], delta=1.5)
@@ -323,8 +353,6 @@ class ElevationUi(UiCase):
                 self.assertEqual(sorted(looks), ["blank", "brush", "cable_manager", "shelf", "vent"])
                 self.assertEqual(len(set(looks.values())), len(looks), "each accessory type looks different: %r" % looks)
                 self.assertEqual(pg.js("document.querySelectorAll('.rk-item[data-item=ri-2][data-rack=rk-foh] .rk-cell').length"), 3)
-                if size == "m":
-                    self.assertGreaterEqual(pg.rect(".rk-item[data-type=blank]")["height"], 44, "44 px targets under a coarse pointer")
                 warn = pg.js("document.querySelector('.rk-rack[data-rack=rk-amp] .rk-warnings').textContent")
                 self.assertIn("Filler", warn)
                 self.assertIn("IEM transmitter", warn)
