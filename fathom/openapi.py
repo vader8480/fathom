@@ -12,6 +12,35 @@ _ERRORS = {
     "415": "Unsupported format", "422": "Invalid (details.problems) or pdf_unsupported", "428": "Precondition required (If-Match / base_revision)",
     "429": "Throttled", "500": "Internal error (body has an error id only)",
 }
+_NOT_AVAILABLE = "Not available (code not_available): the engine module behind this route is not installed"
+
+# Per-operation detail, keyed by handler name (routes carry only a body / response schema name).
+_STR, _INT, _BOOL = {"type": "string"}, {"type": "integer"}, {"type": "boolean"}
+_SHARE_Q = ("share", _STR, "share token of this project, carried on links / encoded in the QR")
+_QR_Q = [("ecl", {"type": "string", "enum": ["L", "M", "Q", "H"], "default": "M"}, "error correction level"),
+         ("scale", {"type": "integer", "minimum": 1, "maximum": 40, "default": 4}, "pixels per module")]
+_ANNOTATIONS = ["name", "model", "ip", "serial", "asset_tag", "code", "power", "weight", "status"]
+_QUERY: Dict[str, List[Tuple[str, Dict[str, Any], str]]] = {
+    "r_view_rack": [_SHARE_Q],
+    "r_rack_svg": [("face", {"type": "string", "enum": ["front", "rear", "both"], "default": "front"}, "both = front and rear side by side"),
+                   ("images", {"type": "string", "enum": ["1"]}, "1 embeds device images (data: URIs)"),
+                   ("annotate", {"type": "string", "enum": _ANNOTATIONS}, "adds a label column with this field per device")],
+    "r_qr_rack": [_SHARE_Q] + _QR_Q,
+    "r_library": [("q", _STR, "search text"), ("discipline", _STR, ""), ("kind", _STR, ""), ("project", _STR, "include this project's templates"),
+                  ("source", {"type": "string", "enum": ["catalog", "all"]}, "catalog = only the Rackula catalog; all = every tier (default excludes the catalog)"),
+                  ("ids", _STR, "comma-separated template ids: exactly those, in order, from any tier"),
+                  ("rack", {"type": "string", "enum": ["1", "0"]}, "1 keeps rack-mountable templates (ru >= 1)")],
+    "r_library_netbox": [("project", _STR, "resolve project templates of this project")],
+}
+_OK_TYPES = {"r_view_rack": "text/html", "r_rack_svg": "image/svg+xml", "r_qr_rack": "image/svg+xml", "r_library_netbox": "application/yaml"}
+_OK_SCHEMAS: Dict[str, Dict[str, Any]] = {
+    "r_rack_totals": {"$ref": "#/components/schemas/RackTotals"},
+    "r_rack_import": {"oneOf": [{"$ref": "#/components/schemas/RackImportPreview"}, {"$ref": "#/components/schemas/RackImportApplied"}]},
+    "r_rack_templates": {"type": "object", "properties": {"templates": {"type": "array", "items": {"$ref": "#/components/schemas/RackTemplate"}}}},
+}
+_CREATED = {"r_rack_from_template": "RackCreated", "r_library_import_netbox": "Template"}
+_ENGINE_ROUTES = {"r_view_rack", "r_rack_svg", "r_rack_totals", "r_rack_import", "r_rack_templates", "r_rack_from_template",
+                  "r_library_import_netbox", "r_library_netbox"}
 
 
 def _group_end(p: str, i: int) -> int:
@@ -223,6 +252,34 @@ def _components() -> Dict[str, Any]:
                                                                   "description": "per-probe fields (enabled, text / check / select values; list fields such as hosts as a string or array); "
                                                                                  "secrets: string sets, empty string clears, null keeps"}}}},
         "DiscoveryTest": {"type": "object", "required": ["probe"], "properties": {"probe": {"type": "string", "enum": ["unifi", "mdns", "lldp", "arp", "snmp", "yamaha", "videohub", "qsys", "ddm"]}, "settings": obj}},
+        "RackImport": {"type": "object", "description": "One of text, zip_b64 or url is required",
+                       "properties": {"text": {"type": "string", "description": "Rackula layout YAML or JSON"},
+                                      "zip_b64": {"type": "string", "description": "a .Rackula.zip, base64"},
+                                      "url": {"type": "string", "description": "a count.racku.la share link or its encoded string"},
+                                      "room": {"type": "string", "description": "room id for the new racks and devices (404 if unknown); default: settings.default_room, else the first room"},
+                                      "apply": {"type": "boolean", "default": False, "description": "commit the ops (needs base_revision)"},
+                                      "base_revision": {"type": "integer"}}},
+        "RackImportPreview": {"type": "object", "properties": {
+            "racks": {"type": "array", "items": obj}, "devices": {"type": "array", "items": obj}, "items": {"type": "array", "items": obj},
+            "warnings": {"type": "array", "items": {"type": "string"}}, "ops": {"type": "array", "items": _ref("Op")}}},
+        "RackImportApplied": {"type": "object", "required": ["revision", "applied", "warnings"], "properties": {
+            "revision": {"type": "integer"}, "applied": {"type": "integer", "description": "number of ops committed"},
+            "warnings": {"type": "array", "items": {"type": "string"}}}},
+        "RackFromTemplate": {"type": "object", "required": ["template", "base_revision"], "properties": {
+            "template": {"type": "string", "description": "id from GET /api/v2/rack-templates"}, "name": {"type": "string"},
+            "room": {"type": "string", "description": "room id (404 if unknown)"}, "location": {"type": "string"}, "base_revision": {"type": "integer"}}},
+        "RackCreated": {"type": "object", "required": ["revision", "rack"], "properties": {"revision": {"type": "integer"}, "rack": {"type": "string", "description": "new rack id"}}},
+        "RackTemplate": {"type": "object", "properties": {
+            "id": {"type": "string"}, "name": {"type": "string"}, "description": {"type": "string"}, "units": {"type": "integer"},
+            "width_in": {"type": "integer", "enum": [10, 19, 21, 23]},
+            "form_factor": {"type": "string", "enum": ["cabinet", "open_frame", "two_post", "four_post", "wall_mount", "road_case"]}}},
+        "RackTotals": {"type": "object", "properties": {
+            "units": {"type": "integer"}, "used_u": {"type": "integer"}, "free_u": {"type": "integer"}, "weight_kg": {"type": "number"},
+            "max_load_kg": {"type": ["number", "null"]}, "power_w": {"type": "number"}, "power_limit_w": {"type": ["number", "null"]},
+            "devices": {"type": "integer"}, "items": {"type": "integer"}}},
+        "NetboxImport": {"type": "object", "required": ["text"], "properties": {
+            "text": {"type": "string", "description": "NetBox device-type YAML"},
+            "override": {"type": "boolean", "default": False, "description": "shadow a built-in template with the same id"}}},
     }
     return schemas
 
@@ -242,8 +299,12 @@ def build_spec(routes: Iterable[Any], version: str) -> Dict[str, Any]:
             "tags": list(getattr(rt, "tags", []) or ["misc"]),
             "x-fathom-role": role,
         }
+        handler = str(getattr(getattr(rt, "handler", None), "__name__", ""))
         if params:
             op["parameters"] = [{"name": n, "in": "path", "required": True, "schema": {"type": "string"}} for n in params]
+        if handler in _QUERY:
+            op.setdefault("parameters", []).extend({"name": n, "in": "query", "required": False, "schema": s, "description": d}
+                                                   for n, s, d in _QUERY[handler])
         body = getattr(rt, "body", None)
         if body:
             if body == "Multipart":
@@ -254,14 +315,20 @@ def build_spec(routes: Iterable[Any], version: str) -> Dict[str, Any]:
             else:
                 op["requestBody"] = {"required": True, "content": {"application/json": {"schema": _ref(body) if body in schemas else {"type": "object"}}}}
         resp_name = getattr(rt, "response", None)
-        ok_schema = _ref(resp_name) if resp_name and resp_name in schemas else {"type": "object"}
-        responses: Dict[str, Any] = {"200": {"description": "OK", "content": {"application/json": {"schema": ok_schema}}}}
-        if method == "post":
+        ok_schema = _ref(resp_name) if resp_name and resp_name in schemas else _OK_SCHEMAS.get(handler, {"type": "object"})
+        ok_type = _OK_TYPES.get(handler, "application/json")
+        ok_body = {"schema": ok_schema} if ok_type == "application/json" else {"schema": {"type": "string"}}
+        responses: Dict[str, Any] = {"200": {"description": "OK", "content": {ok_type: ok_body}}}
+        if handler in _CREATED:
+            responses = {"201": {"description": "Created", "content": {"application/json": {"schema": _ref(_CREATED[handler])}}}}
+        elif method == "post":
             responses["201"] = {"description": "Created"}
         if method == "delete":
             responses["204"] = {"description": "No content"}
         for code, desc in _ERRORS.items():
             responses[code] = {"description": desc, "content": {"application/json": {"schema": _ref("Error")}}}
+        if handler in _ENGINE_ROUTES:
+            responses["501"] = {"description": _NOT_AVAILABLE, "content": {"application/json": {"schema": _ref("Error")}}}
         op["responses"] = responses
         if role != "public":
             op["security"] = [{"basic": []}, {"session": []}]

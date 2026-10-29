@@ -139,6 +139,12 @@ def run_selftest() -> int:
         # ================================================ 0.3 checks
         _check_v2(check, skip, sample, tmpd)
 
+    # ================================================ racks (Rackula features)
+    try:
+        _check_racks(check, skip)
+    except Exception as exc:
+        check(False, f"racks: checks crashed ({type(exc).__name__}: {exc})")
+
     if fails:
         print(f"error: {len(fails)} selftest check(s) failed")
         return 1
@@ -281,7 +287,7 @@ def _check_v2(check, skip, sample: Path, tmpd: Path) -> None:
     missing = [f for f in PACKAGE_FILES if not (run / f).is_file()]
     for rid in ("main", "chapel", "broadcast"):
         missing += [f"rooms/{rid}/{f}" for f in ("index.html", "diagram.svg", "patch.html") if not (run / "rooms" / rid / f).is_file()]
-    missing += [f for f in ("racks/rk-foh-front.svg", "racks/rk-foh-rear.svg", "floorplans/fp-main-floor.svg", "devices/foh-cl5.html", "qr/foh-cl5.svg", f"{run.name}.zip") if not (run / f).is_file()]
+    missing += [f for f in ("racks/rk-foh-front.svg", "racks/rk-foh-rear.svg", "racks/rk-foh.svg", "racks/rk-foh.html", "floorplans/fp-main-floor.svg", "devices/foh-cl5.html", "qr/foh-cl5.svg", f"{run.name}.zip") if not (run / f).is_file()]
     check(not missing, f"campus-demo build: §5.9 package complete{(' (missing ' + ', '.join(missing) + ')') if missing else ''}")
     if (run / "floorplans" / "fp-main-floor.svg").is_file():
         plan = (run / "floorplans" / "fp-main-floor.svg").read_text(encoding="utf-8")
@@ -291,3 +297,106 @@ def _check_v2(check, skip, sample: Path, tmpd: Path) -> None:
     hdr = (run / "cable-schedule.csv").read_text(encoding="utf-8").splitlines()[0] if (run / "cable-schedule.csv").is_file() else ""
     check(hdr == ",".join(lab for _, lab in cables.CABLE_COLUMNS), "campus-demo build: cable schedule header")
     shutil.rmtree(run, ignore_errors=True)
+
+
+# A tiny current-format (1/6-U positions) Rackula layout: two devices and a blank, which becomes a RackItem.
+RACKULA_LAYOUT = {
+    "version": "26.9.2", "name": "Selftest",
+    "racks": [{"id": "rack-a", "name": "Selftest rack", "height": 8, "width": 19, "desc_units": False, "form_factor": "4-post-cabinet",
+               "starting_unit": 1, "position": 0, "devices": [
+                   {"id": "d1", "device_type": "sw-1u", "name": "Core switch", "position": 6, "face": "front"},
+                   {"id": "d2", "device_type": "srv-2u", "name": "Media server", "position": 18, "face": "front"},
+                   {"id": "d3", "device_type": "blank-1u", "position": 36, "face": "front"}]}],
+    "device_types": [{"slug": "sw-1u", "u_height": 1, "manufacturer": "Acme", "model": "S24", "category": "network"},
+                     {"slug": "srv-2u", "u_height": 2, "manufacturer": "Acme", "model": "R2", "category": "server"},
+                     {"slug": "blank-1u", "u_height": 1, "category": "blank"}],
+}
+RACKULA_FIXTURE = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "rackula" / "media-server.rackula.yaml"
+
+
+def _check_racks(check, skip) -> None:
+    from . import library, rack_templates, racks
+    from .parsers import rackula
+    from .schema import apply_ops, new_doc, validate_doc
+
+    def errors(doc):
+        return [p for p in validate_doc(doc) if p.get("level") == "error"]
+
+    # ---- catalog tier
+    cat = library.catalog_templates()
+    unresolved = [t["id"] for t in cat if library.get_template(t["id"]) is None]
+    check(len(cat) >= 600 and not unresolved, f"racks: catalog has {len(cat)} templates, {len(unresolved)} unresolved by get_template")
+    imaged = [t for t in cat if t.get("image_front") and t.get("image_rear")]
+    missing_img = [t["id"] for t in imaged if not (STATIC_DIR / "rack-images" / t["image_front"]).is_file()]
+    check(bool(imaged) and not missing_img, f"racks: {len(imaged)} catalog templates with images, {len(missing_img)} image files missing")
+    if not imaged:
+        return
+
+    # ---- a rack with items and a shelf child: totals, collisions, SVG with images
+    tpl = imaged[0]
+    ru = int(tpl.get("ru") or 1)
+    doc = new_doc("Selftest")
+    doc, _ = apply_ops(doc, [
+        {"op": "put", "coll": "racks", "id": "rk-st", "value": {
+            "id": "rk-st", "name": "Selftest rack", "units": 12, "width_in": 19, "form_factor": "cabinet",
+            "weight_kg": 20, "max_load_kg": 100, "power_limit_w": 500, "items": [
+                {"id": "ri-1", "type": "blank", "u": 1, "height": 1, "face": "front", "depth": "half", "weight_kg": 0.5},
+                {"id": "ri-2", "type": "shelf", "u": 2 + ru, "height": 1, "face": "front", "depth": "full", "slots": 2},
+                {"id": "ri-3", "type": "vent", "u": 12, "height": 1, "face": "front", "depth": "half"}]}},
+        {"op": "put", "coll": "devices", "id": "st-cat", "value": {
+            "id": "st-cat", "name": "Catalog device", "kind": tpl.get("kind") or "other", "template": tpl["id"], "weight_kg": 10, "power_w": 50,
+            "rack": {"id": "rk-st", "u": 2, "height": ru, "face": "front", "side": "full", "depth": "full"}}},
+        {"op": "put", "coll": "devices", "id": "st-shelf", "value": {
+            "id": "st-shelf", "name": "Shelf player", "kind": "other", "weight_kg": 2, "power_w": 15,
+            "rack": {"id": "rk-st", "u": 2 + ru, "height": 1, "face": "front", "side": "full", "shelf": "ri-2", "slot": 0}}},
+    ])
+    check(not errors(doc), f"racks: rack with items and a shelf validates ({len(errors(doc))} errors)")
+    warn = [p["code"] for p in racks.validate_racks(doc)]
+    check(not racks.collisions(doc, "rk-st") and not warn, f"racks: no collisions or rack warnings ({', '.join(warn) or 'none'})")
+    cells = racks.shelf_contents(doc, "rk-st", "ri-2")
+    check(cells == [{"slot": 0, "device": "st-shelf"}, {"slot": 1, "device": None}],
+          "racks: shelf cells hold the shelf child")
+    tot = racks.rack_totals(doc, "rk-st")
+    want = {"units": 12, "used_u": ru + 3, "free_u": 12 - ru - 3, "weight_kg": 32.5, "max_load_kg": 100, "power_w": 65.0, "power_limit_w": 500,
+            "devices": 2, "items": 3}
+    check(all(tot.get(k) == v for k, v in want.items()), f"racks: rack_totals {tot}")
+    try:
+        svg = racks.rack_svg(doc, "rk-st", face="both", images=True)
+        ET.fromstring(svg)
+        check("data:image/webp;base64," in svg and "Shelf player" in svg and "Selftest rack" in svg,
+              "racks: rack_svg(face='both', images=True) parses, embeds the image and draws the shelf child")
+    except ET.ParseError as exc:
+        check(False, f"racks: rack_svg parse error {exc}")
+    linked = racks.rack_svg(doc, "rk-st", face="rear", images=True, base_url="/")
+    check("/static/rack-images/" + tpl["image_rear"] in linked and tpl["image_front"] not in linked, "racks: rear face links only the rear image")
+
+    # ---- Rackula import preview
+    pv = rackula.preview(new_doc("Selftest"), {"text": json.dumps(RACKULA_LAYOUT)})
+    got, _ = apply_ops(new_doc("Selftest"), pv["ops"])
+    rk = (got.get("racks") or [{}])[0]
+    pos = sorted((d["name"], d["rack"]["u"], d["rack"]["height"]) for d in got.get("devices") or [] if d.get("rack"))
+    check(len(pv["racks"]) == 1 and not errors(got) and pos == [("Core switch", 1, 1), ("Media server", 3, 2)]
+          and [i["type"] for i in rk.get("items") or []] == ["blank"], f"racks: Rackula layout previews ({len(pv['ops'])} ops, {pos})")
+    if RACKULA_FIXTURE.is_file():
+        pv = rackula.preview(new_doc("Selftest"), {"text": RACKULA_FIXTURE.read_text(encoding="utf-8")})
+        got, _ = apply_ops(new_doc("Selftest"), pv["ops"])
+        rid = got["racks"][0]["id"] if got.get("racks") else ""
+        check(len(pv["devices"]) == 6 and not errors(got) and rid and not racks.collisions(got, rid),
+              f"racks: {RACKULA_FIXTURE.name} previews ({len(pv['devices'])} devices, {len(pv['warnings'])} warnings)")
+    else:
+        skip(f"racks: {RACKULA_FIXTURE.name} preview (not a source checkout)")
+
+    # ---- rack templates apply cleanly to a new project and to the campus sample
+    campus = json.loads((SAMPLES_DIR / "campus-demo" / "project.json").read_text(encoding="utf-8"))
+    bad = []
+    tids = [t["id"] for t in rack_templates.list_templates()]
+    for tid in tids:
+        for label, base in (("new", new_doc("Selftest")), ("campus", json.loads(json.dumps(campus)))):
+            try:
+                res = rack_templates.apply_ops(base, tid)
+                out, _ = apply_ops(base, res["ops"])
+                if errors(out) or racks.collisions(out, res["rack_id"]):
+                    bad.append(f"{tid}@{label}")
+            except Exception as exc:
+                bad.append(f"{tid}@{label}: {type(exc).__name__}: {exc}")
+    check(len(tids) >= 5 and not bad, f"racks: {len(tids)} rack templates apply cleanly{(' (failed ' + ', '.join(bad) + ')') if bad else ''}")

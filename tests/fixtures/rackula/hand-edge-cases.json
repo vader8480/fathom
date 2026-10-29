@@ -1,0 +1,24 @@
+{
+  "version": "0.6.4",
+  "name": "Legacy JSON",
+  "rack": {
+    "name": "Old Rack",
+    "height": 10,
+    "width": 10,
+    "desc_units": false,
+    "form_factor": "open-frame",
+    "starting_unit": 1,
+    "position": 0,
+    "devices": [
+      {"id": "a", "device_type": "patch-24", "position": 1.5, "face": "front"},
+      {"id": "b", "device_type": "blank-1u", "position": 10, "face": "front"},
+      {"id": "c", "device_type": "atem", "position": 3, "face": "front", "name": "ATEM Mini Extreme"}
+    ]
+  },
+  "device_types": [
+    {"slug": "patch-24", "model": "Patch Panel 24", "u_height": 1, "is_full_depth": false, "colour": "#6272A4", "category": "patch-panel"},
+    {"slug": "blank-1u", "model": "Blank 1U", "u_height": 1, "colour": "#44475A", "category": "blank"},
+    {"slug": "atem", "manufacturer": "Blackmagic Design", "model": "ATEM Mini Extreme", "u_height": 2, "colour": "#A85A7A", "category": "av-media"}
+  ],
+  "settings": {"display_mode": "label", "show_labels_on_images": false}
+}

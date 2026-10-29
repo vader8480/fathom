@@ -4,7 +4,7 @@ v0.2 artifacts (``index.html``, ``diagram.svg``, ``patch-sheet.csv``,
 ``project.json``, ``build-notes.txt``, ``<run>.zip``, optional ``report.pdf`` /
 ``diagram.png``) keep their names. With a v2 doc the run folder also holds the
 §5.9 package: per-room maps and patch pages, device pages, schedules (CSV),
-label sheet, rack and floor-plan SVGs, QR codes and ``report.html``. Pages
+label sheet, rack SVGs and pages, floor-plan SVGs, QR codes and ``report.html``. Pages
 come from the W5 renderers and the analysis from W6 when those modules are
 importable; otherwise compact built-in fallbacks are used and a build note
 says so.
@@ -342,6 +342,11 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
         notes.append("room index: built-in fallback (render_html.render_room_index not available)")
         _write(run_dir / "rooms" / "index.html", _fallback_room_index(sdoc, rooms))
 
+    # ---- rack SVGs and pages (before the device pages, whose Rack line links to the pages written here)
+    rack_files, rack_notes = _write_racks(fdoc, run_dir, name)
+    notes.extend(rack_notes)
+    rack_pages = [rid for rid, f in rack_files.items() if f.get("page")]
+
     # ---- QR + device pages
     base = public_base(doc, base_url)
     qr_svgs: Dict[str, str] = {}
@@ -363,7 +368,8 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
     for d in devices:
         try:
             if render_device_page is not None:
-                page = _call(render_device_page, sdoc, d["id"], project=name, overlay=overlay, base_url="../", qr_svg=qr_svgs.get(d["id"], ""), sw=False, link_style="build")
+                page = _call(render_device_page, sdoc, d["id"], project=name, overlay=overlay, base_url="../", qr_svg=qr_svgs.get(d["id"], ""), sw=False, link_style="build",
+                             rack_pages=rack_pages)
             else:
                 page = _fallback_device_page(sdoc, d, overlay, qr_svgs.get(d["id"], ""))
         except Exception as exc:
@@ -373,6 +379,7 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
 
     # ---- schedules
     sections: Dict[str, str] = {}
+    extra_css: List[str] = []
     if patch_table is not None and patch_table_csv is not None:
         try:
             _write(run_dir / "patch-table.csv", patch_table_csv(_call(patch_table, fdoc, overlay)))
@@ -436,22 +443,20 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
         except Exception as exc:
             notes.append(f"console channels: {type(exc).__name__}: {exc}; section skipped")
 
-    # ---- racks
-    rack_svg = _optional("racks", "rack_svg")
-    if rack_svg is None:
-        notes.append("rack SVGs: built-in fallback (fathom.racks not available)")
-    rack_parts = []
-    for rk in fdoc.get("racks") or []:
-        for face in ("front", "rear"):
+    # ---- racks (files written above)
+    if rack_files:
+        render_rack_section = _optional("render_html", "render_rack_report_section")
+        rack_html = ""
+        if render_rack_section is not None:
             try:
-                svg = rack_svg(fdoc, rk["id"], face=face) if rack_svg is not None else _fallback_rack_svg(fdoc, rk, face)
+                rack_html = render_rack_section(fdoc, rack_files)
+                from .render_html import RACK_REPORT_CSS
+
+                extra_css.append(RACK_REPORT_CSS)
             except Exception as exc:
-                notes.append(f"rack {rk['id']} {face}: {type(exc).__name__}: {exc}; fallback used")
-                svg = _fallback_rack_svg(fdoc, rk, face)
-            _write(run_dir / "racks" / f"{rk['id']}-{face}.svg", svg)
-            rack_parts.append(f'<figure><img src="racks/{html.escape(rk["id"])}-{face}.svg" alt="{html.escape(rk.get("name", rk["id"]))} {face}"><figcaption>{html.escape(rk.get("name", rk["id"]))} · {face}</figcaption></figure>')
-    if rack_parts:
-        sections["Racks"] = '<div class="grid">' + "".join(rack_parts) + "</div>"
+                notes.append(f"racks section: {type(exc).__name__}: {exc}; fallback used")
+                rack_html = ""
+        sections["Racks"] = rack_html or _fallback_rack_section(fdoc, rack_files)
 
     # ---- floor plans
     from .floorplan import plan_svg
@@ -473,7 +478,6 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
         sections["Floor plans"] = "".join(plan_parts)
 
     # ---- standard operating procedures (published pages, tree order, one per printed page)
-    report_css = ""
     try:
         sop_html, sop_css_text = _sop_section(doc, project_dir, run_dir, rooms=rooms, all_rooms=set(rooms) == {r.get("id") for r in doc.get("rooms") or []})
     except Exception as exc:
@@ -481,7 +485,8 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
         sop_html, sop_css_text = "", ""
     if sop_html:
         sections["Standard operating procedures"] = sop_html
-        report_css = sop_css_text
+        extra_css.append(sop_css_text)
+    report_css = "".join(extra_css)
 
     # ---- report
     maps = "".join(f'<figure class="map"><img src="rooms/{html.escape(r)}/diagram.svg" alt="{html.escape(room_map.get(r, {}).get("name", r))} signal flow"><figcaption>{html.escape(room_map.get(r, {}).get("name", r))}</figcaption></figure>' for r in rooms)
@@ -495,6 +500,73 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
     _write(run_dir / "report.html", report)
     notes.extend(overlay.get("notes") or [])
     return notes
+
+
+def _write_racks(fdoc: Doc, run_dir: Path, project: str) -> Tuple[Dict[str, Dict[str, str]], List[str]]:
+    """Per rack: ``racks/<rack>-front.svg`` / ``-rear.svg`` (always, fallback renderer when needed), ``racks/<rack>.svg``
+    (both faces with images, when ``racks.rack_svg`` takes ``face="both", images=True``) and ``racks/<rack>.html``
+    (when ``render_rack.rack_page_html`` exists). Returns ``({rack_id: {front, rear, svg?, page?}}, notes)`` with
+    build-relative paths."""
+    notes: List[str] = []
+    rack_svg = _optional("racks", "rack_svg")
+    if rack_svg is None:
+        notes.append("rack SVGs: built-in fallback (fathom.racks not available)")
+    rack_page = _optional("render_rack", "rack_page_html")
+    if rack_page is None:
+        notes.append("rack pages: racks/<rack>.html skipped (fathom.render_rack.rack_page_html not available)")
+    both = rack_svg is not None
+    files: Dict[str, Dict[str, str]] = {}
+    for rk in fdoc.get("racks") or []:
+        if not isinstance(rk, dict) or not rk.get("id"):
+            continue
+        rid = str(rk["id"])
+        rel = f"racks/{quote(rid, safe='')}"
+        f: Dict[str, str] = {}
+        for face in ("front", "rear"):
+            try:
+                svg = rack_svg(fdoc, rid, face=face) if rack_svg is not None else _fallback_rack_svg(fdoc, rk, face)
+            except Exception as exc:
+                notes.append(f"rack {rid} {face}: {type(exc).__name__}: {exc}; fallback used")
+                svg = _fallback_rack_svg(fdoc, rk, face)
+            _write(run_dir / "racks" / f"{rid}-{face}.svg", svg)
+            f[face] = f"{rel}-{face}.svg"
+        if both:
+            try:
+                svg = rack_svg(fdoc, rid, face="both", images=True)
+            except TypeError:
+                both = False
+                notes.append("rack SVGs: racks/<rack>.svg skipped (fathom.racks.rack_svg does not take face='both' / images)")
+            except ValueError as exc:
+                notes.append(f"rack {rid}: racks/{rid}.svg skipped ({exc})")
+            except Exception as exc:
+                notes.append(f"rack {rid}: racks/{rid}.svg skipped ({type(exc).__name__}: {exc})")
+            else:
+                _write(run_dir / "racks" / f"{rid}.svg", svg)
+                f["svg"] = f"{rel}.svg"
+        if rack_page is not None:
+            try:
+                page = _call(rack_page, fdoc, project, rid, base="", link_style="build")
+            except Exception as exc:
+                notes.append(f"rack {rid}: page failed ({type(exc).__name__}: {exc}); racks/{rid}.html skipped")
+            else:
+                _write(run_dir / "racks" / f"{rid}.html", page)
+                f["page"] = f"{rel}.html"
+        files[rid] = f
+    return files, notes
+
+
+def _fallback_rack_section(fdoc: Doc, files: Dict[str, Dict[str, str]]) -> str:
+    parts = []
+    for rk in fdoc.get("racks") or []:
+        f = files.get(rk.get("id")) if isinstance(rk, dict) else None
+        if not f:
+            continue
+        name = html.escape(str(rk.get("name") or rk["id"]))
+        for face in ("front", "rear"):
+            parts.append(f'<figure><img src="{html.escape(f[face])}" alt="{name} {face}"><figcaption>{name} · {face}</figcaption></figure>')
+        if f.get("page"):
+            parts.append(f'<p><a href="{html.escape(f["page"])}">{name}</a></p>')
+    return '<div class="grid">' + "".join(parts) + "</div>"
 
 
 def _sop_section(doc: Doc, project_dir: Path, run_dir: Path, *, rooms: List[str], all_rooms: bool) -> Tuple[str, str]:

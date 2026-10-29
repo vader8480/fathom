@@ -77,6 +77,10 @@ SPEC_ROLES = {
     ("GET", "/api/v2/projects/{}/floorplans/{}.svg"): "viewer", ("GET", "/api/v2/projects/{}/schedules/{}"): "viewer",
     ("GET", "/api/v2/projects/{}/cables/tag-preview"): "editor", ("GET", "/api/v2/projects/{}/racks/{}.svg"): "viewer",
     ("GET", "/api/v2/projects/{}/qr/{}.svg"): "viewer", ("GET", "/api/v2/projects/{}/trace"): "viewer",
+    ("GET", "/p/{}/rk/{}"): "viewer", ("GET", "/api/v2/projects/{}/qr/rack/{}.svg"): "viewer",
+    ("GET", "/api/v2/projects/{}/racks/{}/totals"): "viewer", ("POST", "/api/v2/projects/{}/racks/import"): "editor",
+    ("GET", "/api/v2/rack-templates"): "viewer", ("POST", "/api/v2/projects/{}/racks/from-template"): "editor",
+    ("POST", "/api/v2/library/import/netbox"): "editor", ("GET", "/api/v2/library/{}/netbox.yaml"): "viewer",
     # phase3 P3A
     ("GET", "/api/v2/projects/{}/scenes"): "viewer", ("POST", "/api/v2/projects/{}/scenes"): "editor",
     ("PATCH", "/api/v2/projects/{}/scenes/{}"): "editor", ("DELETE", "/api/v2/projects/{}/scenes/{}"): "editor",

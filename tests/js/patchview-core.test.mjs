@@ -250,6 +250,33 @@ T('hitTest', () => {
   }
 });
 
+T('hitTest: nearest dot wins across adjacent cards at low zoom', () => {
+  const hitTest = need(pv, 'hitTest', 'FR-PV-04', S);
+  const portAnchor = pv.portAnchor;
+  const sc = scene(fx());
+  const left = (c) => c.layout.rows.filter((r) => r.side === 'left' || r.side === 'both');
+  const cards = sc.cards.filter((c) => left(c).length >= 1);
+  assert.ok(cards.length >= 2, m('FR-PV-04', S, 'fixture has two cards with input ports'));
+  const a = cards[0], b = cards[1];
+  // b sits right under a (same column); a is later in the array, so it is on top and iterated first
+  b.x = a.x; b.y = a.y + a.h + 4;
+  sc.cards = sc.cards.filter((c) => c !== a && c !== b).concat([b, a]);
+  const opts = { k: 0.15, dotHit: 22, noWireEnd: true };
+  const bPort = left(b)[0].port.id, aPort = left(a)[left(a).length - 1].port.id;
+  const onB = hitTest(sc, portAnchor(b, bPort, 'left'), opts);
+  assert.equal(onB.type, 'port', m('FR-PV-04', S, 'dot of the lower card is a port hit'));
+  assert.equal(onB.card.id, b.id, m('FR-PV-04', S, 'the drop goes to the card whose dot is under the point, not the first card in z-order within the touch radius'));
+  assert.equal(onB.port.id, bPort);
+  const onA = hitTest(sc, portAnchor(a, aPort, 'left'), opts);
+  assert.equal(onA.card.id, a.id, m('FR-PV-04', S, 'the upper card keeps its own dot'));
+  assert.equal(onA.port.id, aPort);
+  // a card stacked above the winning dot's card still takes a point inside its body
+  b.y = a.y + a.h - Math.min(a.h, b.h) / 2;
+  const insideA = { x: a.x + a.w / 2, y: Math.min(a.y + a.h - 1, b.y + 1) };
+  const body = hitTest(sc, insideA, opts);
+  assert.equal(body.card.id, a.id, m('FR-PV-06', S, 'overlapping card on top wins a point inside its body'));
+});
+
 T('compatibleTargets', () => {
   const compatibleTargets = need(pv, 'compatibleTargets', 'FR-PV-04', S);
   const d = fx();

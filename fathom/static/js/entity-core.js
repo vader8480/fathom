@@ -6,7 +6,7 @@
 // that, when given, fills the `href` of facts that name another entity.
 
 import { indexDoc, devicePorts, portRef } from './model-core.js';
-import { rackDevices, rackUnits, ruLabel } from './rack-core.js';
+import { rackDevices, rackItems, rackTotals, rackUnits, ruLabel } from './rack-core.js';
 
 const DOT = ' \u00b7 ';
 
@@ -162,29 +162,75 @@ export function roomFacts(doc, room, opts) {
   return out;
 }
 
-// RU numbers (1-based, inside the rack) that hold at least one placed device on any face.
-function usedUnits(doc, rack) {
+const FORM_FACTOR_LABELS = {
+  cabinet: 'Cabinet', open_frame: 'Open frame', two_post: '2-post', four_post: '4-post',
+  wall_mount: 'Wall mount', road_case: 'Road case',
+};
+
+const RACK_WIDTHS = [10, 19, 21, 23];
+
+// rackTotals for a rack object that may not be in doc.racks (then devices only,
+// counted by rack id, items from the object).
+function totalsOf(doc, rack, info) {
+  const t = rackTotals(doc, rack.id, info);
+  if (t) return t;
   const units = rackUnits(rack);
   const used = {};
   rackDevices(doc, rack.id).forEach(function (p) {
-    if (!(p.u >= 1)) return;
+    if (p.shelf || !(p.u >= 1)) return;
     for (let u = p.u; u < p.u + p.height; u++) if (u <= units) used[u] = true;
   });
-  return Object.keys(used).length;
+  const n = Object.keys(used).length;
+  return { units: units, used_u: n, free_u: units - n, weight_kg: 0, max_load_kg: null, power_w: 0, power_limit_w: null,
+    devices: rackDevices(doc, rack.id).length, items: list(rack.items).length };
 }
 
+function rackWidthIn(rack) {
+  const w = parseInt(rack && rack.width_in, 10);
+  return RACK_WIDTHS.indexOf(w) >= 0 ? w : 19;
+}
+
+function formFactorLabel(rack) {
+  const f = str(rack && rack.form_factor);
+  return FORM_FACTOR_LABELS[f] || FORM_FACTOR_LABELS.cabinet;
+}
+
+// Load and power against the rack's limits: {weight: {value, limit, over}, power: {…}}.
+function rackLimits(totals) {
+  function one(v, lim) { return { value: v, limit: lim, over: lim !== null && v > lim }; }
+  const t = totals || {};
+  return {
+    weight: one(t.weight_kg || 0, typeof t.max_load_kg === 'number' ? t.max_load_kg : null),
+    power: one(t.power_w || 0, typeof t.power_limit_w === 'number' ? t.power_limit_w : null),
+  };
+}
+
+// The rack page passes opts.info / ctxInfo.info (template summaries
+// {id: {weight_kg, power_w}} for rackTotals, {} while loading); its presence
+// selects the page's fuller facts and cards over the A.3 set.
+function pageInfo(o) {
+  return o && o.info && typeof o.info === 'object' ? o.info : null;
+}
+
+// A.3: room, height, used, free, devices, location. With opts.info: width and
+// form factor after height, row last.
 export function rackFacts(doc, rack, opts) {
   const out = [];
   if (!rack) return out;
   const link = linker(opts);
-  const units = rackUnits(rack);
-  const used = usedUnits(doc, rack);
+  const info = pageInfo(opts);
+  const t = totalsOf(doc, rack, info);
   if (has(rack.room)) fact(out, 'room', 'Room', nameOf(find(list(doc && doc.rooms), rack.room), rack.room), link('rooms', rack.room));
-  fact(out, 'height', 'Height', units + ' U');
-  fact(out, 'used', 'Used', used + ' U');
-  fact(out, 'free', 'Free', Math.max(0, units - used) + ' U');
-  fact(out, 'devices', 'Devices', String(rackDevices(doc, rack.id).length));
+  fact(out, 'height', 'Height', t.units + ' U');
+  if (info) {
+    fact(out, 'width', 'Width', rackWidthIn(rack) + '\u2033');
+    fact(out, 'form', 'Form factor', formFactorLabel(rack));
+  }
+  fact(out, 'used', 'Used', t.used_u + ' U');
+  fact(out, 'free', 'Free', Math.max(0, t.free_u) + ' U');
+  fact(out, 'devices', 'Devices', String(t.devices));
   if (has(rack.location)) fact(out, 'location', 'Location', nameOf(find(list(doc && doc.locations), rack.location), rack.location));
+  if (info) fact(out, 'row', 'Row', str(rack.row));
   return out;
 }
 
@@ -206,8 +252,12 @@ export function roomTabs() {
   return ROOM_TABS.slice();
 }
 
-export function rackTabs() {
-  return RACK_TABS.slice();
+// Without a rack: the A.3 tab set. A rack page passes its rack and also gets
+// `accessories` after `devices` (shown even when the rack has none, to add one).
+export function rackTabs(doc, rack) {
+  const tabs = RACK_TABS.slice();
+  if (rack) tabs.splice(tabs.indexOf('devices') + 1, 0, 'accessories');
+  return tabs;
 }
 
 // tabs: keys or {key} objects. Unknown, empty or missing → the default tab
@@ -313,22 +363,50 @@ function roomCards(doc, room, ctxInfo) {
   ];
 }
 
+function num1(n) {
+  return String(Math.round(n * 10) / 10);
+}
+
+// A load card (weight, power): value against the rack's limit, level 'warn' when over.
+function limitCard(key, label, l, unit, limitWord) {
+  const c = countCard(key, label, l.value, null, l.limit === null ? unit : unit + ' of ' + num1(l.limit) + ' ' + limitWord);
+  c.limit = l.limit;
+  c.level = l.over ? 'warn' : '';
+  c.title = l.over ? num1(l.value - l.limit) + ' ' + unit + ' over the ' + limitWord : '';
+  return c;
+}
+
 function rackCards(doc, rack, ctxInfo) {
   const name = nameOf(rack, rack.id);
-  const units = rackUnits(rack);
-  const used = usedUnits(doc, rack);
+  const info = pageInfo(ctxInfo);
+  const t = totalsOf(doc, rack, info);
+  const tabs = ctxInfo && Array.isArray(ctxInfo.tabs) ? ctxInfo.tabs : rackTabs();
   const devIds = ids(rackDevices(doc, rack.id), function (p) { return p.device; });
   const devs = devIds.map(function (id) { return { id: id }; });
   const cables = cablesTouching(doc, devIds);
   const problems = problemsOf(doc, ctxInfo).filter(function (p) { return has(p.device) && devIds.indexOf(p.device) >= 0; });
-  return [
-    countCard('height', 'Height', units, 'elevation', 'U'),
-    countCard('used', 'Used', used, 'elevation', 'U'),
-    countCard('free', 'Free', Math.max(0, units - used), 'elevation', 'U'),
-    card('devices', 'Devices', devs, { tab: 'devices', kind: 'device', title: plural(devs.length, 'device', 'devices') + DOT + name }),
+  const devCard = card('devices', 'Devices', devs, { tab: 'devices', kind: 'device', title: plural(devs.length, 'device', 'devices') + DOT + name });
+  const tail = [
     card('cables', 'Cables', cables, { tab: 'cables', kind: 'cable', title: plural(cables.length, 'cable', 'cables') + DOT + name }),
     card('problems', 'Problems', problems, { kind: 'problem', title: 'Open problems' + DOT + name, sub: problems.length ? 'open' : '' }),
   ];
+  if (!info) {
+    return [
+      countCard('height', 'Height', t.units, 'elevation', 'U'),
+      countCard('used', 'Used', t.used_u, 'elevation', 'U'),
+      countCard('free', 'Free', Math.max(0, t.free_u), 'elevation', 'U'),
+      devCard,
+    ].concat(tail);
+  }
+  const lim = rackLimits(t);
+  return [
+    countCard('used', 'Used', t.used_u, 'elevation', 'of ' + t.units + ' U'),
+    countCard('free', 'Free', Math.max(0, t.free_u), 'elevation', 'U'),
+    limitCard('weight', 'Weight', lim.weight, 'kg', 'max'),
+    limitCard('power', 'Power', lim.power, 'W', 'limit'),
+    devCard,
+    countCard('accessories', 'Accessories', rackItems(doc, rack.id).length, tabs.indexOf('accessories') >= 0 ? 'accessories' : null),
+  ].concat(tail);
 }
 
 // Overview cards: [{key, label, count, sub, tab, drill: {title, kind, ids} | null}].
@@ -336,6 +414,11 @@ function rackCards(doc, rack, ctxInfo) {
 // validation results; see problemsOf) and the SOP pages. Each falls back to the
 // doc collection (doc.problems, doc.pages) when absent. Only open problem reports
 // and non-archived pages count.
+// Racks: height, used, free, devices, cables, problems (A.3). With ctxInfo.info
+// (template summaries, see pageInfo): used, free, weight, power, devices,
+// accessories, cables, problems; weight and power add {limit, level:
+// 'warn'|'', title}, and ctxInfo.tabs (default rackTabs()) gates the
+// accessories card's tab.
 export function summaryCards(kind, doc, entity, ctxInfo) {
   if (!entity) return [];
   if (kind === 'device') return deviceCards(doc, entity, ctxInfo);

@@ -1,9 +1,16 @@
 """Equipment library: built-in templates, extension dirs, global custom, per project.
 
-Precedence (later wins): built-in (``fathom/library/templates``) < extension
-dirs (``FATHOM_LIBRARY`` + plugin-registered) < global custom
-(``<data>/library/*.json``) < project (``doc["templates"]``). Template format:
-§4.5 of docs/SPEC.md; port groups expand with the shared §4.4.3 algorithm.
+Precedence (later wins): presets (``fathom.presets``) < built-in
+(``fathom/library/templates``) < extension dirs (``FATHOM_LIBRARY`` +
+plugin-registered) < global custom (``<data>/library/*.json``) < project
+(``doc["templates"]``). Template format: §4.5 of docs/SPEC.md; port groups
+expand with the shared §4.4.3 algorithm.
+
+The Rackula catalog (``rackula/catalog.json``, ``source: "catalog"``) sits
+below presets. :func:`get_template` falls back to it and
+``list_templates(source="catalog"|"all", ids=...)`` reads it, but
+:func:`load_library`, the default :func:`list_templates` and
+``library.suggest`` never see it.
 """
 
 from __future__ import annotations
@@ -20,16 +27,25 @@ Doc = Dict[str, Any]
 Op = Dict[str, Any]
 
 BUILTIN_DIR = Path(__file__).resolve().parent / "templates"
+CATALOG_PATH = Path(__file__).parent / "rackula" / "catalog.json"
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,79}$")
 UNVERIFIED_NOTE = "Port counts not verified against the datasheet; please check."
 
 _TEMPLATE_KEYS = (
     "id", "manufacturer", "model", "name", "kind", "discipline", "brand", "ru", "width", "depth_mm", "power_w",
     "weight_kg", "cost", "currency", "dante", "routing", "dmx_footprint", "ports", "dante_channels", "checks",
-    "tags", "source_url", "notes",
+    "tags", "source_url", "notes", "full_depth", "airflow", "rack_category", "image_front", "image_rear",
+    "part_number",
 )
+_STR_KEYS = ("airflow", "rack_category", "image_front", "image_rear", "part_number")
+_SUMMARY_EXTRA = (
+    "full_depth", "airflow", "rack_category", "image_front", "image_rear", "part_number", "weight_kg", "power_w",
+    "width", "depth_mm",
+)
+_CATALOG_MAX_BYTES = 32 * 1024 * 1024
 
 _cache: Dict[str, Any] = {"sig": None, "lib": {}}
+_catalog_cache: Dict[str, Any] = {"sig": None, "by_id": {}}
 
 
 # ------------------------------------------------------------ expansion
@@ -191,6 +207,41 @@ def load_library(refresh: bool = False) -> Dict[str, Dict[str, Any]]:
     return _cache["lib"]
 
 
+def _catalog(refresh: bool = False) -> Dict[str, Dict[str, Any]]:
+    """id → catalog template, re-read only when ``CATALOG_PATH`` (path, mtime, size) changes."""
+    path = CATALOG_PATH
+    try:
+        st = path.stat()
+        sig: Tuple[Any, ...] = (str(path), st.st_mtime_ns, st.st_size)
+    except OSError:
+        sig = (str(path), None, None)
+    if refresh or _catalog_cache["sig"] != sig:
+        by_id: Dict[str, Dict[str, Any]] = {}
+        data: Any = None
+        if sig[1] is not None and sig[2] <= _CATALOG_MAX_BYTES:
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                data = None
+        items = data.get("templates") if isinstance(data, dict) else data
+        for item in items if isinstance(items, list) else []:
+            if isinstance(item, dict) and isinstance(item.get("id"), str) and item["id"] not in by_id and not validate_template(item):
+                t = dict(item)
+                t["source"] = "catalog"
+                by_id[t["id"]] = t
+        _catalog_cache["by_id"] = by_id
+        _catalog_cache["sig"] = sig
+    return _catalog_cache["by_id"]
+
+
+def catalog_templates(refresh: bool = False) -> List[Dict[str, Any]]:
+    """Every Rackula catalog template (``source: "catalog"``) in file order; ``[]`` when the file is missing or unreadable.
+
+    The dicts are the cached ones: copy before mutating.
+    """
+    return list(_catalog(refresh).values())
+
+
 def _merged(doc: Optional[Doc]) -> Dict[str, Dict[str, Any]]:
     lib = dict(load_library())
     for t in (doc or {}).get("templates") or []:
@@ -201,8 +252,15 @@ def _merged(doc: Optional[Doc]) -> Dict[str, Dict[str, Any]]:
     return lib
 
 
+def _all_tiers(doc: Optional[Doc]) -> Dict[str, Dict[str, Any]]:
+    lib = dict(_catalog())
+    lib.update(_merged(doc))
+    return lib
+
+
 def get_template(template_id: str, doc: Optional[Doc] = None) -> Optional[Dict[str, Any]]:
-    t = _merged(doc).get(template_id or "")
+    tid = template_id or ""
+    t = _merged(doc).get(tid) or _catalog().get(tid)
     return copy.deepcopy(t) if t else None
 
 
@@ -223,32 +281,92 @@ def ports_summary(t: Dict[str, Any]) -> str:
 
 
 def summarize(t: Dict[str, Any]) -> Dict[str, Any]:
-    return {
+    out = {
         "id": t["id"], "manufacturer": t.get("manufacturer", ""), "model": t.get("model", ""),
         "name": t.get("name") or t.get("model", ""), "kind": t.get("kind", ""), "discipline": _discipline(t),
         "ru": t.get("ru"), "ports_summary": ports_summary(t), "source": t.get("source", "builtin"),
         "tags": list(t.get("tags") or []),
     }
+    for k in _SUMMARY_EXTRA:
+        if t.get(k) is not None:
+            out[k] = t[k]
+    return out
 
 
-def list_templates(q: str = "", discipline: str = "", kind: str = "", doc: Optional[Doc] = None) -> List[Dict[str, Any]]:
+def _id_list(ids: Any) -> List[str]:
+    raw = ids.split(",") if isinstance(ids, str) else list(ids)
+    out: List[str] = []
+    for x in raw:
+        s = str(x).strip()
+        if s and s not in out:
+            out.append(s)
+    return out
+
+
+def _truthy(v: Any) -> bool:
+    if isinstance(v, str):
+        return v.strip().lower() not in ("", "0", "false", "no", "off")
+    return bool(v)
+
+
+def list_templates(
+    q: str = "", discipline: str = "", kind: str = "", doc: Optional[Doc] = None,
+    source: Optional[str] = None, ids: Any = None, rack: Any = False,
+) -> List[Dict[str, Any]]:
+    """Template summaries, sorted by manufacturer / model / id.
+
+    ``source``: ``None`` = every tier except the catalog; ``"catalog"`` = the
+    catalog only; ``"all"`` = every tier (higher tiers shadow the same id);
+    anything else (``builtin``, ``extension``, ``custom``, ``project``,
+    ``preset``) keeps templates of that source. ``ids`` (list or comma string)
+    returns exactly those templates from any tier, in the given order, unknown
+    ids skipped. ``rack`` keeps templates with ``ru >= 1``.
+    """
+    src = str(source or "").strip().lower()
+    want = _id_list(ids) if ids else None
+    if want is not None:
+        pool = _catalog() if src == "catalog" else _all_tiers(doc)
+        cands = [pool[i] for i in want if i in pool]
+        if src not in ("", "all", "catalog"):
+            cands = [t for t in cands if (t.get("source") or "builtin") == src]
+    elif src == "catalog":
+        cands = list(_catalog().values())
+    elif src == "all":
+        cands = list(_all_tiers(doc).values())
+    else:
+        cands = list(_merged(doc).values())
+        if src:
+            cands = [t for t in cands if (t.get("source") or "builtin") == src]
     words = [w for w in re.split(r"\s+", (q or "").lower().strip()) if w]
+    only_rack = _truthy(rack)
     out = []
-    for t in _merged(doc).values():
+    for t in cands:
         if discipline and _discipline(t) != discipline:
             continue
         if kind and t.get("kind") != kind:
             continue
+        if only_rack:
+            ru = t.get("ru")
+            if not isinstance(ru, int) or isinstance(ru, bool) or ru < 1:
+                continue
         if words:
-            hay = " ".join(str(x) for x in (t.get("id"), t.get("manufacturer"), t.get("model"), t.get("name"), t.get("kind"), " ".join(t.get("tags") or []))).lower()
+            hay = " ".join(str(x) for x in (t.get("id"), t.get("manufacturer"), t.get("model"), t.get("name"), t.get("kind"), " ".join(t.get("tags") or []), t.get("part_number") or "")).lower()
             if not all(w in hay for w in words):
                 continue
         out.append(summarize(t))
-    out.sort(key=lambda s: (s["manufacturer"].lower(), s["model"].lower(), s["id"]))
+    if want is None:
+        out.sort(key=lambda s: (s["manufacturer"].lower(), s["model"].lower(), s["id"]))
     return out
 
 
 # ------------------------------------------------------------ validation
+
+
+def _safe_image_path(p: str) -> bool:
+    """``image_front``/``image_rear`` are read from disk when rack SVGs embed them: no traversal, no absolute or URL forms."""
+    if len(p) > 200 or "\\" in p or ":" in p or any(ord(c) < 32 for c in p):
+        return False
+    return all(seg not in ("", ".", "..") for seg in p.split("/"))
 
 
 def validate_template(t: Dict[str, Any]) -> List[str]:
@@ -278,6 +396,15 @@ def validate_template(t: Dict[str, Any]) -> List[str]:
         v = t.get(k)
         if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0):
             errs.append(f"{k} must be a non-negative number or null")
+    if t.get("full_depth") is not None and not isinstance(t["full_depth"], bool):
+        errs.append("full_depth must be true, false or null")
+    for k in _STR_KEYS:
+        if t.get(k) is not None and not isinstance(t[k], str):
+            errs.append(f"{k} must be a string or null")
+    for k in ("image_front", "image_rear"):
+        v = t.get(k)
+        if isinstance(v, str) and v and not _safe_image_path(v):
+            errs.append(f"{k} must be a relative path under static/rack-images/")
     ports = t.get("ports")
     if not isinstance(ports, list):
         errs.append("ports must be a list of groups")
@@ -452,7 +579,8 @@ def delete_custom_template(template_id: str) -> None:
 
 
 __all__ = [
-    "BUILTIN_DIR", "load_library", "list_templates", "get_template", "validate_template", "instantiate",
+    "BUILTIN_DIR", "CATALOG_PATH", "load_library", "list_templates", "get_template", "catalog_templates",
+    "validate_template", "instantiate",
     "apply_template_ops", "template_from_device", "save_custom_template", "delete_custom_template",
     "expand_port_groups", "ports_summary", "summarize",
 ]

@@ -47,6 +47,12 @@ PORT_DIRS: Tuple[str, ...] = ("in", "out", "io")
 NETWORK_MEDIA = frozenset({"dante", "avb", "aes67", "aes50", "madi", "snake", "network", "qlan"})
 GENERIC_PREFIXES = frozenset({"", "in", "input", "inputs", "out", "output", "outputs", "ch", "channel"})
 ROUTING_MODES: Tuple[str, ...] = ("matrix", "passthrough", "none", "explicit", "indexed")
+#: §4.3.7 rack fields and accessory items (RackItem)
+RACK_WIDTHS: Tuple[int, ...] = (10, 19, 21, 23)
+RACK_FORM_FACTORS: Tuple[str, ...] = ("cabinet", "open_frame", "two_post", "four_post", "wall_mount", "road_case")
+RACK_ITEM_TYPES: Tuple[str, ...] = ("blank", "vent", "shelf", "drawer", "cable_manager", "brush", "lacing_bar", "other")
+RACK_FACES: Tuple[str, ...] = ("front", "rear")
+RACK_DEPTHS: Tuple[str, ...] = ("full", "half")
 #: §4.3.17 console internals (fallback copies of ``vocab.CHANNEL_*``)
 CHANNEL_KINDS: Tuple[str, ...] = ("input", "stereo_input", "mix", "aux", "group", "matrix", "stereo", "mono", "dca", "mute_group",
                                   "rack", "monitor", "cue", "talkback", "oscillator")
@@ -1237,6 +1243,8 @@ def is_v1_expressible(doc: Doc) -> bool:
         for k in ("inventory", "rack", "interfaces", "dmx", "template", "routing", "patch", "tags", "channels", "channel_links", "container"):
             if d.get(k):
                 return False
+        if d.get("weight_kg") is not None or d.get("power_w") is not None:
+            return False
         if str(d.get("status") or "installed") != "installed":
             return False
         for p in d.get("ports") or []:
@@ -1622,6 +1630,7 @@ def validate_doc(doc: Doc) -> List[Problem]:
             P.append(_prob("error", "bad_enum", ref, ref + "/units", "units must be an integer 1-60"))
         if r.get("numbering") not in (None, "bottom_up", "top_down"):
             P.append(_prob("error", "bad_enum", ref, ref + "/numbering", "numbering must be bottom_up or top_down"))
+        P.extend(_rack_field_problems(r, ref))
 
     # ---- devices and ports
     for d in colls["devices"]:
@@ -1637,6 +1646,7 @@ def validate_doc(doc: Doc) -> List[Problem]:
             for f, allowed in (("face", ("front", "rear")), ("side", ("full", "left", "right")), ("depth", ("full", "half"))):
                 if rk.get(f) not in (None, *allowed):
                     P.append(_prob("error", "bad_enum", ref, f"{ref}/rack/{f}", f"rack {f} must be one of {', '.join(allowed)}"))
+        P.extend(_device_rack_field_problems(d, ref))
         rt = d.get("routing")
         if isinstance(rt, dict) and rt.get("mode") not in (None, *ROUTING_MODES):
             P.append(_prob("error", "bad_enum", ref, ref + "/routing/mode", f"routing mode must be one of {', '.join(ROUTING_MODES)}"))
@@ -1768,6 +1778,96 @@ def validate_doc(doc: Doc) -> List[Problem]:
 
     # ---- helpers owned by other units (skipped when not importable)
     P.extend(_helper_problems(doc, colls))
+    return P
+
+
+def _is_int(v: Any, lo: Optional[int] = None, hi: Optional[int] = None) -> bool:
+    if not isinstance(v, int) or isinstance(v, bool):
+        return False
+    return (lo is None or v >= lo) and (hi is None or v <= hi)
+
+
+def _is_num(v: Any, lo: Optional[float] = None) -> bool:
+    if not isinstance(v, (int, float)) or isinstance(v, bool) or v != v:
+        return False
+    return lo is None or v >= lo
+
+
+def _typed_problems(obj: Dict[str, Any], ref: str, path: str, ints: Tuple[Tuple[str, int, Optional[int]], ...] = (),
+                    nums: Tuple[str, ...] = (), strs: Tuple[str, ...] = ()) -> List[Problem]:
+    """``bad_type`` for optional fields that are set to the wrong type (``None`` counts as unset)."""
+    out: List[Problem] = []
+    for f, lo, hi in ints:
+        v = obj.get(f)
+        if v is not None and not _is_int(v, lo, hi):
+            rng = f"{lo}-{hi}" if hi is not None else f">= {lo}"
+            out.append(_prob("error", "bad_type", ref, f"{path}/{f}", f"{f} must be an integer {rng}"))
+    for f in nums:
+        v = obj.get(f)
+        if v is not None and not _is_num(v, 0):
+            out.append(_prob("error", "bad_type", ref, f"{path}/{f}", f"{f} must be a number >= 0"))
+    for f in strs:
+        v = obj.get(f)
+        if v is not None and not isinstance(v, str):
+            out.append(_prob("error", "bad_type", ref, f"{path}/{f}", f"{f} must be a string"))
+    return out
+
+
+def _enum_problem(obj: Dict[str, Any], f: str, allowed: Tuple[Any, ...], ref: str, path: str, what: str) -> List[Problem]:
+    v = obj.get(f)
+    if v is None or (not isinstance(v, bool) and v in allowed):
+        return []
+    return [_prob("error", "bad_enum", ref, f"{path}/{f}", f"{what} must be one of {', '.join(str(a) for a in allowed)}")]
+
+
+def _rack_field_problems(r: Dict[str, Any], ref: str) -> List[Problem]:
+    """Errors for the optional §4.3.7 rack fields and accessory ``items``. Placement warnings
+    (overlap, range, shelves, load) come from ``racks.validate_racks``."""
+    P = _enum_problem(r, "width_in", RACK_WIDTHS, ref, ref, "width_in")
+    P += _enum_problem(r, "form_factor", RACK_FORM_FACTORS, ref, ref, "form_factor")
+    P += _typed_problems(r, ref, ref, ints=(("start_u", 0, None),), nums=("weight_kg", "max_load_kg", "power_limit_w"), strs=("row",))
+    items = r.get("items")
+    if items is None:
+        return P
+    if not isinstance(items, list):
+        P.append(_prob("error", "bad_type", ref, ref + "/items", "items must be a list"))
+        return P
+    seen: Set[str] = set()
+    for i, it in enumerate(items):
+        path = f"{ref}/items/{i}"
+        if not isinstance(it, dict):
+            P.append(_prob("error", "bad_type", ref, path, "rack item must be an object"))
+            continue
+        iid = it.get("id")
+        if iid is None or iid == "":
+            P.append(_prob("error", "missing_field", ref, path + "/id", "rack item needs an id"))
+        elif not isinstance(iid, str):
+            P.append(_prob("error", "bad_type", ref, path + "/id", "rack item id must be a string"))
+        else:
+            if iid in seen:
+                P.append(_prob("error", "duplicate_id", ref, path + "/id", f"duplicate item id {iid!r} in {ref}"))
+            seen.add(iid)
+        if it.get("type") is None or it.get("type") == "":
+            P.append(_prob("error", "missing_field", ref, path + "/type", "rack item needs a type"))
+        else:
+            P += _enum_problem(it, "type", RACK_ITEM_TYPES, ref, path, "item type")
+        ints: Tuple[Tuple[str, int, Optional[int]], ...] = (("height", 1, None), ("slots", 1, 4))
+        if it.get("u") is None or it.get("u") == "":
+            P.append(_prob("error", "missing_field", ref, path + "/u", "rack item needs a u"))
+        else:
+            ints = (("u", 1, None),) + ints
+        P += _typed_problems(it, ref, path, ints=ints, nums=("weight_kg",), strs=("label", "color", "notes"))
+        P += _enum_problem(it, "face", RACK_FACES, ref, path, "item face")
+        P += _enum_problem(it, "depth", RACK_DEPTHS, ref, path, "item depth")
+    return P
+
+
+def _device_rack_field_problems(d: Dict[str, Any], ref: str) -> List[Problem]:
+    """Errors for device ``weight_kg``/``power_w`` and the shelf/slot/colour/image placement fields."""
+    P = _typed_problems(d, ref, ref, nums=("weight_kg", "power_w"))
+    rk = d.get("rack")
+    if isinstance(rk, dict):
+        P += _typed_problems(rk, ref, ref + "/rack", ints=(("slot", 0, None),), strs=("shelf", "color", "image_front", "image_rear"))
     return P
 
 
@@ -2254,6 +2354,13 @@ _ID = {"type": "string", "pattern": ID_RE.pattern}
 _STRS = {"type": "array", "items": _STR}
 _STATUS = {"type": "string", "enum": list(STATUSES)}
 _ENDPOINT = _obj({"device": _ID, "port": _ID}, ("device",))
+_KG = {"type": "number", "minimum": 0}
+_RACK_ITEM = _obj({
+    "id": _STR, "type": {"type": "string", "enum": list(RACK_ITEM_TYPES)}, "u": {"type": "integer", "minimum": 1},
+    "height": {"type": "integer", "minimum": 1}, "face": {"type": "string", "enum": list(RACK_FACES)},
+    "depth": {"type": "string", "enum": list(RACK_DEPTHS)}, "label": _STR, "color": _STR,
+    "slots": {"type": "integer", "minimum": 1, "maximum": 4}, "weight_kg": _KG, "notes": _STR,
+}, ("id", "type", "u"))
 
 
 def _arr(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -2331,20 +2438,25 @@ JSON_SCHEMA: Dict[str, Any] = {
                                 "notes": _STR}, ("id", "name"))),
         "racks": _arr(_obj({"id": _ID, "name": _STR, "room": _STR, "location": _STR, "units": {"type": "integer", "minimum": 1, "maximum": 60},
                             "numbering": {"type": "string", "enum": ["bottom_up", "top_down"]}, "faces": _STRS, "depth_mm": _NUM,
-                            "order": _INT, "notes": _STR}, ("id", "name", "units"))),
+                            "order": _INT, "notes": _STR, "width_in": {"type": "integer", "enum": list(RACK_WIDTHS)},
+                            "form_factor": {"type": "string", "enum": list(RACK_FORM_FACTORS)},
+                            "start_u": {"type": "integer", "minimum": 0}, "weight_kg": _KG, "max_load_kg": _KG,
+                            "power_limit_w": _KG, "row": _STR, "items": _arr(_RACK_ITEM)}, ("id", "name", "units"))),
         "networks": _arr(_obj({"id": _ID, "name": _STR, "vlan": {"type": "integer", "minimum": 1, "maximum": 4094}, "subnet": _STR,
                                "gateway": _STR, "protocol": _STR, "dhcp_range": _STR, "notes": _STR}, ("id", "name"))),
         "devices": _arr(_obj({
             "id": _ID, "name": _STR, "kind": _STR, "discipline": _STR, "room": _STR, "system": _STR, "location": _STR,
             "template": _STR, "manufacturer": _STR, "model": _STR, "code": _STR, "sub": _STR, "lines": _STRS, "brand": _STR,
             "count": _INT, "suffix": _STR, "icon": _STR, "note": _STR, "aliases": _STRS, "dante": _BOOL, "dante_name": _STR,
-            "status": _STATUS, "tags": _STRS,
+            "status": _STATUS, "tags": _STRS, "weight_kg": _KG, "power_w": _KG,
             "routing": _obj({"mode": {"type": "string", "enum": list(ROUTING_MODES)}, "map": _arr(_arr(_STR))}),
             "ports": _arr(_PORT),
             "flow": _obj({"group": _STR, "column": _STR, "order": _INT, "seq": _INT, "show": _BOOL}),
             "patch": _obj({"x": _NUM, "y": _NUM, "collapsed": _BOOL}),
             "rack": _obj({"id": _STR, "u": _INT, "height": _INT, "face": {"type": "string", "enum": ["front", "rear"]},
-                          "side": {"type": "string", "enum": ["full", "left", "right"]}, "depth": {"type": "string", "enum": ["full", "half"]}}),
+                          "side": {"type": "string", "enum": ["full", "left", "right"]}, "depth": {"type": "string", "enum": ["full", "half"]},
+                          "shelf": _STR, "slot": {"type": "integer", "minimum": 0}, "color": _STR,
+                          "image_front": _STR, "image_rear": _STR}),
             "inventory": _obj({"serial": _STR, "asset_tag": _STR, "firmware": _STR, "purchase_date": _STR, "warranty_until": _STR,
                                "vendor": _STR, "cost": _NUM, "currency": _STR, "po": _STR, "notes": _STR,
                                "condition": {"type": "string", "enum": list(CONDITIONS)},

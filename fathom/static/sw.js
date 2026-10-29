@@ -1,11 +1,14 @@
 /* Fathom service worker (ES2018). Scope = the app root; URLs are relative to it.
  * Precache the app shell, network-first for viewer pages and project docs,
- * stale-while-revalidate for /static/, network only for everything else. */
+ * stale-while-revalidate for /static/, network only for everything else.
+ * Rack images (static/rack-images/) are never precached; they are kept in their
+ * own runtime cache, which outlives VERSION bumps. */
 'use strict';
 
-const VERSION = '0.4.1';
+const VERSION = '0.5.1';
 const SHELL_CACHE = 'fathom-shell-' + VERSION;
 const PAGES_CACHE = 'fathom-pages-' + VERSION;
+const IMAGES_CACHE = 'fathom-images-1';
 const NETWORK_TIMEOUT_MS = 3000;
 
 const PRECACHE = [
@@ -29,6 +32,10 @@ const PRECACHE = [
   'static/css/page-device.css', 'static/css/page-room.css', 'static/css/rack.css', 'static/css/inventory.css',
   'static/css/schedules.css', 'static/css/admin.css', 'static/css/discovery.css', 'static/css/inspector.css',
   'static/css/patchtable.css',
+  // Rackula features; install tolerates files that are not there yet (rack-toolbar.css, page-rack.css).
+  'static/js/rack-elevation.js', 'static/js/rack-display.js', 'static/js/rack-display-core.js',
+  'static/js/rack-palette.js', 'static/js/rack-palette-core.js', 'static/js/rack-export.js', 'static/js/rack-export-core.js',
+  'static/css/rack-toolbar.css', 'static/css/rack-palette.css', 'static/css/rack-export.css', 'static/css/page-rack.css',
   'static/js/speech.js', 'static/js/assistant-core.js', 'static/css/assistant.css'
 ];
 
@@ -57,7 +64,7 @@ self.addEventListener('install', function (event) {
 self.addEventListener('activate', function (event) {
   event.waitUntil(caches.keys().then(function (keys) {
     return Promise.all(keys.map(function (k) {
-      if (k.indexOf('fathom-') === 0 && k !== SHELL_CACHE && k !== PAGES_CACHE) return caches.delete(k);
+      if (k.indexOf('fathom-') === 0 && k !== SHELL_CACHE && k !== PAGES_CACHE && k !== IMAGES_CACHE) return caches.delete(k);
       return null;
     }));
   }).then(function () { return self.clients.claim(); }));
@@ -97,9 +104,9 @@ function networkFirst(request, cacheName, timeoutMs, offlineHeader) {
   });
 }
 
-function staleWhileRevalidate(event) {
+function staleWhileRevalidate(event, cacheName) {
   const request = event.request;
-  return caches.open(SHELL_CACHE).then(function (cache) {
+  return caches.open(cacheName).then(function (cache) {
     return cache.match(request).then(function (hit) {
       const update = fetch(request).then(function (resp) {
         if (resp && resp.ok) cache.put(request, resp.clone()).catch(function () {});
@@ -128,8 +135,12 @@ self.addEventListener('fetch', function (event) {
     event.respondWith(networkFirst(request, PAGES_CACHE, 0, true));
     return;
   }
+  if (/^static\/rack-images\//.test(path)) {
+    event.respondWith(staleWhileRevalidate(event, IMAGES_CACHE));
+    return;
+  }
   if (/^static\//.test(path)) {
-    event.respondWith(staleWhileRevalidate(event));
+    event.respondWith(staleWhileRevalidate(event, SHELL_CACHE));
     return;
   }
   if (path === '' || path === 'manifest.webmanifest') {
