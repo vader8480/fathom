@@ -569,12 +569,15 @@ export function hitTest(scene, pt, opts) {
     if (dist(pt, w.a) <= grab) return {type: 'wire-end', wire: w, end: 'from'};
     if (dist(pt, w.b) <= grab) return {type: 'wire-end', wire: w, end: 'to'};
   }
+  const inside = function (c) { return pt.x >= c.x && pt.x <= c.x + c.w && pt.y >= c.y && pt.y <= c.y + c.h; };
+  // Nearest dot wins, across cards too: at low zoom the touch hit radius can exceed the row pitch and
+  // reach the neighbouring card, so the first card in z-order must not claim a dot that another card's
+  // port is closer to. A card stacked above the winning dot's card still takes a point inside its body.
+  let bestDot = null;
   for (let i = scene.cards.length - 1; i >= 0; i--) {
     const c = scene.cards[i];
     if (pt.x < c.x - dotHit || pt.x > c.x + c.w + dotHit || pt.y < c.y - dotHit || pt.y > c.y + c.h + dotHit) continue;
     const rows = c.layout.rows;
-    // Nearest dot wins: at low zoom the touch hit radius can exceed the row pitch.
-    let bestRow = null, bestSide = null, bestD = Infinity;
     for (let j = 0; j < rows.length; j++) {
       const row = rows[j];
       const cy = c.y + row.y + g.rowH / 2;
@@ -583,20 +586,30 @@ export function hitTest(scene, pt, opts) {
       for (let s = 0; s < sides.length; s++) {
         const cx = sides[s] === 'left' ? c.x : c.x + c.w;
         const d = Math.abs(pt.x - cx) <= dotHit ? Math.sqrt((pt.x - cx) * (pt.x - cx) + (pt.y - cy) * (pt.y - cy)) : Infinity;
-        if (d <= dotHit && d < bestD) { bestD = d; bestRow = row; bestSide = sides[s]; }
+        if (d <= dotHit && (!bestDot || d < bestDot.d)) bestDot = {d: d, card: c, idx: i, row: row, side: sides[s]};
       }
     }
-    if (bestRow) {
-      const ref = c.id + ':' + bestRow.port.id;
-      const ws = scene.wiresByPort[ref] || [];
-      if (bestRow.port.dir === 'in' && ws.length === 1 && !opts.noWireEnd) {
-        const w = scene.wireById[ws[0]];
-        return {type: 'wire-end', wire: w, end: w.to.device === c.id && w.to.port === bestRow.port.id ? 'to' : 'from',
-          card: c, port: bestRow.port};
-      }
-      return {type: 'port', card: c, port: bestRow.port, row: bestRow, side: bestSide, onDot: true};
+  }
+  if (bestDot) {
+    for (let i = scene.cards.length - 1; i > bestDot.idx; i--) {
+      if (inside(scene.cards[i])) { bestDot = null; break; }
     }
-    if (pt.x < c.x || pt.x > c.x + c.w || pt.y < c.y || pt.y > c.y + c.h) continue;
+  }
+  if (bestDot) {
+    const c = bestDot.card, bestRow = bestDot.row;
+    const ref = c.id + ':' + bestRow.port.id;
+    const ws = scene.wiresByPort[ref] || [];
+    if (bestRow.port.dir === 'in' && ws.length === 1 && !opts.noWireEnd) {
+      const w = scene.wireById[ws[0]];
+      return {type: 'wire-end', wire: w, end: w.to.device === c.id && w.to.port === bestRow.port.id ? 'to' : 'from',
+        card: c, port: bestRow.port};
+    }
+    return {type: 'port', card: c, port: bestRow.port, row: bestRow, side: bestDot.side, onDot: true};
+  }
+  for (let i = scene.cards.length - 1; i >= 0; i--) {
+    const c = scene.cards[i];
+    if (!inside(c)) continue;
+    const rows = c.layout.rows;
     const ly = pt.y - c.y, lx = pt.x - c.x;
     if (ly < g.headerH) return {type: 'header', card: c};
     for (let j = 0; j < rows.length; j++) {

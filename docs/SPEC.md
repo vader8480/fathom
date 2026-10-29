@@ -2067,7 +2067,7 @@ export function buildScene(doc, overlay, vocab, filter, opts) {}
 export function portAnchor(card, portId, side) {}       // -> {x, y} world coords; header anchor when portId null
 export function wirePath(a, b) {}                        // "M ax ay C c1x c1y c2x c2y bx by"; c = horizontal tangents, offset max(40, |dx|/2)
 export function autoLayout(doc, deviceIds, vocab, opts) {} // -> {id: {x, y}}; layered by longest path, colGap 96, rowGap 24, origin opts
-export function hitTest(scene, pt, opts) {}              // -> {type:'port'|'wire-end'|'wire'|'card'|'header'|'background', card?, port?, wire?, end?}
+export function hitTest(scene, pt, opts) {}              // -> {type:'port'|'wire-end'|'wire'|'card'|'header'|'background', card?, port?, wire?, end?}; the nearest dot within opts.dotHit / k wins across cards (a card stacked above it still takes a point inside its body)
 export function compatibleTargets(doc, scene, from, vocab) {} // -> Set<'dev:port'>
 export function moveOps(doc, positions) {}               // {id:{x, y}} -> merge ops (snapped)
 export function snap(v, grid) {}
