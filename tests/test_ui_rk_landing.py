@@ -32,6 +32,16 @@ VISIBLE_RACKS = """Array.prototype.filter.call(document.querySelectorAll('.rk-ra
   return !s.hidden && s.getBoundingClientRect().width > 0; }).map(function (s) { return s.getAttribute('data-rack'); })"""
 
 
+# The paged-in rack at sm is laid out at the phone width and its block images have loaded.
+PAGED_DRAWN = """(function () {
+  var s = document.querySelectorAll('.rk-rack:not([hidden]) .rk-slots');
+  if (s.length !== 1 || s[0].getBoundingClientRect().width < 150) return false;
+  var imgs = Array.prototype.filter.call(s[0].querySelectorAll('img.rk-img'), function (i) {
+    var r = i.getBoundingClientRect(); return r.bottom > 0 && r.top < window.innerHeight; });
+  return imgs.length > 0 && imgs.every(function (i) { return i.complete && i.naturalWidth > 0 && i.getBoundingClientRect().width > 0; });
+})()"""
+
+
 def pressed(box: str) -> str:
     return "(document.querySelector('#%s [aria-pressed=true]') || {}).getAttribute ? " \
            "document.querySelector('#%s [aria-pressed=true]').getAttribute('data-value') : null" % (box, box)
@@ -53,6 +63,20 @@ class LandingCase(UiCase):
                 return v
             time.sleep(0.2)
         self.fail("timed out waiting for the server to have " + what)
+
+    def seed_images(self) -> None:
+        """The sample racks hold no catalog gear with images: put an APC AP4421A near the top of each."""
+        if any(x.get("id") == "img-foh" for x in self.doc().get("devices") or []):
+            return
+        ops = []
+        for did, rid, u in (("img-foh", "rk-foh", 11), ("img-amp", "rk-amp", 23)):
+            ops.append({"op": "put", "coll": "devices", "id": did, "value": {
+                "id": did, "name": "PDU " + did[4:].upper(), "kind": "power", "manufacturer": "APC", "model": "AP4421A",
+                "template": "apc-ap4421a", "room": "main", "rack": {"id": rid, "u": u, "height": 1, "face": "front", "side": "full"}}})
+        req = urllib.request.Request(self.base + "/api/v2/projects/campus-demo/changes", method="POST",
+                                     data=json.dumps({"base_revision": self.project()["revision"], "ops": ops}).encode(),
+                                     headers={"Content-Type": "application/json", "X-Fathom": "1"})
+        urllib.request.urlopen(req).read()
 
     def rack(self, d: dict, rid: str):
         return next((r for r in d.get("racks") or [] if r.get("id") == rid), None)
@@ -153,6 +177,47 @@ class LandingControls(LandingCase):
                 pg.click("#rk-face [data-value=front]")
                 pg.wait_for("document.querySelectorAll('.rk-slots[data-face=front]').length === 2")
                 self.snap(pg, "toolbar")
+
+    def test_both_faces_image_mode_and_annotate(self):
+        faces = "Array.prototype.map.call(document.querySelectorAll('.rk-rack'), function (r) { return r.querySelectorAll('.rk-face').length; })"
+        self.seed_images()
+        for size in ("d", "m"):
+            with self.landing(size) as pg:
+                self.ready(pg, "racks landing at " + size)
+                pg.wait_for(TWO_RACKS)
+                pg.click("#rk-face [data-value=both]")
+                for attempt in range(2):
+                    pg.wait_for(pressed("rk-face") + " === 'both'")
+                    self.assertEqual(pg.js("document.querySelector('.rk-viewport').__rkElevation.getState().face"), "both",
+                                     "both reaches the elevation")
+                    if size == "d":
+                        pg.wait_for("%s.join() === '2,2'" % faces)
+                        self.assertTrue(pg.js("!!document.querySelector('.rk-rack[data-rack=rk-foh] .rk-face[data-face=rear]')"))
+                    else:
+                        pg.wait_for("%s.join() === '1,1'" % faces)
+                        self.assertTrue(pg.js("!!document.querySelector('.rk-rack:not([hidden]) .rk-facetoggle')"), "sm: one face and a toggle")
+                    self.assertEqual(pg.js("localStorage.getItem('fathom.ui.rack.face')"), "both")
+                    if attempt == 0:
+                        pg.reload()
+                        self.ready(pg, "reload at " + size)
+                self.assertLessEqual(pg.page_hscroll(), 0)
+                self.snap(pg, "both-faces")
+
+                pg.click("#rk-display [data-value=image]")
+                pg.wait_for("document.querySelectorAll('.rk-rack:not([hidden]) img.rk-img').length > 0")
+                pg.wait_for("Array.prototype.some.call(document.querySelectorAll('.rk-rack:not([hidden]) img.rk-img'), "
+                            "function (i) { return i.complete && i.naturalWidth > 0; })", timeout=20)
+                self.snap(pg, "image-mode")
+
+                pg.click("#rk-annotate")
+                pg.click(".rkt-menu [data-act=annotate-model]")
+                pg.wait_for("document.querySelectorAll('.rk-rack:not([hidden]) .rk-annot[data-field=model] .rk-anno').length > 0")
+                self.assertLessEqual(pg.page_hscroll(), 0)
+                self.snap(pg, "annotate")
+                pg.reload()
+                self.ready(pg, "reload at " + size)
+                pg.wait_for("document.querySelectorAll('.rk-rack:not([hidden]) .rk-annot[data-field=model]').length > 0")
+                self.assertEqual(pg.js(pressed("rk-display")), "image")
 
     def test_keyboard_shortcuts(self):
         with self.landing("d") as pg:
@@ -284,12 +349,64 @@ class LandingLibrary(LandingCase):
             pg.click("#rk-library-panel .rpal-row[data-source=catalog] .rpal-add")
             self.poll(self.placed(tid, shown[0], before), "the catalog device in the paged rack " + shown[0])
 
+    def test_library_touch_drag_at_m(self):
+        with self.landing("m") as pg:
+            self.ready(pg, "racks landing at m")
+            pg.wait_for("!!document.querySelector('.rkt-pager:not([hidden])')")
+            rack = pg.js(VISIBLE_RACKS)[0]
+            units = self.rack(self.doc(), rack)["units"]
+            taken = set()
+            for x in self.doc().get("devices") or []:
+                p = x.get("rack") or {}
+                if p.get("id") == rack and p.get("u"):
+                    taken.update(range(p["u"], p["u"] + (p.get("height") or 1)))
+            for it in self.rack(self.doc(), rack).get("items") or []:
+                taken.update(range(it["u"], it["u"] + (it.get("height") or 1)))
+            u = next(n for n in range(units, 0, -1) if n not in taken)
+            pg.click("#rk-library")
+            tid = self.search_catalog(pg, "AP4421A")
+            a = pg.rect("#rk-library-panel .rpal-row[data-source=catalog][data-id=%s] .rpal-name" % json.dumps(tid))
+            where = """(function () {
+              var s = document.querySelector('.rk-rack:not([hidden]) .rk-slots[data-face=front]'), r = s.getBoundingClientRect();
+              return {x: r.left + r.width / 2, y: r.top + (%d - %d + 0.5) * r.height / %d};
+            })()""" % (units, u, units)
+            b = pg.js(where)
+            pg.js("""(function (dy) {
+              for (var p = document.querySelector('.rk-rack:not([hidden])'); p && p !== document.body; p = p.parentElement) {
+                var s = getComputedStyle(p).overflowY;
+                if ((s === 'auto' || s === 'scroll') && p.scrollHeight > p.clientHeight) { p.scrollTop += dy; return; }
+              }
+              window.scrollBy(0, dy);
+            })(%d)""" % int(b["y"] - 620))
+            time.sleep(0.2)
+            b = pg.js(where)
+            self.assertTrue(500 < b["y"] < 800, b)
+            x0, y0 = a["left"] + 10, a["top"] + a["height"] / 2
+            pg.command("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x0, "y": y0}]})
+            time.sleep(0.6)
+            for i in range(1, 11):
+                t = i / 10.0
+                pg.command("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x0 + (b["x"] - x0) * t, "y": y0 + (b["y"] - y0) * t}]})
+                time.sleep(0.03)
+            pg.wait_for("!!document.querySelector('.rk-ghost:not([hidden])')")
+            self.assertTrue(pg.js("document.querySelector('.rkt-root').classList.contains('rkt-lib-dragging')"),
+                            "sm: the sheet fades while a library row is dragged")
+            self.assertEqual(pg.js("getComputedStyle(document.getElementById('rk-library-panel')).pointerEvents"), "none")
+            time.sleep(0.2)
+            pg.shot("library-drag-390")
+            before = self.count(tid, rack)
+            pg.command("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+            hits = self.poll(self.placed(tid, rack, before), "the dragged device in " + rack)
+            self.assertEqual(hits[-1]["rack"]["u"], u)
+            self.assertFalse(pg.js("document.querySelector('.rkt-root').classList.contains('rkt-lib-dragging')"))
+
     def test_accessory_menu_adds_an_item(self):
         for size in ("d", "m"):
             with self.landing(size) as pg:
                 self.ready(pg, "racks landing at " + size)
                 self.pick_rack(pg, "rk-foh")
                 before = len(self.rack(self.doc(), "rk-foh").get("items") or [])
+                drawn = pg.js("document.querySelectorAll('.rk-item[data-rack=rk-foh][data-type=blank]').length")
                 pg.click("#rk-accessory")
                 pg.wait_for("!!document.querySelector('.rkt-menu [data-act=item-blank]')")
                 acts = pg.js("Array.prototype.map.call(document.querySelectorAll('.rkt-menu [data-act]'), function (b) { return b.getAttribute('data-act'); })")
@@ -303,6 +420,56 @@ class LandingLibrary(LandingCase):
                                   "a new item in rk-foh")
                 self.assertEqual(items[-1]["type"], "blank")
                 pg.wait_for("/^Added .* to FOH rack at U\\d+$/.test(document.querySelector('.rk-readout').textContent)")
+                pg.wait_for("document.querySelectorAll('.rk-item[data-rack=rk-foh][data-type=blank]').length === %d" % (drawn + 1))
+                self.assertTrue(pg.js("!!document.querySelector('.rk-item.rk-item-blank[data-item=%s]')" % json.dumps(items[-1]["id"])))
+
+    def drag_to_u(self, pg, src: str, rack: str, units: int, u: int, steps: int = 8) -> None:
+        """Mouse-drag `src` onto RU `u` of `rack`'s front face (`units` tall); the button stays down until release()."""
+        a = pg.rect(src)
+        b = pg.js("""(function () {
+          var s = document.querySelector('.rk-slots[data-rack=%s][data-face=front]'); if (!s) return null;
+          var r = s.getBoundingClientRect(), n = %d;
+          return {x: r.left + r.width / 2, y: r.top + (n - %d + 0.5) * r.height / n};
+        })()""" % (rack, units, u))
+        self.assertIsNotNone(b)
+        x0, y0 = a["left"] + 30, a["top"] + a["height"] / 2
+        pg.command("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x0, "y": y0})
+        pg.command("Input.dispatchMouseEvent", {"type": "mousePressed", "x": x0, "y": y0, "button": "left", "buttons": 1, "clickCount": 1})
+        for i in range(1, steps + 1):
+            t = i / float(steps)
+            pg.command("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x0 + (b["x"] - x0) * t, "y": y0 + (b["y"] - y0) * t,
+                                                    "button": "left", "buttons": 1})
+            time.sleep(0.03)
+        self._drop = b
+
+    def release(self, pg) -> None:
+        b = self._drop
+        pg.command("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": b["x"], "y": b["y"], "button": "left", "buttons": 0, "clickCount": 1})
+
+    def test_library_drag_onto_a_rack(self):
+        with self.landing("d") as pg:
+            self.ready(pg, "racks landing")
+            if os.environ.get("FATHOM_UI_SHOTS"):
+                pg.command("Emulation.setDeviceMetricsOverride", {"width": 1440, "height": 900, "deviceScaleFactor": 1, "mobile": False})
+                pg.wait_for("window.innerWidth === 1440")
+            self.pick_rack(pg, "rk-foh")
+            pg.click("#rk-library")
+            tid = self.search_catalog(pg, "AP4421A")
+            row = "#rk-library-panel .rpal-row[data-source=catalog][data-id=%s]" % json.dumps(tid)
+            free = 4
+            self.assertFalse(any((x.get("rack") or {}).get("id") == "rk-foh" and x["rack"].get("u") == free
+                                 for x in self.doc().get("devices") or []), "U4 of the FOH rack starts free")
+            self.drag_to_u(pg, row, "rk-foh", 12, free)
+            pg.wait_for("!!document.querySelector('.rk-ghost:not([hidden])')")
+            pg.shot("library-drag-1440")
+            before = self.count(tid, "rk-foh")
+            self.release(pg)
+            hits = self.poll(self.placed(tid, "rk-foh", before), "the dragged device in rk-foh")
+            self.assertEqual(hits[-1]["rack"]["u"], free)
+            self.assertEqual(hits[-1]["rack"].get("face"), "front")
+            self.assertEqual(hits[-1].get("room"), "main")
+            pg.wait_for("!!document.querySelector('.rk-rack[data-rack=rk-foh] .rk-block[data-device=%s]')" % json.dumps(hits[-1]["id"]))
+            self.assertTrue(pg.js("document.querySelector('.rk-ghost').hidden"))
 
 
 # ---------------------------------------------------------------- server workflows
@@ -368,19 +535,23 @@ class LandingServerWorkflows(LandingCase):
             self.snap(pg, "import-preview")
             pg.press("Escape")
             pg.wait_for(DIALOG_CLOSED)
-        with self.landing("d") as pg:
-            self.ready(pg, "racks landing")
-            pg.wait_for(SOME_RACKS)
+        with self.open("#/campus-demo/broadcast/racks", "d") as pg:
+            self.ready(pg, "broadcast racks landing")
+            pg.wait_for("!!document.querySelector('.rk-rack[data-rack=rk-bcast]')")
             self.import_preview(pg)
             self.snap(pg, "import-preview")
+            before = self.project()["revision"]
             self.footer(pg, "Apply")
             pg.wait_for(DIALOG_CLOSED)
-            rack = self.poll(lambda d: (self.rack(d, "rk-media-server") or {}).get("room") == "main" and self.rack(d, "rk-media-server"),
-                             "the imported rack in room main")
+            rack = self.poll(lambda d: self.rack(d, "rk-media-server"), "the imported rack")
+            self.assertEqual(rack.get("room"), "broadcast", "the import lands in the room on screen")
             self.assertEqual(rack.get("units"), 18)
             devs = [x for x in self.doc().get("devices") or [] if (x.get("rack") or {}).get("id") == "rk-media-server"]
             self.assertEqual(len(devs), 6)
-            self.assertTrue(all(x.get("room") == "main" for x in devs))
+            self.assertTrue(all(x.get("room") == "broadcast" for x in devs))
+            pg.wait_for("!!document.querySelector('.rk-rack[data-rack=rk-media-server]')", timeout=20)
+            time.sleep(1.5)
+            self.assertEqual(self.project()["revision"], before + 1, "an import is one revision")
             pg.wait_for("!!document.querySelector('.rk-rack[data-rack=rk-media-server]')", timeout=20)
             self.assertEqual(pg.js("document.querySelectorAll('.rk-rack[data-rack=rk-media-server] .rk-block').length"), 6)
             self.assertEqual(pg.js("document.getElementById('rk-select').value"), "rk-media-server")
@@ -466,6 +637,7 @@ class LandingRows(LandingCase):
             self.snap(pg, "rows-bays-b")
 
     def test_2_pager_at_m(self):
+        self.seed_images()
         with self.landing("m") as pg:
             self.ready(pg, "racks landing at m")
             pg.wait_for("!!document.querySelector('.rkt-pager:not([hidden])')")
@@ -485,9 +657,18 @@ class LandingRows(LandingCase):
             second = pg.js(VISIBLE_RACKS)
             self.assertEqual(len(second), 1)
             self.assertNotEqual(second, first)
+            pg.click("#rk-display [data-value=image]")
+            pg.wait_for(PAGED_DRAWN, timeout=20)
             pg.click("#rk-prev")
             pg.wait_for("document.querySelector('.rkt-pager-label').textContent.indexOf('1 of %d') >= 0" % n)
             self.assertEqual(pg.js(VISIBLE_RACKS), first)
+            pg.wait_for(PAGED_DRAWN, timeout=20)
+            pg.click("#rk-next")
+            pg.wait_for("document.querySelector('.rkt-pager-label').textContent.indexOf('2 of %d') >= 0" % n)
+            pg.wait_for(PAGED_DRAWN, timeout=20)
+            self.snap(pg, "pager-image")
+            pg.click("#rk-prev")
+            pg.wait_for("document.querySelector('.rkt-pager-label').textContent.indexOf('1 of %d') >= 0" % n)
             pg.js("""(function () {
               var v = document.querySelector('.rk-viewport'), r = v.getBoundingClientRect();
               var x = r.left + r.width / 2, y = r.top + 20;
