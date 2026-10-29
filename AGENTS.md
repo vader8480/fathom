@@ -60,9 +60,9 @@ components) and §6.14 (storage keys).
 `.github/workflows/ci.yml` runs on every pull request and on pushes to
 `main` (Ubuntu, Python 3.12, Node LTS, Google Chrome stable as
 `FATHOM_CHROME`): `python -m unittest discover -s tests`,
-`node --test tests/js/*.test.mjs` and `fathom selftest`, about 2 minutes
-end to end. Logs are uploaded as an artifact when a step fails. The `Tests`
-job installs `.[serve,discovery]` when the `discovery` extra exists in
+`node --test tests/js/*.test.mjs` and `fathom selftest`, about 20 minutes
+end to end (the `Tests` job has a 45-minute timeout). Logs are uploaded as
+an artifact when a step fails. The `Tests` job installs `.[serve,discovery]` when the `discovery` extra exists in
 `pyproject.toml`, else `.[serve]`.
 
 - **Approve PR** posts an approving review from `github-actions[bot]` on

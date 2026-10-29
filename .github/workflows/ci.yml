@@ -35,7 +35,9 @@ jobs:
   tests:
     name: Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The unittest step alone takes ~20 min and grows with every UI suite;
+    # 20 min cancelled a green run during its post-steps.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
