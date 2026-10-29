@@ -1,4 +1,4 @@
-"""PAGE (docs/notes/rackula.md, wave 2): the rack entity page ``racks/<id>/<tab>[/front|rear|both]``.
+"""PAGE (docs/SPEC.md §6.7.3): the rack entity page ``racks/<id>/<tab>[/front|rear|both]``.
 
 Overview cards carry the rack totals (U used/free, weight against the max load, power against the
 circuit limit, devices, accessories) and warn when a limit is exceeded; library template weights

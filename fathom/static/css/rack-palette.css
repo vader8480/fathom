@@ -1,4 +1,4 @@
-/* Rack library palette (docs/notes/rackula.md PAL): search, category chips, favourites / recent /
+/* Rack library palette (docs/SPEC.md §6.13.11): search, category chips, favourites / recent /
    results rows. Fills its container (the host sizes it: a side panel at md/lg, a bottom sheet at sm).
    Colours come from app.css; the swatches use the contract category colours via --rpal-c. */
 .rpal-root{display:flex;flex-direction:column;height:100%;min-height:0;min-width:0;background:var(--panel);color:var(--text)}

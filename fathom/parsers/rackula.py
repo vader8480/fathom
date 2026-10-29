@@ -15,7 +15,7 @@ into ``doc`` would create, plus the ops (§4.9) that do it::
   encoded ``l`` value (lz-string, or the older zlib/gzip + base64url form).
 
 Optional ``room`` names the room for new racks and devices (default: the
-document's first room). Unparseable input raises ``ValueError`` with a
+document's default room, ``settings.default_room``, else the first room). Unparseable input raises ``ValueError`` with a
 readable message; anything imported approximately is listed in ``warnings``.
 Collisions after import are warnings, not refusals.
 """

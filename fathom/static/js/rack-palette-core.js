@@ -1,4 +1,4 @@
-// Rack library palette, pure core (docs/notes/rackula.md G, PAL): library entries, ranked search,
+// Rack library palette, pure core (docs/SPEC.md §6.13.11): library entries, ranked search,
 // categories, favourites/recents prefs and the device a template instantiates into. No DOM, window,
 // storage, fetch or timers, so it imports in Node.
 

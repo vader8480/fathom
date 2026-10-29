@@ -1,4 +1,4 @@
-/* Racks landing (rack.js, docs/notes/rackula.md LAND): toolbar segments and menus, the library
+/* Racks landing (rack.js, docs/SPEC.md §6.7.2): toolbar segments and menus, the library
    panel (right panel at lg, overlay at md, bottom sheet at sm), totals chips, row strips, the sm
    pager and the template / import / duplicate dialogs. Colours come from css/app.css. */
 
