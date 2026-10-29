@@ -1,0 +1,41 @@
+{
+  "request": {
+    "model": "llama3.1:latest",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are Fathom's AV/lighting troubleshooting assistant."
+      },
+      {
+        "role": "user",
+        "content": "What feeds the ATEM Mini?"
+      }
+    ],
+    "stream": false,
+    "max_tokens": 700,
+    "temperature": 0.2
+  },
+  "status": 200,
+  "response": {
+    "id": "chatcmpl-p4a-1",
+    "object": "chat.completion",
+    "created": 1761670000,
+    "model": "llama3.1:latest",
+    "system_fingerprint": "fp_ollama",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "The ATEM Mini is fed by Audio Rack 1 on its Stream input."
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 31,
+      "completion_tokens": 14,
+      "total_tokens": 45
+    }
+  }
+}

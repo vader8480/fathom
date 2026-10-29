@@ -4,14 +4,14 @@
 // highlights a row of the view's primary table.
 
 import { h } from './dom.js';
-import { canSee } from './router-core.js';
+import { canSee, buildRoute } from './router-core.js';
 import { createTable } from './datatable.js';
 import { skeleton, emptyState, inlineError, staleBadge, reviewBadge, confirmScope } from './feedback.js';
 import { openWizard } from './wizard.js';
 import { slug, newId, deepClone } from './model-core.js';
 import { suggestionControl, applyChoice } from './suggest-ui.js';
 
-function msg(e) { return (e && e.message) || String(e); }
+function msg(e) { return (e && e.details && typeof e.details.detail === 'string' && e.details.detail) || (e && e.message) || String(e); }
 function fmtTime(s) {
   if (!s) return '';
   const d = new Date(s);
@@ -102,6 +102,108 @@ function errSlot(cls) {
     show: function (err, retry, compact) { el.innerHTML = ''; el.appendChild(inlineError(err, retry, { compact: compact !== false })); },
     clear: function () { el.innerHTML = ''; },
   };
+}
+
+// Endpoints the api object has no method for yet (invites, suggestions): the api's generic request
+// helper when it exists (same base, CSRF header and error mapping), else fetch with the same contract.
+function apiCall(ctx, method, path, body, params) {
+  const api = ctx.api || {};
+  if (typeof api.request === 'function') return api.request(method, path, body, { params: params }).then(function (r) { return r.data; });
+  const q = Object.keys(params || {}).filter(function (k) { return params[k] !== undefined && params[k] !== null && params[k] !== ''; })
+    .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(String(params[k])); }).join('&');
+  const headers = { 'X-Fathom': '1', 'Accept': 'application/json' };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  return fetch((api.base || '') + path + (q ? '?' + q : ''), { method: method, headers: headers, body: body === undefined ? undefined : JSON.stringify(body), credentials: 'same-origin' }).then(function (res) {
+    if (res.status === 204) return null;
+    return res.json().catch(function () { return null; }).then(function (data) {
+      if (res.ok) return data;
+      const err = new Error((data && data.error) || 'HTTP ' + res.status);
+      err.status = res.status;
+      err.code = (data && data.code) || '';
+      throw err;
+    });
+  });
+}
+// A server without the endpoint (older build, sibling feature not merged yet): the list is empty
+// rather than broken.
+function isMissing(e) { return !!(e && (e.status === 404 || e.status === 405)); }
+function absUrl(ctx, rel) {
+  if (!rel) return '';
+  try { return new URL(rel, ctx.appRoot || location.href).href; } catch (e) { return rel; }
+}
+// Copy to the clipboard (clipboard API, else select + execCommand); the input keeps the text selected
+// so a manual copy works too.
+function copyField(ctx, input, text) {
+  function fallback() {
+    input.focus();
+    input.select();
+    let ok = false;
+    try { ok = document.execCommand && document.execCommand('copy'); } catch (e) { ok = false; }
+    ctx.toast(ok ? 'Link copied' : 'Select the link and copy it', ok ? 'ok' : 'warn');
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { ctx.toast('Link copied', 'ok'); }, fallback);
+  else fallback();
+}
+function overridesText(projects) {
+  const n = Object.keys(projects || {}).length;
+  return n ? n + (n === 1 ? ' override' : ' overrides') : '\u2014';
+}
+
+// Per-project role overrides (users, invites): rows of `project · role` with add / remove. `value()`
+// is the whole map (rows without a project are skipped); `valid()` marks duplicate projects.
+function projectRolesEditor(ctx, initial, opts) {
+  opts = opts || {};
+  const live = (ctx.projects || []).map(function (p) { return { name: p.name, title: p.title && p.title !== p.name ? p.name + ' \u00b7 ' + p.title : p.name }; });
+  if (ctx.project && !live.some(function (p) { return p.name === ctx.project; })) live.unshift({ name: ctx.project, title: ctx.project });
+  const rows = [];
+  const list = h('div', { class: 'adm-pr-rows' });
+  const err = h('div', { class: 'adm-pr-err', 'aria-live': 'polite' });
+  const hint = h('div', { class: 'muted adm-pr-hint' }, opts.hint || 'No overrides: the server role applies to every project.');
+  function options(cur) {
+    const names = live.slice();
+    if (cur && !names.some(function (p) { return p.name === cur; })) names.push({ name: cur, title: cur + ' (not on this server)' });
+    return [h('option', { value: '' }, 'Choose a project\u2026')].concat(names.map(function (p) { return h('option', { value: p.name, selected: p.name === cur ? true : null }, p.title); }));
+  }
+  function sync() {
+    hint.hidden = rows.length > 0;
+    valid();
+    if (opts.onChange) opts.onChange();
+  }
+  function addRow(name, role) {
+    const proj = h('select', { class: 'adm-pr-proj', 'aria-label': 'Project' }, options(name || ''));
+    const rl = h('select', { class: 'adm-pr-role', 'aria-label': 'Role in that project' }, ['viewer', 'editor'].map(function (x) { return h('option', { value: x, selected: x === (role || 'viewer') ? true : null }, x); }));
+    const rm = h('button', { type: 'button', class: 'small adm-pr-rm', 'aria-label': 'Remove this project' }, '\u00d7');
+    const row = h('div', { class: 'adm-pr-row' }, [proj, h('span', { class: 'muted adm-pr-dot', 'aria-hidden': 'true' }, '\u00b7'), rl, rm]);
+    const entry = { el: row, proj: proj, rl: rl };
+    rm.addEventListener('click', function () { rows.splice(rows.indexOf(entry), 1); row.remove(); sync(); });
+    proj.addEventListener('change', sync);
+    rl.addEventListener('change', sync);
+    rows.push(entry);
+    list.appendChild(row);
+    hint.hidden = true;
+  }
+  function value() {
+    const out = {};
+    rows.forEach(function (r) { if (r.proj.value) out[r.proj.value] = r.rl.value; });
+    return out;
+  }
+  function valid() {
+    const seen = {};
+    let dup = false;
+    rows.forEach(function (r) { r.el.classList.remove('adm-pr-dup'); });
+    rows.forEach(function (r) {
+      const n = r.proj.value;
+      if (!n) return;
+      if (seen[n]) { dup = true; r.el.classList.add('adm-pr-dup'); seen[n].el.classList.add('adm-pr-dup'); } else seen[n] = r;
+    });
+    err.textContent = dup ? 'A project is listed twice. Remove one of the rows.' : '';
+    return !dup;
+  }
+  Object.keys(initial || {}).sort().forEach(function (k) { addRow(k, initial[k]); });
+  hint.hidden = rows.length > 0;
+  const add = h('button', { type: 'button', class: 'small adm-pr-add', onclick: function () { addRow('', 'viewer'); const last = rows[rows.length - 1]; if (last) last.proj.focus(); sync(); } }, '+ Add project');
+  const el = h('div', { class: 'adm-pr', 'data-rows': 'projects' }, [list, hint, err, h('div', { class: 'row' }, add)]);
+  return { el: el, value: value, valid: valid, count: function () { return rows.length; } };
 }
 
 // DataTable `empty` as a node: the emptyState when there are no rows at all, otherwise the table's
@@ -814,8 +916,16 @@ function crudTable(ctx, coll, cols, opts) {
 
 const SETTINGS_TABS = [
   ['project', 'Project'], ['rooms', 'Venues & rooms'], ['systems', 'Systems'], ['locations', 'Locations'], ['networks', 'Networks'],
-  ['templates', 'Templates'], ['users', 'Users'], ['backups', 'Backups'], ['sharing', 'Sharing'], ['offline', 'Offline'],
+  ['templates', 'Templates'], ['users', 'Users'], ['invites', 'Invites'], ['backups', 'Backups'], ['sharing', 'Sharing'], ['suggestions', 'Suggestions'],
+  ['assistant', 'Assistant'], ['offline', 'Offline'], ['trash', 'Trash'],
 ];
+// Settings › Assistant (P4C): provider labels in the order the select shows them, env variable names
+// for the "Set by environment" hint, and the local-server presets used when the catalogue has none.
+const LLM_LABELS = { openai: 'OpenAI', anthropic: 'Anthropic', xai: 'xAI Grok', openai_compat: 'Local / OpenAI-compatible server' };
+const LLM_ENV = { base_url: 'FATHOM_LLM_URL', api_key: 'FATHOM_LLM_API_KEY', provider: 'FATHOM_LLM_PROVIDER', model: 'FATHOM_LLM_MODEL', api: 'FATHOM_LLM_API',
+  temperature: 'FATHOM_LLM_TEMPERATURE', max_tokens: 'FATHOM_LLM_MAX_TOKENS', web_lookup: 'FATHOM_LLM_WEB_LOOKUP', daily_cap: 'FATHOM_LLM_DAILY_CAP' };
+const LLM_PRESETS = [['ollama', 'Ollama', 'http://localhost:11434/v1'], ['lmstudio', 'LM Studio', 'http://localhost:1234/v1'], ['vllm', 'vLLM', 'http://localhost:8000/v1'], ['llamacpp', 'llama.cpp', 'http://localhost:8080/v1']];
+const INVITE_TTL = [['24', '24 hours'], ['72', '72 hours'], ['168', '7 days']];
 
 function isoIn(days) {
   return new Date(Date.now() + days * 864e5).toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -970,6 +1080,30 @@ export function mountSettings(el, ctx) {
     all[j].focus();
   });
 
+  // Lock editing (P2C): one `settings.locked` op through the ops pipeline; the server stamps
+  // locked_by / locked_at and answers other ops with 423 while locked. The toggle is shown to every
+  // editor even while the store is read-only, because unlocking is how it stops being read-only.
+  function lockCard() {
+    const s = store.doc.settings || {};
+    const locked = s.locked === true;
+    const who = locked && (s.locked_by || s.locked_at) ? (s.locked_by ? 'by ' + s.locked_by : '') + (s.locked_at ? (s.locked_by ? ' \u00b7 ' : '') + fmtTime(s.locked_at) : '') : '';
+    const status = h('div', { class: 'adm-lock-status', 'data-locked': locked ? 'true' : 'false' }, [
+      h('span', { class: 'chip' + (locked ? ' on' : '') }, locked ? 'Locked' : 'Unlocked'),
+      who ? h('span', { class: 'adm-lock-who' }, who) : null,
+    ]);
+    const mayToggle = role !== 'viewer' && (!store.readOnly || locked) && !(ctx.isTimeTravel && ctx.isTimeTravel());
+    const toggle = mayToggle ? h('button', { type: 'button', class: locked ? 'primary' : '', 'data-act': 'lock-toggle', 'aria-pressed': locked ? 'true' : 'false', onclick: function () {
+      ctx.commit([{ op: 'root', key: 'settings', value: { locked: !locked } }], locked ? 'Unlock editing' : 'Lock editing');
+      ctx.toast(locked ? 'Editing unlocked' : 'Editing locked', 'ok');
+    } }, locked ? 'Unlock editing' : 'Lock editing') : null;
+    return h('section', { class: 'adm-card', 'data-card': 'lock' }, [
+      h('h3', null, 'Lock editing'),
+      status,
+      toggle ? h('div', { class: 'row adm-lock-row' }, toggle) : null,
+      h('p', { class: 'muted adm-lock-hint' }, 'While locked, nobody can change the model until someone unlocks it. Builds, files and procedures are unaffected.'),
+    ]);
+  }
+
   function projectPanel() {
     const m = store.doc.meta || {};
     function rootField(key, sub, label, opts) {
@@ -1007,6 +1141,7 @@ export function mountSettings(el, ctx) {
         rootField('settings', 'autosave', 'Autosave', { check: true }),
         h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Tag pattern tokens: {D} discipline letter, {M} medium, {room}, {from}, {to}, {n:03}. ' + (m.slug ? 'Project slug: ' + m.slug : '')),
       ]),
+      lockCard(),
     ];
     if (role === 'admin' && ctx.api) {
       // Typing the name stays: it is a stronger guard than confirmScope for the one delete that
@@ -1015,17 +1150,17 @@ export function mountSettings(el, ctx) {
       const deleteProject = function () {
         delErr.clear();
         return ctx.api.deleteProject(ctx.project).then(function () { location.hash = ''; location.reload(); }, function (e) {
-          if (!destroyed) delErr.show(actErr('Could not delete ' + ctx.project, e), deleteProject);
+          if (!destroyed) delErr.show(actErr('Could not move ' + ctx.project + ' to the trash', e), deleteProject);
         });
       };
       cards.push(h('section', { class: 'adm-card', 'data-card': 'danger' }, [h('h3', null, 'Danger zone'),
-        h('p', { class: 'muted' }, 'Deleting a project removes it and all its history from this server.'),
-        h('div', null, h('button', { type: 'button', class: 'danger', onclick: function () {
-          ctx.prompt('Type the project name (' + ctx.project + ') to delete it and all its history.', '', { title: 'Delete project', ok: 'Delete' }).then(function (v) {
+        h('p', { class: 'muted' }, 'Moving a project to the trash takes it off the project list. An admin can restore it, with its history and files, from Settings \u203a Trash until it is deleted permanently there.'),
+        h('div', null, h('button', { type: 'button', class: 'danger', 'data-act': 'trash-project', onclick: function () {
+          ctx.prompt('Type the project name (' + ctx.project + ') to move it to the trash. It can be restored from Settings \u203a Trash.', '', { title: 'Move to trash', ok: 'Move to trash' }).then(function (v) {
             if (v !== ctx.project) { if (v !== null) ctx.toast('Name did not match', 'warn'); return; }
             deleteProject();
           });
-        } }, 'Delete project')),
+        } }, 'Move to trash')),
         delErr.el,
       ]));
     }
@@ -1126,6 +1261,7 @@ export function mountSettings(el, ctx) {
     const dt = createTable(host, {
       key: 'settings.users', scope: '', caption: 'Users', noun: { one: 'user', many: 'users' },
       url: urlBinding(ctx), highlight: hlOf(ctx), csvName: 'users.csv', rowId: function (u) { return u.username; },
+      rowAttrs: function (u) { return { 'data-user': u.username }; }, cards: true,
       empty: 'No user accounts yet. Add a user below to turn sign-in on.',
       columns: [
         { key: 'username', header: 'User', sticky: true },
@@ -1134,6 +1270,11 @@ export function mountSettings(el, ctx) {
           sel.addEventListener('change', function () { update(u, { role: sel.value }, 'Could not change the role of ' + u.username, 'Role updated'); });
           return sel;
         } },
+        { key: 'projects', header: 'Projects', value: function (u) { return overridesText(u.projects); }, csv: function (u) { return Object.keys(u.projects || {}).sort().map(function (k) { return k + ': ' + u.projects[k]; }).join('; '); },
+          cell: function (u) {
+            const keys = Object.keys(u.projects || {}).sort();
+            return h('span', { class: keys.length ? 'adm-user-projects' : 'muted adm-user-projects', title: keys.map(function (k) { return k + ': ' + u.projects[k]; }).join('\n') || null }, overridesText(u.projects));
+          } },
         { key: 'disabled', header: 'Disabled', filterable: true, value: function (u) { return u.disabled ? 'yes' : ''; }, cell: function (u) {
           const dis = h('input', { type: 'checkbox', 'aria-label': 'Disable ' + u.username });
           dis.checked = !!u.disabled;
@@ -1143,6 +1284,7 @@ export function mountSettings(el, ctx) {
         timeCol('created', 'Created', function (u) { return u.created; }),
         actions(function (u) {
           return [
+            h('button', { type: 'button', class: 'small', 'data-act': 'access', 'aria-label': 'Access per project for ' + u.username, onclick: function () { openAccess(u); } }, 'Access'),
             h('button', { type: 'button', class: 'small', onclick: function () {
               ctx.prompt('New password for ' + u.username + ' (8+ characters)', '', { type: 'password', title: 'Reset password', ok: 'Set password' }).then(function (pw) {
                 if (pw) update(u, { password: pw }, 'Could not reset the password of ' + u.username, 'Password reset', true);
@@ -1178,6 +1320,34 @@ export function mountSettings(el, ctx) {
         if (!destroyed) list.fail(actErr('Could not remove user ' + u.username, e), function () { return removeUser(u); });
       });
     }
+    // Access per project (P2C): a dialog (bottom sheet at sm) with the per-project rows; Save PATCHes
+    // the whole `projects` map. Admins have no overrides to edit.
+    const accessSlot = h('div', { class: 'adm-user-access' });
+    function openAccess(u) {
+      const admin = u.role === 'admin';
+      const body = h('div', { class: 'adm-access', 'data-user': u.username }, [
+        h('h4', null, 'Access per project'),
+        admin ? h('p', { class: 'muted adm-access-admin' }, 'Admins have full access everywhere.')
+          : h('p', { class: 'muted' }, 'The server role (' + (u.role || 'viewer') + ') applies everywhere except in the projects listed here.'),
+      ]);
+      const editor = admin ? null : projectRolesEditor(ctx, u.projects || {});
+      if (editor) body.appendChild(editor.el);
+      function save() {
+        return update(u, { projects: editor.value() }, 'Could not save the access of ' + u.username, 'Access updated');
+      }
+      if (ctx.openDialog) {
+        return ctx.openDialog({
+          title: u.username,
+          body: body,
+          buttons: editor ? [{ label: 'Cancel', value: null }, { label: 'Save', primary: true, validate: editor.valid, value: true }] : [{ label: 'Close', value: null }],
+        }).then(function (v) { if (v && editor) return save(); return null; });
+      }
+      // harness: no dialog host, the editor opens under the table
+      accessSlot.innerHTML = '';
+      if (editor) body.appendChild(h('div', { class: 'row' }, [h('button', { type: 'button', class: 'small primary', onclick: function () { if (editor.valid()) save().then(function () { accessSlot.innerHTML = ''; }); } }, 'Save'), h('button', { type: 'button', class: 'small', onclick: function () { accessSlot.innerHTML = ''; } }, 'Cancel')]));
+      accessSlot.appendChild(body);
+      return Promise.resolve(null);
+    }
     const un = h('input', { placeholder: 'username', autocapitalize: 'none', autocomplete: 'off', 'aria-label': 'New username' });
     const pw = h('input', { type: 'password', placeholder: 'password (8+)', autocomplete: 'new-password', 'aria-label': 'New password' });
     const rl = h('select', { 'aria-label': 'New user role' }, ['viewer', 'editor', 'admin'].map(function (x) { return h('option', { value: x, selected: x === 'editor' ? true : null }, x); }));
@@ -1194,8 +1364,203 @@ export function mountSettings(el, ctx) {
     };
     const add = h('button', { type: 'button', class: 'small primary', onclick: addUser }, 'Add user');
     load();
-    nodes.push(host, h('div', { class: 'row adm-addrow' }, [un, pw, rl, add]), addErr.el);
+    nodes.push(host, accessSlot, h('div', { class: 'row adm-addrow' }, [un, pw, rl, add]), addErr.el);
     return { nodes: nodes, tables: [dt], primary: dt };
+  }
+
+  // Settings › Invites (P2C, admin): one-time invite links with a role, optional per-project
+  // overrides and an expiry; the list of open invites with Revoke.
+  function invitesPanel() {
+    if (!ctx.api) return needsServer();
+    const host = h('div');
+    const roleSel = h('select', { id: 'adm-inv-role', 'aria-label': 'Role of the invited user' }, ['viewer', 'editor', 'admin'].map(function (x) { return h('option', { value: x, selected: x === 'editor' ? true : null }, x); }));
+    const ttl = h('select', { id: 'adm-inv-ttl', 'aria-label': 'Link expires' }, INVITE_TTL.map(function (o) { return h('option', { value: o[0], selected: o[0] === '72' ? true : null }, o[1]); }));
+    const note = h('input', { id: 'adm-inv-note', placeholder: 'e.g. for Jordan, Sunday volunteers', autocomplete: 'off', maxlength: '120' });
+    const pr = projectRolesEditor(ctx, {}, { hint: 'No overrides: the role above applies to every project.' });
+    const adminNote = h('div', { class: 'muted adm-access-admin' }, 'Admins have full access everywhere.');
+    const prField = h('div', { class: 'field adm-inv-projects' }, [h('label', null, 'Access per project'), h('div', null, [pr.el, adminNote])]);
+    function syncRole() {
+      const admin = roleSel.value === 'admin';
+      pr.el.hidden = admin;
+      adminNote.hidden = !admin;
+    }
+    roleSel.addEventListener('change', syncRole);
+    syncRole();
+    const out = h('div', { class: 'adm-inv-out', hidden: true, 'aria-live': 'polite' });
+    const createErr = errSlot();
+    const create = h('button', { type: 'button', class: 'primary adm-inv-create', 'data-act': 'create-invite' }, 'Create link');
+    function showLink(r) {
+      const url = absUrl(ctx, r.url || ((r.accept_url || 'invite/') + (/\/$/.test(r.accept_url || 'invite/') ? '' : '/') + (r.token || (r.invite && r.invite.token) || '')));
+      out.innerHTML = '';
+      out.hidden = false;
+      const input = h('input', { class: 'adm-inv-url mono', readonly: true, value: url, 'aria-label': 'Invite link' });
+      input.addEventListener('focus', function () { input.select(); });
+      const copy = h('button', { type: 'button', class: 'small adm-inv-copy', 'data-act': 'copy-invite', onclick: function () { copyField(ctx, input, url); } }, 'Copy');
+      out.appendChild(h('div', { class: 'row adm-share-row' }, [input, copy]));
+      out.appendChild(h('div', { class: 'muted adm-inv-hint' }, 'Send this link yourself \u2014 it works once' + (r.expires ? ' and expires ' + fmtTime(r.expires) : '') + '.'));
+    }
+    function doCreate() {
+      if (!pr.valid()) return null;
+      create.disabled = true;
+      createErr.clear();
+      const body = { role: roleSel.value, projects: roleSel.value === 'admin' ? {} : pr.value(), ttl_hours: Number(ttl.value) || 72, note: note.value.trim() };
+      return apiCall(ctx, 'POST', 'api/v2/invites', body).then(function (r) {
+        create.disabled = false;
+        if (destroyed) return null;
+        r = r || {};
+        showLink(r);
+        ctx.toast('Invite link created', 'ok');
+        note.value = '';
+        const token = r.token || (r.invite && r.invite.token);
+        return load().then(function () { if (token) dt.setHighlight(token); });
+      }, function (e) {
+        create.disabled = false;
+        if (destroyed) return null;
+        createErr.show(actErr(isMissing(e) ? 'This server has no invite links yet' : 'Could not create the invite link', e), isMissing(e) ? null : doCreate, false);
+        return null;
+      });
+    }
+    create.addEventListener('click', doCreate);
+    function projectsText(inv) {
+      const p = inv.projects || {};
+      const keys = Object.keys(p).sort();
+      return keys.length ? keys.map(function (k) { return k + ': ' + p[k]; }).join(', ') : '\u2014';
+    }
+    const dt = createTable(host, {
+      key: 'settings.invites', scope: '', caption: 'Open invites', noun: { one: 'invite', many: 'invites' }, cards: true,
+      url: urlBinding(ctx), highlight: hlOf(ctx), csvName: 'invites.csv', rowId: function (i) { return i.token; },
+      rowAttrs: function (i) { return { 'data-invite': i.token }; },
+      empty: emptyFor(function () { return dt; }, { title: 'No open invites.', text: 'Create link makes a one-time link you send yourself; it shows up here until it is used, expires or is revoked.' }),
+      columns: [
+        { key: 'role', header: 'Role', filterable: true, value: function (i) { return i.role || ''; }, sticky: true },
+        { key: 'projects', header: 'Projects', value: projectsText, cell: function (i) { return h('span', { class: Object.keys(i.projects || {}).length ? '' : 'muted' }, projectsText(i)); } },
+        { key: 'created_by', header: 'Created by', filterable: true, value: function (i) { return i.created_by || ''; } },
+        timeCol('expires', 'Expires', function (i) { return i.expires; }),
+        { key: 'note', header: 'Note', value: function (i) { return i.note || ''; } },
+        actions(function (i) {
+          return h('button', { type: 'button', class: 'small danger', 'data-act': 'revoke', 'aria-label': 'Revoke invite ' + (i.note || String(i.token).slice(0, 8)), onclick: function () {
+            confirmScope(ctx, { verb: 'Revoke', noun: 'invite link' + (i.note ? ' \u201c' + i.note + '\u201d' : ''), danger: true, ok: 'Revoke',
+              detail: 'The link stops working at once. Nobody who already used it is affected.' }).then(function (y) { if (y) revoke(i); });
+          } }, 'Revoke');
+        }),
+      ],
+    });
+    const list = listState(dt);
+    function load() {
+      list.busy();
+      return apiCall(ctx, 'GET', 'api/v2/invites').then(function (r) { if (!destroyed) list.done((r && r.invites) || []); }, function (e) {
+        if (destroyed) return;
+        if (isMissing(e)) list.done([]);
+        else list.fail(actErr('Could not load the invites', e), load);
+      });
+    }
+    function revoke(i) {
+      return apiCall(ctx, 'DELETE', 'api/v2/invites/' + encodeURIComponent(i.token)).then(function () { list.clear(); ctx.toast('Invite revoked', 'ok'); return load(); }, function (e) {
+        if (!destroyed) list.fail(actErr('Could not revoke the invite', e), function () { return revoke(i); });
+      });
+    }
+    load();
+    return {
+      nodes: [
+        h('section', { class: 'adm-card adm-form adm-inv-form', 'data-card': 'invite' }, [
+          h('h3', null, 'Invite someone'),
+          h('p', { class: 'muted' }, 'An invite link lets one person create their own account with the role you choose. It works once and expires on its own.'),
+          fld('Role', roleSel),
+          prField,
+          fld('Expires in', ttl),
+          fld('Note', note),
+          h('div', { class: 'row adm-inv-row' }, create),
+          createErr.el,
+          out,
+        ]),
+        h('h3', null, 'Open invites'),
+        host,
+      ],
+      tables: [dt], primary: dt,
+    };
+  }
+
+  // Settings › Suggestions (P2C, admin): problem reports of kind `suggestion` for this project, or
+  // for every project; Resolve / Reopen reuses the problems PATCH.
+  function suggestionsPanel() {
+    if (!ctx.api) return needsServer();
+    const host = h('div');
+    let all = false;
+    const allBox = h('input', { type: 'checkbox', id: 'adm-sug-all' });
+    allBox.addEventListener('change', function () { all = allBox.checked; load(); });
+    const summary = h('span', { class: 'muted adm-sug-summary' });
+    const isOpen = function (r) { return (r.status || 'open') === 'open'; };
+    const projectOf = function (r) { return r.project || ctx.project; };
+    const deviceHref = function (r) { return buildRoute({ project: projectOf(r), room: '*', view: 'devices', id: r.device, query: {} }); };
+    const pageHref = function (r) { return buildRoute({ project: projectOf(r), room: '*', view: 'sop', query: { page: r.page } }); };
+    const aboutText = function (r) { return r.device ? (r.device_name || r.device) : (r.page ? (r.page_title || r.page) : ''); };
+    function setStatus(r, status) {
+      return ctx.api.patchProblem(projectOf(r), r.id, { status: status }).then(function () {
+        list.clear();
+        ctx.toast(status === 'resolved' ? 'Suggestion resolved' : 'Suggestion reopened', 'ok');
+        const p = projectOf(r) === ctx.project && ctx.reload ? ctx.reload() : Promise.resolve();
+        return p.then(load, load);
+      }, function (e) {
+        if (!destroyed) list.fail(actErr('Could not ' + (status === 'resolved' ? 'resolve' : 'reopen') + ' the suggestion', e), function () { return setStatus(r, status); });
+      });
+    }
+    const dt = createTable(host, {
+      key: 'settings.suggestions', scope: ctx.project, caption: 'Suggestions', noun: { one: 'suggestion', many: 'suggestions' }, cards: true,
+      url: urlBinding(ctx), highlight: hlOf(ctx), csvName: 'suggestions.csv', rowId: function (r) { return projectOf(r) + ':' + r.id; },
+      rowAttrs: function (r) { return { 'data-suggestion': r.id, 'data-project': projectOf(r) }; },
+      rowClass: function (r) { return isOpen(r) ? '' : 'adm-sug-resolved'; },
+      empty: emptyFor(function () { return dt; }, { title: 'No suggestions yet.', text: 'Anyone can send one from the user menu.' }),
+      columns: [
+        { key: 'text', header: 'Suggestion', sticky: true, value: function (r) { return r.text || ''; }, cell: function (r) {
+          return h('div', { class: 'adm-sug-text' }, [r.text || '', !isOpen(r) && r.resolved ? h('div', { class: 'muted adm-sug-resolved-note' }, 'Resolved ' + fmtTime(r.resolved) + (r.resolved_by ? ' by ' + r.resolved_by : '') + (r.note ? ' \u2014 ' + r.note : '')) : null]);
+        } },
+        { key: 'project', header: 'Project', filterable: true, value: projectOf, cell: function (r) { return mono(projectOf(r)); } },
+        { key: 'by', header: 'By', filterable: true, value: function (r) { return r.by || ''; } },
+        timeCol('created', 'When', function (r) { return r.created; }),
+        { key: 'about', header: 'About', value: aboutText, cell: function (r) {
+          if (r.device) return h('a', { class: 'chip adm-sug-about', 'data-device': r.device, href: deviceHref(r) }, r.device_name || r.device);
+          if (r.page) return h('a', { class: 'chip adm-sug-about', 'data-page': r.page, href: pageHref(r) }, r.page_title || r.page);
+          return h('span', { class: 'muted' }, '\u2014');
+        } },
+        { key: 'status', header: 'Status', filterable: true, value: function (r) { return isOpen(r) ? 'Open' : 'Resolved'; }, cell: function (r) { return h('span', { class: 'chip' + (isOpen(r) ? ' on' : ''), 'data-status': isOpen(r) ? 'open' : 'resolved' }, isOpen(r) ? 'Open' : 'Resolved'); } },
+        write ? actions(function (r) {
+          const open = isOpen(r);
+          return h('button', { type: 'button', class: 'small', 'data-act': open ? 'resolve' : 'reopen', onclick: function () { setStatus(r, open ? 'resolved' : 'open'); } }, open ? 'Resolve' : 'Reopen');
+        }) : null,
+      ].filter(Boolean),
+    });
+    const list = listState(dt);
+    function done(rows) {
+      list.done(rows);
+      const nOpen = rows.filter(isOpen).length;
+      summary.textContent = rows.length ? nOpen + ' open \u00b7 ' + rows.length + ' total' : '';
+    }
+    function load() {
+      list.busy();
+      const wantAll = all;
+      const p = wantAll
+        ? apiCall(ctx, 'GET', 'api/v2/suggestions').then(function (r) { return ((r && r.items) || []).map(function (x) { return Object.assign({ project: x.project || ctx.project }, x); }); })
+        // an older server ignores ?kind= and returns every report; only suggestions are shown
+        : ctx.api.problems(ctx.project, { kind: 'suggestion' }).then(function (r) { return ((r && r.problems) || []).filter(function (x) { return x.kind === 'suggestion'; }).map(function (x) { return Object.assign({ project: ctx.project }, x); }); });
+      return p.then(function (rows) { if (!destroyed && wantAll === all) done(rows); }, function (e) {
+        if (destroyed || wantAll !== all) return;
+        if (isMissing(e)) done([]);
+        else list.fail(actErr('Could not load the suggestions', e), load);
+      });
+    }
+    load();
+    return {
+      nodes: [
+        h('div', { class: 'adm-sec-head adm-sug-head' }, [
+          h('h3', null, 'Suggestions'),
+          h('label', { class: 'chk adm-sug-all', for: 'adm-sug-all' }, [allBox, 'All projects']),
+          summary,
+        ]),
+        h('p', { class: 'muted' }, 'Ideas and requests people send from the user menu. Resolve them when done; the sender is named so you can follow up.'),
+        host,
+      ],
+      tables: [dt], primary: dt,
+    };
   }
 
   function backupsPanel() {
@@ -1330,6 +1695,83 @@ export function mountSettings(el, ctx) {
     };
   }
 
+  // Settings › Trash (admin): projects moved to the trash, with Restore and Delete permanently.
+  function trashPanel() {
+    if (!ctx.api || !ctx.api.listTrash) return needsServer();
+    const host = h('div');
+    let retention = null;
+    function retentionText() {
+      return retention ? 'Deleted projects are kept for ' + retention + ' day' + (retention === 1 ? '' : 's') + '.' : 'Deleted projects are kept here until an admin deletes them permanently.';
+    }
+    function restoreProject(t) {
+      return ctx.api.restoreTrash(t.name).then(function () {
+        ctx.toast('Restored ' + t.name, 'ok');
+        if (ctx.reloadProjects) ctx.reloadProjects();
+        list.clear();
+        return load();
+      }, function (e) {
+        if (!destroyed) list.fail(actErr('Could not restore ' + t.name, e), function () { return restoreProject(t); });
+      });
+    }
+    function purgeProject(t) {
+      return ctx.api.purgeTrash(t.name).then(function () {
+        ctx.toast('Deleted ' + t.name + ' permanently', 'ok');
+        list.clear();
+        return load();
+      }, function (e) {
+        if (!destroyed) list.fail(actErr('Could not delete ' + t.name, e), function () { return purgeProject(t); });
+      });
+    }
+    const dt = createTable(host, {
+      key: 'settings.trash', scope: '', caption: 'Trash', noun: { one: 'project', many: 'projects' },
+      url: urlBinding(ctx), highlight: hlOf(ctx), csvName: 'trash.csv', rowId: function (t) { return t.name; },
+      rowAttrs: function (t) { return { 'data-trash': t.name }; },
+      empty: emptyFor(function () { return dt; }, function () { return { title: 'Nothing in the trash.', text: retentionText() }; }),
+      columns: [
+        { key: 'name', header: 'Project', cell: function (t) { return mono(t.name); }, sticky: true },
+        timeCol('trashed_at', 'Trashed', function (t) { return t.trashed_at; }),
+        { key: 'trashed_by', header: 'By', hideOnMobile: true, value: function (t) { return t.trashed_by || ''; } },
+        { key: 'rooms', header: 'Rooms', align: 'right', hideOnMobile: true, value: function (t) { return Number(t.rooms) || 0; } },
+        { key: 'devices', header: 'Devices', align: 'right', value: function (t) { return Number(t.devices) || 0; } },
+        actions(function (t) {
+          return [
+            h('button', { type: 'button', class: 'small', 'data-act': 'restore', 'aria-label': 'Restore ' + t.name, onclick: function () { restoreProject(t); } }, 'Restore'),
+            h('button', { type: 'button', class: 'small danger', 'data-act': 'purge', 'aria-label': 'Delete ' + t.name + ' permanently', onclick: function () {
+              confirmScope(ctx, { verb: 'Delete permanently', noun: 'project ' + t.name, danger: true, ok: 'Delete permanently',
+                detail: 'The project, its history and its files are removed from this server for good. Backups are not affected.' }).then(function (y) {
+                if (y) purgeProject(t);
+              });
+            } }, 'Delete permanently'),
+          ];
+        }),
+      ],
+    });
+    const list = listState(dt);
+    const note = h('p', { class: 'muted adm-trash-note' }, retentionText());
+    function load() {
+      list.busy();
+      return ctx.api.listTrash().then(function (r) {
+        if (destroyed) return;
+        const days = Number(r && r.retention_days);
+        retention = days > 0 ? days : null;
+        note.textContent = retentionText();
+        list.done((r && r.items) || []);
+      }, function (e) { if (!destroyed) list.fail(e, load); });
+    }
+    load();
+    return {
+      nodes: [
+        h('section', { class: 'adm-card', 'data-card': 'trash' }, [
+          h('h3', null, 'Trash'),
+          h('p', { class: 'muted' }, 'Projects moved to the trash from Settings › Project can be restored here with their history and files. ' + 'Deleting permanently cannot be undone.'),
+          note,
+        ]),
+        host,
+      ],
+      tables: [dt], primary: dt,
+    };
+  }
+
   function sharingPanel() {
     if (!ctx.api) return needsServer();
     const host = h('div');
@@ -1376,6 +1818,245 @@ export function mountSettings(el, ctx) {
     };
   }
 
+  // Settings › Assistant (P4C, admin): the language model behind the Helper. Reads the provider
+  // catalogue and the saved settings from the P4A endpoints; a server without them (404) shows a
+  // note instead of the form. Fields the server marks `source: env` are disabled with a hint.
+  function assistantPanel() {
+    if (!ctx.api || !ctx.api.llmProviders) return needsServer();
+    const host = h('div', { class: 'adm-llm', 'data-card': 'llm-host' });
+    const state = h('div', { class: 'adm-state', 'aria-live': 'polite' });
+    host.appendChild(state);
+    state.appendChild(skeleton('cards', 2));
+    let providers = [];
+    let settings = null;
+    let clearKey = false;
+    let lastDefault = '';
+
+    function providerOf(id) { return providers.filter(function (p) { return p.id === id; })[0] || null; }
+    function labelOf(p) { return p.label || LLM_LABELS[p.id] || p.id; }
+    function fromEnv(field) { return !!(settings && settings.source && settings.source[field] === 'env'); }
+    function envHint(field) { return h('div', { class: 'muted adm-llm-env', 'data-env': field }, 'Set by environment (' + (LLM_ENV[field] || ('FATHOM_LLM_' + field.toUpperCase())) + ')'); }
+    function field(label, input, key, extra) {
+      const wrap = fld(label, h('div', { class: 'adm-llm-field' }, [input].concat(extra || [])));
+      if (key && fromEnv(key)) {
+        input.disabled = true;
+        wrap.classList.add('adm-llm-from-env');
+        wrap.lastChild.appendChild(envHint(key));
+      }
+      return wrap;
+    }
+    function presetsOf(p) {
+      const given = (p && p.presets) || {};
+      return LLM_PRESETS.map(function (x) { return { id: x[0], label: x[1], url: given[x[0]] || x[2] }; });
+    }
+
+    function form() {
+      const s = settings || {};
+      const provSel = h('select', { id: 'adm-llm-provider', 'aria-label': 'Provider' }, providers.map(function (p) { return h('option', { value: p.id, selected: p.id === s.provider ? true : null }, labelOf(p)); }));
+      if (!providerOf(s.provider) && providers.length) provSel.value = providers[0].id;
+      const url = h('input', { id: 'adm-llm-url', type: 'url', inputmode: 'url', autocomplete: 'off', spellcheck: 'false', placeholder: 'https://…', value: s.base_url || '' });
+      const presets = h('div', { class: 'row adm-llm-presets', role: 'group', 'aria-label': 'Local server presets' });
+      const key = h('input', { id: 'adm-llm-key', type: 'password', autocomplete: 'new-password', placeholder: s.api_key_set ? 'Stored' : 'Paste the API key', 'aria-label': 'API key' });
+      const keyClear = h('button', { type: 'button', class: 'small ghost adm-llm-clear-key', 'data-act': 'clear-key' }, 'Clear key');
+      const keyState = h('span', { class: 'muted adm-llm-key-state' }, s.api_key_set ? 'A key is stored; typing replaces it.' : 'No key stored.');
+      const apiSel = h('select', { id: 'adm-llm-api', 'aria-label': 'OpenAI API' }, [['chat', 'Chat Completions'], ['responses', 'Responses']].map(function (o) { return h('option', { value: o[0], selected: (s.api || 'chat') === o[0] ? true : null }, o[1]); }));
+      const model = h('input', { id: 'adm-llm-model', list: 'adm-llm-models', autocomplete: 'off', spellcheck: 'false', placeholder: 'e.g. gpt-4o-mini', value: s.model || '' });
+      const models = h('datalist', { id: 'adm-llm-models' });
+      const fetchBtn = h('button', { type: 'button', class: 'small', 'data-act': 'fetch-models' }, 'Fetch models');
+      const modelsErr = errSlot('adm-llm-models-err');
+      const temp = h('input', { id: 'adm-llm-temp', type: 'number', inputmode: 'decimal', step: '0.1', min: '0', max: '2', value: s.temperature === undefined || s.temperature === null ? '' : String(s.temperature) });
+      const maxTok = h('input', { id: 'adm-llm-max', type: 'number', inputmode: 'numeric', step: '1', min: '1', value: s.max_tokens === undefined || s.max_tokens === null ? '' : String(s.max_tokens) });
+      const testBtn = h('button', { type: 'button', 'data-act': 'test' }, 'Test connection');
+      const testOut = h('span', { class: 'adm-llm-test-out', role: 'status', 'aria-live': 'polite' });
+      const web = h('input', { type: 'checkbox', id: 'adm-llm-web' });
+      web.checked = !!s.web_lookup;
+      const cap = h('input', { id: 'adm-llm-cap', type: 'number', inputmode: 'numeric', step: '1', min: '0', value: s.daily_cap === undefined || s.daily_cap === null ? '' : String(s.daily_cap) });
+      const save = h('button', { type: 'button', class: 'primary', 'data-act': 'save' }, 'Save');
+      const saveErr = errSlot('adm-llm-save-err');
+      const saved = h('span', { class: 'muted adm-llm-saved', role: 'status' });
+
+      const urlField = field('Base URL', url, 'base_url', [presets]);
+      const keyField = field('API key', key, 'api_key', [h('div', { class: 'row adm-llm-key-row' }, [keyState, keyClear])]);
+      const apiField = field('API', apiSel, 'api');
+      const modelField = field('Model', model, 'model', [models, h('div', { class: 'row adm-llm-model-row' }, [fetchBtn]), modelsErr.el]);
+
+      function drawPresets(p) {
+        presets.innerHTML = '';
+        presets.hidden = !p || p.id !== 'openai_compat';
+        if (presets.hidden) return;
+        presetsOf(p).forEach(function (x) {
+          presets.appendChild(h('button', { type: 'button', class: 'chip adm-llm-preset', 'data-preset': x.id, title: x.url, disabled: url.disabled ? true : null, onclick: function () {
+            url.value = x.url;
+            lastDefault = x.url;
+            url.dispatchEvent(new Event('input', { bubbles: true }));
+          } }, x.label));
+        });
+      }
+      function syncProvider(initial) {
+        const p = providerOf(provSel.value);
+        const def = (p && p.default_base_url) || '';
+        if (!url.disabled && (initial ? !url.value : (!url.value.trim() || url.value.trim() === lastDefault))) url.value = def;
+        lastDefault = def;
+        drawPresets(p);
+        apiField.hidden = !p || p.id !== 'openai';
+        const needsKey = !p || p.needs_key !== false;
+        keyField.classList.toggle('adm-llm-optional', !needsKey);
+        key.placeholder = s.api_key_set ? 'Stored' : (needsKey ? 'Paste the API key' : 'Optional for a local server');
+        fetchBtn.disabled = !(p && p.lists_models) || model.disabled;
+        fetchBtn.title = p && p.lists_models ? '' : 'This provider does not list its models; type the model name.';
+        keyClear.hidden = !s.api_key_set || clearKey || key.disabled;
+      }
+      provSel.addEventListener('change', function () { syncProvider(false); testOut.textContent = ''; });
+      keyClear.addEventListener('click', function () {
+        clearKey = true;
+        key.value = '';
+        key.placeholder = 'Paste the API key';
+        keyState.textContent = 'The stored key is removed when you save.';
+        keyClear.hidden = true;
+      });
+      key.addEventListener('input', function () { if (key.value) { clearKey = false; keyState.textContent = 'The new key is saved when you save.'; } });
+      // only a typed key travels; an untouched field keeps the stored one
+      function keyBody() {
+        const out = {};
+        if (fromEnv('api_key')) return out;
+        if (key.value) out.api_key = key.value;
+        else if (clearKey) out.clear_api_key = true;
+        return out;
+      }
+      function connBody() {
+        return Object.assign({ provider: provSel.value, base_url: url.value.trim() }, key.value ? { api_key: key.value } : {});
+      }
+      fetchBtn.addEventListener('click', function () {
+        modelsErr.clear();
+        fetchBtn.disabled = true;
+        fetchBtn.textContent = 'Fetching\u2026';
+        ctx.api.llmModels(connBody()).then(function (r) {
+          const list = (r && r.models) || [];
+          models.innerHTML = '';
+          list.forEach(function (mname) { models.appendChild(h('option', { value: typeof mname === 'string' ? mname : (mname && mname.id) || '' })); });
+          if (!list.length) modelsErr.show({ message: 'The server listed no models.', status: 200 }, null);
+          else if (!model.value) model.value = typeof list[0] === 'string' ? list[0] : (list[0].id || '');
+          model.setAttribute('data-models', String(list.length));
+        }, function (e) {
+          if (!destroyed) modelsErr.show(actErr('Could not fetch the models', e), null);
+        }).then(function () { if (destroyed) return; fetchBtn.disabled = false; fetchBtn.textContent = 'Fetch models'; });
+      });
+      testBtn.addEventListener('click', function () {
+        testBtn.disabled = true;
+        testBtn.setAttribute('aria-busy', 'true');
+        testOut.className = 'adm-llm-test-out';
+        testOut.innerHTML = '';
+        testOut.appendChild(h('span', { class: 'adm-llm-spin', 'aria-hidden': 'true' }));
+        testOut.appendChild(document.createTextNode(' Testing\u2026'));
+        ctx.api.llmTest(Object.assign(connBody(), { model: model.value.trim() })).then(function (r) {
+          if (destroyed) return;
+          r = r || {};
+          const ok = r.ok !== false;
+          testOut.className = 'adm-llm-test-out ' + (ok ? 'ok' : 'warn');
+          testOut.setAttribute('data-ok', ok ? 'true' : 'false');
+          testOut.textContent = ok
+            ? 'OK' + (r.model ? ' \u00b7 ' + r.model : '') + (typeof r.latency_ms === 'number' ? ' \u00b7 ' + Math.round(r.latency_ms) + ' ms' : '')
+            : 'Failed' + (r.detail ? ' \u00b7 ' + r.detail : '');
+        }, function (e) {
+          if (destroyed) return;
+          testOut.className = 'adm-llm-test-out warn';
+          testOut.setAttribute('data-ok', 'false');
+          testOut.textContent = 'Failed \u00b7 ' + msg(e);
+        }).then(function () { if (destroyed) return; testBtn.disabled = false; testBtn.removeAttribute('aria-busy'); });
+      });
+      function num(input, integer) {
+        const v = input.value.trim();
+        if (v === '') return null;
+        const n = Number(v);
+        if (isNaN(n)) return null;
+        return integer ? Math.round(n) : n;
+      }
+      function body() {
+        const out = {};
+        const put = function (k, v) { if (!fromEnv(k)) out[k] = v; };
+        put('provider', provSel.value);
+        put('base_url', url.value.trim());
+        put('model', model.value.trim());
+        if (provSel.value === 'openai') put('api', apiSel.value);
+        put('temperature', num(temp, false));
+        put('max_tokens', num(maxTok, true));
+        put('web_lookup', web.checked);
+        put('daily_cap', num(cap, true));
+        return Object.assign(out, keyBody());
+      }
+      const doSave = function () {
+        saveErr.clear();
+        saved.textContent = '';
+        save.disabled = true;
+        return ctx.api.saveLlmSettings(body()).then(function (r) {
+          if (destroyed) return;
+          settings = r && r.provider ? r : Object.assign({}, settings, body(), { api_key_set: key.value ? true : (clearKey ? false : s.api_key_set) });
+          clearKey = false;
+          key.value = '';
+          s.api_key_set = settings.api_key_set;
+          key.placeholder = s.api_key_set ? 'Stored' : 'Paste the API key';
+          keyState.textContent = s.api_key_set ? 'A key is stored; typing replaces it.' : 'No key stored.';
+          keyClear.hidden = !s.api_key_set;
+          saved.textContent = 'Saved';
+          ctx.toast('Assistant settings saved', 'ok');
+        }, function (e) { if (!destroyed) saveErr.show(actErr('Could not save the assistant settings', e), doSave); }).then(function () { if (!destroyed) save.disabled = false; });
+      };
+      save.addEventListener('click', doSave);
+      syncProvider(true);
+
+      const llmCard = h('section', { class: 'adm-card adm-form adm-llm-card', 'data-card': 'llm' }, [
+        h('h3', null, 'Language model'),
+        h('p', { class: 'muted adm-llm-intro' }, 'The Helper answers from the project data on its own. A model adds plain-language notes and proposals; nothing is applied without a click.'),
+        field('Provider', provSel, 'provider'),
+        urlField,
+        keyField,
+        apiField,
+        modelField,
+        field('Temperature', temp, 'temperature'),
+        field('Max tokens', maxTok, 'max_tokens'),
+        h('div', { class: 'row adm-llm-test-row' }, [testBtn, testOut]),
+      ]);
+      const behaviourCard = h('section', { class: 'adm-card adm-form adm-llm-card', 'data-card': 'behaviour' }, [
+        h('h3', null, 'Behaviour'),
+        field('Web lookup for manuals', h('label', { class: 'chk adm-llm-toggle', for: 'adm-llm-web' }, [web, h('span', null, 'Let the model look up equipment manuals online')]), 'web_lookup',
+          [h('div', { class: 'muted adm-llm-hint' }, 'When off, the assistant never contacts the internet.')]),
+        field('Daily request cap', cap, 'daily_cap', [h('div', { class: 'muted adm-llm-hint' }, 'Model requests per day for this server; 0 or empty means no cap.')]),
+      ]);
+      return [
+        h('div', { class: 'adm-grid adm-llm-grid' }, [llmCard, behaviourCard]),
+        h('div', { class: 'row adm-llm-actions' }, [save, saved]),
+        saveErr.el,
+      ];
+    }
+
+    function load() {
+      state.innerHTML = '';
+      state.appendChild(skeleton('cards', 2));
+      return Promise.all([ctx.api.llmProviders(), ctx.api.llmSettings()]).then(function (r) {
+        if (destroyed) return;
+        providers = ((r[0] && r[0].providers) || []).filter(function (p) { return p && p.id; });
+        settings = r[1] || {};
+        state.innerHTML = '';
+        if (!providers.length) {
+          host.appendChild(h('p', { class: 'muted adm-llm-missing' }, 'This server lists no language-model providers.'));
+          return;
+        }
+        form().forEach(function (n) { host.appendChild(n); });
+      }, function (e) {
+        if (destroyed) return;
+        state.innerHTML = '';
+        if (isMissing(e)) {
+          host.appendChild(h('section', { class: 'adm-card', 'data-card': 'llm-missing' }, [h('h3', null, 'Language model'),
+            h('p', { class: 'muted adm-llm-missing' }, 'This server has no language-model settings yet (it needs a newer Fathom). The Helper keeps answering from the project data; a model can be set with FATHOM_LLM_URL and FATHOM_LLM_MODEL.')]));
+          return;
+        }
+        state.appendChild(inlineError(actErr('Could not load the assistant settings', e), load));
+      });
+    }
+    load();
+    return { nodes: [h('h3', null, 'Assistant'), host], tables: [] };
+  }
+
   function offlinePanel() {
     const secure = window.isSecureContext && 'serviceWorker' in navigator;
     return { nodes: [
@@ -1385,7 +2066,7 @@ export function mountSettings(el, ctx) {
     ], tables: [] };
   }
 
-  const PANELS = { project: projectPanel, rooms: roomsPanel, systems: systemsPanel, locations: locationsPanel, networks: networksPanel, templates: templatesPanel, users: usersPanel, backups: backupsPanel, sharing: sharingPanel, offline: offlinePanel };
+  const PANELS = { project: projectPanel, rooms: roomsPanel, systems: systemsPanel, locations: locationsPanel, networks: networksPanel, templates: templatesPanel, users: usersPanel, invites: invitesPanel, backups: backupsPanel, sharing: sharingPanel, suggestions: suggestionsPanel, assistant: assistantPanel, offline: offlinePanel, trash: trashPanel };
 
   function clearPanel() {
     if (cur) cur.tables.forEach(function (t) { t.destroy(); });

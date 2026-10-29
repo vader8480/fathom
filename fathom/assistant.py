@@ -7,7 +7,10 @@ suspect segment, build numbered checks from the checklists (kinds, media,
 template ``checks``, generic) and propose a note for the map. The optional LLM
 bridge (``llm.py``) only adds ``llm.text``; it never changes the deterministic
 fields and its output is never executed. Suggested ops are only proposals the
-user must confirm.
+user must confirm. With a tool-calling provider the grounded loop of
+``assistant_tools`` runs afterwards (§6.9.6 "tool loop"); edits it suggests
+come back as a ``proposal`` (``assistant_edits``) that is applied only through
+``POST …/assistant/apply``.
 """
 
 from __future__ import annotations
@@ -623,13 +626,26 @@ def _empty_answer(question: str, intent: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def answer(doc: Doc, question: str, *, room: Optional[str] = None, overlay: Optional[Dict[str, Any]] = None, use_llm: bool = True,
-           history: Optional[List[Dict[str, str]]] = None, base_revision: Optional[int] = None) -> Dict[str, Any]:
-    """Answer a question about the system (§5.10). Raises ``ValueError`` for an empty question."""
+           history: Optional[List[Dict[str, str]]] = None, base_revision: Optional[int] = None,
+           ctx: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Answer a question about the system (§5.10). Raises ``ValueError`` for an empty question.
+
+    ``ctx`` (optional, server-side) feeds the tool-calling LLM path (§6.9.6 tool loop): ``pdir``
+    (attachments), ``project``, ``username``, ``role``, ``attachments`` (ids the user attached),
+    ``manual_text`` (pasted reference text) and ``provider`` (test injection). The deterministic
+    fields never depend on it."""
     from . import search as S
 
     q = (question or "").strip()
     if not q:
         raise ValueError("empty question")
+    if (ctx or {}).get("mode") == "draft":
+        # Draft a room (§6.9.5b): the text is a room description, not a question; the deterministic drafter
+        # (or the tool loop in draft mode) returns one add_device + connect proposal instead of the pipeline below.
+        from .assistant_draft import answer_draft
+
+        return answer_draft(doc, q, str(room or ""), use_llm=use_llm, history=history, base_revision=base_revision,
+                            ctx=dict(ctx or {}, overlay=overlay))
     cl = load_checklists()
     index = S.build_index(doc, overlay)
     intent, det = _parse(doc, q, room, index, cl, overlay)
@@ -637,8 +653,8 @@ def answer(doc: Doc, question: str, *, room: Optional[str] = None, overlay: Opti
     res["unresolved"] = det["unresolved"]
     res["notes"].extend(det.get("notes") or [])
     devs = T.device_map(doc, overlay)
-    ctx = {"doc": doc, "overlay": overlay, "intent": intent, "det": det, "devs": devs, "cl": cl,
-           "base_revision": base_revision if base_revision is not None else doc.get("revision", 0)}
+    ctx = {"doc": doc, "overlay": overlay, "intent": intent, "det": det, "devs": devs, "cl": cl, "room": room, "index": index,
+           "base_revision": base_revision if base_revision is not None else doc.get("revision", 0), "extra": dict(ctx or {})}
     if intent["type"] == "troubleshoot":
         _troubleshoot(res, ctx)
     elif intent["type"] == "trace":
@@ -653,6 +669,11 @@ def answer(doc: Doc, question: str, *, room: Optional[str] = None, overlay: Opti
         else:
             res["summary"] = "Sorry, I couldn't tell which device you mean. Try naming it, e.g. \"Restream has no audio\"."
     res["llm"] = _llm_polish(res, ctx, use_llm, history)
+    prop = res["llm"].pop("_proposal", None)
+    if isinstance(prop, dict):
+        # the LLM's confirmable proposal (§5.10) replaces the deterministic suggestion
+        res["proposal"] = prop
+        res.pop("suggestion", None)
     return res
 
 
@@ -1110,11 +1131,36 @@ def _llm_polish(res: Dict[str, Any], ctx: Dict[str, Any], use_llm: bool, history
     if not use_llm or assistant_cfg.get("llm") is False:
         return {"used": False}
     try:
+        from . import assistant_tools as AT
         from . import llm
     except Exception:  # pragma: no cover
         return {"used": False}
+    extra = ctx.get("extra") or {}
+    prov = extra.get("provider") or AT.provider()
+    if prov is not None:
+        # grounded tool loop (§6.9.6 tool loop): the model reads the project through tools and may propose edits
+        tctx = {"doc": ctx["doc"], "overlay": ctx["overlay"], "index": ctx.get("index"), "room": ctx["intent"].get("room") or ctx.get("room") or "",
+                "base_revision": ctx["base_revision"], "deterministic": {"summary": res.get("summary"), "paths": res.get("paths"), "checks": res.get("checks")}}
+        for k in ("pdir", "project", "username", "role", "attachments", "manual_text"):
+            if extra.get(k) is not None:
+                tctx[k] = extra[k]
+        out = AT.answer_with_tools(ctx["doc"], res["question"], history, tctx, provider_=prov)
+        if out.get("reason") == "cap":
+            return {"used": False, "reason": "cap"}
+        if out.get("error"):
+            r: Dict[str, Any] = {"used": False, "error": str(out["error"])}
+            if out.get("proposal"):
+                r["_proposal"] = out["proposal"]
+            return r
+        r = {"used": True, "model": out.get("model"), "text": str(out.get("text") or ""), "tools": list(out.get("used_tools") or []),
+             "steps": out.get("steps"), "finish": out.get("finish")}
+        if out.get("proposal"):
+            r["_proposal"] = out["proposal"]
+        return r
     if not llm.configured():
         return {"used": False}
+    if not AT.reserve_request(AT.effective_config().get("daily_cap")):
+        return {"used": False, "reason": "cap"}
     try:
         text = llm.chat(_llm_messages(res, ctx, history, llm.max_context()))
         return {"used": True, "model": llm.info().get("model"), "text": text}

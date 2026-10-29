@@ -2,6 +2,7 @@
 // them with base_revision, handles rebases, conflicts and offline queueing.
 
 import { touchedRefs } from './model-core.js';
+import { formatShortCode, parseShortCode } from './search-core.js';
 
 export class ApiError extends Error {
   constructor(message, status, code, details) {
@@ -11,6 +12,12 @@ export class ApiError extends Error {
     this.code = code || '';
     this.details = details || {};
   }
+}
+
+// A `/changes` batch refused because the project is locked (settings.locked, §3.28 FR-UX-17):
+// the server answers 423 with code "locked".
+export function isLockedError(e) {
+  return !!e && (e.code === 'locked' || e.status === 423);
 }
 
 function qs(params) {
@@ -61,7 +68,7 @@ export function createApi(opts) {
       return p.then(function (data) {
         if (!res.ok) {
           const d = isJson && data ? data : {};
-          throw new ApiError(d.error || (typeof data === 'string' && data ? data.slice(0, 200) : 'HTTP ' + res.status), res.status, d.code || '', d.details || {});
+          throw new ApiError(d.error || (typeof data === 'string' && data ? data.slice(0, 200) : 'HTTP ' + res.status), res.status, d.code || '', d.details || (typeof d.detail === 'string' && d.detail ? { detail: d.detail } : {}));
         }
         return { data: data, res: res };
       });
@@ -83,7 +90,20 @@ export function createApi(opts) {
     logout: function () { return send('DELETE', 'api/v2/session'); },
     listProjects: function () { return get('api/v2/projects'); },
     createProject: function (o) { return send('POST', 'api/v2/projects', { name: o.name, template: o.template || 'blank', org: o.org || '' }); },
-    deleteProject: function (name) { return send('DELETE', proj(name), undefined, { confirm: name }); },
+    // Moves the project to the trash (restorable from Settings › Trash); {purge: true} deletes it for good.
+    deleteProject: function (name, o) { o = o || {}; return send('DELETE', proj(name), undefined, { confirm: name, purge: o.purge ? 1 : '' }); },
+    listTrash: function () { return get('api/v2/trash'); },
+    restoreTrash: function (name) { return send('POST', 'api/v2/trash/' + enc(name) + '/restore', {}); },
+    purgeTrash: function (name) { return send('DELETE', 'api/v2/trash/' + enc(name)); },
+    lookupCode: function (code) { return get('api/v2/codes/' + enc(parseShortCode(code) || String(code || '').trim())); },
+    // Absolute link for a device short code (the QR / label target): <origin>/c/XXXX-XXXX.
+    codeLink: function (code) {
+      const path = base + 'c/' + formatShortCode(code);
+      if (typeof location === 'undefined' || !location.href) return path.charAt(0) === '/' ? path : '/' + path;
+      try { return new URL(path, location.href).href; } catch (e) { return path; }
+    },
+    labelPresets: function () { return get('api/v2/labels/presets'); },
+    deviceLabelsUrl: function (name, params) { return url(proj(name) + '/labels/devices', params); },
     getProject: function (name) {
       return request('GET', proj(name)).then(function (r) {
         const d = r.data || {};
@@ -141,10 +161,31 @@ export function createApi(opts) {
     tagPreview: function (name, scope, pattern) { return get(proj(name) + '/cables/tag-preview', { scope: scope, pattern: pattern }); },
     trace: function (name, params) { return get(proj(name) + '/trace', params); },
     search: function (name, q, o) { o = o || {}; return get(proj(name) + '/search', { q: q, limit: o.limit, kinds: o.kinds }); },
+    // Assistant (§5.10, P4B): payload {question, room, use_llm, history[{role, text, attachments?}],
+    // attachments?, manual_text?} is sent as given; the answer may carry llm, used_tools, proposal.
     ask: function (name, payload) { return send('POST', proj(name) + '/assistant', payload); },
+    // Applies a proposal the assistant returned: body {proposal | id, base_revision} -> {revision, applied, summary}; 423 when locked.
+    applyProposal: function (name, body) { return send('POST', proj(name) + '/assistant/apply', body || {}); },
+    // Language-model settings (P4A, admin): providers catalogue, saved settings, model list and a connection test.
+    llmProviders: function () { return get('api/v2/llm/providers'); },
+    llmSettings: function () { return get('api/v2/llm/settings'); },
+    saveLlmSettings: function (body) { return send('PUT', 'api/v2/llm/settings', body || {}); },
+    llmModels: function (body) { return send('POST', 'api/v2/llm/models', body || {}); },
+    llmTest: function (body) { return send('POST', 'api/v2/llm/test', body || {}); },
     qrUrl: function (name, device) { return url(proj(name) + '/qr/' + enc(device) + '.svg'); },
     rackSvgUrl: function (name, rack, face) { return url(proj(name) + '/racks/' + enc(rack) + '.svg', { face: face }); },
     floorplanImageUrl: function (name, fp, hide) { return url(proj(name) + '/floorplans/' + enc(fp) + '/image', { hide: hide }); },
+    // Cable runs on a plan (P5A, §5.7): paths, runs with lengths, totals and half-placed cables; `scene` optional.
+    planRuns: function (name, fp, scene) { return get(proj(name) + '/floorplans/' + enc(fp) + '/runs', { scene: scene }); },
+    // Nearest shared path to a normalised point within `max` (normalised units) -> {path, point} | {path: null}.
+    planSnap: function (name, fp, point, max) { return send('POST', proj(name) + '/floorplans/' + enc(fp) + '/runs/snap', { point: point, max: max }); },
+    // body {cables: [ids] | all: true, base_revision, round_to} -> {revision, updated [{cable, from_m, to_m}], skipped}; 409 stale, 423 locked.
+    planEstimate: function (name, fp, body) { return send('POST', proj(name) + '/floorplans/' + enc(fp) + '/runs/estimate', body || {}); },
+    // Plan export (P5C): fmt svg|png|pdf; opts {runs: bool, scene}.
+    floorplanExportUrl: function (name, fp, fmt, opts) {
+      opts = opts || {};
+      return url(proj(name) + '/floorplans/' + enc(fp) + '.' + (fmt || 'svg'), { runs: opts.runs ? 1 : '', scene: opts.scene });
+    },
     fileUrl: function (name, att) { return url(proj(name) + '/files/' + enc(att.id) + '/' + enc(att.name || 'file')); },
     deleteFile: function (name, attId) { return send('DELETE', proj(name) + '/files/' + enc(attId)); },
     builds: function (name) { return get(proj(name) + '/builds'); },
@@ -184,7 +225,18 @@ export function createApi(opts) {
     problems: function (name, params) { return get(proj(name) + '/problems', params); },
     // body: a plain object (JSON) or a FormData with text/device/page/name/device_status and an optional photo
     reportProblem: function (name, body) { return send('POST', proj(name) + '/problems', body); },
+    // "Suggest an improvement" (FR-UX-18): a problem report with kind "suggestion"; body {text, name?, url?, device?, page?}
+    reportSuggestion: function (name, body) { return send('POST', proj(name) + '/problems', Object.assign({}, body || {}, { kind: 'suggestion' })); },
     patchProblem: function (name, id, patch) { return send('PATCH', proj(name) + '/problems/' + enc(id), patch); },
+    // Scenes (FR-SCN, §5.6 "Scenes"): `sid` may be the literal 'base' where the server allows it.
+    scenes: function (name) { return get(proj(name) + '/scenes'); },
+    createScene: function (name, body) { return send('POST', proj(name) + '/scenes', body || {}); },
+    patchScene: function (name, sid, body) { return send('PATCH', proj(name) + '/scenes/' + enc(sid), body || {}); },
+    deleteScene: function (name, sid) { return send('DELETE', proj(name) + '/scenes/' + enc(sid)); },
+    activateScene: function (name, sid) { return send('POST', proj(name) + '/scenes/' + enc(sid || 'base') + '/activate', {}); },
+    saveScene: function (name, sid) { return send('POST', proj(name) + '/scenes/' + enc(sid) + '/save', {}); },
+    sceneDiff: function (name, sid, against) { return get(proj(name) + '/scenes/' + enc(sid) + '/diff', { against: against || 'base' }); },
+    sceneDoc: function (name, sid) { return get(proj(name) + '/scenes/' + enc(sid || 'base') + '/doc'); },
     shares: function (name) { return get(proj(name) + '/shares'); },
     createShare: function (name, o) { return send('POST', proj(name) + '/shares', o || {}); },
     deleteShare: function (name, token) { return send('DELETE', proj(name) + '/shares/' + enc(token)); },
@@ -347,6 +399,18 @@ export class ChangeQueue extends EventTarget {
         self._emit(err && err.status ? 'error' : 'offline', { retryIn: delay });
         self._schedule(delay);
         return null;
+      }
+      // Someone locked editing (423): every queued op would be refused too, so the whole queue is
+      // dropped at once instead of one batch per retry; the shell shows the lock banner after resync.
+      if (isLockedError(err)) {
+        let all = [];
+        self._items.forEach(function (it) { all = all.concat(it.ops); });
+        self._items = [];
+        self._persist();
+        self._error = err.message;
+        self._emit('error', { dropped: all.length, locked: true });
+        self.dispatchEvent(makeEvent('dropped', { error: err, ops: all, locked: true }));
+        return self.resync().catch(function () { return null; });
       }
       // validation / permission errors: drop this batch so the queue does not wedge
       self._items.splice(0, batch.count);

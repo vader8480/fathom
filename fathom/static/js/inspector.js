@@ -14,8 +14,9 @@ import { selToString } from './router-core.js';
 import {
   devicePorts, portLabel, deviceTitle, disciplineOf, mediumInfo, setPortsOps, deleteDeviceOps, duplicateDeviceOps,
   connectOps, disconnectOps, repatchOps, expandPortGroups, newId, slug, formatLength, parseLength, deepClone,
-  normalizeMac,
+  normalizeMac, conditionsOf, containerDevices, containerContents, deepEqual,
 } from './model-core.js';
+import { formatShortCode } from './search-core.js';
 import { duplicateHints, fetchDuplicates, openMergeDialog } from './merge-ui.js';
 import { inlineError, reviewBadge } from './feedback.js';
 import {
@@ -517,7 +518,13 @@ export function mountInspector(el, ctx) {
       root.appendChild(section('console', 'Console channels (' + eff.channels.length + ')' + (eff.source === 'overlay' ? ' \u00b7 imported' : ''), consoleSection(d, eff), true));
     }
     root.appendChild(section('rack', 'Rack', rackFields(d)));
+    const isBox = d.kind === 'container';
+    const boxes = containerDevices(store.doc).filter(function (c) { return c.id !== id; });
     root.appendChild(section('inventory', 'Inventory', [
+      fieldRow('Condition', boundSelect('devices', id, ['inventory', 'condition'], conditionsOf(vocab, ctx.meta), { empty: '\u2014', label: 'Set condition' })),
+      isBox ? null : fieldRow('Stored in', boundSelect('devices', id, ['container'], boxes.map(function (c) { return [c.id, c.name || c.id]; }), { empty: '\u2014', label: 'Set container' })),
+      isBox ? holdsBlock(d) : null,
+      codeRow(d),
       fieldRow('Serial', bound('devices', id, ['inventory', 'serial'])),
       fieldRow('Asset tag', bound('devices', id, ['inventory', 'asset_tag'])),
       fieldRow('Firmware', bound('devices', id, ['inventory', 'firmware'])),
@@ -528,6 +535,7 @@ export function mountInspector(el, ctx) {
       fieldRow('Currency', bound('devices', id, ['inventory', 'currency'], { placeholder: (store.doc.settings && store.doc.settings.currency) || 'USD' })),
       fieldRow('PO', bound('devices', id, ['inventory', 'po'])),
       fieldRow('Notes', bound('devices', id, ['inventory', 'notes'], { multiline: true })),
+      customFieldsBlock(d),
     ]));
     root.appendChild(section('net', 'Network interfaces (' + (d.interfaces || []).length + ')', interfacesEditor(d)));
     root.appendChild(section('dmx', 'DMX', [
@@ -904,6 +912,124 @@ export function mountInspector(el, ctx) {
       render();
     } }, 'Add interface'));
     return out;
+  }
+
+  // -------------------------------------------------- inventory extras (FR-INV-10..13)
+
+  const FIELD_KEY_MAX = 40;
+  const FIELD_MAX = 32;
+
+  // Short code row: XXXX-XXXX, a Copy link button and the device QR as a thumbnail (same image the QR section shows).
+  function codeRow(d) {
+    const code = d.short_code ? formatShortCode(d.short_code) : '';
+    const row = h('div', { class: 'ins-code', 'data-code': code || '' });
+    if (!code) {
+      row.appendChild(h('span', { class: 'muted', 'aria-label': 'No code yet', text: '\u2014' }));
+      return fieldRow('Code', h('div', { class: 'ins-code-wrap' }, [row]));
+    }
+    const link = ctx.api && ctx.api.codeLink ? ctx.api.codeLink(code) : '';
+    row.appendChild(h('code', { class: 'ins-code-text', text: code }));
+    if (link) {
+      row.appendChild(h('button', { type: 'button', class: 'small chip ins-copy-link', 'data-copy': link, title: link, 'aria-label': 'Copy link for ' + d.name, onclick: function () {
+        const done = function () { ctx.toast('Link copied: ' + link, 'ok'); };
+        const fail = function () { ctx.toast('Could not copy. The link is ' + link, 'warn'); };
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(link).then(done, fail); return; }
+        } catch (e) { /* fall through */ }
+        fail();
+      } }, 'Copy link'));
+    }
+    if (ctx.api && ctx.api.qrUrl) {
+      const thumb = h('img', { class: 'ins-qr ins-qr-thumb', alt: 'QR code for ' + d.name, src: ctx.api.qrUrl(ctx.project, d.id), loading: 'lazy' });
+      thumb.addEventListener('error', function () { thumb.classList.add('hidden'); });
+      row.appendChild(thumb);
+    }
+    return fieldRow('Code', h('div', { class: 'ins-code-wrap' }, [row]));
+  }
+
+  // A container lists what it holds; each entry selects that device.
+  function holdsBlock(d) {
+    const items = containerContents(store.doc, d.id).sort(function (a, b) { return String(a.name || a.id).localeCompare(String(b.name || b.id), undefined, { numeric: true }); });
+    const body = items.length
+      ? h('ul', { class: 'ins-holds' }, items.map(function (x) {
+        return h('li', null, [selLink({ type: 'device', id: x.id, device: x.id }, x.name || x.id, 'ins-holds-link', { 'data-device': x.id }), h('span', { class: 'muted', text: ' \u00b7 ' + (x.kind || 'device') })]);
+      }))
+      : h('div', { class: 'muted', text: 'Nothing stored here yet. Pick this container under "Stored in" on a device, or use "Put in container" in Inventory.' });
+    return h('div', { class: 'field ins-holds-row' }, [h('label', null, 'Holds (' + items.length + ')'), body]);
+  }
+
+  // Key/value editor for inventory.fields; the whole object is written on change/blur (nulls delete removed keys).
+  function customFieldsBlock(d) {
+    const id = d.id;
+    const cur = d.inventory && d.inventory.fields && typeof d.inventory.fields === 'object' ? d.inventory.fields : {};
+    const rows = h('div', { class: 'ins-fields-rows' });
+    const errHost = h('div', { class: 'ins-fields-err' });
+    const wrap = h('div', { class: 'ins-fields', 'data-fields': id });
+    function showError(msg) {
+      errHost.textContent = '';
+      if (msg) errHost.appendChild(inlineError({ message: msg }, null, { compact: true }));
+    }
+    function collect() {
+      const next = {};
+      let error = '';
+      Array.prototype.forEach.call(rows.querySelectorAll('.ins-field-row'), function (r) {
+        const kIn = r.querySelector('.ins-field-key');
+        const vIn = r.querySelector('.ins-field-val');
+        const k = kIn.value.trim().slice(0, FIELD_KEY_MAX);
+        kIn.classList.remove('ins-field-dup');
+        if (!k) return;
+        if (Object.prototype.hasOwnProperty.call(next, k)) { error = 'Duplicate field name \u201c' + k + '\u201d. Field names must be unique.'; kIn.classList.add('ins-field-dup'); return; }
+        next[k] = vIn.value;
+      });
+      if (!error && Object.keys(next).length > FIELD_MAX) error = 'At most ' + FIELD_MAX + ' custom fields per device.';
+      return { next: next, error: error };
+    }
+    function write() {
+      const c = collect();
+      showError(c.error);
+      if (c.error) return;
+      const e = find(store.doc.devices, id);
+      if (!e) return;
+      const before = e.inventory && e.inventory.fields && typeof e.inventory.fields === 'object' ? e.inventory.fields : {};
+      if (deepEqual(before, c.next)) return;
+      let patch;
+      if (!Object.keys(c.next).length) patch = null;
+      else {
+        patch = {};
+        Object.keys(before).forEach(function (k) { patch[k] = null; });
+        Object.keys(c.next).forEach(function (k) { patch[k] = c.next[k]; });
+      }
+      commit([{ op: 'merge', coll: 'devices', id: id, value: { inventory: { fields: patch } } }], 'Edit custom fields \u00b7 ' + (e.name || id));
+    }
+    function addRow(k, v, focus) {
+      const kIn = h('input', { type: 'text', class: 'ins-field-key', placeholder: 'Field', maxlength: String(FIELD_KEY_MAX), 'aria-label': 'Field name', autocomplete: 'off' });
+      kIn.value = k;
+      const vIn = h('input', { type: 'text', class: 'ins-field-val', placeholder: 'Value', 'aria-label': 'Value' + (k ? ' for ' + k : ''), autocomplete: 'off' });
+      vIn.value = v;
+      const rm = h('button', { type: 'button', class: 'small ghost danger ins-field-rm', 'aria-label': 'Remove field' + (k ? ' ' + k : ''), text: '\u2715' });
+      const r = h('div', { class: 'ins-field-row' }, [kIn, vIn, rm]);
+      if (ro()) { kIn.disabled = true; vIn.disabled = true; rm.disabled = true; }
+      kIn.addEventListener('change', write);
+      vIn.addEventListener('change', write);
+      kIn.addEventListener('blur', write);
+      vIn.addEventListener('blur', write);
+      rm.addEventListener('click', function () { r.remove(); write(); if (!rows.children.length) addBtn.focus(); });
+      rows.appendChild(r);
+      if (focus) kIn.focus();
+      return r;
+    }
+    Object.keys(cur).forEach(function (k) { addRow(k, cur[k] == null ? '' : String(cur[k]), false); });
+    const addBtn = h('button', { type: 'button', class: 'small chip ins-field-add', text: 'Add field' });
+    addBtn.addEventListener('click', function () {
+      if (rows.querySelectorAll('.ins-field-row').length >= FIELD_MAX) { showError('At most ' + FIELD_MAX + ' custom fields per device.'); return; }
+      addRow('', '', true);
+    });
+    if (ro()) addBtn.disabled = true;
+    wrap.appendChild(h('div', { class: 'ins-fields-head' }, [h('span', { class: 'muted', text: 'Custom fields' }), ro() ? null : addBtn]));
+    if (!Object.keys(cur).length && ro()) wrap.appendChild(h('div', { class: 'muted', text: 'None.' }));
+    wrap.appendChild(rows);
+    wrap.appendChild(errHost);
+    return wrap;
   }
 
   function attachmentsBlock(d) {

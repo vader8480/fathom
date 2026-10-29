@@ -12,9 +12,9 @@ import { h } from './dom.js';
 import { mountExplorer } from './explorer.js';
 import { mountEntityHeader } from './entity-header.js';
 import { createTable, openTableDialog } from './datatable.js';
-import { inlineError, skeleton, emptyState } from './feedback.js';
+import { inlineError, skeleton, emptyState, confirmScope } from './feedback.js';
 import { roomFacts, roomTabs, resolveTab, summaryCards, tabLabel, statusPill, primaryAddress, rackPosition, rackFacts } from './entity-core.js';
-import { indexDoc, devicePorts, portLabel, portRef, deviceTitle, formatLength, mediumInfo, addDeviceFromTemplateOps } from './model-core.js';
+import { indexDoc, devicePorts, portLabel, portRef, deviceTitle, formatLength, mediumInfo, addDeviceFromTemplateOps, disciplineOf } from './model-core.js';
 import { newRackOps } from './rack-core.js';
 import { bulkAdd } from './wizard.js';
 
@@ -27,6 +27,12 @@ const NOUNS = {
   problem: { one: 'problem', many: 'problems' },
 };
 const TAB_KIND = { devices: 'device', cables: 'cable', racks: 'rack', plans: 'floorplan', procedures: 'page' };
+// GET /api/v2/starters changes only when a user starter is saved or deleted; fetched once per page
+// load and dropped after either.
+let starterCache = null;
+// Tag chips of the Save-as-starter dialog (P6A); mirrors fathom.starters.STARTER_TAGS.
+const STARTER_TAGS = ['audio', 'video', 'lighting', 'network', 'inventory'];
+const TRASH = '\uD83D\uDDD1';
 
 function list(v) {
   return Array.isArray(v) ? v : [];
@@ -100,6 +106,11 @@ export function mount(el, ctx) {
 
   function readOnly() {
     return !!(store && store.readOnly) || ctx.role === 'viewer';
+  }
+
+  // Helper "Draft a room" (FR-AST-15): app.js loads assistant-ui.js on this event when it is not mounted yet.
+  function describeRoom(roomId) {
+    document.dispatchEvent(new CustomEvent('fathom:assistant-open', { detail: { mode: 'draft', room: roomId || '' } }));
   }
 
   function href(partial) {
@@ -294,6 +305,272 @@ export function mount(el, ctx) {
     }).catch(function (e) { toast((e && e.message) || 'Could not add the device', 'err'); });
   }
 
+  // ---------------------------------------------------------- add room from starter (P3C)
+
+  function errText(e, fallback) {
+    if (e && (e.code === 'locked' || e.status === 423)) return 'Editing is locked \u2014 the room was not added';
+    return (e && e.message) || fallback;
+  }
+
+  function loadStarters() {
+    if (starterCache) return Promise.resolve(starterCache);
+    if (!ctx.api || typeof ctx.api.request !== 'function') return Promise.reject(new Error('Starters need a connection to the server'));
+    return ctx.api.request('GET', 'api/v2/starters').then(function (r) {
+      starterCache = list(r && r.data && r.data.starters);
+      return starterCache;
+    });
+  }
+
+  function starterCounts(s) {
+    return [plural(s.devices || 0, NOUNS.device), plural(s.cables || 0, NOUNS.cable), plural(s.racks || 0, NOUNS.rack)].join(DOT);
+  }
+
+  function isAdmin() {
+    return ctx.role === 'admin';
+  }
+
+  function apiPath(parts) {
+    return parts.map(encodeURIComponent).join('/');
+  }
+
+  // Delete a user starter (admin): confirm, DELETE /api/v2/starters/<id>, then `done(id)` on success.
+  function deleteStarter(s, done) {
+    confirmScope(ctx, { verb: 'Delete', noun: 'starter ' + (s.label || s.id), danger: true, ok: 'Delete starter',
+      detail: 'Rooms already added from it are not affected.' }).then(function (yes) {
+      if (!yes || S.destroyed) return;
+      return ctx.api.request('DELETE', 'api/v2/' + apiPath(['starters', s.id])).then(function () {
+        starterCache = null;
+        toast('Deleted starter ' + (s.label || s.id), 'ok');
+        if (typeof done === 'function') done(s.id);
+      }).catch(function (e) { toast((e && e.message) || 'Could not delete the starter', 'err'); });
+    });
+  }
+
+  function openStarterDialog() {
+    if (typeof ctx.openDialog !== 'function' || !ctx.project) return;
+    const S2 = { starters: [], selected: '', dirty: false, busy: false, dlg: null };
+    const listEl = h('div', { class: 'pr-starter-groups', role: 'radiogroup', 'aria-label': 'Starter' }, skeleton('list'));
+    const nameInput = h('input', { type: 'text', class: 'pr-starter-name', id: 'pr-starter-name', maxlength: '80', autocomplete: 'off',
+      oninput: function () { S2.dirty = true; } });
+    const hint = h('p', { class: 'pr-starter-hint' }, 'The starter\u2019s devices, racks, cables, network and its power-up procedure are copied into a new room; ids are prefixed with the room so a starter can be added more than once.');
+    const errBox = h('div', { class: 'pr-starter-error', hidden: true });
+
+    function pick(id) {
+      S2.selected = id;
+      Array.prototype.forEach.call(listEl.querySelectorAll('.pr-starter'), function (card) {
+        const on = card.getAttribute('data-starter') === id;
+        card.setAttribute('aria-checked', on ? 'true' : 'false');
+        card.classList.toggle('pr-starter-on', on);
+      });
+      const s = S2.starters.filter(function (x) { return x.id === id; })[0];
+      if (s && (!S2.dirty || !nameInput.value.trim())) { nameInput.value = s.label || s.room_name || ''; S2.dirty = false; }
+    }
+
+    function card(s) {
+      return h('button', {
+        type: 'button', class: 'pr-starter', role: 'radio', 'aria-checked': 'false', 'data-starter': s.id, 'data-source': s.source || 'bundled',
+        onclick: function () { pick(s.id); },
+      }, [
+        h('span', { class: 'pr-starter-head' }, [h('span', { class: 'pr-starter-label' }, s.label || s.id), h('span', { class: 'pr-starter-counts' }, starterCounts(s))]),
+        h('span', { class: 'pr-starter-blurb' }, str(s.blurb)),
+        h('span', { class: 'pr-starter-tags' }, list(s.tags).map(function (t) { return h('span', { class: 'chip' }, t); })),
+      ]);
+    }
+
+    // A user starter's card sits in a wrapper with the admin-only trash button beside it (a button
+    // cannot nest inside the card button).
+    function userCard(s) {
+      const wrap = h('div', { class: 'pr-starter-user' + (isAdmin() ? ' pr-starter-user--del' : ''), 'data-starter': s.id }, card(s));
+      if (isAdmin()) {
+        wrap.appendChild(h('button', {
+          type: 'button', class: 'icon ghost danger pr-starter-del', 'data-del': s.id, 'aria-label': 'Delete starter ' + (s.label || s.id), title: 'Delete starter',
+          onclick: function () {
+            deleteStarter(s, function (id) {
+              S2.starters = S2.starters.filter(function (x) { return x.id !== id; });
+              render(S2.starters);
+              if (S2.selected === id) pick(S2.starters.length ? S2.starters[0].id : '');
+            });
+          },
+        }, TRASH));
+      }
+      return wrap;
+    }
+
+    function group(title, rows, build, source) {
+      return h('section', { class: 'pr-starter-group', 'data-group': source }, [
+        title ? h('h3', { class: 'pr-starter-group-title' }, title) : null,
+        h('div', { class: 'pr-starters' }, rows.map(build)),
+      ]);
+    }
+
+    function render(rows) {
+      listEl.textContent = '';
+      if (!rows.length) { listEl.appendChild(emptyState({ title: 'No starters are installed.' })); return; }
+      const bundled = rows.filter(function (s) { return s.source !== 'user'; });
+      const users = rows.filter(function (s) { return s.source === 'user'; });
+      if (!users.length) { listEl.appendChild(group('', bundled, card, 'bundled')); return; }
+      if (bundled.length) listEl.appendChild(group('Bundled starters', bundled, card, 'bundled'));
+      listEl.appendChild(group('Your starters', users, userCard, 'user'));
+      const sel = S2.selected;
+      if (sel) pick(sel);
+    }
+
+    function showError(e, fallback) {
+      errBox.textContent = '';
+      errBox.appendChild(inlineError({ status: e && e.status, message: errText(e, fallback) }, null, { compact: true }));
+      errBox.hidden = false;
+    }
+
+    loadStarters().then(function (rows) {
+      S2.starters = rows;
+      render(rows);
+      if (rows.length) pick(rows[0].id);
+    }).catch(function (e) {
+      listEl.textContent = '';
+      listEl.appendChild(inlineError(e, function () { starterCache = null; S2.dlg && S2.dlg.close(null); openStarterDialog(); }, { compact: true }));
+    });
+
+    function submit() {
+      const name = nameInput.value.trim();
+      if (!S2.selected || !name || S2.busy) { if (!name) nameInput.focus(); return false; }
+      S2.busy = true;
+      errBox.hidden = true;
+      const btn = S2.dlg && S2.dlg.box.querySelector('footer button.primary');
+      if (btn) { btn.disabled = true; btn.textContent = 'Adding\u2026'; }
+      const starter = S2.starters.filter(function (x) { return x.id === S2.selected; })[0] || {};
+      ctx.api.request('POST', 'api/v2/projects/' + encodeURIComponent(ctx.project) + '/rooms/from-starter', { starter: S2.selected, name: name }).then(function (r) {
+        const out = (r && r.data) || {};
+        const reload = typeof ctx.reload === 'function' ? ctx.reload() : Promise.resolve(null);
+        return Promise.resolve(reload).catch(function () { return null; }).then(function () {
+          if (S2.dlg) S2.dlg.close(out.room || null);
+          toast('Added room ' + name + ' from ' + (starter.label || S2.selected) + ' (' + starterCounts(out.info || starter) + ')', 'ok');
+          if (out.room && !S.destroyed) go({ view: 'rooms', id: out.room, room: out.room, tab: 'overview', query: {} });
+        });
+      }).catch(function (e) {
+        S2.busy = false;
+        if (btn) { btn.disabled = false; btn.textContent = 'Add room'; }
+        showError(e, 'Could not add the room');
+      });
+      return false;
+    }
+
+    ctx.openDialog({
+      title: 'Add room from starter',
+      wide: true,
+      body: h('div', { class: 'pr-starter-dialog' }, [
+        hint,
+        listEl,
+        h('div', { class: 'pr-starter-form' }, [h('label', { for: 'pr-starter-name' }, 'Room name'), nameInput]),
+        errBox,
+      ]),
+      onOpen: function (d) {
+        S2.dlg = d;
+        d.box.classList.add('pr-starter-box');
+        nameInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+      },
+      buttons: [{ label: 'Cancel', value: null }, { label: 'Add room', primary: true, validate: submit, value: null }],
+    });
+  }
+
+  // ---------------------------------------------------------- save room as starter (P6A, FR-ROOM-11)
+
+  // Tags pre-checked in the save dialog: the disciplines of the room's devices, plus `inventory`
+  // when the room keeps gear in containers (road cases).
+  function roomStarterTags(roomId) {
+    const v = vocab();
+    const tags = {};
+    list(doc().devices).forEach(function (d) {
+      if (!d || d.room !== roomId) return;
+      const disc = disciplineOf(d, v);
+      if (STARTER_TAGS.indexOf(disc) >= 0) tags[disc] = true;
+      if (d.kind === 'container') tags.inventory = true;
+    });
+    return Object.keys(tags);
+  }
+
+  function openSaveStarterDialog(room) {
+    if (typeof ctx.openDialog !== 'function' || !ctx.project || !room || !ctx.api || typeof ctx.api.request !== 'function') return;
+    const S3 = { busy: false, replace: false, dlg: null };
+    const name = str(room.name || room.id);
+    const labelInput = h('input', { type: 'text', class: 'pr-ss-label', id: 'pr-ss-label', maxlength: '80', autocomplete: 'off', value: name });
+    const blurbInput = h('textarea', { class: 'pr-ss-blurb', id: 'pr-ss-blurb', rows: '3', maxlength: '500',
+      placeholder: 'What this room is for, how big it is, what makes the design worth reusing' });
+    const preset = roomStarterTags(room.id);
+    const tagsEl = h('div', { class: 'pr-ss-tags', role: 'group', 'aria-label': 'Tags' }, STARTER_TAGS.map(function (t) {
+      const cb = h('input', { type: 'checkbox', class: 'pr-ss-tag', value: t, checked: preset.indexOf(t) >= 0 });
+      const chip = h('label', { class: 'chip pr-ss-chip' + (preset.indexOf(t) >= 0 ? ' on' : ''), 'data-tag': t }, [cb, t]);
+      cb.addEventListener('change', function () { chip.classList.toggle('on', cb.checked); });
+      return chip;
+    }));
+    const errBox = h('div', { class: 'pr-starter-error', hidden: true });
+
+    function primaryBtn() {
+      return S3.dlg ? S3.dlg.box.querySelector('footer button.primary') : null;
+    }
+
+    function setBusy(on, label) {
+      S3.busy = on;
+      const btn = primaryBtn();
+      if (btn) { btn.disabled = on; btn.textContent = label; }
+    }
+
+    function tags() {
+      return Array.prototype.filter.call(tagsEl.querySelectorAll('input.pr-ss-tag'), function (cb) { return cb.checked; })
+        .map(function (cb) { return cb.value; });
+    }
+
+    function submit() {
+      const label = labelInput.value.trim();
+      if (!label) { labelInput.focus(); return false; }
+      if (S3.busy) return false;
+      errBox.hidden = true;
+      setBusy(true, S3.replace ? 'Replacing\u2026' : 'Saving\u2026');
+      const body = { label: label, blurb: blurbInput.value.trim(), tags: tags() };
+      if (S3.replace) body.replace = true;
+      ctx.api.request('POST', 'api/v2/' + apiPath(['projects', ctx.project, 'rooms', room.id, 'save-starter']), body).then(function (r) {
+        const out = (r && r.data) || {};
+        const s = out.starter || {};
+        starterCache = null;
+        if (S3.dlg) S3.dlg.close(s.id || null);
+        const notes = [];
+        if (out.dropped_cables) notes.push(plural(out.dropped_cables, { one: 'cable to another room', many: 'cables to other rooms' }));
+        if (out.dropped_files) notes.push(plural(out.dropped_files, { one: 'attached file', many: 'attached files' }));
+        toast('Saved starter ' + (s.label || label) + (notes.length ? ' (left out: ' + notes.join(', ') + ')' : ''), 'ok');
+      }).catch(function (e) {
+        const exists = e && (e.code === 'exists' || e.status === 409) && e.code !== 'bundled';
+        S3.replace = !!exists;
+        setBusy(false, exists ? 'Replace starter' : 'Save starter');
+        errBox.textContent = '';
+        errBox.appendChild(inlineError({
+          status: e && e.status,
+          message: exists ? 'You already have a starter called \u201C' + label + '\u201D. Replace it, or change the label.' : ((e && e.message) || 'Could not save the starter'),
+        }, null, { compact: true }));
+        errBox.hidden = false;
+      });
+      return false;
+    }
+
+    ctx.openDialog({
+      title: 'Save as starter',
+      body: h('div', { class: 'pr-starter-dialog pr-ss-dialog' }, [
+        h('p', { class: 'pr-starter-hint' }, 'The room, its devices, racks, cables, floor-plan markers and procedures become a starter you can add to any project from Rooms \u25B8 Add room from starter\u2026 or fathom new --template.'),
+        h('div', { class: 'pr-starter-form' }, [h('label', { for: 'pr-ss-label' }, 'Label'), labelInput]),
+        h('div', { class: 'pr-starter-form' }, [h('label', { for: 'pr-ss-blurb' }, 'Blurb'), blurbInput]),
+        h('div', { class: 'pr-starter-form' }, [h('span', { class: 'pr-ss-tags-label', id: 'pr-ss-tags-label' }, 'Tags'), tagsEl]),
+        h('p', { class: 'pr-ss-note' }, 'Serials, asset tags, prices, short codes and attached files are not saved.'),
+        errBox,
+      ]),
+      onOpen: function (d) {
+        S3.dlg = d;
+        d.box.classList.add('pr-starter-box');
+        tagsEl.setAttribute('aria-labelledby', 'pr-ss-tags-label');
+        labelInput.addEventListener('input', function () { if (S3.replace) { S3.replace = false; setBusy(false, 'Save starter'); errBox.hidden = true; } });
+        labelInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+      },
+      buttons: [{ label: 'Cancel', value: null }, { label: 'Save starter', primary: true, validate: submit, value: null }],
+    });
+  }
+
   function addRack(roomId) {
     if (typeof ctx.prompt !== 'function') return;
     Promise.resolve(ctx.prompt('Rack name', 'Rack', { title: 'Add rack', ok: 'Add rack' })).then(function (name) {
@@ -407,26 +684,45 @@ export function mount(el, ctx) {
     const rows = landingRows();
     const lede = h('p', { class: 'pr-lede' }, plural(rows.length, NOUNS.room) + (venueCount === 1 ? DOT + (list(d.venues)[0].name || '') : ''));
     const host = h('div', { class: 'pr-landing-table' });
+    const actions = h('div', { class: 'pr-landing-actions' });
+    if (!readOnly() && ctx.api && typeof ctx.openDialog === 'function') {
+      actions.appendChild(h('button', { type: 'button', class: 'pr-add-starter', 'data-action': 'add-starter', onclick: openStarterDialog }, 'Add room from starter\u2026'));
+      actions.appendChild(h('button', { type: 'button', class: 'pr-add-starter', 'data-action': 'describe-room', title: 'Describe the room and let the Helper draft its devices and patch',
+        onclick: function () { describeRoom(''); } }, 'Describe a room\u2026'));
+    }
     root.appendChild(h('div', { class: 'pr-landing' }, [
-      h('div', { class: 'pr-landing-head' }, [h('h1', { class: 'pr-title' }, [h('span', { class: 'pr-glyph', 'aria-hidden': 'true' }, GLYPH), 'Rooms']), lede]),
+      h('div', { class: 'pr-landing-head' }, [h('h1', { class: 'pr-title' }, [h('span', { class: 'pr-glyph', 'aria-hidden': 'true' }, GLYPH), 'Rooms']), lede, actions]),
       host,
     ]));
     const num = function (key, header, hide) {
       return { key: key, header: header, align: 'right', hideOnMobile: !!hide, value: function (r) { return r[key]; } };
     };
+    const canSave = !readOnly() && ctx.project && ctx.api && typeof ctx.openDialog === 'function';
+    const columns = [
+      { key: 'name', header: 'Name', value: function (r) { return r.name; },
+        cell: function (r) { return h('a', { class: 'pr-room-link', href: roomHref(r.id), 'data-room': r.id }, r.name); } },
+      { key: 'code', header: 'Code', hideOnMobile: true, value: function (r) { return r.code; } },
+      { key: 'venue', header: 'Venue', hideOnMobile: true, hidden: venueCount < 2, filterable: venueCount > 1, value: function (r) { return r.venue; } },
+      num('devices', 'Devices'), num('cables', 'Cables'), num('racks', 'Racks', true), num('plans', 'Plans', true),
+      num('procedures', 'Procedures', true),
+    ];
+    if (canSave) {
+      // Per-row "Save as starter…" (editors). The DataTable ignores row clicks on buttons, so the row
+      // still navigates everywhere else; on phones the room page's ⋯ menu carries the same action.
+      columns.push({ key: 'actions', header: 'Actions', sortable: false, searchable: false, csv: false, hideOnMobile: true, align: 'right',
+        value: function () { return ''; },
+        cell: function (r) {
+          return h('button', { type: 'button', class: 'small pr-save-starter', 'data-action': 'save-starter', 'data-room': r.id,
+            'aria-label': 'Save ' + r.name + ' as starter', title: 'Save this room as a starter for other projects',
+            onclick: function () { openSaveStarterDialog(sortedRooms(doc()).filter(function (x) { return x.id === r.id; })[0] || null); } }, 'Save as starter\u2026');
+        } });
+    }
     S.table = createTable(host, {
       key: 'rooms',
       scope: ctx.project || '',
       caption: 'Rooms',
       noun: NOUNS.room,
-      columns: [
-        { key: 'name', header: 'Name', value: function (r) { return r.name; },
-          cell: function (r) { return h('a', { class: 'pr-room-link', href: roomHref(r.id), 'data-room': r.id }, r.name); } },
-        { key: 'code', header: 'Code', hideOnMobile: true, value: function (r) { return r.code; } },
-        { key: 'venue', header: 'Venue', hideOnMobile: true, hidden: venueCount < 2, filterable: venueCount > 1, value: function (r) { return r.venue; } },
-        num('devices', 'Devices'), num('cables', 'Cables'), num('racks', 'Racks', true), num('plans', 'Plans', true),
-        num('procedures', 'Procedures', true),
-      ],
+      columns: columns,
       rows: rows,
       onRow: function (r) { go({ view: 'rooms', id: r.id, room: r.id, tab: 'overview' }); },
       url: tableUrl(),
@@ -514,6 +810,12 @@ export function mount(el, ctx) {
     if (ctx.project) {
       overflow.push({ key: 'public', label: 'Public page', target: '_blank',
         href: str(ctx.appRoot || '/') + 'p/' + encodeURIComponent(ctx.project) + '/r/' + encodeURIComponent(id) });
+    }
+    if (!readOnly() && ctx.project && ctx.api && typeof ctx.openDialog === 'function') {
+      overflow.push({ key: 'save-starter', label: 'Save as starter\u2026', title: 'Keep this room as a starter for other projects',
+        run: function () { openSaveStarterDialog(S.room || room); } });
+      overflow.push({ key: 'describe-room', label: 'Describe a room\u2026', title: 'Let the Helper draft devices and patch for this room from a description',
+        run: function () { describeRoom(id); } });
     }
     const title = room.name || id;
     const kindLabel = cap(room.kind);

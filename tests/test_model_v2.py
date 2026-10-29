@@ -19,7 +19,7 @@ except ImportError:  # pragma: no cover - run as a package
 
 
 COLLECTIONS = ["venues", "rooms", "systems", "locations", "racks", "networks", "devices", "cables", "bundles",
-               "floorplans", "attachments", "templates", "imports", "pages", "problems"]
+               "floorplans", "attachments", "templates", "imports", "pages", "problems", "scenes"]
 
 
 def codes(problems, level=None):
@@ -142,7 +142,7 @@ A1 = [
     ("projector", "video", "#bef264", "none"), ("lighting_console", "lighting", "#fbbf24", "matrix"), ("dmx_node", "lighting", "#f59e0b", "matrix"),
     ("dimmer", "lighting", "#eab308", "matrix"), ("fixture", "lighting", "#fde047", "passthrough"), ("switch", "network", "#fb923c", "matrix"),
     ("control", "control", "#c084fc", "matrix"), ("touch_panel", "control", "#d8b4fe", "none"), ("power", "power", "#f87171", "matrix"),
-    ("patch_panel", "other", "#94a3b8", "passthrough"),
+    ("patch_panel", "other", "#94a3b8", "passthrough"), ("container", "other", "#8b94a6", "none"),
 ]
 
 # v0.2 MEDIA (identical to the first 14 rows of Appendix A.2).
@@ -165,7 +165,7 @@ class Vocab(unittest.TestCase):
 
     def test_vocab_kinds(self):
         K = self.vocab.KINDS
-        self.assertEqual(len(K), 34, fr("FR-VOC-01", "A.1", "len(KINDS)"))
+        self.assertEqual(len(K), 35, fr("FR-VOC-01", "A.1", "len(KINDS)"))
         self.assertEqual(sorted(K), sorted(k for k, *_ in A1), fr("FR-VOC-01", "A.1", "kind keys"))
         for key, disc, color, routing in A1:
             self.assertEqual(K[key]["discipline"], disc, fr("FR-VOC-01", "A.1", key))

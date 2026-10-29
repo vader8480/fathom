@@ -1,7 +1,8 @@
 """Fathom command line.
 
   fathom serve [--host H] [--port N] [--data DIR] [--open]   web app (editor + viewer)
-  fathom new <name|path> [--template T] [--org O]           create a project (T: blank | rrc-littleton | campus-demo)
+  fathom new <name|path> [--template T] [--org O]           create a project (T: blank | rrc-littleton | campus-demo | church-<starter> | user-<slug>)
+  fathom starters                                           room starters: bundled church rooms + the ones saved from your rooms
   fathom import <project> <file|folder>... [--kind K] [--node ID] [--device NAME] [--room R] [--apply]
   fathom inspect <file|folder> [--kind K] [--json]          parse an export and show what was found
   fathom build <project> [--pdf] [--png] [--open] [--out DIR] [--state S] [--rooms a,b] [--base-url URL] [--no-discovery]
@@ -16,6 +17,8 @@
   fathom migrate <project> [--write]                        v1 → v2 summary (and save)
   fathom user add|list|passwd|role|remove|disable|enable    users and roles
   fathom backup create [--include-builds] | list | restore <zip|name> [--yes]   whole-server backups
+  fathom trash list | restore <name> | purge <name> | purge --expired   deleted projects (kept 30 days)
+  fathom codes backfill [project]                           give every device a short code (labels)
   fathom library list [-q Q] | show <id>                    equipment templates
   fathom schedule <kind> <project> [--room R] [--csv]       patch, cables, ip, dmx, bom, inventory, racks, labels
   fathom tags <project> [--scope all] [--apply]             auto cable tags (preview, then apply)
@@ -130,9 +133,32 @@ def cmd_status(_a: argparse.Namespace) -> None:
 
 
 def cmd_new(a: argparse.Namespace) -> None:
-    pdir = new_project(a.name, template=a.template, org=a.org or "", force=a.force)
+    template = (a.template or "blank").strip()
+    if template.startswith("user-"):
+        from .starters import new_project_from_starter
+
+        pdir = new_project_from_starter(a.name, template, org=a.org or "", force=a.force)
+    else:
+        pdir = new_project(a.name, template=template, org=a.org or "", force=a.force)
     print(f"ok: project created at {pdir}")
     print("next: fathom import <project> <exports>, edit project.json (or fathom serve), then fathom build --open")
+
+
+def cmd_starters(_a: argparse.Namespace) -> None:
+    """``fathom starters``: every starter (bundled, then user) as ``id  source  room  devices  cables`` lines."""
+    from .starters import list_starters, starters_root
+
+    rows = list_starters()
+    if not rows:
+        print("no starters installed")
+        return
+    width = max(len(r["id"]) for r in rows)
+    print(f"{'id'.ljust(width)}  source   room                 devices  cables")
+    for r in rows:
+        room = str(r.get("room_name") or r.get("room") or "")[:20]
+        print(f"{r['id'].ljust(width)}  {str(r.get('source') or 'bundled').ljust(7)}  {room.ljust(20)} {str(r.get('devices', 0)).rjust(7)}  {str(r.get('cables', 0)).rjust(6)}")
+    users = [r for r in rows if r.get("source") == "user"]
+    print(f"{len(rows)} starter(s), {len(users)} saved by users in {display_path(starters_root())}")
 
 
 def cmd_import(a: argparse.Namespace) -> None:
@@ -537,6 +563,41 @@ def cmd_user(a: argparse.Namespace) -> None:
         _die(str(exc).strip("'\""))
 
 
+def cmd_invite(a: argparse.Namespace) -> None:
+    from . import users
+
+    try:
+        if a.action == "create":
+            projects = {}
+            for item in a.project or []:
+                name, sep, role = item.partition("=")
+                if not sep or not name.strip():
+                    _die(f"--project expects name=role, got '{item}'")
+                projects[name.strip()] = role.strip()
+            inv = users.create_invite(a.role or "editor", projects or None, created_by="cli", ttl_hours=a.hours, note=a.note or "")
+            print(f"/invite/{inv['token']}")
+            print(f"  role: {inv['role']}" + (f"  projects: {', '.join(f'{k}:{v}' for k, v in sorted(inv['projects'].items()))}" if inv.get("projects") else ""))
+            print(f"  expires: {inv['expires']}  (open the path on the server's URL; the link works once)")
+            return
+        if a.action == "list":
+            rows = users.list_invites(include_used=a.all)
+            if not rows:
+                print("no open invites")
+            for inv in rows:
+                state = f"used by {inv['used_by']} {inv.get('used_at') or ''}".rstrip() if inv.get("used_by") else f"expires {inv.get('expires')}"
+                proj = ", ".join(f"{k}:{v}" for k, v in sorted((inv.get("projects") or {}).items()))
+                print(f"{inv['token']}\t{inv.get('role', '')}\t{state}{chr(9) + proj if proj else ''}{chr(9) + inv['note'] if inv.get('note') else ''}")
+            return
+        if a.action == "revoke":
+            if not a.token:
+                _die("invite revoke <token>")
+            if not users.revoke_invite(a.token):
+                _die(f"invite '{a.token}' not found")
+            print(f"ok: revoked {a.token}")
+    except (ValueError, KeyError, LookupError) as exc:
+        _die(str(exc).strip("'\""))
+
+
 def cmd_backup(a: argparse.Namespace) -> None:
     from . import backup as B
 
@@ -576,6 +637,60 @@ def cmd_backup(a: argparse.Namespace) -> None:
             print(f"  previous data saved as {res['pre_restore_backup']}")
     except B.BackupError as exc:
         _die(str(exc))
+
+
+def cmd_trash(a: argparse.Namespace) -> None:
+    from . import project as P
+
+    if a.action == "list":
+        rows = P.list_trashed()
+        if not rows:
+            print(f"trash is empty ({display_path(P.trash_root())}, kept {P.TRASH_RETENTION_DAYS} days)")
+        for e in rows:
+            print(f"{e['dir']}\t{e['name']}\t{e['trashed_at']}\t{e['trashed_by'] or '-'}\t{e['rooms']} rooms\t{e['devices']} devices")
+        return
+    if a.action == "purge" and a.expired:
+        gone = P.purge_expired(a.days)
+        print(f"ok: purged {len(gone)} expired project(s)" + (": " + ", ".join(gone) if gone else ""))
+        return
+    if not a.name:
+        _die(f"trash {a.action} <name> (names: fathom trash list)")
+    try:
+        if a.action == "restore":
+            info = P.trash_info(a.name) or {}
+            P.restore_project(a.name)
+            print(f"ok: restored {info.get('name') or a.name}")
+        else:
+            P.purge_project(a.name)
+            print(f"ok: purged {a.name}")
+    except FileNotFoundError as exc:
+        _die(str(exc))
+    except P.ProjectExists as exc:
+        _die(f"{exc} (rename or trash it first)")
+
+
+def cmd_codes(a: argparse.Namespace) -> None:
+    from . import project as P, schema
+
+    if a.action != "backfill":
+        _die("codes backfill [project]")
+    names = [a.project] if a.project else list_projects()
+    total = 0
+    for name in names:
+        try:
+            doc, pdir = P.load_doc(name)
+        except SystemExit as exc:
+            _die(str(exc).replace("error: ", ""))
+        if not schema.short_codes_enabled(doc):
+            print(f"{name}: short codes are off (settings.short_codes = false)")
+            continue
+        work = schema.normalize(doc)
+        n = schema.ensure_short_codes(work)
+        if n:
+            P.save_doc(work, pdir, base_revision=None, author=getpass.getuser(), summary=f"Assigned {n} short code(s)", source="cli")
+        total += n
+        print(f"{name}: {n} code(s) assigned, {sum(1 for d in work.get('devices') or [] if isinstance(d, dict))} devices")
+    print(f"ok: {total} code(s) assigned in {len(names)} project(s)")
 
 
 def cmd_library(a: argparse.Namespace) -> None:
@@ -897,6 +1012,57 @@ def cmd_discovery_doctor(a: argparse.Namespace) -> None:
     sys.exit(1 if rep["advice"] else 0)
 
 
+def cmd_llm(a: argparse.Namespace) -> None:
+    """``fathom llm show|models|test``: the assistant's LLM provider (settings file + FATHOM_LLM_* env; the key is never printed)."""
+    from .llm import LLMError
+    from .llm import config as lcfg
+    from .llm.providers import make
+
+    overrides = {k: v for k, v in (("provider", a.provider), ("base_url", a.url), ("model", a.model), ("api", a.api)) if v}
+    if a.action == "show":
+        pub = lcfg.public()
+        if a.json:
+            print(json.dumps(pub, indent=2, sort_keys=True))
+            return
+        src = pub.get("source") or {}
+        for k in ("provider", "effective_base_url", "model", "api", "temperature", "max_tokens", "web_lookup", "daily_cap", "timeout"):
+            print(f"{k:19} {pub.get(k)!s:40} ({src.get('base_url' if k == 'effective_base_url' else k, 'default')})")
+        print(f"{'api_key':19} {'set' if pub.get('api_key_set') else 'not set':40} ({src.get('api_key', 'default')})")
+        print(f"{'configured':19} {'yes' if pub.get('configured') else 'no'}")
+        print(f"files: {lcfg.settings_path()} (+ llm-secrets.json)")
+        return
+    try:
+        cfg = lcfg.probe_config(overrides)
+    except lcfg.ConfigError as exc:
+        _die(str(exc))
+    if not cfg.get("provider"):
+        _die("no provider configured (Settings › Assistant, FATHOM_LLM_PROVIDER / FATHOM_LLM_URL, or --provider)")
+    if not lcfg.resolved_base_url(cfg):
+        _die("this provider needs a base URL (--url or FATHOM_LLM_URL)")
+    prov = make(cfg)
+    if a.action == "models":
+        try:
+            models = prov.list_models()
+        except LLMError as exc:
+            _die(str(exc), 2)
+        if a.json:
+            print(json.dumps({"provider": prov.id, "models": models}, indent=2))
+        else:
+            for m in models:
+                print(m)
+            if not models:
+                print(f"no models listed by {prov.label}", file=sys.stderr)
+        return
+    res = prov.test_connection(model=cfg.get("model") or "", timeout=cfg.get("timeout"))
+    res["provider"] = prov.id
+    if a.json:
+        print(json.dumps(res, indent=2))
+    else:
+        print(("ok" if res["ok"] else "FAILED") + f": {prov.label} · {res.get('model') or '(no model)'} · {res.get('latency_ms')} ms · {res.get('detail')}")
+    if not res["ok"]:
+        sys.exit(2)
+
+
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="fathom", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--version", action="version", version=f"fathom {__version__}")
@@ -915,10 +1081,14 @@ def main(argv=None) -> None:
 
     s = sub.add_parser("new", help="create a project")
     s.add_argument("name", help="project name (in the data dir) or a path")
-    s.add_argument("--template", default="blank", help="blank or a sample name (rrc-littleton, campus-demo)")
+    s.add_argument("--template", default="blank", help="blank, a sample name (rrc-littleton, campus-demo), a church starter (church-sanctuary, church-youth-room, "
+                                                        "church-chapel, church-portable, church-broadcast) or a starter you saved from a room (user-<slug>; see fathom starters)")
     s.add_argument("--org", help="organisation / venue name for the header")
     s.add_argument("--force", action="store_true")
     s.set_defaults(func=cmd_new)
+
+    s = sub.add_parser("starters", help="room starters: the bundled church rooms plus the ones saved from your rooms (FATHOM_DATA/starters)")
+    s.set_defaults(func=cmd_starters)
 
     s = sub.add_parser("import", help="copy exports into a project and register them")
     s.add_argument("project")
@@ -1001,6 +1171,16 @@ def main(argv=None) -> None:
     s.add_argument("--password-stdin", action="store_true", help="read the password from stdin")
     s.set_defaults(func=cmd_user)
 
+    s = sub.add_parser("invite", help="one-time invite links (FATHOM_DATA/invites.json)")
+    s.add_argument("action", choices=["create", "list", "revoke"])
+    s.add_argument("token", nargs="?", help="revoke: the inv-… token")
+    s.add_argument("--role", choices=["viewer", "editor", "admin"], help="create: role of the invited user (default editor)")
+    s.add_argument("--project", action="append", metavar="NAME=ROLE", help="create: per-project override (viewer|editor); repeatable")
+    s.add_argument("--hours", type=float, default=72.0, help="create: hours until the link expires (default 72)")
+    s.add_argument("--note", help="create: a note shown in the invite list")
+    s.add_argument("--all", action="store_true", help="list: include used invites")
+    s.set_defaults(func=cmd_invite)
+
     s = sub.add_parser("backup", help="whole-server backups (FATHOM_DATA/backups)")
     s.add_argument("action", choices=["create", "list", "restore"])
     s.add_argument("target", nargs="?", help="restore: a backup .zip path or a name from 'backup list'")
@@ -1010,6 +1190,18 @@ def main(argv=None) -> None:
     s.add_argument("--yes", action="store_true", help="restore: do not ask for confirmation")
     s.add_argument("--no-safety", action="store_true", help="restore: skip the pre-restore backup of the current data")
     s.set_defaults(func=cmd_backup)
+
+    s = sub.add_parser("trash", help="deleted projects (FATHOM_DATA/trash, kept 30 days)")
+    s.add_argument("action", choices=["list", "restore", "purge"])
+    s.add_argument("name", nargs="?", help="trash entry name from 'trash list'")
+    s.add_argument("--expired", action="store_true", help="purge: delete every entry older than --days")
+    s.add_argument("--days", type=int, default=30, help="purge --expired: retention in days (default 30)")
+    s.set_defaults(func=cmd_trash)
+
+    s = sub.add_parser("codes", help="device short codes (the XXXX-XXXX printed on labels)")
+    s.add_argument("action", choices=["backfill"])
+    s.add_argument("project", nargs="?", help="one project (default: every project in the data dir)")
+    s.set_defaults(func=cmd_codes)
 
     s = sub.add_parser("library", help="equipment templates")
     s.add_argument("action", choices=["list", "show"])
@@ -1095,6 +1287,15 @@ def main(argv=None) -> None:
     d.add_argument("--interface", default="", help="listen on one interface only")
     d.add_argument("--json", action="store_true")
     d.set_defaults(func=cmd_discovery_doctor)
+
+    s = sub.add_parser("llm", help="assistant LLM provider (FATHOM_DATA/llm.json + FATHOM_LLM_* env)")
+    s.add_argument("action", choices=["show", "models", "test"])
+    s.add_argument("--provider", choices=["openai", "anthropic", "xai", "openai_compat"], help="models/test: override the configured provider")
+    s.add_argument("--url", help="models/test: override the base URL")
+    s.add_argument("--model", help="test: override the model")
+    s.add_argument("--api", choices=["chat", "responses"], help="models/test: OpenAI API flavour")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(func=cmd_llm)
 
     a = p.parse_args(argv)
     a.func(a)

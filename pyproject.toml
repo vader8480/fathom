@@ -33,7 +33,7 @@ dev = ["pytest>=7"]
 fathom = "fathom.cli:main"
 
 [tool.setuptools]
-packages = ["fathom", "fathom.parsers", "fathom.library", "fathom.discovery", "fathom.discovery.probes"]
+packages = ["fathom", "fathom.parsers", "fathom.library", "fathom.discovery", "fathom.discovery.probes", "fathom.llm", "fathom.llm.providers"]
 include-package-data = true
 
 [tool.setuptools.package-data]

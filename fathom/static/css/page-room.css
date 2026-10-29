@@ -12,8 +12,54 @@
 .pr-glyph{color:var(--accent);font-size:18px;line-height:1}
 .pr-lede{margin:0;color:var(--muted);font-size:12.5px}
 .pr-landing-table{min-width:0}
+.pr-landing-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
+.pr-landing-actions:empty{display:none}
+button.pr-add-starter{min-height:36px}
 a.pr-room-link{display:inline-flex;align-items:center;min-height:32px;font-weight:600;text-decoration:none}
 a.pr-room-link:hover{text-decoration:underline}
+
+/* add room from starter (P3C): cards in a radiogroup, name field, inline error */
+.pr-starter-dialog{display:flex;flex-direction:column;gap:14px;min-width:0}
+.pr-starter-hint{margin:0;color:var(--muted);font-size:12.5px;line-height:1.45}
+.pr-starters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;min-width:0}
+button.pr-starter{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0;min-height:44px;padding:10px 12px;
+  background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);text-align:left;font:inherit;cursor:pointer}
+button.pr-starter:hover{background:rgba(142,162,255,.08)}
+button.pr-starter:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+button.pr-starter.pr-starter-on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:rgba(142,162,255,.12)}
+.pr-starter-head{display:flex;flex-direction:column;gap:2px;min-width:0;width:100%}
+.pr-starter-label{font-weight:700;font-size:14px}
+.pr-starter-on .pr-starter-label{color:var(--accent)}
+.pr-starter-counts{color:var(--muted);font-size:12px}
+.pr-starter-blurb{color:var(--muted);font-size:12.5px;line-height:1.4;overflow-wrap:anywhere}
+.pr-starter-tags{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
+.pr-starter-tags .chip{min-height:22px;padding:0 8px;font-size:11px}
+.pr-starter-form{display:flex;flex-direction:column;gap:4px;min-width:0}
+.pr-starter-form label{color:var(--muted);font-size:12px;font-weight:600}
+input.pr-starter-name{min-height:40px;width:100%;max-width:420px}
+.pr-starter-error{min-width:0}
+.pr-starter-error .fb-error{margin:0}
+
+/* starter groups (P6A): bundled first, then "Your starters" with an admin-only trash button per card */
+.pr-starter-groups{display:flex;flex-direction:column;gap:14px;min-width:0}
+.pr-starter-group{display:flex;flex-direction:column;gap:8px;min-width:0}
+.pr-starter-group-title{margin:0;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.pr-starter-user{position:relative;display:flex;min-width:0}
+.pr-starter-user>button.pr-starter{flex:1 1 auto;min-width:0}
+.pr-starter-user.pr-starter-user--del>button.pr-starter{padding-right:48px}
+button.pr-starter-del{position:absolute;top:6px;right:6px;min-width:40px;min-height:40px;padding:0;font-size:16px;line-height:1}
+button.pr-starter-del:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+button.pr-save-starter{min-height:32px;white-space:nowrap}
+
+/* save room as starter (P6A): label, blurb, tag chips, what is left out */
+textarea.pr-ss-blurb{width:100%;max-width:420px;min-height:72px;resize:vertical;font:inherit}
+input.pr-ss-label{min-height:40px;width:100%;max-width:420px}
+.pr-ss-tags-label{color:var(--muted);font-size:12px;font-weight:600}
+.pr-ss-tags{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+label.pr-ss-chip{cursor:pointer;min-height:32px;padding:0 12px;font-size:12.5px;user-select:none}
+label.pr-ss-chip input{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+label.pr-ss-chip:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.pr-ss-note{margin:0;color:var(--muted);font-size:12px;line-height:1.45}
 
 /* page body below the sticky header */
 .pr-body{flex:1 0 auto;min-width:0;padding:14px 16px 24px}
@@ -59,8 +105,17 @@ a.pr-back{display:inline-flex;align-items:center;min-height:40px}
   .pr-body{padding:10px 10px 20px}
   .pr-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   button.pr-card-main{min-height:76px}
+  .pr-landing-actions{margin-left:0;width:100%}
+  button.pr-add-starter{min-height:44px;width:100%}
+  .pr-starters{grid-template-columns:minmax(0,1fr);gap:8px}
+  button.pr-starter{min-height:48px}
+  input.pr-starter-name,input.pr-ss-label{max-width:none;min-height:44px}
+  textarea.pr-ss-blurb{max-width:none}
+  button.pr-starter-del{min-width:44px;min-height:44px}
+  label.pr-ss-chip{min-height:44px;padding:0 14px}
 }
 
 @media (pointer:coarse){
-  a.pr-room-link,a.pr-card-tab,a.pr-back{min-height:44px}
+  a.pr-room-link,a.pr-card-tab,a.pr-back,button.pr-add-starter,input.pr-starter-name,input.pr-ss-label,button.pr-starter-del,label.pr-ss-chip{min-height:44px}
+  button.pr-starter-del{min-width:44px}
 }

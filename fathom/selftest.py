@@ -159,7 +159,7 @@ def _check_v2(check, skip, sample: Path, tmpd: Path) -> None:
     from .plugins import get_importer, importers
 
     # ---- vocabulary
-    check(len(vocab.KINDS) == 34 and len(vocab.MEDIA) == 41 and len(vocab.DISCIPLINES) == 7, "vocab: 34 kinds, 41 media, 7 disciplines")
+    check(len(vocab.KINDS) == 35 and len(vocab.MEDIA) == 41 and len(vocab.DISCIPLINES) == 7, "vocab: 35 kinds, 41 media, 7 disciplines")
     json.dumps(vocab.as_dict())
 
     # ---- RRC migration identity

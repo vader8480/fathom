@@ -1,0 +1,36 @@
+{
+  "request": {
+    "model": "llama3.1:latest",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Say OK"
+      }
+    ],
+    "max_tokens": 5,
+    "stream": false
+  },
+  "status": 200,
+  "response": {
+    "id": "chatcmpl-p4a-1",
+    "object": "chat.completion",
+    "created": 1761670000,
+    "model": "llama3.1:latest",
+    "system_fingerprint": "fp_ollama",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "OK"
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 9,
+      "completion_tokens": 1,
+      "total_tokens": 10
+    }
+  }
+}

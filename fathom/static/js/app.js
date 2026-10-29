@@ -7,9 +7,9 @@
 
 import {
   createStore, canConnect, devicePorts, portLabel, deviceTitle, disciplineOf, mediumInfo,
-  filterDevices, parsePortRef, slug, deepClone,
+  filterDevices, parsePortRef, slug, deepClone, isLocked, sceneById,
 } from './model-core.js';
-import { createApi, ChangeQueue, ApiError } from './api.js';
+import { createApi, ChangeQueue, ApiError, isLockedError } from './api.js';
 import { h, esc } from './dom.js';
 import {
   layoutFor, DEFAULT_VIEW, SECTIONS, sectionOf, sectionsFor, canSee, parseRoute, buildRoute, withQuery, mergeRoute,
@@ -19,8 +19,75 @@ import { createDrawer } from './drawer.js';
 import { parseDrawer, selectionOpensDrawer } from './drawer-core.js';
 import { openSearch } from './search.js';
 import { createNotices, mountBell, skeleton, inlineError } from './feedback.js';
+import { relTime } from './feedback-core.js';
 
 export { h, esc, selToString, selFromString };
+
+// ------------------------------------------------------------ theme (FR-UX-15)
+// Applied before anything renders: `fathom.ui.theme` (local) is dark (default), light or system;
+// `?theme=` (search or hash query) overrides for one page load without persisting.
+
+const THEME_KEY = 'fathom.ui.theme';
+export const THEMES = ['dark', 'light', 'system'];
+const THEME_LABELS = { dark: 'Dark', light: 'Light', system: 'System' };
+const THEME_COLORS = { dark: '#0b1020', light: '#f6f7fb' };
+
+function themeParam() {
+  if (typeof location === 'undefined') return null;
+  const s = new URLSearchParams(location.search);
+  if (THEMES.indexOf(s.get('theme')) >= 0) return s.get('theme');
+  const hq = location.hash.indexOf('?');
+  if (hq >= 0) {
+    const v = new URLSearchParams(location.hash.slice(hq + 1)).get('theme');
+    if (THEMES.indexOf(v) >= 0) return v;
+  }
+  return null;
+}
+
+export function readTheme() {
+  const o = themeParam();
+  if (o) return o;
+  try {
+    const v = window.localStorage.getItem(THEME_KEY);
+    return THEMES.indexOf(v) >= 0 ? v : 'dark';
+  } catch (e) { return 'dark'; }
+}
+
+function prefersLight() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+}
+
+export function resolvedScheme(theme) {
+  return theme === 'light' || (theme === 'system' && prefersLight()) ? 'light' : 'dark';
+}
+
+export function applyTheme(theme) {
+  if (THEMES.indexOf(theme) < 0) theme = 'dark';
+  document.documentElement.setAttribute('data-theme', theme);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', THEME_COLORS[resolvedScheme(theme)]);
+  return theme;
+}
+
+export function setTheme(theme, persist) {
+  const t = applyTheme(theme);
+  if (persist !== false) { try { window.localStorage.setItem(THEME_KEY, t); } catch (e) { /* private mode */ } }
+  return t;
+}
+
+export function nextTheme(theme) {
+  return THEMES[(Math.max(0, THEMES.indexOf(theme)) + 1) % THEMES.length];
+}
+
+if (typeof document !== 'undefined' && document.documentElement) {
+  applyTheme(readTheme());
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const onScheme = function () { applyTheme(document.documentElement.getAttribute('data-theme') || 'dark'); };
+    if (mq.addEventListener) mq.addEventListener('change', onScheme);
+    else if (mq.addListener) mq.addListener(onScheme);
+  }
+}
 
 const PAGE_CSS = ['entity-header.css', 'datatable.css', 'explorer.css'];
 const ADMIN_CSS = ['datatable.css', 'admin.css'];
@@ -34,6 +101,7 @@ export const VIEWS = {
   racks: { label: 'Racks', module: './rack.js', export: 'mount', css: ['plan.css', 'explorer.css', 'entity-header.css', 'datatable.css', 'rack.css'] },
   devices: { label: 'Devices', module: './page-device.js', export: 'mount', css: PAGE_CSS.concat(['page-device.css']) },
   inventory: { label: 'Inventory', module: './inventory.js', export: 'mount', css: ['plan.css', 'datatable.css', 'inventory.css'] },
+  files: { label: 'Files', module: './files.js', export: 'mount', css: ['plan.css', 'datatable.css', 'files.css'] },
   schedules: { label: 'Schedules', module: './schedules.js', export: 'mount', css: ['plan.css', 'datatable.css', 'schedules.css'] },
   imports: { label: 'Imports', module: './views-admin.js', export: 'mountImports', css: ADMIN_CSS },
   discovery: { label: 'Discovery', module: './views-discovery.js', export: 'mount', css: ['datatable.css', 'discovery.css'] },
@@ -43,12 +111,15 @@ export const VIEWS = {
   sop: { label: 'SOPs', module: './views-sop.js', export: 'mount', css: ['sop.css'] },
   json: { label: 'JSON', module: null, internal: true },
 };
-const BOOT_CSS = ['drawer.css', 'inspector.css', 'search.css', 'feedback.css'];
+const BOOT_CSS = ['drawer.css', 'inspector.css', 'search.css', 'feedback.css', 'scenes.css'];
+// Views that carry the scene bar (#app-scenes, scenes.js §6.15) and may preview a scene.
+const SCENE_VIEWS = { patch: true, table: true, map: true, plan: true, racks: true, rooms: true };
+const SCENES_UNSUPPORTED = 'Scenes need a server with scene support';
 // Loading skeleton per view (feedback.js kinds). Canvas views (patch, plan, map) have no canvas
 // kind; patch and plan draw cards on a canvas, so 'cards' is the closest shape.
 const SKELETON_KIND = {
   home: 'cards', patch: 'cards', plan: 'cards', map: 'cards', sop: 'list',
-  table: 'table', inventory: 'table', schedules: 'table', imports: 'table', discovery: 'table',
+  table: 'table', inventory: 'table', files: 'table', schedules: 'table', imports: 'table', discovery: 'table',
   history: 'table', builds: 'table', settings: 'table',
 };
 const PAGE_VIEWS = { devices: true, rooms: true, racks: true };
@@ -612,7 +683,12 @@ export function makeCtx(store, extras) {
     env: (typeof window !== 'undefined') ? detectEnv() : { touch: false, narrow: false, platform: 'other', online: true, secure: false },
     commit: function (ops, label) {
       if (!ops || !ops.length) return null;
-      if (ctx.store.readOnly) { ctx.toast('Read-only: this change was not made', 'warn'); return null; }
+      if (ctx.store.readOnly) {
+        // The lock itself may always be toggled by an editor (Settings › Project lock card).
+        if (A.locked && A.store === ctx.store && !baseReadOnly() && isLockOnlyOps(ops)) { setLocked(ops[0].value.locked); return null; }
+        ctx.toast(A.locked && A.store === ctx.store ? 'Editing is locked \u2014 this change was not made' : 'Read-only: this change was not made', 'warn');
+        return null;
+      }
       try {
         const d = ctx.store.commit(ops, label);
         announce(label);
@@ -640,6 +716,11 @@ export function makeCtx(store, extras) {
     closeInspector: function () {},
     reload: function () { return Promise.resolve(null); },
     timeTravel: null,
+    // Scenes (§6.15): the shell replaces these; in a harness there is no preview mode.
+    preview: null,
+    sceneEditor: !(store && store.readOnly),
+    previewScene: function () { ctx.toast(SCENES_UNSUPPORTED, 'warn'); return Promise.resolve(null); },
+    exitPreview: function () {},
     // B.2 SHELL item 4: every member below is optional for views; these are the harness-safe defaults.
     navigateRoute: function () { return ''; },
     routeHref: function () { return '#'; },
@@ -701,6 +782,10 @@ const A = {
   route: copyRoute(EMPTY_ROUTE), layout: 'lg', nav: null, drawer: null, drawerOpen: false, intent: null, pendingSection: '',
   applyingRoute: false, subs: {}, recent: null, notices: null, bell: null, overlayInfo: { fetchedAt: null, revision: null },
   saveTrack: { last: '', offlineMax: 0 }, noteSig: '', focusing: false, projectsError: null, projectsLoading: false,
+  locked: false, tour: null, tourChecked: false,
+  // Scenes (§6.15): preview = {scene, name, doc, revision} while a scene is previewed read-only;
+  // sceneBar = {ctx, handle} while #app-scenes is mounted for the current project.
+  preview: null, sceneBar: null,
 };
 
 function focusView(sel) {
@@ -936,6 +1021,8 @@ function saveLabel(d) {
   const n = (d && d.pending) || (A.queue ? A.queue.pending : 0);
   const st = d ? d.state : 'saved';
   if (A.travel) return 'Viewing r' + A.travel.rev;
+  if (A.preview) return 'Preview \u00b7 r' + rev;
+  if (A.store && A.locked && !baseReadOnly() && !n) return 'Locked \u00b7 r' + rev;
   if (A.store && A.store.readOnly && !n) return (A.offline ? 'Offline \u00b7 ' : 'Read-only \u00b7 ') + 'r' + rev;
   if (st === 'saving') return 'Saving\u2026';
   if (st === 'pending') return n + ' pending';
@@ -1000,8 +1087,249 @@ function refreshBanner() {
   }
   if (A.offline) { setBanner('warn', 'Offline copy \u00b7 read-only. Edits come back when the server is reachable.'); return; }
   if (navigator.onLine === false || (q && q.state === 'offline')) { setBanner('warn', 'Offline \u00b7 ' + (q ? q.pending : 0) + ' pending edits. They are kept on this device and sent when you reconnect.'); return; }
-  if (A.store && A.store.readOnly) { setBanner('info', 'Read-only access. You can browse, search and trace.'); return; }
+  if (A.store && A.store.readOnly && baseReadOnly()) { setBanner('info', 'Read-only access. You can browse, search and trace.'); return; }
   setBanner('', null);
+}
+
+// ---- project lock (FR-UX-17): settings.locked makes the store read-only for everyone; views get
+// ctx.role 'viewer' except Settings (which holds the lock toggle); editors may unlock from #app-lock.
+
+function baseReadOnly() {
+  return A.role === 'viewer' || A.offline;
+}
+
+function lockInfo() {
+  const doc = A.store ? A.store.doc : null;
+  const s = (doc && doc.settings) || {};
+  return { locked: isLocked(doc), by: s.locked_by ? String(s.locked_by) : '', at: s.locked_at ? String(s.locked_at) : '' };
+}
+
+function renderLock(li) {
+  const el = $('app-lock');
+  if (!el) return;
+  if (!li.locked || A.travel) { el.hidden = true; el.innerHTML = ''; return; }
+  const ms = li.at ? Date.parse(li.at) : NaN;
+  const when = isNaN(ms) ? '' : relTime(ms, Date.now());
+  el.innerHTML = '';
+  el.appendChild(h('span', { class: 'app-lock-text' }, [
+    h('b', null, 'Editing is locked'), ' by ' + (li.by || 'another user') + (when ? ' \u00b7 ' + when : ''),
+  ]));
+  if (!baseReadOnly()) el.appendChild(h('button', { type: 'button', class: 'small', id: 'app-unlock', onclick: function () { setLocked(false); } }, 'Unlock'));
+  el.hidden = false;
+}
+
+// Re-reads settings.locked from the doc; `initial` skips the view re-mount of the first load.
+function applyLock(initial) {
+  const store = A.store;
+  if (!store) { A.locked = false; renderLock({ locked: false }); return; }
+  const li = lockInfo();
+  const was = A.locked;
+  A.locked = li.locked;
+  const want = baseReadOnly() || li.locked || !!A.preview;
+  if (!A.travel && store.readOnly !== want) store.setReadOnly(want);
+  renderLock(li);
+  if (initial || was === li.locked) return;
+  refreshBanner();
+  updateSave(null);
+  announce(li.locked ? 'Editing is locked' : 'Editing is unlocked');
+  // Views read ctx.role when they mount; Settings keeps the real role and follows store 'mode' itself.
+  if (A.view && A.view !== 'settings' && A.viewHandle) {
+    const v = A.view;
+    setTimeout(function () { if (A.store === store && A.view === v) mountView(v); }, 0);
+  }
+}
+
+function isLockOnlyOps(ops) {
+  if (!ops || ops.length !== 1) return false;
+  const o = ops[0];
+  if (!o || o.op !== 'root' || o.key !== 'settings' || !o.value || typeof o.value !== 'object') return false;
+  return Object.keys(o.value).every(function (k) { return k === 'locked' || k === 'locked_by' || k === 'locked_at'; }) && typeof o.value.locked === 'boolean';
+}
+
+// One op through the normal pipeline; the server fills locked_by / locked_at.
+function setLocked(on) {
+  const store = A.store;
+  if (!store || !A.ctx || A.travel || baseReadOnly()) return;
+  const ops = [{ op: 'root', key: 'settings', value: { locked: !!on } }];
+  if (store.readOnly) store.setReadOnly(false);
+  try {
+    store.commit(ops, on ? 'Lock editing' : 'Unlock editing');
+  } catch (e) {
+    toast(errMsg(e), 'err');
+  }
+  applyLock(false);
+}
+
+// ---- scenes (FR-SCN, §6.15): the bar under the sub-nav on SCENE_VIEWS and the read-only preview.
+// Preview swaps the store's doc for GET …/scenes/<sid>/doc; views get ctx.role 'viewer' (the lock
+// mechanism); a remote doc load or a route out of SCENE_VIEWS ends it; ?scene=<sid> deep-links it.
+
+// app.html predates the bar: #app-preview goes after #app-lock, #app-scenes after #app-subnav.
+function ensureShellRows() {
+  const app = $('app');
+  if (!app) return;
+  if (!$('app-preview')) {
+    const el = h('div', { id: 'app-preview', class: 'app-preview', role: 'status', hidden: true });
+    const lock = $('app-lock');
+    if (lock && lock.parentNode === app) app.insertBefore(el, lock.nextSibling);
+    else app.insertBefore(el, $('app-views') || app.firstChild);
+  }
+  if (!$('app-scenes')) {
+    const el = h('div', { id: 'app-scenes', class: 'app-scenes', hidden: true });
+    const sub = $('app-subnav');
+    if (sub && sub.parentNode === app) app.insertBefore(el, sub.nextSibling);
+    else app.insertBefore(el, $('app-body'));
+  }
+}
+
+function sceneEditor() {
+  return !!A.store && !baseReadOnly() && !A.travel;
+}
+
+function previewInfo() {
+  return A.preview ? { scene: A.preview.scene, name: A.preview.name } : null;
+}
+
+function renderPreview() {
+  const el = $('app-preview');
+  if (!el) return;
+  const p = A.preview;
+  if (!p) { el.hidden = true; el.innerHTML = ''; return; }
+  el.innerHTML = '';
+  el.appendChild(h('span', { class: 'app-preview-text' }, [h('b', null, 'Previewing scene ' + p.name), ' \u2014 read-only']));
+  if (sceneEditor()) el.appendChild(h('button', { type: 'button', class: 'small primary', id: 'app-preview-switch', onclick: switchToPreviewed }, 'Switch to this scene'));
+  el.appendChild(h('button', { type: 'button', class: 'small', id: 'app-preview-exit', onclick: function () { endPreview(true); } }, 'Exit preview'));
+  el.hidden = false;
+}
+
+// Views read ctx.role when they mount, so entering or leaving preview re-mounts the current view.
+function remountForPreview() {
+  const store = A.store;
+  const v = A.view;
+  if (!store || !v || !A.viewHandle || v === 'settings') return;
+  setTimeout(function () { if (A.store === store && A.view === v) mountView(v); }, 0);
+}
+
+function sceneLabel(sid, doc) {
+  if (!sid || sid === 'base') return 'Base';
+  const s = sceneById(doc, sid);
+  return (s && s.name) || sid;
+}
+
+function startPreview(sid, name) {
+  const store = A.store;
+  if (!A.api || !store) return Promise.resolve(null);
+  sid = sid || 'base';
+  if (A.travel) endTimeTravel();
+  return A.api.sceneDoc(A.project, sid).then(function (r) {
+    if (A.store !== store || !r || !r.doc) return null;
+    const live = A.preview ? A.preview.doc : store.doc;
+    const label = name || sceneLabel(sid, live);
+    if (!A.preview) A.preview = { scene: sid, name: label, doc: store.doc, revision: store.revision };
+    else { A.preview.scene = sid; A.preview.name = label; }
+    if (!store.readOnly) store.setReadOnly(true);
+    store.replaceDoc(r.doc, A.preview.revision, 'preview');
+    renderPreview();
+    refreshBanner();
+    updateSave(null);
+    if (SCENE_VIEWS[A.view] && A.route.query.scene !== sid) syncRoute(withQuery(A.route, { scene: sid }), true);
+    remountForPreview();
+    announce('Previewing scene ' + label + ' (read-only)');
+    return r;
+  }, function (e) {
+    if (A.store === store && A.route.query.scene) syncRoute(withQuery(A.route, { scene: null }), true);
+    toast(e && e.status === 404 ? SCENES_UNSUPPORTED : 'Could not preview the scene: ' + errMsg(e), 'warn');
+    throw e;
+  });
+}
+
+// `restore` puts the live doc back; false when a fresh doc just arrived from the server ('load').
+function endPreview(restore) {
+  const p = A.preview;
+  if (!p) return;
+  A.preview = null;
+  const store = A.store;
+  if (store && restore) store.replaceDoc(p.doc, p.revision, 'load');
+  if (store) applyLock(true);
+  renderPreview();
+  refreshBanner();
+  updateSave(null);
+  if (A.route.query.scene) syncRoute(withQuery(A.route, { scene: null }), true);
+  remountForPreview();
+  announce('Preview ended');
+}
+
+function switchToPreviewed() {
+  const p = A.preview;
+  if (!p || !A.api || !A.queue) return;
+  const name = p.name;
+  A.api.activateScene(A.project, p.scene).then(function () {
+    toast('Switched to ' + name, 'ok');
+    // The resync loads the live doc ('load'), which ends the preview.
+    return A.queue.resync().then(afterResync);
+  }).catch(function (e) {
+    if (isLockedError(e)) { toast('Editing is locked \u2014 this change was not made', 'warn'); return; }
+    toast(e && e.status === 404 ? SCENES_UNSUPPORTED : errMsg(e), 'err');
+  });
+}
+
+// Route → preview: ?scene= enters (or switches) the preview; navigating between SCENE_VIEWS keeps it
+// (the query is re-added); any other view ends it.
+function applySceneRoute(r) {
+  if (!A.store) return;
+  if (!SCENE_VIEWS[r.view]) { if (A.preview) endPreview(true); return; }
+  const want = r.query.scene || '';
+  if (want) {
+    if (!A.preview || A.preview.scene !== want) startPreview(want, '').catch(function () {});
+  } else if (A.preview) {
+    syncRoute(withQuery(A.route, { scene: A.preview.scene }), true);
+  }
+}
+
+function destroySceneBar() {
+  const rec = A.sceneBar;
+  A.sceneBar = null;
+  if (rec && rec.handle) { try { rec.handle.destroy(); } catch (e) { console.warn(e); } }
+  const el = $('app-scenes');
+  if (el) { el.hidden = true; el.innerHTML = ''; }
+}
+
+// Mounts scenes.js into #app-scenes on SCENE_VIEWS (once per project), unmounts it elsewhere.
+function syncSceneBar() {
+  const el = $('app-scenes');
+  if (!el) return;
+  const want = !!(A.ctx && A.store && A.api && SCENE_VIEWS[A.view]);
+  if (!want) { destroySceneBar(); return; }
+  if (A.sceneBar && A.sceneBar.ctx === A.ctx) { if (A.sceneBar.handle) A.sceneBar.handle.render(); return; }
+  destroySceneBar();
+  const rec = { ctx: A.ctx, handle: null };
+  A.sceneBar = rec;
+  importModule('./scenes.js').then(function (m) {
+    if (A.sceneBar !== rec) return;
+    rec.handle = m.mountSceneBar(el, rec.ctx);
+  }, function (e) {
+    if (A.sceneBar === rec) A.sceneBar = null;
+    console.warn('scene bar: ' + errMsg(e));
+  });
+}
+
+// User menu "Scenes…": the bar's actions menu (on a SCENE_VIEW; otherwise after going to Patch).
+function openScenesMenu() {
+  if (!A.store) return;
+  if (!SCENE_VIEWS[A.view]) navigate('patch', { keepSel: false });
+  let tries = 0;
+  (function attempt() {
+    const b = A.sceneBar && A.sceneBar.handle;
+    const st = b ? b.state() : null;
+    if (st && !st.supported) { toast(SCENES_UNSUPPORTED, 'warn'); return; }
+    if (st && st.failed) { toast('Scenes could not be loaded', 'warn'); return; }
+    if (st && st.scenes) {
+      if (!st.hidden) b.openMenu(); else toast('This project has no scenes yet', 'info');
+      return;
+    }
+    if (++tries > 60) { toast(SCENES_UNSUPPORTED, 'warn'); return; }
+    setTimeout(attempt, 100);
+  })();
 }
 
 function afterResync() {
@@ -1292,6 +1620,7 @@ function mountView(key) {
   A.viewHandle = null;
   A.view = key;
   renderNav();
+  syncSceneBar();
   const host = $('app-main');
   host.innerHTML = '';
   const el = h('div', { class: 'app-view', 'data-view': key });
@@ -1481,7 +1810,7 @@ function openMenu(anchor, items) {
   items.forEach(function (it) {
     if (it.sep) { menu.appendChild(h('div', { class: 'sep', role: 'separator' })); return; }
     if (it.info) { menu.appendChild(h('div', { class: 'lbl' }, it.info)); return; }
-    menu.appendChild(h('button', { type: 'button', role: 'menuitem', disabled: !!it.disabled, 'aria-current': it.current ? 'page' : null, onclick: function () { close(); it.action(); } }, it.label));
+    menu.appendChild(h('button', { type: 'button', role: 'menuitem', id: it.id || null, disabled: !!it.disabled, 'aria-current': it.current ? 'page' : null, onclick: function () { close(); it.action(); } }, it.label));
   });
   document.body.appendChild(menu);
   const r = anchor.getBoundingClientRect();
@@ -1505,7 +1834,10 @@ function openMenu(anchor, items) {
       if (n) n.focus();
     }
   }
-  setTimeout(function () { document.addEventListener('pointerdown', outside, true); document.addEventListener('keydown', key, true); }, 0);
+  // Keys bind at once so an immediate Esc is not lost; pointerdown waits a tick
+  // so the pointer that opened the menu cannot also close it.
+  document.addEventListener('keydown', key, true);
+  setTimeout(function () { document.addEventListener('pointerdown', outside, true); }, 0);
 }
 
 function userMenu() {
@@ -1528,8 +1860,15 @@ function userMenu() {
     if (A.role !== 'viewer') items.push({ label: 'New project\u2026', action: newProjectDialog });
     items.push({ sep: true });
   }
+  const theme = readTheme();
+  items.push({ label: 'Theme: ' + THEME_LABELS[theme] + ' \u25B8 ' + THEME_LABELS[nextTheme(theme)], id: 'app-menu-theme', action: function () { setTheme(nextTheme(readTheme())); } });
   items.push({ label: 'Make available offline', action: makeOffline });
   items.push({ label: 'Keyboard shortcuts', action: shortcutsDialog });
+  // The menu is gone by the time these open; focus the button first so Esc returns there.
+  items.push({ label: 'Take the tour', id: 'app-menu-tour', disabled: !A.store, action: function () { $('app-user').focus(); runTour(); } });
+  items.push({ label: 'Scenes\u2026', id: 'app-menu-scenes', disabled: !A.store, action: openScenesMenu });
+  if (A.store && !baseReadOnly() && !A.travel && !A.locked) items.push({ label: 'Lock editing', id: 'app-menu-lock', action: function () { setLocked(true); } });
+  items.push({ label: 'Suggest an improvement\u2026', id: 'app-menu-suggest', disabled: !A.ctx, action: function () { $('app-user').focus(); suggestImprovement(); } });
   if (s.auth_enabled && u) {
     items.push({ label: 'Change password', action: changePasswordDialog });
     items.push({ sep: true });
@@ -1540,7 +1879,73 @@ function userMenu() {
 
 function shortcutsDialog() {
   const rows = [['Cmd/Ctrl+K', 'Search'], ['Cmd/Ctrl+J', 'Helper (assistant)'], ['Cmd/Ctrl+S', 'Save now'], ['Cmd/Ctrl+Z', 'Undo'], ['Shift+Cmd/Ctrl+Z, Ctrl+Y', 'Redo'], ['Esc', 'Close dialogs, panels and highlights']];
-  openDialog({ title: 'Keyboard shortcuts', body: h('table', { class: 'adm-table' }, h('tbody', null, rows.map(function (r) { return h('tr', null, [h('th', { scope: 'row' }, r[0]), h('td', null, r[1])]); }))), buttons: [{ label: 'Close', value: null, primary: true }] });
+  openDialog({
+    title: 'Keyboard shortcuts',
+    body: h('table', { class: 'adm-table' }, h('tbody', null, rows.map(function (r) { return h('tr', null, [h('th', { scope: 'row' }, r[0]), h('td', null, r[1])]); }))),
+    buttons: [{ label: 'Take the tour', value: 'tour' }, { label: 'Close', value: null, primary: true }],
+  }).then(function (v) { if (v === 'tour') runTour(); });
+}
+
+// ---- first-run tour (FR-UX-16; tour.js). Runs once after the first project loads when
+// fathom.ui.tour is unset, then stores {done, at}. ?tour=0 never auto-starts, ?tour=1 always does
+// (also under ?smoke=1, where it otherwise stays off so smoke runs see the plain shell).
+
+const TOUR_KEY = 'fathom.ui.tour';
+
+function tourSteps() {
+  return [
+    { target: '#app-project, #app-room', title: 'Project and room', text: 'Switch projects and rooms here. "All rooms" shows the whole project at once.' },
+    { target: '#app-views, #app-tabbar', title: 'Sections', text: 'Patch, Rooms, Devices, Schedules, SOPs, Data and Settings. Right-click or long-press a section for its views.' },
+    { target: '#app-search', title: 'Search everything', text: 'Devices, cables, rooms, racks and procedures. Cmd/Ctrl+K opens it from anywhere.' },
+    { target: '#app-assistant-btn', title: 'Helper', text: 'Ask how a signal gets from A to B or where a device lives; the Helper answers from this project.' },
+    { target: '#app-user', title: 'Save state and your menu', text: 'Edits save on their own; the dot next to this button shows the state. Theme, offline copy, lock and suggestions live in this menu.' },
+  ];
+}
+
+function tourSeen() {
+  let raw = null;
+  try { raw = window.localStorage.getItem(TOUR_KEY); } catch (e) { return false; }
+  if (!raw) return false;
+  try {
+    const o = JSON.parse(raw);
+    return !!(o && typeof o === 'object');
+  } catch (e) { return true; }
+}
+
+function tourStore(result) {
+  try { window.localStorage.setItem(TOUR_KEY, JSON.stringify({ done: true, at: new Date().toISOString(), reason: result && result.reason })); } catch (e) { /* private mode */ }
+}
+
+function runTour() {
+  if (A.tour && A.tour.isOpen()) return Promise.resolve(A.tour);
+  return Promise.all([ensureCss('tour.css'), importModule('./tour.js')]).then(function (r) {
+    const m = r[1];
+    A.tour = m.startTour(tourSteps(), { onClose: function (res) { A.tour = null; tourStore(res); } });
+    return A.tour;
+  }).catch(function (e) { toast(errMsg(e), 'err'); return null; });
+}
+
+function maybeStartTour() {
+  if (A.tourChecked || !A.store) return;
+  A.tourChecked = true;
+  const p = urlParam('tour');
+  if (p === '0') return;
+  if (p !== '1' && (urlParam('smoke') === '1' || tourSeen())) return;
+  setTimeout(function () { if (A.store) runTour(); }, 350);
+}
+
+// ---- "Suggest an improvement" (FR-UX-18; improve-ui.js)
+
+function suggestImprovement() {
+  const ctx = A.ctx;
+  if (!ctx) { toast('Open a project first', 'warn'); return; }
+  const u = A.session && A.session.user;
+  const view = VIEWS[A.view] ? VIEWS[A.view].label : '';
+  const room = A.store && A.store.room ? roomName(A.store.room) : '';
+  const about = [A.project, view, room].filter(Boolean).join(' \u00b7 ');
+  return Promise.all([importModule('./improve-ui.js')]).then(function (r) {
+    return r[0].openImproveDialog(ctx, { about: about, name: u ? u.username : '', url: location.href });
+  }).catch(function (e) { toast(errMsg(e), 'err'); });
 }
 
 function changePasswordDialog() {
@@ -1581,6 +1986,15 @@ function registerSW() {
 
 // ---- assistant panel
 
+// Views ask for the Helper with `fathom:assistant-open` {detail: {mode, room}} (page-room.js "Describe a room…").
+// assistant-ui.js handles the event itself once loaded; before that, load it here and hand the detail over.
+document.addEventListener('fathom:assistant-open', function (e) {
+  if (A.assistant || !A.ctx) return;
+  const detail = e && e.detail;
+  toggleAssistant(true);
+  A.assistantOpenDetail = detail;
+});
+
 function toggleAssistant(force) {
   const el = $('app-assistant');
   if (!el || !A.ctx) return;
@@ -1593,6 +2007,7 @@ function toggleAssistant(force) {
     importModule('./assistant-ui.js').then(function (m) {
       el.innerHTML = '';
       A.assistant = m.mountAssistant(el, Object.assign({}, A.ctx, { closePanel: function () { toggleAssistant(false); } })) || { destroy: function () {} };
+      if (A.assistantOpenDetail && m.openAssistant) { m.openAssistant(A.assistantOpenDetail); A.assistantOpenDetail = null; }
       if (A.assistant.focus) A.assistant.focus();
     }, function (e) {
       el.innerHTML = '';
@@ -1608,11 +2023,13 @@ function toggleAssistant(force) {
 
 function startTimeTravel(rev) {
   if (!A.api) return Promise.resolve();
+  if (A.preview) endPreview(true);
   return A.api.historyDoc(A.project, rev).then(function (r) {
     if (!A.travel) A.travel = { rev: rev, doc: A.store.doc, revision: A.store.revision, readOnly: A.store.readOnly };
     A.travel.rev = rev;
     A.store.setReadOnly(true);
     A.store.replaceDoc(r.doc, A.travel.revision, 'history');
+    renderLock(lockInfo());
     refreshBanner();
     updateSave(null);
   }).catch(function (e) { toast(errMsg(e), 'err'); });
@@ -1624,6 +2041,7 @@ function endTimeTravel() {
   A.travel = null;
   A.store.replaceDoc(t.doc, t.revision, 'load');
   A.store.setReadOnly(t.readOnly);
+  applyLock(true);
   refreshBanner();
   updateSave(null);
 }
@@ -1645,7 +2063,9 @@ function restoreRevision(rev) {
 function newProjectDialog() {
   const name = h('input', { id: 'np-name', placeholder: 'e.g. riverside', autocapitalize: 'none', autocomplete: 'off' });
   const org = h('input', { id: 'np-org', placeholder: 'Organization' });
-  const tpl = h('select', { id: 'np-template' }, [h('option', { value: 'blank' }, 'Blank')].concat(((A.meta && A.meta.samples) || []).map(function (s) { return h('option', { value: s }, 'Sample: ' + s); })));
+  const tpl = h('select', { id: 'np-template' }, [h('option', { value: 'blank' }, 'Blank')]
+    .concat(((A.meta && A.meta.samples) || []).map(function (s) { return h('option', { value: s }, 'Sample: ' + s); }))
+    .concat(((A.meta && A.meta.user_starters) || []).map(function (s) { return h('option', { value: s.id }, 'Starter: ' + (s.label || s.id)); })));
   name.addEventListener('input', function () { if (!org.value) org.placeholder = name.value ? name.value : 'Organization'; });
   return openDialog({
     title: 'New project',
@@ -1685,8 +2105,13 @@ function teardown() {
   if ($('app')) $('app').classList.remove('ast-open');
   A.viewStates = {};
   A.travel = null;
+  destroySceneBar();
+  A.preview = null;
+  renderPreview();
   A.ctx = null;
   A.store = null;
+  A.locked = false;
+  renderLock({ locked: false });
   A.view = '';
   A.pendingSection = '';
   A.overlayInfo = { fetchedAt: null, revision: null };
@@ -1877,7 +2302,14 @@ function loadProject(name, route) {
     }
     const recent = A.recent;
     const ctx = makeCtx(store, {
-      api: noticeApi(A.api, name), project: name, meta: A.meta, role: A.role, session: A.session,
+      api: noticeApi(A.api, name), project: name, meta: A.meta, session: A.session,
+      // Locked project or scene preview: every view is a viewer except Settings, which holds the lock toggle.
+      get role() { return (A.locked || A.preview) && A.view !== 'settings' ? 'viewer' : A.role; },
+      // Scenes (§6.15): the bar reads the real editing right (the lock answers 423 by itself).
+      get sceneEditor() { return sceneEditor(); },
+      get preview() { return previewInfo(); },
+      previewScene: startPreview,
+      exitPreview: function () { endPreview(true); },
       navigate: navigate,
       openInspector: openDrawer,
       closeInspector: closeDrawer,
@@ -1915,6 +2347,8 @@ function loadProject(name, route) {
     } catch (e) { console.warn('notifications: ' + errMsg(e)); }
     on(store, 'doc', function (e) {
       const d = e.detail;
+      // A doc from the server replaces whatever was previewed: the preview ends without restoring.
+      if (A.preview && (d.source === 'load' || d.source === 'remote' || d.source === 'pending')) endPreview(false);
       if (d.source === 'local' || d.source === 'undo' || d.source === 'redo') {
         if (A.travel) return;
         queue.enqueue(d.ops, d.label || d.source);
@@ -1923,6 +2357,7 @@ function loadProject(name, route) {
       if (d.touched && d.touched.some(function (r) { return r.indexOf('rooms/') === 0 || r.indexOf('venues/') === 0; })) renderPickers();
       if (d.source === 'load') renderPickers();
       if (d.source !== 'local' && d.touched && d.touched.some(function (r) { return r.indexOf('problems/') === 0; })) checkProblemReports(false);
+      if (d.source === 'load' || (d.touched && d.touched.indexOf('settings') >= 0)) applyLock(false);
       updateSave(null);
       refreshSelbar();
     });
@@ -1940,11 +2375,15 @@ function loadProject(name, route) {
     });
     on(store, 'error', function (e) { toast(errMsg(e.detail && e.detail.error), 'err'); });
     on(queue, 'state', function (e) { updateSave(e.detail); refreshBanner(); trackSave(e.detail); });
-    on(queue, 'dropped', function (e) { toast('Change rejected by the server: ' + errMsg(e.detail.error) + '. Reloaded the project.', 'err'); });
+    on(queue, 'dropped', function (e) {
+      if (isLockedError(e.detail.error)) { toast('Someone locked editing \u2014 your last change was not saved', 'err'); return; }
+      toast('Change rejected by the server: ' + errMsg(e.detail.error) + '. Reloaded the project.', 'err');
+    });
     on(queue, 'problems', function (e) { A.problems = e.detail || []; emit('problems', A.problems); });
     on(window, 'online', function () { refreshBanner(); queue.flush(); });
     on(window, 'offline', refreshBanner);
     on(window, 'beforeunload', function (e) { if (queue.pending && navigator.onLine !== false) { queue.flush(); e.preventDefault(); e.returnValue = ''; } });
+    applyLock(true);
     renderPickers();
     refreshBanner();
     updateSave(null);
@@ -1952,7 +2391,7 @@ function loadProject(name, route) {
     checkProblemReports(true);
     A.loading = '';
     const cur = parseRoute(location.hash);
-    return applyRoute(cur.project === name ? cur : route);
+    return applyRoute(cur.project === name ? cur : route).then(function (r) { maybeStartTour(); return r; });
   }).catch(function (e) {
     A.loading = '';
     const main = $('app-main');
@@ -2065,6 +2504,8 @@ function applyRoute(input) {
   const prev = A.route;
   A.route = r;
   if (canon) historyWrite(buildRoute(r), true);
+  // Before the view mounts, so a view outside SCENE_VIEWS mounts on the live doc.
+  applySceneRoute(r);
   let mounted = null;
   const same = r.view === A.view && !!A.viewHandle;
   applySelection(r, false);
@@ -2150,6 +2591,7 @@ export function boot(root, opts) {
   A.nav = navMemory(storageOf('sessionStorage'));
   resetSubs();
   ensureCss(BOOT_CSS);
+  ensureShellRows();
   ensureDrawer();
   const env = detectEnv();
   const kbd = document.querySelector('#app-search .app-search-kbd');

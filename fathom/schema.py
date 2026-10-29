@@ -32,7 +32,7 @@ Problem = Dict[str, Any]
 SCHEMA_VERSION: int = 2
 COLLECTIONS: Tuple[str, ...] = (
     "venues", "rooms", "systems", "locations", "racks", "networks", "devices",
-    "cables", "bundles", "floorplans", "attachments", "templates", "imports", "pages", "problems",
+    "cables", "bundles", "floorplans", "attachments", "templates", "imports", "pages", "problems", "scenes",
 )
 ROOTS: Tuple[str, ...] = ("meta", "settings", "media")
 
@@ -61,6 +61,15 @@ CHANNEL_SOURCES: Tuple[str, ...] = ("user", "yamaha", "clf", "dante", "csv")
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "default_room": "main", "units": "metric", "cable_tag_pattern": "{D}-{n:03}", "currency": "USD", "autosave": True,
 }
+#: ``device.inventory.condition`` (fallback copy of ``vocab.CONDITIONS``, FR-INV-06)
+CONDITIONS: Tuple[str, ...] = ("new", "good", "fair", "poor", "broken")
+#: ``device.short_code``: 8 chars, no 0 / 1 / I / O so codes survive handwriting and OCR (FR-INV-09)
+SHORT_CODE_ALPHABET: str = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+SHORT_CODE_RE = re.compile(r"^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$")
+#: ``device.inventory.fields`` limits (custom fields)
+MAX_CUSTOM_FIELDS = 32
+MAX_CUSTOM_FIELD_KEY = 40
+MAX_CUSTOM_FIELD_VALUE = 500
 
 
 class SchemaError(ValueError):
@@ -89,6 +98,7 @@ _FALLBACK_KINDS = {
     "dimmer": ("lighting", "right", "matrix"), "fixture": ("lighting", "right", "passthrough"), "switch": ("network", "right", "matrix"),
     "control": ("control", "right", "matrix"), "touch_panel": ("control", "left", "none"), "power": ("power", "right", "matrix"),
     "patch_panel": ("other", "right", "passthrough"),
+    "container": ("other", "right", "none"),
 }
 _A, _V, _L, _N, _C, _P = "audio", "video", "lighting", "network", "control", "power"
 _FALLBACK_MEDIA = {
@@ -302,17 +312,166 @@ def normalize(doc: Doc) -> Doc:
             if ent.get("auto") is True:
                 continue
             e = _clean(copy.deepcopy(ent), keep=("ports",) if coll == "devices" else ())
+            if coll == "scenes" and isinstance(ent.get("data"), dict):
+                e["data"] = copy.deepcopy(ent["data"])  # §4.3.18: empty lists / {} inside scene data are meaningful
             if coll == "devices":
                 ports = e.get("ports")
                 if ports is None:
                     e["ports"] = []
                 elif isinstance(ports, list):
                     e["ports"] = [p for p in ports if not (isinstance(p, dict) and p.get("auto") is True)]
+                _normalize_device_extras(e)
+            if coll == "floorplans" and not isinstance(e.get("paths"), list):
+                e["paths"] = []  # FR-PLAN-14: shared paths always present (never a route when absent)
             lst.append(e)
         out[coll] = lst
     for k, v in src.items():
         if k not in out and k not in COLLECTIONS and k not in ROOTS:
             out[k] = copy.deepcopy(v)
+    return out
+
+
+def _conditions() -> Tuple[str, ...]:
+    try:
+        from . import vocab  # type: ignore
+
+        return tuple(getattr(vocab, "CONDITIONS", None) or CONDITIONS)
+    except Exception:  # pragma: no cover
+        return CONDITIONS
+
+
+def _normalize_device_extras(e: Dict[str, Any]) -> None:
+    """In place, on an already-copied device: FR-INV-06..09 fields
+    (``inventory.condition``, ``inventory.fields``, ``container``, ``short_code``)."""
+    inv = e.get("inventory")
+    if isinstance(inv, dict):
+        cond = inv.get("condition")
+        if cond is not None and (not isinstance(cond, str) or cond not in _conditions()):
+            inv.pop("condition", None)
+        fields = inv.get("fields")
+        if fields is not None:
+            clean = normalize_custom_fields(fields)
+            if clean:
+                inv["fields"] = clean
+            else:
+                inv.pop("fields", None)
+        if not inv:
+            e.pop("inventory", None)
+    cont = e.get("container")
+    if cont is not None and (not isinstance(cont, str) or not cont.strip()):
+        e.pop("container", None)
+    elif isinstance(cont, str):
+        e["container"] = cont.strip()
+    if "short_code" in e:
+        code = parse_short_code(e.get("short_code"))
+        if code:
+            e["short_code"] = code
+        else:
+            e.pop("short_code", None)
+
+
+def normalize_custom_fields(fields: Any) -> Dict[str, str]:
+    """``inventory.fields`` → str→str: ≤ 32 keys, keys trimmed to ≤ 40 chars,
+    values stringified and cut to ≤ 500 chars, empty keys dropped."""
+    out: Dict[str, str] = {}
+    if not isinstance(fields, dict):
+        return out
+    for k, v in fields.items():
+        key = str(k).strip()[:MAX_CUSTOM_FIELD_KEY].strip()
+        if not key or key in out:
+            continue
+        if v is None:
+            val = ""
+        elif isinstance(v, bool):
+            val = "true" if v else "false"
+        elif isinstance(v, (int, float, str)):
+            val = str(v)
+        else:
+            val = json.dumps(v, ensure_ascii=False)
+        out[key] = val[:MAX_CUSTOM_FIELD_VALUE]
+        if len(out) >= MAX_CUSTOM_FIELDS:
+            break
+    return out
+
+
+# ------------------------------------------------------- short codes (FR-INV-09)
+
+
+def parse_short_code(text: Any) -> Optional[str]:
+    """``"abcd-2345"`` / ``" ABCD2345 "`` → ``"ABCD2345"``; ``None`` when it is not a valid code."""
+    if not isinstance(text, str):
+        return None
+    code = text.strip().replace("-", "").replace(" ", "").upper()
+    return code if SHORT_CODE_RE.match(code) else None
+
+
+def format_short_code(code: Any) -> str:
+    """``"ABCD2345"`` → ``"ABCD-2345"`` (anything else is returned stripped)."""
+    c = parse_short_code(code)
+    if c is None:
+        return str(code or "").strip()
+    return c[:4] + "-" + c[4:]
+
+
+def new_short_code(taken: Optional[Set[str]] = None) -> str:
+    """A random code (``secrets.choice`` over the 32-char alphabet) not in ``taken``."""
+    import secrets
+
+    taken = taken or set()
+    while True:
+        code = "".join(secrets.choice(SHORT_CODE_ALPHABET) for _ in range(8))
+        if code not in taken:
+            return code
+
+
+def short_codes_enabled(doc: Doc) -> bool:
+    """``settings.short_codes`` is not ``False`` (an opt-out for golden-file projects)."""
+    settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    return settings.get("short_codes") is not False
+
+
+def ensure_short_codes(doc: Doc) -> int:
+    """Assign a ``short_code`` to every device lacking one, unique within the doc.
+    Mutates ``doc`` in place (the one deliberate exception to this module's
+    purity, since callers want the count); returns how many were assigned.
+    Not part of :func:`normalize`: ``project.save_doc`` / ``apply_changes``,
+    project creation and ``fathom codes backfill`` call it."""
+    devs = doc.get("devices")
+    if not isinstance(devs, list):
+        return 0
+    taken: Set[str] = set()
+    for d in devs:
+        if isinstance(d, dict):
+            code = parse_short_code(d.get("short_code"))
+            if code:
+                taken.add(code)
+    seen: Set[str] = set()
+    n = 0
+    for d in devs:
+        if not isinstance(d, dict) or d.get("auto") is True:
+            continue
+        code = parse_short_code(d.get("short_code"))
+        if code and code not in seen:
+            seen.add(code)  # the first holder keeps it; a duplicate further down gets a fresh one
+            continue
+        code = new_short_code(taken)
+        d["short_code"] = code
+        taken.add(code)
+        seen.add(code)
+        n += 1
+    return n
+
+
+def container_contents(doc: Doc) -> Dict[str, List[str]]:
+    """``{container_id: [device_id, …]}`` from ``device.container`` links (doc order;
+    computed, never persisted)."""
+    out: Dict[str, List[str]] = {}
+    for d in doc.get("devices") or []:
+        if not isinstance(d, dict) or not d.get("id"):
+            continue
+        c = d.get("container")
+        if isinstance(c, str) and c:
+            out.setdefault(c, []).append(str(d["id"]))
     return out
 
 
@@ -1073,7 +1232,7 @@ def is_v1_expressible(doc: Doc) -> bool:
     """True when the doc can round-trip through the v1 format (§4.6.7)."""
     if len(doc.get("venues") or []) > 1 or len(doc.get("rooms") or []) > 1:
         return False
-    for c in ("racks", "networks", "floorplans", "attachments", "templates", "locations", "pages", "problems"):
+    for c in ("racks", "networks", "floorplans", "attachments", "templates", "locations", "pages", "problems", "scenes"):
         if doc.get(c):
             return False
     if len(doc.get("systems") or []) > 1:
@@ -1081,7 +1240,7 @@ def is_v1_expressible(doc: Doc) -> bool:
     for d in doc.get("devices") or []:
         if not isinstance(d, dict):
             return False
-        for k in ("inventory", "rack", "interfaces", "dmx", "template", "routing", "patch", "tags", "channels", "channel_links"):
+        for k in ("inventory", "rack", "interfaces", "dmx", "template", "routing", "patch", "tags", "channels", "channel_links", "container"):
             if d.get(k):
                 return False
         if d.get("weight_kg") is not None or d.get("power_w") is not None:
@@ -1366,8 +1525,11 @@ _REQUIRED: Dict[str, Tuple[str, ...]] = {
     "locations": ("name",), "racks": ("name", "units"), "networks": ("name",),
     "devices": ("name", "kind"), "cables": ("from", "to", "medium"), "bundles": (),
     "floorplans": ("name", "room", "source", "image"), "attachments": ("name", "file", "mime"),
-    "templates": (), "imports": ("kind", "path"), "pages": ("slug", "title"), "problems": ("text",),
+    "templates": (), "imports": ("kind", "path"), "pages": ("slug", "title"), "problems": ("text",), "scenes": ("name",),
 }
+#: §4.3.18 scene name length cap and the device fields a scene owns
+MAX_SCENE_NAME = 80
+SCENE_PLACEMENT_FIELDS: Tuple[str, ...] = ("room", "location", "rack", "patch")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -1385,6 +1547,19 @@ def validate_doc(doc: Doc) -> List[Problem]:
     settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
     if settings.get("units") not in (None, "metric", "imperial"):
         P.append(_prob("error", "bad_enum", "settings", "settings/units", "units must be metric or imperial"))
+    if "locked" in settings and not isinstance(settings.get("locked"), bool):
+        P.append(_prob("error", "bad_type", "settings", "settings/locked", "locked must be true or false"))
+    for key in ("locked_by", "locked_at"):
+        if settings.get(key) is not None and not isinstance(settings.get(key), str):
+            P.append(_prob("error", "bad_type", "settings", f"settings/{key}", f"{key} must be a string"))
+    if settings.get("suggest_url") is not None:
+        url = settings.get("suggest_url")
+        if not isinstance(url, str):
+            P.append(_prob("error", "bad_type", "settings", "settings/suggest_url", "suggest_url must be a string"))
+        elif url and not re.match(r"^https?://[^\s/?#]+", url, re.I):
+            P.append(_prob("error", "bad_enum", "settings", "settings/suggest_url", "suggest_url must be an http(s) URL"))
+    if settings.get("scene") is not None and not isinstance(settings.get("scene"), str):
+        P.append(_prob("error", "bad_type", "settings", "settings/scene", "scene must be a scene id string"))
 
     colls: Dict[str, List[Dict[str, Any]]] = {}
     for coll in COLLECTIONS:
@@ -1507,7 +1682,11 @@ def validate_doc(doc: Doc) -> List[Problem]:
             for f in ("purchase_date", "warranty_until"):
                 if inv.get(f) and not _valid_date(inv.get(f)):
                     P.append(_prob("warning", "bad_date", ref, f"{ref}/inventory/{f}", f"{f} must be YYYY-MM-DD"))
+            cond = inv.get("condition")
+            if cond not in (None, "", *_conditions()):
+                P.append(_prob("warning", "bad_condition", ref, f"{ref}/inventory/condition", f"unknown condition '{cond}' (one of {', '.join(_conditions())})"))
         P.extend(_channel_problems(d, ref, pseen))
+    P.extend(_container_problems(colls["devices"]))
 
     # ---- cables and bundles
     bundle_ids = ids["bundles"]
@@ -1583,6 +1762,8 @@ def validate_doc(doc: Doc) -> List[Problem]:
                 v = m.get(k)
                 if isinstance(v, (int, float)) and not isinstance(v, bool) and not 0 <= v <= 1:
                     P.append(_prob("warning", "marker_out_of_bounds", ref, f"{ref}/markers/{j}/{k}", "marker outside the plan"))
+        P.extend(_path_problems(f, ref))
+    P.extend(_route_problems(colls))
     for a in colls["attachments"]:
         ref = f"attachments/{a['id']}"
         dangling(ref, ref + "/device", "device", a.get("device"), "devices")
@@ -1593,6 +1774,7 @@ def validate_doc(doc: Doc) -> List[Problem]:
     # ---- SOP pages (§4.3.15)
     P.extend(_page_problems(colls, ids))
     P.extend(_problem_report_problems(colls, ids))
+    P.extend(_scene_problems(settings, colls, ids, idx))
 
     # ---- helpers owned by other units (skipped when not importable)
     P.extend(_helper_problems(doc, colls))
@@ -1689,6 +1871,124 @@ def _device_rack_field_problems(d: Dict[str, Any], ref: str) -> List[Problem]:
     return P
 
 
+#: FR-PLAN-14 shared path kinds and FR-PLAN-15 route modes (`fathom/runs.py`)
+PATH_KINDS: Tuple[str, ...] = ("tray", "catwalk", "trench", "conduit", "floor", "other")
+ROUTE_MODES: Tuple[str, ...] = ("auto", "manual")
+
+
+def _is_point(v: Any) -> bool:
+    return (isinstance(v, (list, tuple)) and len(v) == 2
+            and all(isinstance(c, (int, float)) and not isinstance(c, bool) for c in v))
+
+
+def _path_problems(fp: Dict[str, Any], ref: str) -> List[Problem]:
+    """``floorplan.paths[]`` (§4.3.11): ``paths`` must be a list (error ``bad_type``);
+    a path whose ``points`` is not a list of ≥ 2 ``[x, y]`` number pairs is an error
+    ``path_bad_points``; a point outside [0, 1] is the same code as a warning."""
+    P: List[Problem] = []
+    paths = fp.get("paths")
+    if paths is None:
+        return P
+    if not isinstance(paths, list):
+        return [_prob("error", "bad_type", ref, ref + "/paths", "paths must be a list")]
+    seen: Set[str] = set()
+    for j, p in enumerate(paths):
+        path = f"{ref}/paths/{j}"
+        if not isinstance(p, dict):
+            P.append(_prob("error", "bad_type", ref, path, "path must be an object"))
+            continue
+        pid = p.get("id")
+        if not isinstance(pid, str) or not pid:
+            P.append(_prob("error", "missing_field", ref, path + "/id", "path needs an id"))
+        elif not ID_RE.match(pid):
+            P.append(_prob("error", "bad_id", ref, path + "/id", f"bad path id {pid!r}"))
+        elif pid in seen:
+            P.append(_prob("error", "duplicate_id", ref, path + "/id", f"duplicate path id {pid!r}"))
+        else:
+            seen.add(pid)
+        pts = p.get("points")
+        if not isinstance(pts, list) or len(pts) < 2 or not all(_is_point(q) for q in pts):
+            P.append(_prob("error", "path_bad_points", ref, path + "/points", "path points must be at least two [x, y] number pairs"))
+        elif any(not (0 <= q[0] <= 1 and 0 <= q[1] <= 1) for q in pts):
+            P.append(_prob("warning", "path_bad_points", ref, path + "/points", "path point outside the plan"))
+        for k in ("elevation_m",):
+            v = p.get(k)
+            if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))):
+                P.append(_prob("error", "bad_type", ref, f"{path}/{k}", f"{k} must be a number"))
+    return P
+
+
+def _route_problems(colls: Dict[str, List[Dict[str, Any]]]) -> List[Problem]:
+    """``cable.route`` / ``bundle.route`` (§4.3.10): wrong type is an error; a
+    ``plan`` that is not a floor plan is a warning ``route_wrong_plan``; a ``via``
+    entry naming no path on that plan is a warning ``route_dangling_path``
+    (the run then falls back to a straight line). A run is advisory: a missing
+    marker is not reported here (``runs.plan_runs`` lists it under ``unplaced``)."""
+    P: List[Problem] = []
+    plans = {f["id"]: {str(p.get("id")) for p in (f.get("paths") or []) if isinstance(p, dict)} for f in colls["floorplans"]}
+    for coll in ("cables", "bundles"):
+        for e in colls[coll]:
+            route = e.get("route")
+            if route is None:
+                continue
+            ref = f"{coll}/{e['id']}"
+            if not isinstance(route, dict):
+                P.append(_prob("error", "bad_type", ref, ref + "/route", "route must be an object"))
+                continue
+            if route.get("mode") not in (None, *ROUTE_MODES):
+                P.append(_prob("error", "bad_enum", ref, ref + "/route/mode", f"route mode must be one of {', '.join(ROUTE_MODES)}"))
+            for k in ("slack_m", "drop_m"):
+                v = route.get(k)
+                if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))):
+                    P.append(_prob("error", "bad_type", ref, f"{ref}/route/{k}", f"{k} must be a number"))
+            pts = route.get("points")
+            if pts is not None and (not isinstance(pts, list) or not all(_is_point(q) for q in pts)):
+                P.append(_prob("error", "bad_type", ref, ref + "/route/points", "route points must be [x, y] number pairs"))
+            plan = route.get("plan")
+            if plan is not None and plan not in plans:
+                P.append(_prob("warning", "route_wrong_plan", ref, ref + "/route/plan", f"{ref}: route plan '{plan}' is not a floor plan (route ignored)"))
+            via = route.get("via")
+            if via is not None and not isinstance(via, list):
+                P.append(_prob("error", "bad_type", ref, ref + "/route/via", "route via must be a list of path ids"))
+                continue
+            known = plans[plan] if plan in plans else (set().union(*plans.values()) if plans else set())
+            for j, pid in enumerate(via or []):
+                if pid not in known:
+                    P.append(_prob("warning", "route_dangling_path", ref, f"{ref}/route/via/{j}", f"{ref}: path '{pid}' does not exist on the plan (straight run instead)"))
+    return P
+
+
+def _container_problems(devices: List[Dict[str, Any]]) -> List[Problem]:
+    """``device.container`` links (FR-INV-08): target missing, target not a
+    ``container`` kind, or a loop when following the links — all warnings."""
+    P: List[Problem] = []
+    by_id = {d["id"]: d for d in devices if isinstance(d.get("id"), str)}
+    for d in devices:
+        c = d.get("container")
+        if not c:
+            continue
+        ref = f"devices/{d['id']}"
+        path = ref + "/container"
+        if not isinstance(c, str):
+            P.append(_prob("warning", "container_missing", ref, path, f"{ref}: container must be a device id"))
+            continue
+        target = by_id.get(c)
+        if target is None:
+            P.append(_prob("warning", "container_missing", ref, path, f"{ref}: container '{c}' does not exist"))
+            continue
+        if target.get("kind") != "container":
+            P.append(_prob("warning", "container_not_container", ref, path, f"{ref}: '{c}' is not a container (kind {target.get('kind') or '?'})"))
+        hops: Set[str] = {d["id"]}
+        cur: Any = c
+        while isinstance(cur, str) and cur in by_id:
+            if cur in hops:
+                P.append(_prob("warning", "container_cycle", ref, path, f"{ref}: container chain loops back through '{cur}'"))
+                break
+            hops.add(cur)
+            cur = by_id[cur].get("container")
+    return P
+
+
 def _page_problems(colls: Dict[str, List[Dict[str, Any]]], ids: Dict[str, Set[str]]) -> List[Problem]:
     """Slug shape and uniqueness, enums, parent existence and cycles (errors);
     links to missing rooms / devices / attachments are warnings so deleting a
@@ -1760,6 +2060,89 @@ def _problem_report_problems(colls: Dict[str, List[Dict[str, Any]]], ids: Dict[s
             P.append(_prob("warning", "dangling_link", ref, ref + "/page", f"{ref}: page '{r['page']}' does not exist"))
         if r.get("attachment") and r["attachment"] not in ids["attachments"]:
             P.append(_prob("warning", "dangling_link", ref, ref + "/attachment", f"{ref}: attachment '{r['attachment']}' does not exist"))
+    return P
+
+
+def _scene_problems(settings: Dict[str, Any], colls: Dict[str, List[Dict[str, Any]]], ids: Dict[str, Set[str]], idx: "DocIndex") -> List[Problem]:
+    """Scenes (§4.3.18): name shape, one ``base`` entry at most (error ``bad_enum``), typed ``data``
+    (errors ``bad_type``); duplicate names, a ``settings.scene`` that names no scene and scene cables /
+    markers / device entries pointing at devices or ports that no longer exist are warnings
+    (``duplicate_name`` / ``dangling_link``) — a deleted device must never make a scene unsaveable."""
+    P: List[Problem] = []
+    scenes_ = colls.get("scenes") or []
+    names: Dict[str, str] = {}
+    base_refs: List[str] = []
+    dev_ids = ids.get("devices") or set()
+    fp_ids = ids.get("floorplans") or set()
+    for s in scenes_:
+        ref = f"scenes/{s['id']}"
+        name = s.get("name")
+        if name is not None and not isinstance(name, str):
+            P.append(_prob("error", "bad_type", ref, ref + "/name", "name must be a string"))
+        elif isinstance(name, str):
+            if len(name) > MAX_SCENE_NAME:
+                P.append(_prob("error", "bad_enum", ref, ref + "/name", f"name is longer than {MAX_SCENE_NAME} characters"))
+            key = name.strip().casefold()
+            if key and key in names:
+                P.append(_prob("warning", "duplicate_name", ref, ref + "/name", f"scene name '{name}' is also used by {names[key]}"))
+            elif key:
+                names[key] = ref
+        if "base" in s and not isinstance(s.get("base"), bool):
+            P.append(_prob("error", "bad_type", ref, ref + "/base", "base must be true or false"))
+        if s.get("base") is True:
+            base_refs.append(ref)
+        if s.get("note") is not None and not isinstance(s.get("note"), str):
+            P.append(_prob("error", "bad_type", ref, ref + "/note", "note must be a string"))
+        data = s.get("data")
+        if data is None:
+            continue
+        if not isinstance(data, dict):
+            P.append(_prob("error", "bad_type", ref, ref + "/data", "data must be an object"))
+            continue
+        for key in ("cables", "bundles"):
+            lst = data.get(key)
+            if lst is not None and not isinstance(lst, list):
+                P.append(_prob("error", "bad_type", ref, f"{ref}/data/{key}", f"data.{key} must be a list"))
+        for key in ("markers", "devices"):
+            obj = data.get(key)
+            if obj is not None and not isinstance(obj, dict):
+                P.append(_prob("error", "bad_type", ref, f"{ref}/data/{key}", f"data.{key} must be an object"))
+        for j, c in enumerate(data.get("cables") if isinstance(data.get("cables"), list) else []):
+            if not isinstance(c, dict):
+                continue
+            cid = c.get("id") or j
+            for end in ("from", "to"):
+                ep = c.get(end)
+                if not isinstance(ep, dict) or not ep.get("device"):
+                    continue
+                dev = str(ep["device"])
+                if dev not in dev_ids:
+                    P.append(_prob("warning", "dangling_link", ref, f"{ref}/data/cables/{j}/{end}/device", f"{ref}: cable {cid}: device '{dev}' does not exist"))
+                elif ep.get("port") and idx.port(dev, str(ep["port"])) is None:
+                    P.append(_prob("warning", "dangling_link", ref, f"{ref}/data/cables/{j}/{end}/port", f"{ref}: cable {cid}: port '{dev}:{ep['port']}' does not exist"))
+        markers = data.get("markers") if isinstance(data.get("markers"), dict) else {}
+        for fp, lst in markers.items():
+            if fp not in fp_ids:
+                P.append(_prob("warning", "dangling_link", ref, f"{ref}/data/markers/{fp}", f"{ref}: floor plan '{fp}' does not exist"))
+            if not isinstance(lst, list):
+                P.append(_prob("error", "bad_type", ref, f"{ref}/data/markers/{fp}", "markers must be a list"))
+                continue
+            for j, m in enumerate(lst):
+                if isinstance(m, dict) and m.get("device") and m["device"] not in dev_ids:
+                    P.append(_prob("warning", "dangling_link", ref, f"{ref}/data/markers/{fp}/{j}/device", f"{ref}: device '{m['device']}' does not exist"))
+        devices = data.get("devices") if isinstance(data.get("devices"), dict) else {}
+        for did, entry in devices.items():
+            if not isinstance(entry, dict):
+                P.append(_prob("error", "bad_type", ref, f"{ref}/data/devices/{did}", "device placement must be an object"))
+                continue
+            if did not in dev_ids:
+                P.append(_prob("warning", "dangling_link", ref, f"{ref}/data/devices/{did}", f"{ref}: device '{did}' does not exist"))
+    if len(base_refs) > 1:
+        for ref in base_refs[1:]:
+            P.append(_prob("error", "bad_enum", ref, ref + "/base", f"only one scene may be the base ({base_refs[0]} already is)"))
+    active = settings.get("scene")
+    if isinstance(active, str) and active and active != "base" and active not in (ids.get("scenes") or set()):
+        P.append(_prob("warning", "dangling_link", "settings", "settings/scene", f"active scene '{active}' does not exist"))
     return P
 
 
@@ -2005,20 +2388,33 @@ _CHANNEL_LINK = _obj({
     "level": _STR, "source": _STR, "note": _STR,
 }, ("from", "to", "kind"))
 
+_POINT = {"type": "array", "items": _NUM, "minItems": 2, "maxItems": 2}
+#: §4.3.11 shared path on a floor plan (FR-PLAN-14)
+_PATH = _obj({
+    "id": _ID, "name": _STR, "kind": {"type": "string", "enum": list(PATH_KINDS)}, "points": {"type": "array", "items": _POINT, "minItems": 2},
+    "color": _STR, "elevation_m": _NUM, "note": _STR,
+}, ("id", "points"))
+#: §4.3.10 advisory route of a cable / bundle on one plan (FR-PLAN-15)
+_ROUTE = _obj({
+    "plan": _ID, "points": _arr(_POINT), "via": _arr(_ID), "slack_m": _NUM, "drop_m": _NUM,
+    "mode": {"type": "string", "enum": list(ROUTE_MODES)},
+})
+
 JSON_SCHEMA: Dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://fathom.local/api/v2/schema.json",
     "title": "Fathom project doc (schema 2)",
     "type": "object",
     "additionalProperties": True,
-    "required": ["fathom", "revision", "meta", "settings", *[c for c in COLLECTIONS if c not in ("pages", "problems")]],  # pages/problems: added in 0.4, optional on disk
+    "required": ["fathom", "revision", "meta", "settings", *[c for c in COLLECTIONS if c not in ("pages", "problems", "scenes")]],  # pages/problems/scenes: added in 0.4, optional on disk
     "properties": {
         "fathom": {"type": "integer", "const": 2},
         "revision": {"type": "integer", "minimum": 0},
         "meta": _obj({k: _STR for k in ("org", "system", "title", "intro", "footnote", "slug", "version", "author", "description")}),
         "settings": _obj({
             "default_room": _STR, "units": {"type": "string", "enum": ["metric", "imperial"]}, "cable_tag_pattern": _STR,
-            "currency": _STR, "public_url": _STR, "autosave": _BOOL, "problem_email": _STR,
+            "currency": _STR, "public_url": _STR, "autosave": _BOOL, "problem_email": _STR, "short_codes": _BOOL,
+            "locked": _BOOL, "locked_by": _STR, "locked_at": _STR, "suggest_url": _STR, "scene": _STR,
             "labels": _obj({"cols": _INT, "rows": _INT, "width_in": _NUM, "height_in": _NUM, "page": {"type": "string", "enum": ["letter", "a4"]}}),
             "assistant": _obj({"llm": _BOOL}),
         }),
@@ -2062,7 +2458,11 @@ JSON_SCHEMA: Dict[str, Any] = {
                           "shelf": _STR, "slot": {"type": "integer", "minimum": 0}, "color": _STR,
                           "image_front": _STR, "image_rear": _STR}),
             "inventory": _obj({"serial": _STR, "asset_tag": _STR, "firmware": _STR, "purchase_date": _STR, "warranty_until": _STR,
-                               "vendor": _STR, "cost": _NUM, "currency": _STR, "po": _STR, "notes": _STR}),
+                               "vendor": _STR, "cost": _NUM, "currency": _STR, "po": _STR, "notes": _STR,
+                               "condition": {"type": "string", "enum": list(CONDITIONS)},
+                               "fields": {"type": "object", "additionalProperties": _STR, "maxProperties": MAX_CUSTOM_FIELDS}}),
+            "container": _ID,
+            "short_code": {"type": "string", "pattern": SHORT_CODE_RE.pattern},
             "interfaces": _arr(_INTERFACE),
             "dmx": _obj({"universe": _INT, "address": _INT, "footprint": _INT, "mode": _STR, "channel": _STR,
                          "protocol": {"type": "string", "enum": ["dmx", "sacn", "artnet"]}, "port": _STR}),
@@ -2074,11 +2474,13 @@ JSON_SCHEMA: Dict[str, Any] = {
             "color": _STR, "channels": _INT, "status": _STATUS, "bidirectional": _BOOL, "bundle": _STR, "label": _STR,
             "signal": _STR, "note": _STR, "count": _INT, "from_text": _STR, "to_text": _STR,
             "flow": _obj({"seq": _INT, "from_card": _STR, "to_card": _STR}),
+            "route": _ROUTE,
         }, ("id", "from", "to", "medium"))),
         "bundles": _arr(_obj({
             "id": _ID, "kind": {"type": "string", "enum": ["multicore", "loom", "snake", "link"]}, "tag": _STR, "type": _STR,
             "length_m": _NUM, "medium": _STR, "label": _STR, "signal": _STR, "note": _STR, "count": _INT,
             "from_text": _STR, "to_text": _STR, "bidirectional": _BOOL, "flow": _obj({"seq": _INT, "from_card": _STR, "to_card": _STR}),
+            "route": _ROUTE,
         }, ("id",))),
         "floorplans": _arr(_obj({
             "id": _ID, "name": _STR, "room": _STR,
@@ -2089,6 +2491,7 @@ JSON_SCHEMA: Dict[str, Any] = {
             "calibration": _obj({"p1": _arr(_NUM), "p2": _arr(_NUM), "distance": _NUM, "unit": {"type": "string", "enum": ["m", "ft"]}}),
             "units": {"type": "object"},
             "markers": _arr(_obj({"device": _STR, "x": _NUM, "y": _NUM, "rotation": _NUM, "label": _STR}, ("device", "x", "y"))),
+            "paths": _arr(_PATH),
             "order": _INT, "notes": _STR,
         }, ("id", "name", "room", "source", "image"))),
         "attachments": _arr(_obj({
@@ -2109,7 +2512,17 @@ JSON_SCHEMA: Dict[str, Any] = {
         "problems": _arr(_obj({
             "id": _ID, "text": _STR, "device": _STR, "room": _STR, "page": _STR, "status": {"type": "string", "enum": list(PROBLEM_STATUSES)},
             "created": _STR, "by": _STR, "via": {"type": "string", "enum": ["app", "public", "share"]}, "attachment": _STR,
-            "resolved": _STR, "resolved_by": _STR, "note": _STR,
+            "resolved": _STR, "resolved_by": _STR, "note": _STR, "kind": {"type": "string", "enum": ["problem", "suggestion"]},
         }, ("id", "text"))),
+        "scenes": _arr(_obj({
+            "id": _ID, "name": {"type": "string", "maxLength": MAX_SCENE_NAME}, "note": _STR, "base": _BOOL,
+            "created": _STR, "by": _STR, "updated": _STR,
+            "data": _obj({
+                "cables": {"type": "array", "items": {"type": "object"}}, "bundles": {"type": "array", "items": {"type": "object"}},
+                "markers": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "object"}}},
+                "devices": {"type": "object", "additionalProperties": _obj({
+                    "room": _STR, "location": _STR, "rack": {"type": "object"}, "patch": {"type": "object"}})},
+            }),
+        }, ("id", "name"))),
     },
 }

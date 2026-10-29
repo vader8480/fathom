@@ -18,6 +18,9 @@ Python WSGI server (`fathom/server.py`) plus a no-build ES-module frontend in
 - Engine modules are imported lazily inside handlers; follow that pattern.
 - All data lives under `FATHOM_DATA` (default `~/.fathom`; `/data` in Docker).
   Writes are atomic and per-project locked (`project.project_lock`).
+ `DELETE /api/v2/projects/<n>` moves a project to `<data>/trash/` (30-day
+ retention; `fathom trash list|restore|purge`); `?purge=1` deletes for good.
+ Devices get an 8-char `short_code` on save (`/c/<code>` resolves it).
 
 ## Frontend conventions
 
@@ -74,9 +77,9 @@ components) and §6.14 (storage keys).
 `.github/workflows/ci.yml` runs on every pull request and on pushes to
 `main` (Ubuntu, Python 3.12, Node LTS, Google Chrome stable as
 `FATHOM_CHROME`): `python -m unittest discover -s tests`,
-`node --test tests/js/*.test.mjs` and `fathom selftest`, about 2 minutes
-end to end. Logs are uploaded as an artifact when a step fails. The `Tests`
-job installs `.[serve,discovery]` when the `discovery` extra exists in
+`node --test tests/js/*.test.mjs` and `fathom selftest`, about 20 minutes
+end to end (the `Tests` job has a 45-minute timeout). Logs are uploaded as
+an artifact when a step fails. The `Tests` job installs `.[serve,discovery]` when the `discovery` extra exists in
 `pyproject.toml`, else `.[serve]`.
 
 - **Approve PR** posts an approving review from `github-actions[bot]` on

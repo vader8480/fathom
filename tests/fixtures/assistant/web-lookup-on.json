@@ -1,0 +1,9 @@
+{
+  "name": "scripted: web lookup enabled (the test stubs urlopen)",
+  "model": "fake-tools",
+  "config": {"web_lookup": true, "daily_cap": 50},
+  "steps": [
+    {"tool_calls": [{"id": "w1", "name": "web_lookup", "arguments": {"query": "Shure ULXD4D user guide"}}]},
+    {"text": "The ULXD4D user guide is on Shure's site.", "finish": "stop"}
+  ]
+}

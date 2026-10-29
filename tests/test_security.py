@@ -38,6 +38,10 @@ SPEC_ROLES = {
     ("GET", "/api/v2/session"): "public", ("POST", "/api/v2/session"): "public", ("DELETE", "/api/v2/session"): "any",
     ("GET", "/api/v2/users"): "admin", ("POST", "/api/v2/users"): "admin", ("PATCH", "/api/v2/users/{}"): "admin",
     ("DELETE", "/api/v2/users/{}"): "admin", ("POST", "/api/v2/users/me/password"): "any", ("GET", "/login"): "public",
+    # phase2 P2A
+    ("GET", "/api/v2/invites"): "admin", ("POST", "/api/v2/invites"): "admin", ("DELETE", "/api/v2/invites/{}"): "admin",
+    ("GET", "/invite/{}"): "public", ("GET", "/api/v2/invites/{}/check"): "public", ("POST", "/api/v2/invites/{}/accept"): "public",
+    ("GET", "/api/v2/suggestions"): "admin",
     ("GET", "/api/v2/backups"): "admin", ("POST", "/api/v2/backups"): "admin", ("POST", "/api/v2/backups/upload"): "admin",
     ("GET", "/api/v2/backups/{}"): "admin", ("DELETE", "/api/v2/backups/{}"): "admin", ("POST", "/api/v2/backups/{}/restore"): "admin",
     ("GET", "/healthz"): "public", ("GET", "/api/v2/schema.json"): "public",
@@ -45,7 +49,12 @@ SPEC_ROLES = {
     ("GET", "/api/v2/library/suggest"): "viewer",
     ("POST", "/api/v2/library"): "editor", ("DELETE", "/api/v2/library/{}"): "editor", ("GET", "/api/v2/presets"): "viewer",
     ("GET", "/api/v2/projects"): "viewer", ("POST", "/api/v2/projects"): "editor", ("GET", "/api/v2/projects/{}"): "viewer",
+    # phase3 P3C
+    ("GET", "/api/v2/starters"): "viewer", ("POST", "/api/v2/projects/{}/rooms/from-starter"): "editor",
     ("PUT", "/api/v2/projects/{}"): "editor", ("POST", "/api/v2/projects/{}/changes"): "editor", ("DELETE", "/api/v2/projects/{}"): "admin",
+    # phase1 P1A
+    ("GET", "/api/v2/trash"): "admin", ("POST", "/api/v2/trash/{}/restore"): "admin", ("DELETE", "/api/v2/trash/{}"): "admin",
+    ("GET", "/api/v2/codes/{}"): "viewer", ("GET", "/c/{}"): "viewer",
     ("GET", "/api/v2/projects/{}/devices/duplicates"): "viewer", ("POST", "/api/v2/projects/{}/devices/merge/preview"): "editor",
     ("POST", "/api/v2/projects/{}/devices/merge"): "editor",
     ("GET", "/api/v2/projects/{}/devices/{}/channels"): "viewer", ("POST", "/api/v2/projects/{}/devices/{}/channels/apply"): "editor",
@@ -72,7 +81,19 @@ SPEC_ROLES = {
     ("GET", "/api/v2/projects/{}/racks/{}/totals"): "viewer", ("POST", "/api/v2/projects/{}/racks/import"): "editor",
     ("GET", "/api/v2/rack-templates"): "viewer", ("POST", "/api/v2/projects/{}/racks/from-template"): "editor",
     ("POST", "/api/v2/library/import/netbox"): "editor", ("GET", "/api/v2/library/{}/netbox.yaml"): "viewer",
+    # phase3 P3A
+    ("GET", "/api/v2/projects/{}/scenes"): "viewer", ("POST", "/api/v2/projects/{}/scenes"): "editor",
+    ("PATCH", "/api/v2/projects/{}/scenes/{}"): "editor", ("DELETE", "/api/v2/projects/{}/scenes/{}"): "editor",
+    ("POST", "/api/v2/projects/{}/scenes/{}/activate"): "editor", ("POST", "/api/v2/projects/{}/scenes/{}/save"): "editor",
+    ("GET", "/api/v2/projects/{}/scenes/{}/diff"): "viewer", ("GET", "/api/v2/projects/{}/scenes/{}/doc"): "viewer",
+    # phase4 P4A
+    ("GET", "/api/v2/llm/providers"): "viewer", ("GET", "/api/v2/llm/settings"): "admin", ("PUT", "/api/v2/llm/settings"): "admin",
+    ("POST", "/api/v2/llm/models"): "admin", ("POST", "/api/v2/llm/test"): "admin",
+    # phase1 P1B
+    ("GET", "/api/v2/labels/presets"): "viewer", ("GET", "/api/v2/projects/{}/labels/devices"): "viewer",
     ("GET", "/api/v2/projects/{}/search"): "viewer", ("POST", "/api/v2/projects/{}/assistant"): "viewer",
+    # phase4 P4B
+    ("POST", "/api/v2/projects/{}/assistant/apply"): "editor",
     ("GET", "/api/v2/projects/{}/pages"): "viewer", ("POST", "/api/v2/projects/{}/pages/preview"): "editor",
     ("GET", "/api/v2/projects/{}/pages/{}"): "viewer", ("PUT", "/api/v2/projects/{}/pages/{}"): "editor",
     ("DELETE", "/api/v2/projects/{}/pages/{}"): "editor", ("POST", "/api/v2/projects/{}/pages/{}/move"): "editor",
@@ -81,6 +102,9 @@ SPEC_ROLES = {
     ("GET", "/api/v2/projects/{}/sop/bundle.zip"): "editor", ("POST", "/api/v2/projects/{}/problems"): "viewer",
     ("GET", "/api/v2/projects/{}/problems"): "viewer", ("PATCH", "/api/v2/projects/{}/problems/{}"): "editor",
     ("GET", "/api/v2/projects/{}/qr/page/{}.svg"): "viewer", ("GET", "/api/v2/projects/{}/qr/pages.html"): "viewer",
+    # phase5 P5C
+    ("GET", "/api/v2/projects/{}/rooms/{}/patch.svg"): "viewer", ("GET", "/api/v2/projects/{}/rooms/{}/patch.{}"): "viewer",
+    ("GET", "/api/v2/projects/{}/floorplans/{}.{}"): "viewer",
     ("POST", "/api/v2/projects/{}/builds"): "editor", ("GET", "/api/v2/projects/{}/builds"): "viewer",
     ("DELETE", "/api/v2/projects/{}/builds/{}"): "editor", ("GET", "/builds/{}/{}/{}"): "viewer",
     ("GET", "/api/meta"): "viewer", ("GET", "/api/projects"): "viewer", ("POST", "/api/projects"): "editor",
@@ -94,7 +118,13 @@ SPEC_ROLES = {
     ("POST", "/p/{}/problems"): "viewer", ("POST", "/s/{}/problems"): "public",
     ("GET", "/p/{}/files/{}/{}"): "viewer", ("GET", "/s/{}"): "public", ("GET", "/s/{}/{}"): "public", ("GET", "/static/{}"): "public",
     ("GET", "/sw.js"): "public", ("GET", "/manifest.webmanifest"): "public", ("GET", "/favicon.ico"): "public",
-    ("GET", "/apple-touch-icon.png"): "public", ("GET", "/api/openapi.json"): "public", ("GET", "/api/docs"): "public",
+    ("GET", "/apple-touch-icon.png"): "public",     ("GET", "/api/openapi.json"): "public", ("GET", "/api/docs"): "public",
+    # phase5 P5A
+    ("GET", "/api/v2/projects/{}/floorplans/{}/runs"): "viewer", ("POST", "/api/v2/projects/{}/floorplans/{}/runs/snap"): "viewer",
+    ("POST", "/api/v2/projects/{}/floorplans/{}/runs/estimate"): "editor",
+    # phase6 P6A
+    ("POST", "/api/v2/projects/{}/rooms/{}/save-starter"): "editor", ("GET", "/api/v2/starters/{}"): "viewer",
+    ("DELETE", "/api/v2/starters/{}"): "admin",
 }
 RANK = {"viewer": 1, "editor": 2, "admin": 3}
 SAMPLES = ["proj", "main", "atem-mini", "rk-foh", "cables", "1", "nobody", "imp-0001", "att-000000000000", "sh-abc123", "fp-none",
@@ -102,7 +132,11 @@ SAMPLES = ["proj", "main", "atem-mini", "rk-foh", "cables", "1", "nobody", "imp-
 PARAM_HINTS = {"name": "proj", "room": "main", "device": "atem-mini", "rack": "rk-foh", "kind": "cables", "rev": "1", "username": "nobody",
                "iid": "imp-0001", "att": "att-000000000000", "token": "sh-abc123", "fp": "fp-none", "run": "run1", "file": "index.html",
                "filename": "x.png", "path": "app.html", "tid": "nope", "backup": "fathom-backup-none.zip", "table": "devices", "slug": "power-up",
-               "rid": "run-20260101-000000-0000", "pid": "pr-00000000"}
+               "rid": "run-20260101-000000-0000", "pid": "pr-00000000", "code": "ABCD2345", "tname": "proj",
+               "invite": "inv-000000000000000000000000",  # phase2 P2A
+               "sid": "sc-00000000",  # phase3 P3A
+               "fmt": "png",  # phase5 P5C
+               "starter": "church-chapel"}  # phase6 P6A
 DISCOVERY_FIXTURES = str(Path(__file__).parent / "fixtures" / "discovery")
 
 

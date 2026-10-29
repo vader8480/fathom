@@ -271,6 +271,393 @@ export function layerVisible(fp, layer) {
   return layer.visible !== false;
 }
 
+// ------------------------------------------------- paths & cable runs (P5B)
+// Mirror of fathom/runs.py: shared paths (`floorplan.paths[]`, normalised polylines)
+// and cable runs between two placed markers (`cable.route` = {plan, points, via,
+// slack_m, drop_m, mode}). Geometry is done in normalised plan coordinates; lengths
+// come out in metres when the plan is calibrated, else in plan (image) pixels.
+
+export const PATH_KINDS = ['tray', 'catwalk', 'trench', 'conduit', 'floor', 'other'];
+export const PATH_KIND_LABELS = {tray: 'Cable tray', catwalk: 'Catwalk', trench: 'Trench', conduit: 'Conduit', floor: 'Floor run', other: 'Other'};
+export const SNAP_NORM = 0.02;
+export const ESTIMATE_ROUND = 0.5;
+
+function xy(p) {
+  if (Array.isArray(p)) return [Number(p[0]), Number(p[1])];
+  return [Number(p && p.x), Number(p && p.y)];
+}
+
+function num(v, dflt) {
+  const n = Number(v);
+  return isFinite(n) ? n : (dflt || 0);
+}
+
+function samePt(a, b) {
+  return Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9;
+}
+
+function pathPoints(path) {
+  return list(path && path.points).map(xy).filter(function (p) { return isFinite(p[0]) && isFinite(p[1]); });
+}
+
+export function pathKind(kind) {
+  return PATH_KINDS.indexOf(kind) >= 0 ? kind : 'other';
+}
+
+export function pathById(fp, id) {
+  const ps = list(fp && fp.paths);
+  for (let i = 0; i < ps.length; i++) if (ps[i].id === id) return ps[i];
+  return null;
+}
+
+// Metres per normalised unit along x and y ({x, y}), null when uncalibrated.
+export function metersPerNorm(fp) {
+  const mpp = metersPerPx(fp);
+  if (mpp == null) return null;
+  const s = planSize(fp);
+  return {x: mpp * s.w, y: mpp * s.h};
+}
+
+// Length of a normalised polyline: metres when calibrated, image px otherwise.
+export function polylineLength(points, fp) {
+  const pts = list(points).map(xy);
+  const mpn = metersPerNorm(fp);
+  const s = planSize(fp);
+  const sx = mpn ? mpn.x : s.w;
+  const sy = mpn ? mpn.y : s.h;
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    total += Math.hypot((pts[i][0] - pts[i - 1][0]) * sx, (pts[i][1] - pts[i - 1][1]) * sy);
+  }
+  return total;
+}
+
+function projectOnSegment(a, b, p) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const l2 = dx * dx + dy * dy;
+  let u = l2 > 0 ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2 : 0;
+  u = u < 0 ? 0 : u > 1 ? 1 : u;
+  return {point: [a[0] + u * dx, a[1] + u * dy], u: u};
+}
+
+// Nearest point of a path to `pt` (normalised): {point, t, dist}; t = segment index + fraction.
+export function nearestPointOnPath(path, pt) {
+  const pts = pathPoints(path);
+  const p = xy(pt);
+  if (!pts.length) return null;
+  if (pts.length === 1) return {point: pts[0].slice(), t: 0, dist: Math.hypot(pts[0][0] - p[0], pts[0][1] - p[1])};
+  let best = null;
+  for (let i = 1; i < pts.length; i++) {
+    const r = projectOnSegment(pts[i - 1], pts[i], p);
+    const d = Math.hypot(r.point[0] - p[0], r.point[1] - p[1]);
+    if (!best || d < best.dist) best = {point: r.point, t: i - 1 + r.u, dist: d};
+  }
+  return best;
+}
+
+// Point of a path at parameter t (see nearestPointOnPath).
+export function pathAt(path, t) {
+  const pts = pathPoints(path);
+  if (!pts.length) return null;
+  if (pts.length === 1 || t <= 0) return pts[0].slice();
+  if (t >= pts.length - 1) return pts[pts.length - 1].slice();
+  const i = Math.floor(t);
+  const u = t - i;
+  return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * u, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * u];
+}
+
+// The part of a path between parameters t1 and t2 (either order), endpoints included.
+export function subPath(path, t1, t2) {
+  const pts = pathPoints(path);
+  if (pts.length < 2) return pts;
+  const lo = Math.min(t1, t2);
+  const hi = Math.max(t1, t2);
+  const out = [pathAt(path, lo)];
+  for (let i = Math.floor(lo) + 1; i <= Math.ceil(hi) - 1 && i < pts.length; i++) {
+    if (i > lo && i < hi) out.push(pts[i].slice());
+  }
+  out.push(pathAt(path, hi));
+  return t1 <= t2 ? out : out.reverse();
+}
+
+// Snap a normalised point to the nearest path within maxNorm: {path, point, t, dist} or null.
+export function snapToPaths(fp, pt, maxNorm) {
+  const max = maxNorm == null ? SNAP_NORM : maxNorm;
+  let best = null;
+  list(fp && fp.paths).forEach(function (path) {
+    if (pathPoints(path).length < 2) return;
+    const r = nearestPointOnPath(path, pt);
+    if (r && r.dist <= max && (!best || r.dist < best.dist)) best = {path: path.id, point: r.point, t: r.t, dist: r.dist};
+  });
+  return best;
+}
+
+// Point (and parameter) on `path` nearest to another path `other`.
+function nearestToPath(path, other) {
+  let best = null;
+  pathPoints(other).forEach(function (v) {
+    const r = nearestPointOnPath(path, v);
+    if (r && (!best || r.dist < best.dist)) best = r;
+  });
+  pathPoints(path).forEach(function (v, i) {
+    const r = nearestPointOnPath(other, v);
+    if (r && (!best || r.dist < best.dist)) best = {point: v.slice(), t: i, dist: r.dist};
+  });
+  return best;
+}
+
+function routeFor(fp, entity) {
+  const r = entity && entity.route;
+  if (!r || typeof r !== 'object') return null;
+  if (r.plan && r.plan !== fp.id) return null;
+  return r;
+}
+
+// The run of a cable (or bundle with device ends) on a plan, or null unless both ends are placed.
+// {cable, plan, points, segments [{kind drop|path|free, path, length_m}], length_m, estimate_m,
+//  unit 'm'|'px', auto, via [used path ids], from, to}
+export function resolveRun(doc, fp, cable) {
+  if (!fp || !cable || !cable.from || !cable.to) return null;
+  const ma = markerOf(fp, cable.from.device);
+  const mb = markerOf(fp, cable.to.device);
+  if (!ma || !mb) return null;
+  const a = [Number(ma.x), Number(ma.y)];
+  const b = [Number(mb.x), Number(mb.y)];
+  const route = routeFor(fp, cable);
+  const manual = !!(route && route.mode === 'manual');
+  const pts = [a];
+  const segs = [];
+  const used = [];
+  function addLeg(kind, pathId, legPts) {
+    const leg = [pts[pts.length - 1]];
+    legPts.forEach(function (p) { if (!samePt(leg[leg.length - 1], p)) leg.push(p); });
+    if (leg.length < 2) return;
+    leg.slice(1).forEach(function (p) { pts.push(p); });
+    segs.push({kind: kind, path: pathId || null, length_m: polylineLength(leg, fp)});
+  }
+  if (manual) {
+    addLeg('free', null, list(route.points).map(xy).concat([b]));
+  } else {
+    const via = route ? list(route.via).map(function (id) { return pathById(fp, id); })
+      .filter(function (p) { return p && pathPoints(p).length >= 2; }) : [];
+    if (!via.length) {
+      addLeg('free', null, [b]);
+    } else {
+      let cur = a;
+      via.forEach(function (path, i) {
+        const entry = nearestPointOnPath(path, cur);
+        const next = via[i + 1];
+        const exit = next ? nearestToPath(path, next) : nearestPointOnPath(path, b);
+        addLeg(i === 0 ? 'drop' : 'free', null, [entry.point]);
+        addLeg('path', path.id, subPath(path, entry.t, exit.t));
+        cur = exit.point;
+        used.push(path.id);
+      });
+      addLeg('drop', null, [b]);
+    }
+  }
+  if (pts.length === 1) { pts.push(b); segs.push({kind: 'free', path: null, length_m: 0}); }
+  let length = 0;
+  segs.forEach(function (s) { length += s.length_m; });
+  const unit = metersPerNorm(fp) ? 'm' : 'px';
+  const run = {
+    cable: cable.id, plan: fp.id, points: pts, segments: segs, length_m: length, estimate_m: null,
+    unit: unit, auto: !manual, via: used, from: cable.from.device, to: cable.to.device,
+  };
+  run.estimate_m = estimateOf(run, cable, fp);
+  return run;
+}
+
+// length + slack + 2·drop + Σ elevation of the paths used; null when the plan is uncalibrated.
+export function estimateOf(run, cable, fp) {
+  if (!run || run.unit !== 'm') return null;
+  const route = (cable && cable.route) || {};
+  let elev = 0;
+  list(run.via).forEach(function (id) { const p = pathById(fp, id); if (p) elev += Math.max(0, num(p.elevation_m)); });
+  return run.length_m + Math.max(0, num(route.slack_m)) + 2 * Math.max(0, num(route.drop_m)) + elev;
+}
+
+function routables(doc) {
+  return list(doc && doc.cables).filter(function (c) { return c && !c.auto; })
+    .concat(list(doc && doc.bundles).filter(function (b) { return b && b.from && b.to && b.from.device && b.to.device; }));
+}
+
+// Runs of every cable (and bundle with device ends) whose two ends are placed on the plan.
+export function runsForPlan(doc, fpId) {
+  const fp = findPlan(doc, fpId);
+  if (!fp) return [];
+  const out = [];
+  routables(doc).forEach(function (c) {
+    const r = resolveRun(doc, fp, c);
+    if (r) out.push(r);
+  });
+  return out;
+}
+
+// Cables with exactly one end on the plan (the server's `unplaced`).
+export function halfPlaced(doc, fpId) {
+  const fp = findPlan(doc, fpId);
+  if (!fp) return [];
+  return routables(doc).filter(function (c) {
+    const a = !!markerOf(fp, c.from && c.from.device);
+    const b = !!markerOf(fp, c.to && c.to.device);
+    return a !== b;
+  }).map(function (c) { return c.id; });
+}
+
+export function roundUp(v, step) {
+  const s = step > 0 ? step : ESTIMATE_ROUND;
+  return Math.round(Math.ceil(v / s - 1e-9) * s * 1000) / 1000;
+}
+
+// [{cable, from_m, to_m}] for the runs whose rounded-up estimate differs from length_m.
+// `only` limits it to those cable ids.
+export function estimateChanges(doc, fpId, only, roundTo) {
+  const want = only ? idSet(list(only).map(function (id) { return {id: id}; })) : null;
+  const out = [];
+  runsForPlan(doc, fpId).forEach(function (r) {
+    if (want && !want[r.cable]) return;
+    if (r.estimate_m == null) return;
+    const to = roundUp(r.estimate_m, roundTo);
+    const ent = entityById(doc, r.cable);
+    const from = ent && ent.length_m != null && isFinite(Number(ent.length_m)) ? Number(ent.length_m) : null;
+    if (from !== null && Math.abs(from - to) < 1e-9) return;
+    out.push({cable: r.cable, from_m: from, to_m: to});
+  });
+  return out;
+}
+
+export function runLabel(run, units) {
+  if (!run) return '';
+  if (run.unit !== 'm') return '?';
+  return formatLength(run.length_m, units);
+}
+
+function entityById(doc, id) {
+  const cs = list(doc && doc.cables);
+  for (let i = 0; i < cs.length; i++) if (cs[i].id === id) return cs[i];
+  const bs = list(doc && doc.bundles);
+  for (let i = 0; i < bs.length; i++) if (bs[i].id === id) return bs[i];
+  return null;
+}
+
+function collOf(doc, id) {
+  if (list(doc && doc.cables).some(function (c) { return c.id === id; })) return 'cables';
+  if (list(doc && doc.bundles).some(function (b) { return b.id === id; })) return 'bundles';
+  return null;
+}
+
+// Cables / bundles whose route.via names the path.
+export function pathUsers(doc, pathId) {
+  return list(doc && doc.cables).concat(list(doc && doc.bundles)).filter(function (c) {
+    return c && c.route && list(c.route.via).indexOf(pathId) >= 0;
+  }).map(function (c) { return c.id; });
+}
+
+function normPoints(points) {
+  const out = [];
+  list(points).map(xy).forEach(function (p) {
+    if (!isFinite(p[0]) || !isFinite(p[1])) return;
+    const q = [round(clamp01(p[0]), 5), round(clamp01(p[1]), 5)];
+    if (!out.length || !samePt(out[out.length - 1], q)) out.push(q);
+  });
+  return out;
+}
+
+function newPathId(fp) {
+  const taken = idSet(fp && fp.paths);
+  for (;;) {
+    let s = '';
+    for (let i = 0; i < 8; i++) s += Math.floor(Math.random() * 16).toString(16);
+    if (!taken['pt-' + s]) return 'pt-' + s;
+  }
+}
+
+function pathFields(target, spec) {
+  if (spec.name !== undefined) target.name = String(spec.name || '').trim();
+  if (spec.kind !== undefined) target.kind = pathKind(spec.kind);
+  if (spec.points !== undefined) target.points = normPoints(spec.points);
+  ['color', 'note'].forEach(function (k) {
+    if (spec[k] === undefined) return;
+    if (spec[k] === null || spec[k] === '') delete target[k]; else target[k] = String(spec[k]);
+  });
+  if (spec.elevation_m !== undefined) {
+    const e = Number(spec.elevation_m);
+    if (spec.elevation_m === null || spec.elevation_m === '' || !(e > 0)) delete target.elevation_m; else target.elevation_m = e;
+  }
+  return target;
+}
+
+// Add a path: spec {name, kind, points, color?, elevation_m?, note?} -> {ops, id}.
+export function addPathOps(doc, fpId, spec) {
+  const fp = findPlan(doc, fpId);
+  const pts = normPoints(spec && spec.points);
+  if (!fp || pts.length < 2) return {ops: [], id: ''};
+  const id = (spec.id && !pathById(fp, spec.id)) ? spec.id : newPathId(fp);
+  const path = pathFields({id: id, name: '', kind: 'other', points: pts}, Object.assign({}, spec, {points: pts}));
+  if (!path.name) path.name = 'Path ' + (list(fp.paths).length + 1);
+  return {ops: [{op: 'merge', coll: 'floorplans', id: fpId, value: {paths: list(fp.paths).concat([path])}}], id: id};
+}
+
+export function updatePathOps(doc, fpId, pathId, patch) {
+  const fp = findPlan(doc, fpId);
+  if (!fp || !pathById(fp, pathId)) return [];
+  let changed = false;
+  const paths = list(fp.paths).map(function (p) {
+    if (p.id !== pathId) return p;
+    const next = pathFields(Object.assign({}, p), patch || {});
+    if (next.points && next.points.length < 2) next.points = p.points;
+    if (!next.name) next.name = p.name;
+    if (JSON.stringify(next) !== JSON.stringify(p)) changed = true;
+    return next;
+  });
+  return changed ? [{op: 'merge', coll: 'floorplans', id: fpId, value: {paths: paths}}] : [];
+}
+
+// Delete a path and strip its id from every route.via that names it.
+export function deletePathOps(doc, fpId, pathId) {
+  const fp = findPlan(doc, fpId);
+  if (!fp || !pathById(fp, pathId)) return [];
+  const ops = [{op: 'merge', coll: 'floorplans', id: fpId, value: {paths: list(fp.paths).filter(function (p) { return p.id !== pathId; })}}];
+  pathUsers(doc, pathId).forEach(function (id) {
+    const ent = entityById(doc, id);
+    ops.push({op: 'merge', coll: collOf(doc, id), id: id, value: {route: {via: list(ent.route.via).filter(function (v) { return v !== pathId; })}}});
+  });
+  return ops;
+}
+
+// Normalised route object: {plan, points, via, slack_m, drop_m, mode}.
+export function normalizeRoute(route) {
+  const r = route || {};
+  const via = [];
+  list(r.via).forEach(function (v) { if (typeof v === 'string' && v && via.indexOf(v) < 0) via.push(v); });
+  return {
+    plan: String(r.plan || ''),
+    points: normPoints(r.points),
+    via: via,
+    slack_m: Math.max(0, num(r.slack_m)),
+    drop_m: Math.max(0, num(r.drop_m)),
+    mode: r.mode === 'manual' ? 'manual' : 'auto',
+  };
+}
+
+export function setRouteOps(doc, cableId, route) {
+  const coll = collOf(doc, cableId);
+  if (!coll) return [];
+  const value = normalizeRoute(route);
+  if (!value.plan) return [];
+  const cur = entityById(doc, cableId).route;
+  if (cur && JSON.stringify(normalizeRoute(cur)) === JSON.stringify(value) && JSON.stringify(cur) === JSON.stringify(value)) return [];
+  return [{op: 'merge', coll: coll, id: cableId, value: {route: value}}];
+}
+
+export function clearRouteOps(doc, cableId) {
+  const coll = collOf(doc, cableId);
+  if (!coll || !entityById(doc, cableId).route) return [];
+  return [{op: 'merge', coll: coll, id: cableId, value: {route: null}}];
+}
+
 // ----------------------------------------------------------------- viewport
 // view = {x, y, k}: screen = world * k + (x, y); world = image px.
 

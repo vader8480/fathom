@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-VIEWS = ["map", "patch", "table", "plan", "racks", "inventory", "schedules", "imports", "discovery", "history", "builds", "settings", "sop", "json", "home", "devices", "rooms"]
+VIEWS = ["map", "patch", "table", "plan", "racks", "inventory", "schedules", "imports", "discovery", "history", "builds", "settings", "sop", "json", "home", "devices", "rooms", "files"]
 HARNESSES = ["patchview", "floorplan", "rack", "schedules", "patchtable"]
 VIEWER_PAGES = ["/p/sunday-demo", "/p/sunday-demo/rooms", "/p/sunday-demo/d/atem-mini", "/p/sunday-demo/r/main/patch"]
 SHELL_IDS = ["app", "app-top", "app-project", "app-room", "app-views", "app-search", "app-assistant-btn", "app-save", "app-user",

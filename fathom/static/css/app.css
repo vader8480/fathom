@@ -10,6 +10,50 @@
   --sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--sal:env(safe-area-inset-left,0px);--sar:env(safe-area-inset-right,0px);
   --discipline-audio:#4ea8ff;--discipline-video:#34d399;--discipline-lighting:#fbbf24;--discipline-network:#fb923c;--discipline-control:#c084fc;--discipline-power:#f87171;--discipline-other:#9aa3b5;
 }
+/* ---- light theme (FR-UX-15): the same variable names with light values; `fathom.ui.theme` is
+   `dark` (default), `light` or `system` and app.js mirrors it onto <html data-theme>. Accent and
+   discipline colours stay as they are. The second copy serves `system` on a light OS; the two blocks
+   must stay identical. The hard-coded dark surfaces of this file (banner, toast, patch-table block
+   head, assistant bubbles) get light values here as well; component CSS files keep their own. */
+html[data-theme="light"]{
+  --bg:#f6f7fb;--panel:#fff;--panel-2:#eef1f7;--border:rgba(15,23,42,.10);--border-2:rgba(15,23,42,.18);
+  --text:#111827;--muted:#5b6475;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:light){
+  html[data-theme="system"]{
+    --bg:#f6f7fb;--panel:#fff;--panel-2:#eef1f7;--border:rgba(15,23,42,.10);--border-2:rgba(15,23,42,.18);
+    --text:#111827;--muted:#5b6475;
+    color-scheme:light;
+  }
+}
+html:not([data-theme="light"]):not([data-theme="system"]){color-scheme:dark}
+@media (prefers-color-scheme:dark){html[data-theme="system"]{color-scheme:dark}}
+html[data-theme="light"] .app-banner{background:#ece8fa}
+html[data-theme="light"] .app-banner.warn{background:#fdebd8;color:#7a3e0c}
+html[data-theme="light"] .app-banner.err{background:#fbe2ee;color:#8a1c4d}
+html[data-theme="light"] .app-banner.info{background:#e6ecfb}
+html[data-theme="light"] .app-toast{background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.18)}
+html[data-theme="light"] .pt-block-head{background:#eef1f7}
+html[data-theme="light"] .pt-dash{color:#b3bac8}
+html[data-theme="light"] .ast-a{background:#eef1f7}
+html[data-theme="light"] .ast-q{background:#1f2a5a;color:#fff}
+html[data-theme="light"] .ast-suggest button.yes{background:#1f2a5a;color:#fff;border-color:#1f2a5a}
+html[data-theme="light"] :is(.app-menu,.app-sec-menu,.app-dialog){box-shadow:0 18px 40px rgba(15,23,42,.18)}
+@media (prefers-color-scheme:light){
+  html[data-theme="system"] .app-banner{background:#ece8fa}
+  html[data-theme="system"] .app-banner.warn{background:#fdebd8;color:#7a3e0c}
+  html[data-theme="system"] .app-banner.err{background:#fbe2ee;color:#8a1c4d}
+  html[data-theme="system"] .app-banner.info{background:#e6ecfb}
+  html[data-theme="system"] .app-toast{background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.18)}
+  html[data-theme="system"] .pt-block-head{background:#eef1f7}
+  html[data-theme="system"] .pt-dash{color:#b3bac8}
+  html[data-theme="system"] .ast-a{background:#eef1f7}
+  html[data-theme="system"] .ast-q{background:#1f2a5a;color:#fff}
+  html[data-theme="system"] .ast-suggest button.yes{background:#1f2a5a;color:#fff;border-color:#1f2a5a}
+  html[data-theme="system"] :is(.app-menu,.app-sec-menu,.app-dialog){box-shadow:0 18px 40px rgba(15,23,42,.18)}
+  html[data-theme="system"] :is(.fp-btn,.rk-btn,.sch-btn,.inv-btn,:is(.fp-root,.rk-root,.sch-root,.inv-root) :is(select,input:not([type=checkbox]):not([type=radio]),textarea)){background:var(--panel-2)}
+}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 html,body{margin:0;background:var(--bg);color:var(--text);font:13px/1.45 var(--font);-webkit-font-smoothing:antialiased}
@@ -75,6 +119,14 @@ a{color:var(--accent)}
 .app-banner.err{background:#2a1020;color:#ffc4e0}
 .app-banner.info{background:#141c34}
 .app-banner:empty{display:none}
+/* project lock (FR-UX-17): under the top bar; Unlock for editors */
+.app-lock{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px calc(12px + var(--sar)) 6px calc(12px + var(--sal));font-size:12.5px;border-bottom:1px solid var(--border);background:rgba(255,149,72,.14);color:var(--text)}
+.app-lock[hidden]{display:none}
+.app-lock-ico{flex:none;font-size:14px;line-height:1;color:var(--warn)}
+.app-lock-text{flex:1 1 auto;min-width:0}
+.app-lock-text b{font-weight:600}
+.app-lock button{flex:none;min-height:32px}
+@media (pointer:coarse){.app-lock button{min-height:44px;min-width:44px}}
 /* sections: icon + label; labels hide when they don't fit (.app-views--icons); home is the brand link at md/lg */
 .app-views{display:flex;align-items:stretch;gap:2px;height:40px;padding:0 calc(8px + var(--sar)) 0 calc(8px + var(--sal));border-bottom:1px solid var(--border);background:var(--panel);overflow:hidden}
 .app-sec-item{flex:none;display:flex}

@@ -168,3 +168,197 @@ T('importTemplateUrl builds the import template download path', () => {
   const a = api.createApi({ base: '/', fetchImpl: fakeFetch(() => jsonResponse(200, {})) });
   assert.equal(a.importTemplateUrl('my show', 'csv', 'devices'), '/api/v2/projects/my%20show/imports/templates/csv/devices.csv');
 });
+
+// ---- P1C: trash, short codes and label sheets (SPEC §6.3)
+
+T('trash and project delete URLs', async () => {
+  const f = fakeFetch(() => jsonResponse(200, { items: [], retention_days: 30 }));
+  const a = api.createApi({ base: '/', fetchImpl: f });
+  await a.listTrash();
+  assert.equal(f.calls[0].method, 'GET'); assert.equal(f.calls[0].url, '/api/v2/trash');
+  await a.restoreTrash('my show');
+  assert.equal(f.calls[1].method, 'POST'); assert.equal(f.calls[1].url, '/api/v2/trash/my%20show/restore');
+  assert.equal(f.calls[1].headers.get('X-Fathom'), '1');
+  await a.purgeTrash('my show');
+  assert.equal(f.calls[2].method, 'DELETE'); assert.equal(f.calls[2].url, '/api/v2/trash/my%20show');
+  await a.deleteProject('my show');
+  assert.equal(f.calls[3].method, 'DELETE');
+  assert.equal(f.calls[3].url, '/api/v2/projects/my%20show?confirm=my%20show', 'without purge the project moves to the trash');
+  await a.deleteProject('my show', { purge: true });
+  assert.equal(f.calls[4].url, '/api/v2/projects/my%20show?confirm=my%20show&purge=1');
+  await a.deleteProject('my show', { purge: false });
+  assert.equal(f.calls[5].url, '/api/v2/projects/my%20show?confirm=my%20show');
+});
+
+T('lookupCode normalises the code; codeLink and label URLs are pure', async () => {
+  const f = fakeFetch(() => jsonResponse(200, { project: 'campus-demo', device: 'foh-cl5', name: 'FOH CL5', room: 'main', kind: 'console' }));
+  const a = api.createApi({ base: '/', fetchImpl: f });
+  const r = await a.lookupCode('abcd-2345');
+  assert.equal(r.device, 'foh-cl5');
+  assert.equal(f.calls[0].method, 'GET');
+  assert.equal(f.calls[0].url, '/api/v2/codes/ABCD2345', 'dash stripped, upper-cased');
+  await a.lookupCode('ABCD2345');
+  assert.equal(f.calls[1].url, '/api/v2/codes/ABCD2345');
+  await a.lookupCode('not a code');
+  assert.equal(f.calls[2].url, '/api/v2/codes/not%20a%20code', 'anything else is passed through for the server to reject');
+  assert.equal(a.codeLink('ABCD2345'), '/c/ABCD-2345', 'no location in Node: a root-relative link');
+  assert.equal(api.createApi({ base: '', fetchImpl: f }).codeLink('abcd-2345'), '/c/ABCD-2345');
+  assert.equal(a.deviceLabelsUrl('my show', { preset: 'avery-5160', room: 'main', ids: ['a', 'b'] }),
+    '/api/v2/projects/my%20show/labels/devices?preset=avery-5160&room=main&ids=a%2Cb');
+  assert.equal(a.deviceLabelsUrl('my show'), '/api/v2/projects/my%20show/labels/devices');
+  assert.equal(f.calls.length, 3, 'deviceLabelsUrl and codeLink do not fetch');
+  await a.labelPresets();
+  assert.equal(f.calls[3].url, '/api/v2/labels/presets');
+});
+
+// ---- P2B: suggestions and lock errors (SPEC §3.28 FR-UX-17/18, §6.3)
+
+T('reportSuggestion posts kind=suggestion; isLockedError recognises 423 and code locked', async () => {
+  const f = fakeFetch(() => jsonResponse(201, { id: 'p1', forwarded: false }));
+  const a = api.createApi({ base: '/', fetchImpl: f });
+  const r = await a.reportSuggestion('my show', { text: 'Bigger buttons', name: 'sam', url: 'http://x/#/my%20show', kind: 'bug' });
+  assert.equal(r.id, 'p1');
+  assert.equal(f.calls[0].method, 'POST');
+  assert.equal(f.calls[0].url, '/api/v2/projects/my%20show/problems');
+  assert.equal(f.calls[0].headers.get('X-Fathom'), '1');
+  const body = JSON.parse(f.calls[0].body);
+  assert.equal(body.kind, 'suggestion', 'kind is always suggestion, whatever the caller passed');
+  assert.equal(body.text, 'Bigger buttons');
+  assert.equal(body.name, 'sam');
+  assert.equal(body.url, 'http://x/#/my%20show');
+  await a.reportSuggestion('my show');
+  assert.deepEqual(JSON.parse(f.calls[1].body), { kind: 'suggestion' }, 'no body still posts the kind');
+  const isLockedError = need(api, 'isLockedError', 'FR-UX-17', S);
+  assert.equal(isLockedError({ status: 423 }), true);
+  assert.equal(isLockedError({ code: 'locked' }), true);
+  assert.equal(isLockedError({ status: 409, code: 'conflict' }), false);
+  assert.equal(isLockedError(null), false);
+  assert.equal(isLockedError(undefined), false);
+  assert.equal(isLockedError(new Error('x')), false);
+});
+
+T('ChangeQueue drops every queued op on 423 locked and reloads the doc', async () => {
+  const { ChangeQueue, createApi } = api;
+  mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] });
+  try {
+    const storage = fakeStorage();
+    const serverDoc = loadFixtureDoc();
+    serverDoc.settings = Object.assign({}, serverDoc.settings, { locked: true, locked_by: 'sam' });
+    const f = fakeFetch((call) => {
+      if (call.method === 'POST') return jsonResponse(423, { error: 'Editing is locked by sam', code: 'locked' });
+      return jsonResponse(200, { name: 'sunday-demo', revision: 7, doc: serverDoc, problems: [], role: 'admin' });
+    });
+    const store = mcL.mod.createStore({ doc: loadFixtureDoc(), vocab, readOnly: false, overlay: null, room: 'main' });
+    store.setRevision(1);
+    const dropped = [];
+    const states = [];
+    const q = new ChangeQueue({ api: createApi({ fetchImpl: f }), project: 'sunday-demo', store, storage, debounceMs: 600, maxBatch: 1 });
+    q.addEventListener('dropped', (e) => dropped.push(e.detail));
+    q.addEventListener('state', (e) => states.push(e.detail));
+    const op1 = [{ op: 'merge', coll: 'devices', id: 'atem-mini', value: { name: 'x' } }];
+    const op2 = [{ op: 'merge', coll: 'devices', id: 'atem-mini', value: { name: 'y' } }];
+    store.commit(op1, 'x'); q.enqueue(op1, 'x');
+    store.commit(op2, 'y'); q.enqueue(op2, 'y');
+    const posts = () => f.calls.filter((c) => c.method === 'POST').length;
+    await q.flush().catch(() => {});
+    await settle();
+    assert.equal(posts(), 1, 'the first 423 stops the flush; nothing is retried');
+    assert.equal(dropped.length, 1, 'one dropped event for the whole queue');
+    assert.equal(dropped[0].locked, true, 'dropped.detail.locked marks the lock case');
+    assert.equal(dropped[0].ops.length, 2, 'every queued op is dropped, not just the failing batch');
+    assert.equal(api.isLockedError(dropped[0].error), true);
+    assert.ok(states.some((d) => d && d.state === 'error' && d.locked === true && d.dropped === 2), 'state error carries dropped count and locked flag');
+    assert.equal(store.doc.settings.locked, true, 'the doc is reloaded from the server');
+    assert.equal(store.revision, 7);
+    assert.equal(store.doc.devices.find((d) => d.id === 'atem-mini').name, serverDoc.devices.find((d) => d.id === 'atem-mini').name, 'pending local edits are gone after the reload');
+    const pend = storage.getItem('fathom.pending.sunday-demo');
+    assert.ok(!pend || JSON.parse(pend).length === 0, 'persisted queue is cleared');
+    await q.flush().catch(() => {});
+    await settle();
+    assert.equal(posts(), 1, 'an empty queue does not post again');
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+// ---- P3B: scenes (SPEC §6.15, §5.6 "Scenes")
+
+T('scene methods hit the §5.6 scene routes with X-Fathom', async () => {
+  const f = fakeFetch((call) => jsonResponse(call.method === 'POST' && /\/scenes$/.test(call.url) ? 201 : 200, { ok: true }));
+  const a = api.createApi({ base: '/', fetchImpl: f });
+  await a.scenes('my show');
+  assert.equal(f.calls[0].method, 'GET'); assert.equal(f.calls[0].url, '/api/v2/projects/my%20show/scenes');
+  await a.createScene('my show', { name: 'Christmas', note: '', copy_from: 'sc-00000001', activate: true });
+  assert.equal(f.calls[1].method, 'POST'); assert.equal(f.calls[1].url, '/api/v2/projects/my%20show/scenes');
+  assert.deepEqual(JSON.parse(f.calls[1].body), { name: 'Christmas', note: '', copy_from: 'sc-00000001', activate: true });
+  assert.equal(f.calls[1].headers.get('X-Fathom'), '1');
+  assert.match(f.calls[1].headers.get('Content-Type') || '', /application\/json/);
+  await a.patchScene('my show', 'sc-00000001', { name: 'Xmas', note: 'choir' });
+  assert.equal(f.calls[2].method, 'PATCH'); assert.equal(f.calls[2].url, '/api/v2/projects/my%20show/scenes/sc-00000001');
+  assert.deepEqual(JSON.parse(f.calls[2].body), { name: 'Xmas', note: 'choir' });
+  await a.deleteScene('my show', 'sc-00000001');
+  assert.equal(f.calls[3].method, 'DELETE'); assert.equal(f.calls[3].url, '/api/v2/projects/my%20show/scenes/sc-00000001');
+  await a.activateScene('my show', 'sc-00000001');
+  assert.equal(f.calls[4].method, 'POST'); assert.equal(f.calls[4].url, '/api/v2/projects/my%20show/scenes/sc-00000001/activate');
+  assert.equal(f.calls[4].body, '{}', 'activate posts an empty JSON object');
+  await a.activateScene('my show', 'base');
+  assert.equal(f.calls[5].url, '/api/v2/projects/my%20show/scenes/base/activate', 'sid may be the literal base');
+  await a.activateScene('my show');
+  assert.equal(f.calls[6].url, '/api/v2/projects/my%20show/scenes/base/activate', 'no sid means Base');
+  await a.saveScene('my show', 'sc-00000001');
+  assert.equal(f.calls[7].method, 'POST'); assert.equal(f.calls[7].url, '/api/v2/projects/my%20show/scenes/sc-00000001/save');
+  await a.sceneDiff('my show', 'sc-00000001', 'base');
+  assert.equal(f.calls[8].method, 'GET'); assert.equal(f.calls[8].url, '/api/v2/projects/my%20show/scenes/sc-00000001/diff?against=base');
+  await a.sceneDiff('my show', 'sc-00000001');
+  assert.equal(f.calls[9].url, '/api/v2/projects/my%20show/scenes/sc-00000001/diff?against=base', 'against defaults to base');
+  await a.sceneDiff('my show', 'sc-00000001', 'sc-00000002');
+  assert.equal(f.calls[10].url, '/api/v2/projects/my%20show/scenes/sc-00000001/diff?against=sc-00000002');
+  await a.sceneDoc('my show', 'sc-00000001');
+  assert.equal(f.calls[11].method, 'GET'); assert.equal(f.calls[11].url, '/api/v2/projects/my%20show/scenes/sc-00000001/doc');
+  await a.sceneDoc('my show', 'base');
+  assert.equal(f.calls[12].url, '/api/v2/projects/my%20show/scenes/base/doc');
+  f.calls.forEach((c) => assert.equal(c.headers.get('X-Fathom'), '1'));
+});
+
+T('scene calls surface 404 and 423 as ApiError with status and code', async () => {
+  const f = fakeFetch((call) => {
+    if (/\/activate$/.test(call.url)) return jsonResponse(423, { error: 'locked', code: 'locked', details: { locked_by: 'sam' } });
+    return jsonResponse(404, { error: 'not found', code: 'not_found' });
+  });
+  const a = api.createApi({ base: '/', fetchImpl: f });
+  await assert.rejects(a.scenes('my show'), (e) => e instanceof api.ApiError && e.status === 404);
+  await assert.rejects(a.activateScene('my show', 'sc-00000001'), (e) => e instanceof api.ApiError && e.status === 423 && api.isLockedError(e));
+});
+
+T('P4C: llm settings and proposal methods hit the P4A/P4B routes; ask passes attachments and manual_text through', async () => {
+  const f = fakeFetch((call) => {
+    if (/llm\/providers$/.test(call.url)) return jsonResponse(200, { providers: [{ id: 'openai', label: 'OpenAI', default_base_url: 'https://api.openai.com/v1', needs_key: true, lists_models: true }] });
+    if (/llm\/models$/.test(call.url)) return jsonResponse(400, { error: 'this provider does not list models', code: 'not_supported' });
+    if (/assistant\/apply$/.test(call.url)) return jsonResponse(423, { error: 'locked', code: 'locked' });
+    return jsonResponse(200, { ok: true });
+  });
+  const a = api.createApi({ base: '/', fetchImpl: f });
+  for (const name of ['llmProviders', 'llmSettings', 'saveLlmSettings', 'llmModels', 'llmTest', 'applyProposal']) assert.equal(typeof a[name], 'function', name + ' is an api method');
+  const prov = await a.llmProviders();
+  assert.equal(prov.providers[0].id, 'openai');
+  assert.equal(f.calls[0].method, 'GET'); assert.equal(f.calls[0].url, '/api/v2/llm/providers');
+  await a.llmSettings();
+  assert.equal(f.calls[1].method, 'GET'); assert.equal(f.calls[1].url, '/api/v2/llm/settings');
+  await a.saveLlmSettings({ provider: 'openai', model: 'gpt-4o-mini', api_key: 'sk-x' });
+  assert.equal(f.calls[2].method, 'PUT'); assert.equal(f.calls[2].url, '/api/v2/llm/settings');
+  assert.deepEqual(JSON.parse(f.calls[2].body), { provider: 'openai', model: 'gpt-4o-mini', api_key: 'sk-x' }, 'the body is sent as given (api_key only when present)');
+  await assert.rejects(a.llmModels({ provider: 'anthropic', base_url: 'https://api.anthropic.com' }), (e) => e instanceof api.ApiError && e.status === 400 && e.code === 'not_supported');
+  assert.equal(f.calls[3].method, 'POST'); assert.equal(f.calls[3].url, '/api/v2/llm/models');
+  await a.llmTest({ provider: 'openai', base_url: 'https://api.openai.com/v1', model: 'gpt-4o-mini' });
+  assert.equal(f.calls[4].method, 'POST'); assert.equal(f.calls[4].url, '/api/v2/llm/test');
+  assert.equal(JSON.parse(f.calls[4].body).model, 'gpt-4o-mini');
+  await a.ask('my show', { question: 'q', history: [{ role: 'user', text: 'q', attachments: ['att-1'] }], attachments: ['att-1'], manual_text: 'page 12: …' });
+  assert.equal(f.calls[5].method, 'POST'); assert.equal(f.calls[5].url, '/api/v2/projects/my%20show/assistant');
+  const asked = JSON.parse(f.calls[5].body);
+  assert.deepEqual(asked.history[0].attachments, ['att-1'], 'history[].attachments travels');
+  assert.equal(asked.manual_text, 'page 12: …', 'manual_text travels');
+  await assert.rejects(a.applyProposal('my show', { id: 'prop-1', base_revision: 3 }), (e) => e instanceof api.ApiError && e.status === 423 && api.isLockedError(e));
+  assert.equal(f.calls[6].method, 'POST'); assert.equal(f.calls[6].url, '/api/v2/projects/my%20show/assistant/apply');
+  assert.deepEqual(JSON.parse(f.calls[6].body), { id: 'prop-1', base_revision: 3 });
+  f.calls.forEach((c) => assert.equal(c.headers.get('X-Fathom'), '1'));
+});

@@ -1,8 +1,20 @@
 // Assistant panel (§6.8, FR-AST UI, Knox "Helper"): question -> traced path
 // chips + numbered checks + "Update the map?" suggestion (Yes commits the
 // ops through the store, undoable). Offline: local cable trace hints.
+// P4C adds the model status line and used-tools row, the "Proposed changes"
+// card (Yes applies through POST …/assistant/apply), attachments and pasted
+// manual text for the next question, and voice input (speech.js).
+// P6B adds the Ask | Draft a room toggle (§6.9.5b): in Draft mode the composer
+// takes a room description, the request carries mode: 'draft' + room, and the
+// answer renders a Draft card (recognised chips, unknown list) above the usual
+// proposal card. `fathom:assistant-open` {detail: {mode, room}} opens it.
 
-import { searchLocal, devicePorts, portLabel } from './model-core.js';
+import { searchLocal, devicePorts, portLabel, invertOps } from './model-core.js';
+import { normaliseMode, placeholderFor, recognisedLabel, unknownLine, roomOptions, roomName, resolveRoom, buildPayload, DRAFT_EXAMPLE, DRAFT_HINT } from './assistant-core.js';
+
+const MANUAL_MAX = 20 * 1024;
+const TOOL_LABELS = { search: 'search', trace: 'trace', manual: 'manual', attachments: 'attachments', web: 'web lookup', draft_room: 'draft' };
+const OPEN_EVENT = 'fathom:assistant-open';
 
 function h(tag, attrs, children) {
   const el = document.createElement(tag);
@@ -35,6 +47,39 @@ export function renderBold(text) {
 }
 
 const transcripts = {};
+// Draft mode is remembered per project for the session (not stored in the browser): {mode, room}.
+const modes = {};
+// The mounted panel, and an open request that arrived before the panel was mounted (the shell mounts it
+// asynchronously after the toolbar button click that the event triggers).
+let active = null;
+let pendingOpen = null;
+
+function openDetail(detail) {
+  const d = detail || {};
+  return { mode: normaliseMode(d.mode), room: d.room === undefined || d.room === null ? '' : String(d.room) };
+}
+
+// Open the Helper (optionally in Draft mode for a room). Views dispatch
+// document.dispatchEvent(new CustomEvent('fathom:assistant-open', {detail: {mode: 'draft', room: 'main'}}));
+// the same call is exported for modules that already import this one.
+export function openAssistant(detail) {
+  const want = openDetail(detail);
+  if (typeof document !== 'undefined') {
+    const btn = document.getElementById('app-assistant-btn');
+    const panel = document.getElementById('app-assistant');
+    if (btn && (!panel || !panel.classList.contains('open'))) btn.click();
+  }
+  if (active && active.setMode) {
+    active.setMode(want.mode, want.room);
+    active.focus();
+  } else {
+    pendingOpen = want;
+  }
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener(OPEN_EVENT, function (e) { openAssistant(e && e.detail); });
+}
 
 function exampleQuestions(doc, room) {
   const devs = (doc.devices || []).filter(function (d) { return !room || room === '*' || (d.room || '') === room; });
@@ -87,22 +132,252 @@ export function mountAssistant(el, ctx) {
   const key = ctx.project || '_';
   const log = transcripts[key] = transcripts[key] || [];
   const useLlm = !(store.doc.settings && store.doc.settings.assistant && store.doc.settings.assistant.llm === false);
+  function canEdit() { return ctx.role !== 'viewer' && !store.readOnly; }
+  if (ctx.ensureCss) ctx.ensureCss('assistant.css');
 
   const logEl = h('div', { class: 'ast-log', role: 'log', 'aria-live': 'polite', 'aria-label': 'Assistant conversation' });
   const input = h('input', { type: 'text', placeholder: 'Ask about your system\u2026', 'aria-label': 'Ask the assistant', enterkeyhint: 'send', autocomplete: 'off' });
   const send = h('button', { type: 'submit', class: 'primary', 'aria-label': 'Send' }, '\u2191');
-  const form = h('form', { class: 'ast-form' }, [input, send]);
+  // ---- Ask | Draft a room (P6B): segmented control + room select; state lives in `modes[key]` for the session
+  const state = modes[key] = modes[key] || { mode: 'ask', room: '' };
+  const modeBtns = { ask: null, draft: null };
+  function modeBtn(mode, label) {
+    const b = h('button', { type: 'button', class: 'ast-mode-btn', 'data-mode': mode, role: 'radio', 'aria-checked': 'false', onclick: function () { setMode(mode); input.focus(); } }, label);
+    modeBtns[mode] = b;
+    return b;
+  }
+  const modeSeg = h('div', { class: 'ast-mode', role: 'radiogroup', 'aria-label': 'Helper mode' }, [modeBtn('ask', 'Ask'), modeBtn('draft', 'Draft a room')]);
+  const roomSel = h('select', { class: 'ast-room', 'aria-label': 'Room to draft' });
+  const roomWrap = h('label', { class: 'ast-room-wrap' }, [h('span', { class: 'ast-room-label' }, 'Room'), roomSel]);
+  const modeRow = h('div', { class: 'ast-modes', 'data-mode': 'ask' }, [modeSeg, roomWrap]);
+  roomSel.addEventListener('change', function () { state.room = roomSel.value; });
+  function fillRooms(want) {
+    const opt = roomOptions(store.doc, want || state.room || (store.room === '*' ? '' : store.room));
+    roomSel.innerHTML = '';
+    opt.rooms.forEach(function (r) {
+      const o = h('option', { value: r.id }, r.name);
+      if (r.id === opt.selected) o.selected = true;
+      roomSel.appendChild(o);
+    });
+    roomSel.disabled = !opt.rooms.length;
+    state.room = opt.selected;
+  }
+  function isDraft() { return state.mode === 'draft'; }
+  function setMode(mode, room) {
+    state.mode = normaliseMode(mode);
+    if (room !== undefined && room !== null && room !== '') {
+      const rid = resolveRoom(store.doc, room);
+      if (rid) state.room = rid;
+    }
+    fillRooms(state.room);
+    modeRow.setAttribute('data-mode', state.mode);
+    root.setAttribute('data-mode', state.mode);
+    Object.keys(modeBtns).forEach(function (m) {
+      modeBtns[m].setAttribute('aria-checked', m === state.mode ? 'true' : 'false');
+      modeBtns[m].classList.toggle('on', m === state.mode);
+    });
+    roomWrap.hidden = !isDraft();
+    input.setAttribute('aria-label', isDraft() ? 'Describe the room' : 'Ask the assistant');
+    if (!voice) input.placeholder = placeholderFor(state.mode);
+    fillChips();
+    if (!log.length) redraw();
+  }
+  // speech.js is loaded on demand (it is not in the offline shell cache): the mic button appears once
+  // the module is in and the browser has a recogniser; data-voice on the form tells tests which.
+  let speech = null;
+  let mic = null;
+  const form = h('form', { class: 'ast-form ast-form-with-status' }, [input, send]);
   const chips = h('div', { class: 'ast-chips', 'aria-label': 'Example questions' });
+  // context for the next question: attachment ids and pasted manual text, shown as chips
+  const pending = { attachments: [], manual: '' };
+  const attachBtn = h('button', { type: 'button', class: 'small ast-attach', 'data-act': 'attach' }, 'Attach');
+  const manualBtn = h('button', { type: 'button', class: 'small ast-manual', 'data-act': 'manual' }, 'Paste manual text\u2026');
+  const ctxRow = h('div', { class: 'ast-ctx' }, [h('div', { class: 'ast-attached', 'aria-label': 'Attached to the next question' }), h('div', { class: 'ast-ctx-acts' }, [attachBtn, manualBtn])]);
+  const attached = ctxRow.firstChild;
+  const voiceHint = h('div', { class: 'ast-voice-hint', role: 'status' });
+  const statusLlm = h('span', { class: 'ast-status-llm' });
+  const tools = h('details', { class: 'ast-tools' }, [h('summary', null, 'Used: '), h('div', { class: 'ast-tools-list' })]);
+  tools.hidden = true;
+  const status = h('div', { class: 'ast-status' }, [statusLlm, tools]);
   const root = h('div', { class: 'ast' }, [
     h('div', { class: 'ast-head' }, [h('span', { class: 'live', 'aria-hidden': 'true' }), h('h2', null, 'Fathom Helper'),
       h('button', { type: 'button', class: 'small ghost', onclick: function () { log.length = 0; redraw(); } }, 'Clear'),
       h('button', { type: 'button', class: 'icon ghost', 'aria-label': 'Close assistant', onclick: function () { if (ctx.closePanel) ctx.closePanel(); } }, '\u00d7')]),
-    logEl, chips, form,
+    logEl, chips, modeRow, ctxRow, voiceHint, form, status,
   ]);
   el.appendChild(root);
 
+  // ---- model status line (meta until the first answer, then the answer's llm / used_tools)
+  function setStatus(llm, usedTools) {
+    if (llm && llm.used) statusLlm.textContent = [llm.provider, llm.model].filter(Boolean).join(' \u00b7 ') || 'Model';
+    else if (llm && (llm.reason || llm.error)) statusLlm.textContent = 'Deterministic mode (' + (llm.reason || llm.error) + ')';
+    else statusLlm.textContent = 'Deterministic mode (no model configured)';
+    statusLlm.setAttribute('data-llm', llm && llm.used ? 'on' : 'off');
+    const list = tools.lastChild;
+    list.innerHTML = '';
+    const names = [];
+    (usedTools || []).forEach(function (t) {
+      const name = typeof t === 'string' ? t : (t && t.name) || '';
+      if (!name) return;
+      const label = TOOL_LABELS[name] || name;
+      if (names.indexOf(label) < 0) names.push(label);
+      list.appendChild(h('span', { class: 'chip ast-tool', 'data-tool': name, title: (t && t.args_summary) || '' }, [label, t && t.args_summary ? h('span', { class: 'ast-tool-args' }, ' \u00b7 ' + t.args_summary) : null]));
+    });
+    tools.hidden = !names.length;
+    tools.open = false;
+    tools.firstChild.textContent = 'Used: ' + names.join(', ');
+  }
+  (function initialStatus() {
+    const info = (ctx.meta && ctx.meta.llm) || null;
+    if (info && info.configured && useLlm) setStatus({ used: true, provider: info.provider, model: info.model }, []);
+    else setStatus({ used: false, reason: !useLlm && info && info.configured ? 'model off for this project' : '' }, []);
+  })();
+
+  // ---- context chips (attachments, manual text) for the next question
+  function attName(id) {
+    const a = (store.doc.attachments || []).filter(function (x) { return x.id === id; })[0];
+    return a ? (a.name || a.id) : id;
+  }
+  function drawCtx() {
+    attached.innerHTML = '';
+    pending.attachments.forEach(function (id) {
+      attached.appendChild(h('span', { class: 'chip on ast-att', 'data-att': id }, [attName(id),
+        h('button', { type: 'button', class: 'ast-chip-x', 'aria-label': 'Remove ' + attName(id), onclick: function () { pending.attachments = pending.attachments.filter(function (x) { return x !== id; }); drawCtx(); } }, '\u00d7')]));
+    });
+    if (pending.manual) {
+      attached.appendChild(h('span', { class: 'chip on ast-manual-chip', 'data-manual': String(pending.manual.length) }, ['Manual text (' + (pending.manual.length / 1024).toFixed(1) + ' KB)',
+        h('button', { type: 'button', class: 'ast-chip-x', 'aria-label': 'Remove the manual text', onclick: function () { pending.manual = ''; drawCtx(); } }, '\u00d7')]));
+    }
+    ctxRow.classList.toggle('has-ctx', !!(pending.attachments.length || pending.manual));
+    attachBtn.setAttribute('aria-pressed', pending.attachments.length ? 'true' : 'false');
+    manualBtn.setAttribute('aria-pressed', pending.manual ? 'true' : 'false');
+  }
+  function kindOf(a) {
+    const mime = String((a && a.mime) || '').toLowerCase();
+    const name = String((a && a.name) || '').toLowerCase();
+    if (a && a.kind) return a.kind;
+    if (mime.indexOf('image/') === 0) return 'image';
+    if (mime === 'application/pdf' || /\.pdf$/.test(name)) return 'pdf';
+    return 'file';
+  }
+  function openAttach() {
+    if (!ctx.openDialog) return;
+    const atts = (store.doc.attachments || []).slice().sort(function (a, b) { return String(a.name || a.id).localeCompare(String(b.name || b.id), undefined, { numeric: true }); });
+    const devs = {};
+    (store.doc.devices || []).forEach(function (d) { devs[d.id] = d; });
+    const boxes = [];
+    const list = h('div', { class: 'ast-pick', role: 'group', 'aria-label': 'Project files' }, atts.map(function (a) {
+      const cb = h('input', { type: 'checkbox', 'data-att': a.id });
+      cb.checked = pending.attachments.indexOf(a.id) >= 0;
+      boxes.push(cb);
+      const dev = a.device && devs[a.device];
+      return h('label', { class: 'ast-pick-row', 'data-att': a.id }, [cb,
+        h('span', { class: 'ast-pick-name' }, [a.name || a.id, dev ? h('span', { class: 'muted ast-pick-dev' }, ' \u00b7 ' + (dev.name || dev.id)) : null]),
+        h('span', { class: 'chip ast-pick-kind', 'data-kind': kindOf(a) }, kindOf(a))]);
+    }));
+    const body = atts.length
+      ? h('div', null, [h('p', { class: 'muted ast-pick-hint' }, 'The assistant reads the chosen files (manuals, spec sheets, photos with text) when answering the next question.'), list])
+      : h('p', { class: 'muted' }, 'No files in this project yet. Upload manuals and spec sheets in Files, then attach them here.');
+    ctx.openDialog({
+      title: 'Attach files',
+      body: body,
+      buttons: atts.length ? [{ label: 'Cancel', value: null }, { label: 'Attach', primary: true, value: function () { return boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.getAttribute('data-att'); }); } }] : [{ label: 'Close', value: null }],
+    }).then(function (ids) {
+      if (!ids) return;
+      pending.attachments = ids;
+      drawCtx();
+      input.focus();
+    });
+  }
+  function openManual() {
+    if (!ctx.openDialog) return;
+    const ta = h('textarea', { id: 'ast-manual-text', rows: 10, placeholder: 'Paste the relevant part of a manual, a spec sheet or an email\u2026', 'aria-label': 'Manual text', maxlength: String(MANUAL_MAX) });
+    ta.value = pending.manual;
+    const count = h('div', { class: 'muted ast-manual-count', 'aria-live': 'polite' });
+    function tick() {
+      const n = ta.value.length;
+      count.textContent = (n / 1024).toFixed(1) + ' KB of ' + (MANUAL_MAX / 1024) + ' KB';
+      count.classList.toggle('warn', n >= MANUAL_MAX);
+    }
+    ta.addEventListener('input', tick);
+    tick();
+    ctx.openDialog({
+      title: 'Paste manual text',
+      body: h('div', { class: 'ast-manual-sheet' }, [h('p', { class: 'muted' }, 'Text pasted here goes with the next question only; it is not stored in the project.'), ta, count]),
+      buttons: [{ label: 'Cancel', value: null }, pending.manual ? { label: 'Remove', value: '' } : null, { label: 'Use text', primary: true, value: function () { return ta.value.slice(0, MANUAL_MAX); } }].filter(Boolean),
+    }).then(function (v) {
+      if (v === null || v === undefined) return;
+      pending.manual = String(v).trim() ? String(v).slice(0, MANUAL_MAX) : '';
+      drawCtx();
+      input.focus();
+    });
+  }
+  attachBtn.addEventListener('click', openAttach);
+  manualBtn.addEventListener('click', openManual);
+  drawCtx();
+
+  // ---- voice input: press to listen (interim text in the box), stop on silence or a second press
+  let voice = null;
+  let voiceBase = '';
+  function setVoice(on) {
+    if (!mic) return;
+    mic.classList.toggle('listening', on);
+    mic.setAttribute('aria-pressed', on ? 'true' : 'false');
+    mic.setAttribute('data-state', on ? 'listening' : 'idle');
+    input.classList.toggle('ast-listening', on);
+    if (on) input.placeholder = 'Listening\u2026';
+    else input.placeholder = placeholderFor(state.mode);
+  }
+  function stopVoice() {
+    if (speech) speech.stop();
+    voice = null;
+    setVoice(false);
+  }
+  function startVoice() {
+    if (!speech) return;
+    voiceHint.textContent = '';
+    voiceBase = input.value.trim();
+    voice = speech.start({
+      lang: (typeof navigator !== 'undefined' && navigator.language) || 'en-US',
+      onResult: function (r) {
+        const sep = voiceBase ? ' ' : '';
+        if (r.isFinal) {
+          voiceBase = (voiceBase + sep + r.final).trim();
+          input.value = voiceBase;
+        } else {
+          input.value = voiceBase + sep + r.interim;
+        }
+      },
+      onEnd: function () {
+        voice = null;
+        setVoice(false);
+        input.value = voiceBase || input.value.trim();
+        input.focus();
+      },
+      onError: function (code) {
+        const text = speech.errorText(code);
+        if (text) voiceHint.textContent = text;
+        voice = null;
+        setVoice(false);
+      },
+    });
+    setVoice(!!voice);
+  }
+  import('./speech.js').then(function (m) {
+    speech = m;
+    if (!m.available()) { form.setAttribute('data-voice', 'none'); return; }
+    mic = h('button', { type: 'button', class: 'ast-mic', 'aria-label': 'Ask by voice', 'aria-pressed': 'false', title: 'Ask by voice' }, '\uD83C\uDFA4');
+    mic.addEventListener('click', function () { if (voice) stopVoice(); else startVoice(); });
+    form.insertBefore(mic, send);
+    form.setAttribute('data-voice', 'ready');
+  }, function () { form.setAttribute('data-voice', 'none'); });
+
   function fillChips() {
     chips.innerHTML = '';
+    if (isDraft()) {
+      chips.appendChild(h('button', { type: 'button', class: 'small ast-draft-example', onclick: function () { input.value = DRAFT_EXAMPLE; input.focus(); } }, 'Example: ' + DRAFT_EXAMPLE));
+      return;
+    }
     exampleQuestions(store.doc, store.room).forEach(function (q) {
       chips.appendChild(h('button', { type: 'button', class: 'small', onclick: function () { ask(q); } }, q));
     });
@@ -157,15 +432,34 @@ export function mountAssistant(el, ctx) {
       a.unresolved.forEach(function (u) {
         const name = typeof u === 'string' ? u : (u.text || u.phrase || '');
         const sugg = (u && u.suggestions) || [];
-        box.appendChild(h('div', { class: 'ast-notes' }, ['I couldn\u2019t find \u201c' + name + '\u201d.', sugg.length ? ' Did you mean: ' : '',
-          sugg.map(function (s, i) { const t = typeof s === 'string' ? s : (s.title || s.id); return [i ? ', ' : '', h('button', { type: 'button', class: 'ast-chip', onclick: function () { input.value = entry.question.replace(name, t); input.focus(); } }, t)]; }).reduce(function (x, y) { return x.concat(y); }, [])]));
+        const chips = sugg.map(function (s, i) { const t = typeof s === 'string' ? s : (s.title || s.id); return [i ? ', ' : '', h('button', { type: 'button', class: 'ast-chip', onclick: function () { input.value = entry.question.replace(name, t); input.focus(); } }, t)]; }).reduce(function (x, y) { return x.concat(y); }, []);
+        box.appendChild(h('div', { class: 'ast-notes' }, ['I couldn\u2019t find \u201c' + name + '\u201d.', sugg.length ? ' Did you mean: ' : ''].concat(chips)));
       });
     }
     (a.notes || []).forEach(function (n) { box.appendChild(h('div', { class: 'ast-notes', html: renderBold(n) })); });
     if (a.llm && a.llm.used && a.llm.text) {
-      box.appendChild(h('div', { class: 'ast-llm' }, [h('div', { class: 'h' }, 'AI notes \u2014 verify against the system' + (a.llm.model ? ' \u00b7 ' + a.llm.model : '')), h('div', null, a.llm.text)]));
+      box.appendChild(h('div', { class: 'ast-llm' }, [h('div', { class: 'h' }, 'AI notes \u2014 verify against the system' + (a.llm.model ? ' \u00b7 ' + a.llm.model : '')), h('div', { html: renderBold(a.llm.text) })]));
     }
     return box;
+  }
+
+  // Draft card (§6.9.5b): what the drafter understood, what it could not place; the proposal card follows.
+  function draftEl(entry) {
+    const d = entry.answer && entry.answer.draft;
+    if (!entry.draft || !d) return null;
+    const rec = Array.isArray(d.recognised) ? d.recognised : [];
+    const unk = Array.isArray(d.unknown) ? d.unknown : [];
+    const card = h('div', { class: 'ast-draft', role: 'group', 'aria-label': 'Draft of ' + roomName(store.doc, entry.room), 'data-recognised': String(rec.length), 'data-unknown': String(unk.length) });
+    card.appendChild(h('h4', null, 'Draft \u00b7 ' + roomName(store.doc, entry.room)));
+    if (rec.length) {
+      card.appendChild(h('div', { class: 'ast-draft-list', 'aria-label': 'Recognised equipment' }, rec.map(function (r) {
+        return h('span', { class: 'chip ast-draft-chip', 'data-kind': r.kind || '', 'data-template': r.template || r.preset || '', title: r.text || '' }, recognisedLabel(r, ctx.vocab));
+      })));
+    } else {
+      card.appendChild(h('p', { class: 'muted ast-draft-none' }, 'Nothing recognised yet \u2014 name models or kinds, separated by commas.'));
+    }
+    if (unk.length) card.appendChild(h('div', { class: 'ast-draft-unknown', role: 'note' }, unknownLine(unk)));
+    return card;
   }
 
   function suggestionEl(entry) {
@@ -190,6 +484,84 @@ export function mountAssistant(el, ctx) {
     return h('div', { class: 'ast-suggest', role: 'group', 'aria-label': 'Update the map?' }, [h('h4', null, 'Update the map?'), h('p', null, s.text), h('div', { class: 'row' }, [yes, no])]);
   }
 
+  // "Proposed changes" (Knox parity): the server's proposal {id, summary[], ops, applicable, problems,
+  // expires}. Yes posts it to …/assistant/apply at the store's revision; the result is a normal
+  // revision, so the doc is refreshed and the toast offers Undo (the inverse ops as a local commit).
+  function proposalExpired(p) {
+    if (!p || !p.expires) return false;
+    const t = typeof p.expires === 'number' ? p.expires * (p.expires < 1e12 ? 1000 : 1) : Date.parse(p.expires);
+    return !isNaN(t) && t <= Date.now();
+  }
+  function proposalEl(entry) {
+    const p = entry.answer && entry.answer.proposal;
+    if (!p || entry.proposalState === 'no') return null;
+    const lines = Array.isArray(p.summary) ? p.summary : (p.summary ? [String(p.summary)] : []);
+    const card = h('div', { class: 'ast-proposal', role: 'group', 'aria-label': 'Proposed changes', 'data-proposal': p.id || '' });
+    card.appendChild(h('h4', null, 'Proposed changes'));
+    if (entry.proposalState === 'yes') {
+      card.setAttribute('data-state', 'applied');
+      card.appendChild(h('p', { class: 'ast-proposal-done' }, 'Applied' + (entry.applied && entry.applied.revision ? ' as revision ' + entry.applied.revision : '') + ' \u2014 undo from the toast or with Cmd/Ctrl+Z.'));
+      return card;
+    }
+    if (lines.length) card.appendChild(h('ul', { class: 'ast-proposal-summary' }, lines.map(function (l) { return h('li', { html: renderBold(l) }); })));
+    (p.problems || []).forEach(function (pr) { card.appendChild(h('div', { class: 'ast-proposal-problem', role: 'note' }, '\u26A0\uFE0E ' + (typeof pr === 'string' ? pr : (pr.message || pr.text || JSON.stringify(pr))))); });
+    if (entry.proposalError) card.appendChild(h('div', { class: 'ast-proposal-problem ast-proposal-err', role: 'alert' }, entry.proposalError));
+    const ops = Array.isArray(p.ops) ? p.ops : [];
+    if (proposalExpired(p)) {
+      card.setAttribute('data-state', 'expired');
+      card.appendChild(h('p', { class: 'ast-proposal-hint muted' }, 'Proposal expired \u2014 ask again'));
+      return card;
+    }
+    if (!canEdit()) {
+      card.setAttribute('data-state', 'readonly');
+      card.appendChild(h('p', { class: 'ast-proposal-hint muted' }, store.readOnly && ctx.role !== 'viewer' ? 'Editing is locked; unlock it in Settings to apply this.' : 'Only editors can apply changes. Ask one to apply this proposal.'));
+      return card;
+    }
+    const applicable = p.applicable !== false && ops.length > 0;
+    const yes = h('button', { type: 'button', id: 'ast-proposal-yes', class: 'yes', disabled: applicable ? null : true, title: applicable ? '' : 'This proposal cannot be applied as is.' }, entry.draft ? 'Apply' : 'Yes, apply');
+    const no = h('button', { type: 'button', id: 'ast-proposal-no' }, entry.draft ? 'Not now' : 'No, leave it');
+    yes.addEventListener('click', function () {
+      if (!ctx.api || !ctx.api.applyProposal) return;
+      yes.disabled = true;
+      no.disabled = true;
+      yes.textContent = 'Applying\u2026';
+      entry.proposalError = '';
+      const label = lines[0] ? lines[0].replace(/\*\*/g, '') : 'Assistant proposal';
+      let inverse = null;
+      try { inverse = ops.length ? invertOps(store.doc, ops) : null; } catch (e) { inverse = null; }
+      const flush = ctx.flush ? Promise.resolve(ctx.flush()).catch(function () { return null; }) : Promise.resolve(null);
+      flush.then(function () {
+        return ctx.api.applyProposal(ctx.project, { proposal: p, id: p.id, base_revision: store.revision });
+      }).then(function (res) {
+        res = res || {};
+        entry.proposalState = 'yes';
+        entry.applied = res;
+        try { if (ops.length) store.applyRemote(ops, 'remote'); } catch (e) { /* the reload below brings the server doc */ }
+        if (typeof res.revision === 'number' && store.setRevision) store.setRevision(res.revision);
+        if (ctx.reload) Promise.resolve(ctx.reload()).catch(function () { return null; });
+        redraw(true);
+        const t = ctx.toast('Applied \u00b7 ' + (res.summary || label), 'ok');
+        if (t && t.appendChild && inverse && inverse.length) {
+          t.appendChild(h('button', { type: 'button', class: 'small ast-undo', onclick: function (e) {
+            e.stopPropagation();
+            t.remove();
+            const r = ctx.commit(inverse, 'Undo: ' + (res.summary || label));
+            if (r) ctx.toast('Undone', 'ok');
+          } }, 'Undo'));
+        }
+      }, function (e) {
+        const locked = e && (e.status === 423 || e.code === 'locked');
+        entry.proposalError = locked ? 'Editing is locked \u2014 nobody can change the model until someone unlocks it.' : ((e && e.message) || 'Could not apply the proposal.');
+        if (e && e.status === 409) entry.proposalError = 'The system changed since this answer. Ask again with the latest data.';
+        redraw(true);
+      });
+    });
+    no.addEventListener('click', function () { entry.proposalState = 'no'; redraw(true); });
+    card.appendChild(h('div', { class: 'row' }, [yes, no]));
+    if (entry.draft) card.appendChild(h('p', { class: 'ast-draft-hint muted' }, DRAFT_HINT));
+    return card;
+  }
+
   // keep: leave the scroll position alone (in-place updates); otherwise bring the latest
   // question to the top so its path chips are visible even when the answer is long.
   function redraw(keep) {
@@ -197,17 +569,27 @@ export function mountAssistant(el, ctx) {
     let lastQ = null;
     logEl.innerHTML = '';
     if (!log.length) {
-      logEl.appendChild(h('div', { class: 'ast-a' }, [h('div', null, 'Ask about this system: what feeds a screen, why the stream has no audio, where a spare lives. Answers trace the actual cables and ports.'),
-        h('div', { class: 'ast-notes' }, 'Room: ' + (store.room === '*' ? 'all rooms' : (((store.doc.rooms || []).filter(function (r) { return r.id === store.room; })[0] || {}).name || store.room)))]));
+      logEl.appendChild(isDraft()
+        ? h('div', { class: 'ast-a ast-intro-draft' }, [h('div', null, 'Describe the room \u2014 type it, dictate it or paste a list \u2014 and the Helper drafts the devices and a first patch for you to review. Nothing is changed until you apply.'),
+          h('div', { class: 'ast-notes' }, 'Room: ' + roomName(store.doc, state.room))])
+        : h('div', { class: 'ast-a' }, [h('div', null, 'Ask about this system: what feeds a screen, why the stream has no audio, where a spare lives. Answers trace the actual cables and ports.'),
+          h('div', { class: 'ast-notes' }, 'Room: ' + (store.room === '*' ? 'all rooms' : (((store.doc.rooms || []).filter(function (r) { return r.id === store.room; })[0] || {}).name || store.room)))]));
     }
     log.forEach(function (entry) {
-      lastQ = h('div', { class: 'ast-q' }, entry.question);
+      const qctx = (entry.attachments || []).map(function (id) { return h('span', { class: 'chip ast-q-att', 'data-att': id }, attName(id)); })
+        .concat(entry.manual ? [h('span', { class: 'chip ast-q-manual' }, 'Manual text')] : [])
+        .concat(entry.draft ? [h('span', { class: 'chip ast-q-draft', 'data-room': entry.room || '' }, 'Draft a room \u00b7 ' + roomName(store.doc, entry.room))] : []);
+      lastQ = h('div', { class: 'ast-q', 'data-mode': entry.draft ? 'draft' : 'ask' }, [entry.question, qctx.length ? h('div', { class: 'ast-q-ctx' }, qctx) : null]);
       logEl.appendChild(lastQ);
-      if (entry.pending) logEl.appendChild(h('div', { class: 'ast-typing' }, 'Tracing\u2026'));
+      if (entry.pending) logEl.appendChild(h('div', { class: 'ast-typing' }, entry.draft ? 'Drafting\u2026' : 'Tracing\u2026'));
       else {
         logEl.appendChild(answerEl(entry));
+        const dr = draftEl(entry);
+        if (dr) logEl.appendChild(dr);
         const s = suggestionEl(entry);
         if (s) logEl.appendChild(s);
+        const pr = proposalEl(entry);
+        if (pr) logEl.appendChild(pr);
       }
     });
     if (keep) logEl.scrollTop = prevTop;
@@ -215,10 +597,13 @@ export function mountAssistant(el, ctx) {
     else logEl.scrollTop = 0;
   }
 
-  function history() {
+  // Prior turns (last 6); a user turn that carried attachments keeps them in `attachments`.
+  function history(entries) {
     const out = [];
-    log.slice(-6).forEach(function (e) {
-      out.push({ role: 'user', text: e.question });
+    entries.slice(-6).forEach(function (e) {
+      const u = { role: 'user', text: e.question };
+      if (e.attachments && e.attachments.length) u.attachments = e.attachments.slice();
+      out.push(u);
       if (e.answer && e.answer.summary) out.push({ role: 'assistant', text: e.answer.summary });
     });
     return out;
@@ -244,15 +629,36 @@ export function mountAssistant(el, ctx) {
     const question = String(q || '').trim();
     if (!question) return;
     input.value = '';
-    const hist = history();
+    if (voice) stopVoice();
+    const hist = history(log);
     const entry = { question: question, pending: true };
+    if (isDraft()) {
+      // Draft a room: the description goes with the chosen room; the answer renders the Draft card
+      entry.draft = true;
+      entry.room = roomSel.value || state.room;
+      if (!entry.room) { ctx.toast('Add a room to the project before drafting one.', 'warn'); return; }
+    }
+    // the chosen files and pasted text go with this question only (the entry remembers them for history)
+    if (pending.attachments.length) entry.attachments = pending.attachments.slice();
+    if (pending.manual) entry.manual = pending.manual;
+    pending.attachments = [];
+    pending.manual = '';
+    drawCtx();
     log.push(entry);
     redraw();
     const room = store.room === '*' ? undefined : store.room;
     if (!ctx.api || navigator.onLine === false) { entry.pending = false; offlineAnswer(entry); redraw(); return; }
-    ctx.api.ask(ctx.project, { question: question, room: room, use_llm: useLlm, history: hist }).then(function (a) {
+    const payload = buildPayload(entry.draft ? 'draft' : 'ask', question, { room: room, draftRoom: entry.room, useLlm: useLlm, history: hist });
+    if (entry.attachments) {
+      // P4B reads attachment ids from history[].attachments: this turn is appended there too
+      payload.history = hist.concat([{ role: 'user', text: question, attachments: entry.attachments.slice() }]);
+      payload.attachments = entry.attachments.slice();
+    }
+    if (entry.manual) payload.manual_text = entry.manual;
+    ctx.api.ask(ctx.project, payload).then(function (a) {
       entry.pending = false;
       entry.answer = a || {};
+      if (a && (a.llm || a.used_tools)) setStatus(a.llm, a.used_tools);
       redraw();
       if (a && a.paths && a.paths[0]) {
         const p = a.paths[0];
@@ -278,11 +684,22 @@ export function mountAssistant(el, ctx) {
   el.addEventListener('keydown', onKey);
   function onRoom() { fillChips(); }
   store.addEventListener('room', onRoom);
-  fillChips();
-  redraw();
-  return {
-    destroy: function () { el.removeEventListener('keydown', onKey); store.removeEventListener('room', onRoom); el.innerHTML = ''; },
+  const handle = {
+    destroy: function () { if (voice) stopVoice(); el.removeEventListener('keydown', onKey); store.removeEventListener('room', onRoom); if (active === handle) active = null; el.innerHTML = ''; },
     focus: function () { setTimeout(function () { input.focus(); }, 60); },
     ask: ask,
+    setMode: setMode,
+    mode: function () { return state.mode; },
   };
+  active = handle;
+  if (pendingOpen) {
+    // an open request (fathom:assistant-open) that arrived while the shell was still mounting the panel
+    const want = pendingOpen;
+    pendingOpen = null;
+    setMode(want.mode, want.room);
+  } else {
+    setMode(state.mode, state.room);
+  }
+  redraw();
+  return handle;
 }

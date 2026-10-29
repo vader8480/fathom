@@ -32,7 +32,7 @@ function asOps(x) {
 
 T('COLLECTIONS and ROOTS constants', () => {
   assert.deepEqual(need(mc, 'COLLECTIONS', '§4.1', S),
-    ['venues', 'rooms', 'systems', 'locations', 'racks', 'networks', 'devices', 'cables', 'bundles', 'floorplans', 'attachments', 'templates', 'imports', 'pages', 'problems'],
+    ['venues', 'rooms', 'systems', 'locations', 'racks', 'networks', 'devices', 'cables', 'bundles', 'floorplans', 'attachments', 'templates', 'imports', 'pages', 'problems', 'scenes'],
     m('§4.1', S, 'COLLECTIONS order'));
   assert.deepEqual(need(mc, 'ROOTS', '§4.1', S), ['meta', 'settings', 'media']);
 });
@@ -680,4 +680,93 @@ T('store events: selection, highlight, filter, room, overlay, revision', () => {
   assert.ok(st.index && st.index.byId.devices['atem-mini'], m('§6.2', S, 'store.index = indexDoc(doc)'));
   st.commit([{ op: 'put', coll: 'devices', id: 'zz', value: { id: 'zz', name: 'ZZ', kind: 'other', ports: [] } }], 'add');
   assert.ok(st.index.byId.devices.zz, m('§6.2', S, 'index invalidated on change'));
+});
+
+// ---- P1C: containers and accessories (FR-INV-11, FR-INV-12)
+
+T('containerDevices / containerContents / isAccessory', () => {
+  const doc = fx();
+  doc.devices.push({ id: 'case-1', name: 'FOH case', kind: 'container', room: 'main', ports: [] });
+  doc.devices.push({ id: 'case-2', name: 'Spare case', kind: 'container', room: 'main' });
+  doc.devices.push({ id: 'ghost-case', name: 'Auto', kind: 'container', room: 'main', auto: true });
+  doc.devices.find((d) => d.id === 'atem-mini').container = 'case-1';
+  doc.devices.find((d) => d.id === 'sound-board').container = 'case-1';
+  doc.devices.push({ id: 'adapter', name: 'HDMI adapter', kind: 'other', room: 'main', ports: [], container: 'case-1' });
+  doc.devices.push({ id: 'loop', name: 'Loop', kind: 'container', room: 'main', container: 'loop' });
+  assert.deepEqual(mc.containerDevices(doc).map((d) => d.id), ['case-1', 'case-2', 'loop'], 'kind container, auto devices skipped');
+  assert.deepEqual(mc.containerContents(doc, 'case-1').map((d) => d.id).sort(), ['adapter', 'atem-mini', 'sound-board']);
+  assert.deepEqual(mc.containerContents(doc, 'case-2'), []);
+  assert.deepEqual(mc.containerContents(doc, 'loop'), [], 'a container never holds itself');
+  assert.deepEqual(mc.containerContents(doc, ''), []);
+  assert.deepEqual(mc.containerContents(null, 'case-1'), []);
+  assert.deepEqual(mc.containerDevices(null), []);
+  assert.equal(mc.isAccessory(doc.devices.find((d) => d.id === 'adapter')), true, 'no ports and not a container');
+  assert.equal(mc.isAccessory(doc.devices.find((d) => d.id === 'case-1')), false, 'containers are not accessories');
+  assert.equal(mc.isAccessory(doc.devices.find((d) => d.id === 'atem-mini')), false, 'devices with ports are not accessories');
+  assert.equal(mc.isAccessory(null), false);
+});
+
+// ---- P2B: project lock (FR-UX-17)
+
+T('isLocked reads settings.locked strictly', () => {
+  const isLocked = need(mc, 'isLocked', 'FR-UX-17', S);
+  const doc = fx();
+  assert.equal(isLocked(doc), false, 'fixture is unlocked');
+  doc.settings = Object.assign({}, doc.settings, { locked: true, locked_by: 'sam' });
+  assert.equal(isLocked(doc), true);
+  doc.settings.locked = 'yes';
+  assert.equal(isLocked(doc), false, 'only boolean true locks');
+  doc.settings.locked = 1;
+  assert.equal(isLocked(doc), false);
+  assert.equal(isLocked({ settings: null }), false);
+  assert.equal(isLocked({}), false);
+  assert.equal(isLocked(null), false);
+  assert.equal(isLocked(undefined), false);
+});
+
+// ---- P3B: scenes (FR-SCN, SPEC §6.15)
+
+T('activeSceneId / sceneById / activeScene read settings.scene and scenes[]', () => {
+  const activeSceneId = need(mc, 'activeSceneId', 'FR-SCN', S);
+  const sceneById = need(mc, 'sceneById', 'FR-SCN', S);
+  const activeScene = need(mc, 'activeScene', 'FR-SCN', S);
+  const base = { id: 'sc-0000base', name: 'Base', base: true, data: {} };
+  const xmas = { id: 'sc-aaaaaaaa', name: 'Christmas', base: false, data: {} };
+  const doc = Object.assign(fx(), { scenes: [base, xmas] });
+  assert.equal(activeSceneId(doc), 'base', 'no settings.scene means Base');
+  assert.equal(activeScene(doc), null);
+  assert.equal(sceneById(doc, 'base'), base, "'base' maps to the entry flagged base");
+  assert.equal(sceneById(doc, ''), base);
+  assert.equal(sceneById(doc, 'sc-aaaaaaaa'), xmas);
+  assert.equal(sceneById(doc, 'sc-nope'), null);
+  doc.settings = Object.assign({}, doc.settings, { scene: 'sc-aaaaaaaa' });
+  assert.equal(activeSceneId(doc), 'sc-aaaaaaaa');
+  assert.equal(activeScene(doc), xmas);
+  doc.settings.scene = 'sc-gone';
+  assert.equal(activeSceneId(doc), 'sc-gone', 'a dangling id is reported as is');
+  assert.equal(activeScene(doc), null, 'but there is no active entry for it');
+  doc.settings.scene = 'sc-0000base';
+  assert.equal(activeScene(doc), null, 'the Base entry is never the active named scene');
+  doc.settings.scene = '';
+  assert.equal(activeSceneId(doc), 'base');
+  assert.equal(activeScene({ settings: { scene: 'x' } }), null, 'no scenes[] at all');
+  assert.equal(sceneById({ scenes: 'nope' }, 'base'), null);
+  assert.equal(activeSceneId(null), 'base');
+  assert.equal(activeScene(null), null);
+  assert.equal(sceneById(null, 'base'), null);
+});
+
+T('sceneDiffText words the summary like the server', () => {
+  const sceneDiffText = need(mc, 'sceneDiffText', 'FR-SCN', S);
+  assert.equal(sceneDiffText({ cables_added: 3, cables_removed: 1, cables_changed: 0, devices_moved: 2, markers_changed: 0 }), '+3 cables \u00b7 \u22121 cable \u00b7 2 devices moved');
+  assert.equal(sceneDiffText({ cables_added: 1 }), '+1 cable');
+  assert.equal(sceneDiffText({ cables_changed: 2 }), '2 cables changed');
+  assert.equal(sceneDiffText({ markers_changed: 1 }), '1 marker changed');
+  assert.equal(sceneDiffText({ devices_moved: 1, markers_changed: 2, cables_changed: 1 }), '1 cable changed \u00b7 1 device moved \u00b7 2 markers changed', 'fixed order');
+  assert.equal(sceneDiffText({}), 'No differences');
+  assert.equal(sceneDiffText(null), 'No differences');
+  assert.equal(sceneDiffText({ cables_added: 0, cables_removed: 0 }), 'No differences', 'zero parts are omitted');
+  assert.equal(sceneDiffText({ summary: { cables_removed: 2 } }), '\u22122 cables', 'accepts a diff dict holding summary');
+  assert.equal(sceneDiffText({ diff: { cables_added: 4 } }), '+4 cables', 'accepts a scene row holding diff');
+  assert.equal(sceneDiffText({ cables_added: '2', devices_moved: 'x' }), '+2 cables', 'numeric strings count, junk does not');
 });

@@ -1,0 +1,21 @@
+{
+  "request": {},
+  "status": 200,
+  "response": {
+    "object": "list",
+    "data": [
+      {
+        "id": "qwen2.5:7b",
+        "object": "model",
+        "created": 1761600000,
+        "owned_by": "library"
+      },
+      {
+        "id": "llama3.1:latest",
+        "object": "model",
+        "created": 1761600000,
+        "owned_by": "library"
+      }
+    ]
+  }
+}

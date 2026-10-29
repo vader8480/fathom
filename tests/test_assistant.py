@@ -13,9 +13,9 @@ from pathlib import Path
 from unittest import mock
 
 try:
-    from _helpers import fr, install_project, install_sunday, requires, sunday_doc, temp_data_dir, temp_env, uniq
+    from _helpers import fr, install_project, install_sunday, load_fixture, requires, sunday_doc, temp_data_dir, temp_env, uniq
 except ImportError:  # pragma: no cover
-    from tests._helpers import fr, install_project, install_sunday, requires, sunday_doc, temp_data_dir, temp_env, uniq
+    from tests._helpers import fr, install_project, install_sunday, load_fixture, requires, sunday_doc, temp_data_dir, temp_env, uniq
 
 Q_LIVESTREAM = "House sound is fine, but the livestream has no audio."
 EXPECTED_HOPS = [{"device": "audio-rack-1", "port": "analog-out-4", "label": "Audio Rack 1 · Stream"},
@@ -326,7 +326,67 @@ class Assistant(unittest.TestCase):
         self.assertIn("T1 EXTRA: check ATEM Mini program audio for Restream.", texts, fr("FR-EXT-03", "F (same id replaces)", "extra checklist dir changes the checks: %s" % texts))
         self.assertNotIn(EXPECTED_CHECKS[2]["text"], texts)
 
+    def test_deterministic_golden(self):
+        """Phase 4: with the LLM off or unconfigured the answer is byte-for-byte the pre-tool-loop answer
+        (``tests/fixtures/assistant/golden-deterministic.json``, generated from the Phase 3 code)."""
+        golden = load_fixture("assistant/golden-deterministic.json")
+        qs = {"livestream": Q_LIVESTREAM, "trace_tv": "What feeds Samsung TV - 1?", "locate": "Where is the spare ULXD4D?",
+              "unresolved": "projector 2 has no picture"}
+        with temp_data_dir():
+            for key, q in qs.items():
+                for use_llm in (False, True):
+                    with self.subTest(q=key, use_llm=use_llm):
+                        a = json.loads(json.dumps(self.answer(q, use_llm=use_llm)))
+                        self.assertEqual(a, golden[key], fr("FR-AST-02", "5.10", "deterministic path unchanged (use_llm=%s)" % use_llm))
+                        self.assertNotIn("proposal", a)
+            # a fake provider that proposes nothing leaves every deterministic field alone and only adds llm.*
+            AT = requires("assistant_tools")
+            prov = AT.FakeProvider({"steps": [{"text": "Check the ATEM audio tab.", "finish": "stop"}]})
+            a = json.loads(json.dumps(self.answer(Q_LIVESTREAM, ctx={"provider": prov})))
+            self.assertEqual({k: v for k, v in a.items() if k != "llm"}, {k: v for k, v in golden["livestream"].items() if k != "llm"},
+                             "6.9.6 the tool loop never changes the deterministic fields")
+            self.assertEqual(a["llm"]["used"], True)
+            self.assertEqual(a["llm"]["text"], "Check the ATEM audio tab.")
+            self.assertEqual(a["llm"]["tools"], [])
+            self.assertEqual(a["llm"]["model"], "fake")
+            self.assertNotIn("raw", a["llm"])
+            msgs = prov.calls[0]["messages"]
+            self.assertIn("built-in analysis", msgs[-1].content, "the deterministic summary rides along as grounding")
+            self.assertIn("Audio Rack 1 · Stream", msgs[-1].content)
+
+    def test_proposal_shape_5_10(self):
+        """§5.10 additions: ``proposal`` replaces ``suggestion`` when the model proposes edits; ``llm.tools`` lists the calls."""
+        AT = requires("assistant_tools")
+        with temp_data_dir():
+            doc = sunday_doc()
+            script = {"model": "fake", "steps": [
+                {"tool_calls": [{"id": "t1", "name": "device", "arguments": {"id_or_name": "ATEM Mini"}}]},
+                {"tool_calls": [{"id": "t2", "name": "propose_changes", "arguments": {"note": "Label the stream input", "changes": [
+                    {"action": "set_field", "device": "ATEM Mini", "port": "Stream", "field": "note", "value": "check Audio tab"}]}}]},
+                {"text": "Proposed a note on **ATEM Mini · Stream**.", "finish": "stop"}]}
+            prov = AT.FakeProvider(script)
+            a = self.answer(Q_LIVESTREAM, doc=doc, ctx={"provider": prov, "role": "editor", "project": "sunday"})
+            self.assertNotIn("suggestion", a, fr("FR-AST-13", "5.10", "suggestion omitted when a proposal exists"))
+            p = a["proposal"]
+            self.assertEqual(sorted(p), sorted(["id", "note", "summary", "ops", "applicable", "problems", "expires", "base_revision", "changes"]))
+            self.assertTrue(p["applicable"])
+            self.assertEqual(p["base_revision"], 1)
+            self.assertEqual(p["ops"][0]["op"], "merge")
+            self.assertEqual(p["ops"][0]["id"], "atem-mini")
+            ports = {x["id"]: x for x in p["ops"][0]["value"]["ports"]}
+            self.assertEqual(ports["analog-in-1"]["note"], "check Audio tab", "port resolved by its label 'Stream'")
+            self.assertEqual(a["llm"]["tools"], [{"name": "device", "args_summary": "id_or_name=ATEM Mini"},
+                                                 {"name": "propose_changes", "args_summary": "note=Label the stream input, changes[1]"}])
+            self.assertEqual(a["paths"][0]["text"], "Audio Rack 1 · Stream → ATEM Mini · Stream → USB Stream Out → Restream", "deterministic paths still there")
+            tool_reply = json.loads([m for m in prov.calls[2]["messages"] if m.role == "tool"][-1].content)
+            self.assertEqual(tool_reply["proposal_id"], p["id"])
+            self.assertIn("Nothing is applied", tool_reply["note"], "the model is told the proposal awaits confirmation")
+
     def test_llm_stub_and_unconfigured(self):
+        with temp_data_dir():  # the daily-cap counter (llm-usage.json) lives under FATHOM_DATA; never ~/.fathom
+            self._llm_stub_and_unconfigured()
+
+    def _llm_stub_and_unconfigured(self):
         llm = requires("llm")
         with temp_env(FATHOM_LLM_URL=None, FATHOM_LLM_MODEL=None, FATHOM_LLM_API_KEY=None):
             self.assertFalse(llm.configured(), fr("FR-AST-07", "6.9.6", "configured() false by default"))
@@ -383,9 +443,11 @@ class Assistant(unittest.TestCase):
                 self.assertEqual(req["body"]["model"], "stub-model")
                 self.assertIs(req["body"]["stream"], False)
                 self.assertEqual(req["body"]["messages"][0]["role"], "system")
-                self.assertTrue(req["body"]["messages"][0]["content"].startswith("You are Fathom's AV/lighting troubleshooting assistant."))
-                self.assertIn("SYSTEM DATA (JSON):", req["body"]["messages"][-1]["content"] if req["body"]["messages"][-1]["role"] == "user" else
-                              json.dumps(req["body"]["messages"]))
+                # the plain rephrase bridge sends the SYSTEM DATA blob; the Phase 4 tool loop (a provider with chat_tools) sends the
+                # built-in analysis inside the question instead - both ground the model in the deterministic answer
+                self.assertTrue(req["body"]["messages"][0]["content"].startswith("You are Fathom's AV/lighting"))
+                last_user = json.dumps([m for m in req["body"]["messages"] if m.get("role") == "user"][-1:])
+                self.assertTrue("SYSTEM DATA (JSON):" in last_user or "built-in analysis" in last_user, last_user[:300])
                 n_before = len(seen)
                 a_off = self.assistant.answer(sunday_doc(), Q_LIVESTREAM, room="main", use_llm=False, base_revision=1)
                 self.assertEqual(a_off["llm"]["used"], False)

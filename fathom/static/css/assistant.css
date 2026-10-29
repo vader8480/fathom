@@ -1,0 +1,116 @@
+/* assistant.css: P4C additions to the Helper panel (status line, used-tools row, proposal card,
+   attachment / manual-text chips, voice input). The base .ast rules stay in app.css. */
+
+/* ---- status line under the composer */
+.ast-form.ast-form-with-status{padding-bottom:6px}
+.ast-status{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:0 14px calc(8px + var(--sab));font-size:11.5px;color:var(--muted);min-height:20px}
+.ast-status-llm::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted);margin-right:6px;vertical-align:1px}
+.ast-status-llm[data-llm=on]::before{background:var(--ok)}
+.ast-tools{min-width:0}
+.ast-tools[hidden]{display:none!important}
+.ast-tools summary{cursor:pointer;list-style:none;color:var(--muted);min-height:20px;display:inline-flex;align-items:center}
+.ast-tools summary::-webkit-details-marker{display:none}
+.ast-tools summary::before{content:"\25B8";margin-right:4px;font-size:10px}
+.ast-tools[open] summary::before{content:"\25BE"}
+.ast-tools-list{display:flex;flex-wrap:wrap;gap:4px;padding:4px 0 2px}
+.ast-tool{font-size:11px;min-height:22px}
+.ast-tool-args{color:var(--muted)}
+
+/* ---- context for the next question (attachments, manual text) */
+.ast-ctx{display:flex;flex-direction:column;gap:6px;padding:0 14px 8px}
+.ast-attached{display:flex;flex-wrap:wrap;gap:6px}
+.ast-attached:empty{display:none}
+.ast-ctx-acts{display:flex;flex-wrap:wrap;gap:6px}
+.ast-ctx-acts button{font-size:12px;border-radius:999px}
+.ast-ctx-acts button[aria-pressed=true]{border-color:var(--border-2);background:rgba(142,162,255,.14);color:var(--text)}
+.ast-att,.ast-manual-chip{max-width:100%;padding-right:2px}
+.ast-att{overflow:hidden}
+.ast-chip-x{border:0;background:transparent;color:inherit;padding:0 6px;min-height:22px;min-width:22px;font-size:14px;line-height:1;cursor:pointer;border-radius:999px}
+.ast-chip-x:hover{background:rgba(142,162,255,.2)}
+.ast-q-ctx{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.ast-q-ctx .chip{background:rgba(11,16,32,.08);color:inherit;border-color:rgba(11,16,32,.2);font-size:11px;min-height:22px}
+
+/* attach picker and manual-text sheet live in the shell dialog */
+.ast-pick{display:flex;flex-direction:column;gap:2px;max-height:52vh;overflow:auto;-webkit-overflow-scrolling:touch}
+.ast-pick-hint{margin:0 0 8px;font-size:12px}
+.ast-pick-row{display:flex;align-items:center;gap:10px;min-height:40px;padding:4px 6px;border-radius:8px;cursor:pointer}
+.ast-pick-row:hover{background:rgba(142,162,255,.08)}
+.ast-pick-row input{flex:none}
+.ast-pick-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.ast-pick-dev{font-size:12px}
+.ast-pick-kind{flex:none;font-size:11px;min-height:22px;text-transform:uppercase;letter-spacing:.4px}
+.ast-manual-sheet{display:flex;flex-direction:column;gap:8px}
+.ast-manual-sheet p{margin:0;font-size:12px}
+.ast-manual-sheet textarea{width:100%;min-height:180px;resize:vertical;font-family:var(--mono);font-size:12px}
+.ast-manual-count{font-size:12px;text-align:right}
+.ast-manual-count.warn{color:var(--warn)}
+
+/* ---- proposal card */
+.ast-proposal{border:1px solid rgba(111,226,180,.45);background:rgba(111,226,180,.07);border-radius:12px;padding:11px 13px}
+.ast-proposal h4{margin:0 0 6px;color:var(--ok);font-size:13px}
+.ast-proposal-summary{margin:0 0 9px;padding-left:18px;font-size:12.5px;line-height:1.5}
+.ast-proposal-summary li{margin:2px 0}
+.ast-proposal-problem{color:var(--warn);font-size:12px;margin:0 0 8px;white-space:pre-wrap}
+.ast-proposal-err{color:var(--err)}
+.ast-proposal-hint{margin:0;font-size:12px}
+.ast-proposal-done{margin:0;font-size:12.5px}
+.ast-proposal button.yes{background:#f4f6fb;color:#0b1020;border-color:#f4f6fb;font-weight:600}
+.ast-proposal button.yes:disabled{opacity:.5;cursor:not-allowed}
+.ast-proposal[data-state=expired]{border-style:dashed;opacity:.85}
+.ast-undo{margin-left:10px;font-weight:600}
+
+/* ---- Ask | Draft a room (P6B, §6.9.5b): segmented control + room select above the composer */
+.ast-modes{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:0 14px 8px}
+.ast-mode{display:inline-flex;border:1px solid var(--border-2);border-radius:999px;padding:2px;background:rgba(255,255,255,.03)}
+.ast-mode-btn{border:0;background:transparent;color:var(--muted);border-radius:999px;min-height:32px;padding:0 12px;font-size:12.5px;cursor:pointer}
+.ast-mode-btn.on,.ast-mode-btn[aria-checked=true]{background:rgba(142,162,255,.18);color:var(--text);font-weight:600}
+.ast-mode-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.ast-room-wrap{display:flex;align-items:center;gap:6px;flex:1 1 160px;min-width:0;font-size:12px;color:var(--muted)}
+.ast-room-wrap[hidden]{display:none}
+.ast-room{flex:1;min-width:0;min-height:32px;border-radius:10px;padding:4px 8px;font-size:12.5px}
+.ast-draft-example{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---- draft card (recognised chips, unknown list) and the proposal hint */
+.ast-draft{border:1px solid rgba(142,162,255,.4);background:rgba(142,162,255,.06);border-radius:12px;padding:11px 13px}
+.ast-draft h4{margin:0 0 8px;color:var(--accent);font-size:13px}
+.ast-draft-list{display:flex;flex-wrap:wrap;gap:6px}
+.ast-draft-chip{font-size:12px;min-height:26px;max-width:100%;white-space:normal;text-align:left;line-height:1.3}
+.ast-draft-unknown{color:var(--warn);font-size:12px;margin-top:8px}
+.ast-draft-none{margin:0;font-size:12.5px}
+.ast-draft-hint{margin:8px 0 0;font-size:12px}
+.ast-q-draft{font-size:11px}
+
+/* ---- voice input */
+.ast-mic{border-radius:12px;min-width:44px;font-size:16px;line-height:1}
+.ast-mic.listening{border-color:var(--err);color:var(--err);animation:ast-pulse 1.2s ease-in-out infinite}
+.ast-form input.ast-listening{border-color:var(--err)}
+.ast-voice-hint{padding:0 14px;font-size:12px;color:var(--warn)}
+.ast-voice-hint:empty{display:none}
+@keyframes ast-pulse{0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,.45)}50%{box-shadow:0 0 0 6px rgba(248,113,113,0)}}
+
+html[data-theme="light"] .ast-proposal button.yes{background:#1f2a5a;color:#fff;border-color:#1f2a5a}
+@media (prefers-color-scheme:light){
+  html[data-theme="system"] .ast-proposal button.yes{background:#1f2a5a;color:#fff;border-color:#1f2a5a}
+}
+
+@media (max-width:699px){
+  .ast-pick{max-height:60vh}
+  .ast-proposal .row button{flex:1 1 auto}
+  .ast-modes{flex-direction:column;align-items:stretch}
+  .ast-mode{align-self:flex-start}
+  .ast-mode-btn{min-height:40px;flex:1 1 auto}
+  .ast-mode{display:flex;align-self:stretch}
+  .ast-room-wrap{flex:1 1 auto;width:100%}
+  .ast-room{min-height:40px}
+}
+
+@media (pointer:coarse){
+  .ast-ctx-acts button,.ast-mic{min-height:44px}
+  .ast-pick-row{min-height:44px}
+  .ast-chip-x{min-height:28px;min-width:28px}
+  .ast-mode-btn,.ast-room{min-height:44px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .ast-mic.listening{animation:none}
+}

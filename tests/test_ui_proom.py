@@ -9,6 +9,7 @@ viewer role, and d/t/m layout without page horizontal scroll. Skips without Chro
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.request
 
 try:
@@ -287,6 +288,253 @@ class RoomPageUi(UiCase):
                     pg.wait_for("!document.querySelector('.ex-root').classList.contains('ex-is-open')")
                 else:
                     self.assertTrue(pg.js("getComputedStyle(document.querySelector('.ex-side')).position !== 'fixed'"))
+
+
+# ---------------------------------------------------------------- add room from starter (phase3 P3C)
+
+STARTER_P = "#/starter-ui/"
+STARTER_CARDS = "[].map.call(document.querySelectorAll('.app-dialog .pr-starter'), function (c) { return c.getAttribute('data-starter'); })"
+
+
+class RoomStarterUi(UiCase):
+    """Rooms ▸ **Add room from starter…** (FR-ROOM-09/10) on its own ``starter-ui`` copy of campus-demo, so
+    the three-room assumptions of ``RoomPageUi`` stay true."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super(RoomStarterUi, cls).setUpClass()
+        req = urllib.request.Request(cls.base + "/api/v2/projects", method="POST",
+                                     data=json.dumps({"name": "starter-ui", "template": "campus-demo"}).encode(),
+                                     headers={"Content-Type": "application/json", "X-Fathom": "1"})
+        with urllib.request.urlopen(req) as r:
+            assert r.status == 201, r.status
+
+    def rooms_ready(self, pg, n: int) -> None:
+        self.assertEqual(pg.smoke["errors"], [])
+        pg.wait_for("document.querySelectorAll('.dt-root[data-table=rooms] tbody tr.dt-row').length === %d" % n)
+
+    def test_dialog_lists_starters_and_adds_a_room(self):
+        with self.open(STARTER_P + "main/rooms", "d") as pg:
+            self.rooms_ready(pg, 3)
+            pg.click("button.pr-add-starter[data-action=add-starter]")
+            pg.wait_for("document.querySelectorAll('.app-dialog .pr-starter').length === 5")
+            self.assertEqual(pg.js(STARTER_CARDS),
+                             ["church-sanctuary", "church-youth-room", "church-chapel", "church-portable", "church-broadcast"])
+            self.assertEqual(pg.js("document.querySelector('.app-dialog .pr-starter[aria-checked=true]').getAttribute('data-starter')"), "church-sanctuary")
+            self.assertEqual(pg.js("document.querySelector('#pr-starter-name').value"), "Sanctuary / auditorium")
+            # Cards carry label, counts, blurb and tag chips.
+            card = pg.js("(function () { var c = document.querySelector('.pr-starter[data-starter=church-portable]');"
+                         " return {label: c.querySelector('.pr-starter-label').textContent, counts: c.querySelector('.pr-starter-counts').textContent,"
+                         " blurb: c.querySelector('.pr-starter-blurb').textContent.length,"
+                         " tags: [].map.call(c.querySelectorAll('.pr-starter-tags .chip'), function (t) { return t.textContent; })}; })()")
+            self.assertEqual(card["label"], "Portable church (road cases)")
+            self.assertIn("devices", card["counts"])
+            self.assertIn("racks", card["counts"])
+            self.assertGreater(card["blurb"], 20)
+            self.assertIn("inventory", card["tags"])
+            pg.click(".app-dialog .pr-starter[data-starter=church-chapel]")
+            self.assertEqual(pg.js("document.querySelector('#pr-starter-name').value"), "Chapel / traditional")
+            # A name the user typed is kept when another card is picked.
+            pg.js("(function () { var i = document.querySelector('#pr-starter-name'); i.value = 'Prayer Chapel'; i.dispatchEvent(new Event('input', {bubbles: true})); })()")
+            pg.click(".app-dialog .pr-starter[data-starter=church-youth-room]")
+            self.assertEqual(pg.js("document.querySelector('#pr-starter-name').value"), "Prayer Chapel")
+            pg.click(".app-dialog .pr-starter[data-starter=church-chapel]")
+            pg.click(".app-dialog footer button.primary")
+            pg.wait_for("location.hash.indexOf('/rooms/prayer-chapel/overview') > 0", timeout=30)
+            pg.wait_for("!document.querySelector('.app-dialog')")
+            pg.wait_for("!!document.querySelector('header.eh[data-id=prayer-chapel]')")
+            self.assertEqual(pg.js("document.querySelector('header.eh .eh-title').textContent").strip(), "Prayer Chapel")
+            self.assertEqual(pg.js("document.querySelectorAll('.ex-root[data-explorer=rooms] .ex-item').length"), 4)
+            self.assertEqual(pg.smoke["errors"], [])
+        raw = json.loads(urllib.request.urlopen(self.base + "/api/v2/projects/starter-ui").read().decode())
+        doc = raw.get("doc", raw)
+        room = [r for r in doc["rooms"] if r["id"] == "prayer-chapel"][0]
+        self.assertEqual(room["name"], "Prayer Chapel")
+        self.assertTrue(all(d["id"].startswith("prayer-chapel-") for d in doc["devices"] if d.get("room") == "prayer-chapel"))
+        hist = json.loads(urllib.request.urlopen(self.base + "/api/v2/projects/starter-ui/history").read().decode())
+        last = hist["revisions"][0] if hist["revisions"][0]["revision"] >= hist["revisions"][-1]["revision"] else hist["revisions"][-1]
+        self.assertEqual(last["source"], "starter")
+        self.assertEqual(last["summary"], "Added room Prayer Chapel from starter Chapel / traditional")
+
+    def test_dialog_at_m_stacks_cards_with_44px_targets(self):
+        with self.open(STARTER_P + "main/rooms", "m") as pg:
+            pg.wait_for("document.querySelectorAll('.dt-root[data-table=rooms] tbody tr.dt-row').length >= 3")
+            self.assertGreaterEqual(pg.rect("button.pr-add-starter")["height"], 44)
+            pg.click("button.pr-add-starter")
+            pg.wait_for("document.querySelectorAll('.app-dialog .pr-starter').length === 5")
+            self.assertLessEqual(pg.page_hscroll(), 0)
+            lefts = pg.js("[].map.call(document.querySelectorAll('.app-dialog .pr-starter'), function (c) { return Math.round(c.getBoundingClientRect().left); })")
+            self.assertEqual(len(set(lefts)), 1, "cards stack in one column at m: %r" % lefts)
+            for t in pg.js(TARGETS % json.dumps(".app-dialog .pr-starter, .app-dialog #pr-starter-name, .app-dialog footer button")):
+                self.assertGreaterEqual(min(t["w"], t["h"]), 44, t)
+            pg.shot("starter-dialog-m")
+            pg.press("Escape")
+            pg.wait_for("!document.querySelector('.app-dialog')")
+
+    def test_viewer_has_no_starter_button_and_error_is_inline(self):
+        raw = json.loads(urllib.request.urlopen(self.base + "/api/v2/projects/starter-ui").read().decode())
+        raw["role"] = "viewer"
+        with self.open(STARTER_P + "main/rooms", "d", intercepts=[("/api/v2/projects/starter-ui", 200, raw, "GET")]) as pg:
+            pg.wait_for("document.querySelectorAll('.dt-root[data-table=rooms] tbody tr.dt-row').length >= 3")
+            self.assertFalse(pg.js("!!document.querySelector('button.pr-add-starter')"))
+        with self.open(STARTER_P + "main/rooms", "d",
+                       intercepts=[("/api/v2/projects/starter-ui/rooms/from-starter", 423, {"error": "locked", "message": "Project is locked"}, "POST")]) as pg:
+            pg.wait_for("document.querySelectorAll('.dt-root[data-table=rooms] tbody tr.dt-row').length >= 3")
+            pg.click("button.pr-add-starter")
+            pg.wait_for("document.querySelectorAll('.app-dialog .pr-starter').length === 5")
+            pg.click(".app-dialog footer button.primary")
+            pg.wait_for("!document.querySelector('.app-dialog .pr-starter-error').hidden")
+            self.assertIn("locked", pg.js("document.querySelector('.app-dialog .pr-starter-error').textContent"))
+            self.assertTrue(pg.js("!!document.querySelector('.app-dialog')"))
+            self.assertFalse(pg.js("document.querySelector('.app-dialog footer button.primary').disabled"))
+
+
+# ---------------------------------------------------------------- save room as starter (phase6 P6A, FR-ROOM-11)
+
+SAVE_P = "#/save-ui/"
+GROUP_TITLES = "[].map.call(document.querySelectorAll('.app-dialog .pr-starter-group-title'), function (t) { return t.textContent; })"
+USER_CARDS = "[].map.call(document.querySelectorAll('.app-dialog .pr-starter-group[data-group=user] .pr-starter'), function (c) { return c.getAttribute('data-starter'); })"
+CHECKED_TAGS = "[].map.call(document.querySelectorAll('.app-dialog input.pr-ss-tag:checked'), function (i) { return i.value; })"
+
+
+class RoomSaveStarterUi(UiCase):
+    """Rooms ▸ **Save as starter…** (FR-ROOM-11): the dialog (label prefilled, blurb, tag chips from the room's
+    disciplines, the "not saved" note), the real ``save-starter`` POST, the **Your starters** group with the admin
+    trash button in the Add-room dialog, a 409 ``exists`` turning the primary button into *Replace starter*, and
+    the 390 px layout. Runs on its own ``save-ui`` copy of campus-demo; ``setUpClass`` saves one starter through
+    the API so both sizes see a user group whatever the test order."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super(RoomSaveStarterUi, cls).setUpClass()
+        cls.api("POST", "/api/v2/projects", {"name": "save-ui", "template": "campus-demo"})
+        cls.api("POST", "/api/v2/projects/save-ui/rooms/chapel/save-starter", {"label": "Chapel seed", "blurb": "Seeded by the test", "tags": ["audio"]})
+
+    @classmethod
+    def api(cls, method: str, path: str, body=None):
+        req = urllib.request.Request(cls.base + path, method=method, data=json.dumps(body).encode() if body is not None else None,
+                                     headers={"Content-Type": "application/json", "X-Fathom": "1"})
+        try:
+            with urllib.request.urlopen(req) as r:
+                raw = r.read().decode()
+                return r.status, (json.loads(raw) if raw else None)
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read().decode() or "{}")
+
+    def open_menu_action(self, pg, action: str) -> None:
+        pg.click("header.eh .eh-more")
+        pg.wait_for("!!document.querySelector('header.eh .eh-menu:not([hidden])')")
+        pg.click("header.eh .eh-menu-item[data-action=%s]" % action)
+
+    def test_landing_button_saves_and_dialog_groups_user_starters(self):
+        with self.open(SAVE_P + "main/rooms", "d") as pg:
+            self.assertEqual(pg.smoke["errors"], [])
+            pg.wait_for("document.querySelectorAll('.dt-root[data-table=rooms] tbody tr.dt-row').length === 3")
+            self.assertEqual(pg.js("document.querySelectorAll('.dt-root[data-table=rooms] button.pr-save-starter').length"), 3,
+                             "every room row carries Save as starter… for an editor")
+            pg.click(".dt-root[data-table=rooms] tr[data-id=main] button.pr-save-starter")
+            pg.wait_for("!!document.querySelector('.app-dialog #pr-ss-label')")
+            self.assertEqual(pg.js("location.hash"), SAVE_P + "main/rooms", "the row button does not navigate")
+            self.assertEqual(pg.js("document.querySelector('.app-dialog h2').textContent"), "Save as starter")
+            self.assertEqual(pg.js("document.querySelector('#pr-ss-label').value"), "Main Auditorium")
+            self.assertEqual(pg.js(CHECKED_TAGS), ["audio", "video", "lighting", "network"], "tags come from the room's disciplines")
+            self.assertEqual(pg.js("[].map.call(document.querySelectorAll('.app-dialog label.pr-ss-chip'), function (c) { return c.textContent; })"),
+                             ["audio", "video", "lighting", "network", "inventory"])
+            self.assertEqual(pg.js("document.querySelector('.app-dialog .pr-ss-note').textContent"),
+                             "Serials, asset tags, prices, short codes and attached files are not saved.")
+            pg.click(".app-dialog label.pr-ss-chip[data-tag=network]")
+            pg.click(".app-dialog label.pr-ss-chip[data-tag=inventory]")
+            self.assertEqual(pg.js(CHECKED_TAGS), ["audio", "video", "lighting", "inventory"])
+            pg.js("(function () { var t = document.querySelector('#pr-ss-blurb'); t.value = 'FOH, two racks, PTZ cameras.'; t.dispatchEvent(new Event('input', {bubbles: true})); })()")
+            pg.shot("save-starter-dialog-d")
+            pg.click(".app-dialog footer button.primary")
+            pg.wait_for("!document.querySelector('.app-dialog')", timeout=30)
+            toast = pg.wait_for("(function () { var t = document.querySelector('.app-toast.ok'); return t ? t.textContent : ''; })()")
+            self.assertTrue(toast.startswith("Saved starter Main Auditorium"), toast)
+            self.assertIn("cables to other rooms", toast, "cross-room cables are reported as left out")
+            self.assertEqual(pg.smoke["errors"], [])
+            # The Add-room dialog now lists it under "Your starters" with a trash button (admin: login is off).
+            pg.click("button.pr-add-starter[data-action=add-starter]")
+            pg.wait_for("document.querySelectorAll('.app-dialog .pr-starter-group[data-group=user] .pr-starter').length >= 2")
+            self.assertEqual(pg.js(GROUP_TITLES), ["Bundled starters", "Your starters"])
+            self.assertEqual(pg.js("document.querySelectorAll('.app-dialog .pr-starter-group[data-group=bundled] .pr-starter').length"), 5)
+            self.assertEqual(pg.js(USER_CARDS), ["user-chapel-seed", "user-main-auditorium"])
+            card = pg.js("(function () { var c = document.querySelector('.pr-starter[data-starter=user-main-auditorium]');"
+                         " return {label: c.querySelector('.pr-starter-label').textContent, counts: c.querySelector('.pr-starter-counts').textContent,"
+                         " blurb: c.querySelector('.pr-starter-blurb').textContent, tags: [].map.call(c.querySelectorAll('.chip'), function (t) { return t.textContent; })}; })()")
+            self.assertEqual(card["label"], "Main Auditorium")
+            self.assertEqual(card["blurb"], "FOH, two racks, PTZ cameras.")
+            self.assertEqual(card["tags"], ["audio", "video", "lighting", "inventory"])
+            self.assertIn("49 devices", card["counts"])
+            self.assertTrue(pg.js("!!document.querySelector('.app-dialog .pr-starter-del[data-del=user-main-auditorium]')"), "admin trash button")
+            self.assertFalse(pg.js("!!document.querySelector('.app-dialog .pr-starter-group[data-group=bundled] .pr-starter-del')"), "bundled cards have no trash")
+            pg.shot("starters-dialog-your-starters-d")
+            # Picking the user starter prefills the room name with its label.
+            pg.click(".app-dialog .pr-starter[data-starter=user-main-auditorium]")
+            self.assertEqual(pg.js("document.querySelector('#pr-starter-name').value"), "Main Auditorium")
+            # Trash → confirm → DELETE: the card goes, the selection moves to the first starter.
+            pg.click(".app-dialog .pr-starter-del[data-del=user-main-auditorium]")
+            pg.wait_for("document.querySelectorAll('.app-dialog').length === 2")
+            self.assertIn("Main Auditorium", pg.js("document.querySelectorAll('.app-dialog')[1].textContent"))
+            pg.js("document.querySelectorAll('.app-dialog')[1].querySelector('footer button.danger').click()")
+            pg.wait_for("document.querySelectorAll('.app-dialog').length === 1 && !document.querySelector('.pr-starter[data-starter=user-main-auditorium]')")
+            self.assertEqual(pg.js(USER_CARDS), ["user-chapel-seed"])
+            self.assertEqual(pg.js("document.querySelector('.app-dialog .pr-starter[aria-checked=true]').getAttribute('data-starter')"), "church-sanctuary")
+            self.assertEqual(pg.smoke["errors"], [])
+        st, out = self.api("GET", "/api/v2/starters")
+        self.assertEqual([s["id"] for s in out["starters"] if s["source"] == "user"], ["user-chapel-seed"])
+
+    def test_room_menu_at_m_replace_flow_and_targets(self):
+        exists = {"error": "a starter 'user-chapel' already exists", "code": "exists"}
+        with self.open(SAVE_P + "chapel/rooms/chapel/overview", "m",
+                       intercepts=[("/api/v2/projects/save-ui/rooms/chapel/save-starter", 409, exists, "POST")]) as pg:
+            self.assertEqual(pg.smoke["errors"], [])
+            pg.wait_for("!!document.querySelector('header.eh[data-id=chapel] .eh-more')")
+            self.open_menu_action(pg, "save-starter")
+            pg.wait_for("!!document.querySelector('.app-dialog #pr-ss-label')")
+            self.assertEqual(pg.js("document.querySelector('#pr-ss-label').value"), "Chapel")
+            self.assertEqual(pg.js(CHECKED_TAGS), ["audio", "video", "network"])
+            self.assertLessEqual(pg.page_hscroll(), 0)
+            for t in pg.js(TARGETS % json.dumps(".app-dialog #pr-ss-label, .app-dialog label.pr-ss-chip, .app-dialog footer button")):
+                self.assertGreaterEqual(t["h"], 44, t)
+            pg.shot("save-starter-dialog-m")
+            pg.click(".app-dialog footer button.primary")
+            pg.wait_for("!document.querySelector('.app-dialog .pr-starter-error').hidden")
+            self.assertIn("Replace it", pg.js("document.querySelector('.app-dialog .pr-starter-error').textContent"))
+            self.assertEqual(pg.js("document.querySelector('.app-dialog footer button.primary').textContent"), "Replace starter")
+            self.assertTrue(pg.js("!!document.querySelector('.app-dialog')"), "the dialog stays open")
+            # Editing the label drops the replace offer.
+            pg.js("(function () { var i = document.querySelector('#pr-ss-label'); i.value = 'Chapel two'; i.dispatchEvent(new Event('input', {bubbles: true})); })()")
+            self.assertEqual(pg.js("document.querySelector('.app-dialog footer button.primary').textContent"), "Save starter")
+            pg.press("Escape")
+            pg.wait_for("!document.querySelector('.app-dialog')")
+            # The Add-room dialog at m: both groups stack in one column, the user card and its trash are ≥ 44 px.
+            pg.goto(SAVE_P + "chapel/rooms")
+            pg.wait_for("document.querySelectorAll('.dt-root[data-table=rooms] tbody tr.dt-row').length >= 3")
+            self.assertTrue(pg.js("(function () { var b = document.querySelector('.dt-root[data-table=rooms] button.pr-save-starter');"
+                                  " return !b || b.getBoundingClientRect().width === 0; })()"), "the row button is hidden at m (the room page menu has the action)")
+            pg.click("button.pr-add-starter")
+            pg.wait_for("document.querySelectorAll('.app-dialog .pr-starter-group[data-group=user] .pr-starter').length >= 1")
+            self.assertEqual(pg.js(GROUP_TITLES), ["Bundled starters", "Your starters"])
+            self.assertLessEqual(pg.page_hscroll(), 0)
+            lefts = pg.js("[].map.call(document.querySelectorAll('.app-dialog .pr-starter'), function (c) { return Math.round(c.getBoundingClientRect().left); })")
+            self.assertEqual(len(set(lefts)), 1, "cards stack in one column at m: %r" % lefts)
+            for t in pg.js(TARGETS % json.dumps(".app-dialog .pr-starter-group[data-group=user] .pr-starter, .app-dialog .pr-starter-del")):
+                self.assertGreaterEqual(min(t["w"], t["h"]), 44, t)
+            pg.shot("starters-dialog-your-starters-m")
+            pg.press("Escape")
+            pg.wait_for("!document.querySelector('.app-dialog')")
+            self.assertEqual(pg.smoke["errors"], [])
+
+    def test_viewer_has_no_save_action(self):
+        st, raw = self.api("GET", "/api/v2/projects/save-ui")
+        raw["role"] = "viewer"
+        with self.open(SAVE_P + "main/rooms/main/overview", "d", intercepts=[("/api/v2/projects/save-ui", 200, raw, "GET")]) as pg:
+            pg.wait_for("!!document.querySelector('header.eh[data-id=main]')")
+            self.assertFalse(pg.js("!!document.querySelector('header.eh [data-action=save-starter]')"))
+            pg.goto(SAVE_P + "main/rooms")
+            pg.wait_for("document.querySelectorAll('.dt-root[data-table=rooms] tbody tr.dt-row').length >= 3")
+            self.assertFalse(pg.js("!!document.querySelector('.dt-root[data-table=rooms] button.pr-save-starter')"))
 
 
 if __name__ == "__main__":  # pragma: no cover

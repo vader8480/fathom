@@ -16,7 +16,10 @@ BOM_COLUMNS: List[Tuple[str, str]] = [
 INVENTORY_KEYS = (
     "id", "name", "room", "location", "kind", "discipline", "manufacturer", "model", "status", "serial", "asset_tag", "firmware",
     "purchase_date", "warranty_until", "vendor", "cost", "currency", "po", "rack", "ru", "ips", "notes",
+    "condition", "container", "short_code",
 )
+#: custom-field columns (FR-INV-07) follow ``INVENTORY_KEYS`` as ``field:<key>``, one per distinct key, sorted
+FIELD_COLUMN_PREFIX = "field:"
 _STATUSES = ("planned", "installed", "spare", "retired")
 
 
@@ -143,6 +146,8 @@ def inventory_schedule(doc: Doc, room: str = "*") -> Dict[str, Any]:
     locs = {r.get("id"): r for r in doc.get("locations") or [] if isinstance(r, dict)}
     racks = {r.get("id"): r for r in doc.get("racks") or [] if isinstance(r, dict)}
     cur0 = str((doc.get("settings") or {}).get("currency") or "USD")
+    names = {d.get("id"): d.get("name") or d.get("id") for d in doc.get("devices") or [] if isinstance(d, dict)}
+    field_keys: List[str] = []
     rows = []
     for d in doc.get("devices") or []:
         if not isinstance(d, dict) or d.get("auto") or not _room_ok(d.get("room", ""), room):
@@ -150,6 +155,10 @@ def inventory_schedule(doc: Doc, room: str = "*") -> Dict[str, Any]:
         inv = d.get("inventory") or {}
         rk = d.get("rack") or {}
         ips = [str(i.get("ip")) for i in d.get("interfaces") or [] if isinstance(i, dict) and i.get("ip")]
+        custom = inv.get("fields") if isinstance(inv.get("fields"), dict) else {}
+        for k in custom:
+            if k not in field_keys:
+                field_keys.append(str(k))
         rows.append({
             "id": d.get("id", ""), "name": d.get("name", ""),
             "room": (rooms.get(d.get("room")) or {}).get("name", d.get("room", "")), "room_id": d.get("room", ""),
@@ -161,8 +170,25 @@ def inventory_schedule(doc: Doc, room: str = "*") -> Dict[str, Any]:
             "vendor": inv.get("vendor", ""), "cost": inv.get("cost", ""), "currency": inv.get("currency") or (cur0 if inv.get("cost") is not None else ""),
             "po": inv.get("po", ""), "rack": (racks.get(rk.get("id")) or {}).get("name", rk.get("id", "")), "rack_id": rk.get("id", ""),
             "ru": rk.get("u", ""), "ips": ";".join(ips), "notes": inv.get("notes", "") or d.get("note", ""),
+            "condition": inv.get("condition", ""),
+            "container": str(names.get(d.get("container")) or "") if d.get("container") else "",
+            "short_code": _format_code(d.get("short_code")),
+            **{FIELD_COLUMN_PREFIX + str(k): str(v) for k, v in custom.items()},
         })
-    return {"kind": "inventory", "columns": [{"key": k, "label": k} for k in INVENTORY_KEYS], "rows": rows, "problems": []}
+    field_keys.sort()
+    for r in rows:
+        for k in field_keys:
+            r.setdefault(FIELD_COLUMN_PREFIX + k, "")
+    columns = [{"key": k, "label": k} for k in INVENTORY_KEYS] + [{"key": FIELD_COLUMN_PREFIX + k, "label": FIELD_COLUMN_PREFIX + k} for k in field_keys]
+    return {"kind": "inventory", "columns": columns, "rows": rows, "problems": []}
 
 
-__all__ = ["bom", "inventory_schedule", "BOM_COLUMNS", "INVENTORY_KEYS"]
+def _format_code(code: Any) -> str:
+    try:
+        from .schema import format_short_code, parse_short_code
+    except ImportError:  # pragma: no cover
+        return str(code or "")
+    return format_short_code(code) if parse_short_code(code) else ""
+
+
+__all__ = ["bom", "inventory_schedule", "BOM_COLUMNS", "INVENTORY_KEYS", "FIELD_COLUMN_PREFIX"]

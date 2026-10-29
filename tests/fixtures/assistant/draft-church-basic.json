@@ -1,0 +1,41 @@
+{
+  "name": "scripted draft mode: a small church room (X32 + stage box + 2 ULXD + 2 K12.2 + ATEM Mini) on the campus fixture",
+  "model": "fake-tools",
+  "scripts": [
+    {
+      "match": "X32",
+      "steps": [
+        {"tool_calls": [{"id": "call_1", "name": "draft_room", "arguments": {
+          "room": "chapel",
+          "devices": [
+            {"text": "X32", "model": "X32", "kind": "console", "count": 1},
+            {"text": "S16 stage box", "model": "S16", "kind": "stage box", "count": 1},
+            {"text": "2 ULXD4D wireless", "model": "ULXD4D", "kind": "wireless_rx", "count": 2},
+            {"text": "2 K12.2 on stands", "model": "K12.2", "kind": "speaker", "count": 2},
+            {"text": "ATEM Mini", "model": "ATEM Mini", "kind": "video_switcher", "count": 1}
+          ]}}]},
+        {"tool_calls": [{"id": "call_2", "name": "propose_changes", "arguments": {
+          "note": "Chapel draft: X32, stage box, 2 ULXD4D, 2 K12.2, ATEM Mini Pro",
+          "changes": [
+            {"action": "add_device", "name": "X32", "room": "chapel", "template": "behringer-x32"},
+            {"action": "add_device", "name": "Stage box", "room": "chapel", "template": "generic-stagebox"},
+            {"action": "add_device", "name": "ULXD4D 1", "room": "chapel", "template": "shure-ulxd4d"},
+            {"action": "add_device", "name": "ULXD4D 2", "room": "chapel", "template": "shure-ulxd4d"},
+            {"action": "add_device", "name": "K12.2 1", "room": "chapel", "template": "qsc-k12-2"},
+            {"action": "add_device", "name": "K12.2 2", "room": "chapel", "template": "qsc-k12-2"},
+            {"action": "add_device", "name": "ATEM Mini Pro", "room": "chapel", "template": "blackmagic-atem-mini-pro"},
+            {"action": "connect", "from": {"device": "ULXD4D 1"}, "to": {"device": "X32"}, "medium": "analog"},
+            {"action": "connect", "from": {"device": "ULXD4D 1"}, "to": {"device": "X32"}, "medium": "analog"},
+            {"action": "connect", "from": {"device": "ULXD4D 2"}, "to": {"device": "X32"}, "medium": "analog"},
+            {"action": "connect", "from": {"device": "ULXD4D 2"}, "to": {"device": "X32"}, "medium": "analog"},
+            {"action": "connect", "from": {"device": "X32"}, "to": {"device": "K12.2 1"}, "medium": "analog"},
+            {"action": "connect", "from": {"device": "X32"}, "to": {"device": "K12.2 2"}, "medium": "analog"}
+          ]}}]},
+        {"text": "Draft for the Chapel: **X32**, a generic **Stage box** (the S16 is not in the library), **ULXD4D 1–2** patched to Mic In 1–4, **K12.2 1–2** on XLR Out 1–2 and an **ATEM Mini Pro** (nothing to patch it to yet). The stage box is not patched: the generic one has no AES50 port. Apply to add them.", "finish": "stop"}
+      ]
+    }
+  ],
+  "steps": [
+    {"text": "Tell me what is in the room (models or kinds, with counts) and I will draft it.", "finish": "stop"}
+  ]
+}

@@ -95,7 +95,7 @@ const SECTION_TABLE = [
   { key: 'home', label: 'Home', glyph: '\u2302', views: ['home'], nav: 'sm' },
   { key: 'patch', label: 'Patch', glyph: '\u2B95', views: ['patch', 'table', 'map'], nav: 'all' },
   { key: 'rooms', label: 'Rooms', glyph: '\u25A3', views: ['rooms', 'plan', 'racks'], nav: 'all' },
-  { key: 'devices', label: 'Devices', glyph: '\u25EB', views: ['devices', 'inventory'], nav: 'all' },
+  { key: 'devices', label: 'Devices', glyph: '\u25EB', views: ['devices', 'inventory', 'files'], nav: 'all' },
   { key: 'schedules', label: 'Schedules', glyph: '\u2630', views: ['schedules', 'builds'], nav: 'all' },
   { key: 'sop', label: 'SOPs', glyph: '\u2611', views: ['sop'], nav: 'all' },
   { key: 'data', label: 'Data', glyph: '\u21C5', views: ['imports', 'discovery', 'history', 'json'], nav: 'all' },
@@ -372,13 +372,17 @@ T('VIEW_ROLES, TAB_ROLES and canSee', () => {
   const VIEW_ROLES = fn('VIEW_ROLES', D2);
   for (const v of ALL_VIEWS) assert.equal(VIEW_ROLES[v], 'viewer', m(U, D2, `VIEW_ROLES.${v}`));
   const TAB_ROLES = fn('TAB_ROLES', D2);
-  assert.deepEqual(plain(TAB_ROLES.settings), { users: 'admin', backups: 'admin', sharing: 'editor' }, m(U, D2, 'TAB_ROLES.settings'));
+  assert.deepEqual(plain(TAB_ROLES.settings), { users: 'admin', invites: 'admin', backups: 'admin', sharing: 'editor', suggestions: 'admin', assistant: 'admin', trash: 'admin' }, m(U, D2, 'TAB_ROLES.settings'));
   const canSee = fn('canSee', D2);
   const cases = [
     ['settings', 'viewer', 'users', false], ['settings', 'editor', 'users', false], ['settings', 'admin', 'users', true],
     ['settings', 'viewer', 'backups', false], ['settings', 'editor', 'backups', false], ['settings', 'admin', 'backups', true],
     ['settings', 'viewer', 'sharing', false], ['settings', 'editor', 'sharing', true], ['settings', 'admin', 'sharing', true],
     ['settings', 'viewer', 'networks', true], ['settings', 'viewer', undefined, true],
+    ['settings', 'viewer', 'trash', false], ['settings', 'editor', 'trash', false], ['settings', 'admin', 'trash', true],
+    ['settings', 'viewer', 'invites', false], ['settings', 'editor', 'invites', false], ['settings', 'admin', 'invites', true],
+    ['settings', 'viewer', 'suggestions', false], ['settings', 'editor', 'suggestions', false], ['settings', 'admin', 'suggestions', true],
+    ['settings', 'viewer', 'assistant', false], ['settings', 'editor', 'assistant', false], ['settings', 'admin', 'assistant', true],
     ['no-such-view', 'viewer', undefined, true], ['no-such-view', 'admin', 'x', true],
   ];
   for (const [v, role, tab, exp] of cases) assert.equal(canSee(v, role, tab), exp, m(U, D2, `canSee(${v}, ${role}, ${tab})`));

@@ -532,7 +532,7 @@ class Bom(unittest.TestCase):
 # ================================================================== builds (§5.9)
 
 BUILD_TOP = ["index.html", "diagram.svg", "patch-sheet.csv", "project.json", "build-notes.txt", "rooms/index.html", "patch-table.csv",
-             "cable-schedule.csv", "cable-labels.html", "ip-schedule.csv", "dmx-schedule.csv", "bom.csv", "inventory.csv"]
+             "cable-schedule.csv", "cable-labels.html", "device-labels.html", "ip-schedule.csv", "dmx-schedule.csv", "bom.csv", "inventory.csv"]
 
 
 def rel_files(run):
@@ -569,7 +569,7 @@ class Builds(unittest.TestCase):
         files = rel_files(run)
         missing = [f for f in BUILD_TOP if f not in files and (notes_required or f != "build-notes.txt")]
         for room in doc["rooms"]:
-            for f in ("index.html", "diagram.svg", "patch.html"):
+            for f in ("index.html", "diagram.svg", "patch.html", "patch.svg"):  # patch.svg: phase5 P5C (FR-EXP-06)
                 if "rooms/%s/%s" % (room["id"], f) not in files:
                     missing.append("rooms/%s/%s" % (room["id"], f))
         for d in doc["devices"]:
@@ -581,9 +581,16 @@ class Builds(unittest.TestCase):
             for face in ("front", "rear"):
                 if "racks/%s-%s.svg" % (r["id"], face) not in files:
                     missing.append("racks/%s-%s.svg" % (r["id"], face))
+        # phase5 P5C (FR-EXP-07): the cable-runs plan sits next to the plain one once floorplan.plan_svg takes runs=
+        import inspect
+
+        from fathom.floorplan import plan_svg
+        plan_runs = "runs" in inspect.signature(plan_svg).parameters
         for fp in doc["floorplans"]:
             if "floorplans/%s.svg" % fp["id"] not in files:
                 missing.append("floorplans/%s.svg" % fp["id"])
+            if plan_runs and "floorplans/%s-runs.svg" % fp["id"] not in files:
+                missing.append("floorplans/%s-runs.svg" % fp["id"])
         zp = run / ("%s.zip" % run.name)
         if not zp.exists():
             missing.append(zp.name)

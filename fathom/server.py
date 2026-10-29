@@ -94,6 +94,7 @@ SHELL_ASSETS = [
     "static/js/floorplan.js", "static/js/floorplan-core.js", "static/js/rack.js", "static/js/rack-core.js",
     "static/js/schedules.js", "static/js/inventory.js", "static/js/views-admin.js", "static/js/merge-ui.js", "static/js/views-discovery.js", "static/js/suggest-ui.js",
     "static/js/views-sop.js", "static/css/sop.css", "static/icons/icon-192.png", "manifest.webmanifest",
+    "static/js/speech.js", "static/js/assistant-core.js", "static/css/assistant.css",
 ]
 SCHEDULE_KINDS = ("patch", "cables", "ip", "dmx", "bom", "inventory", "racks", "labels")
 _STATUS_TEXT = {
@@ -599,7 +600,11 @@ def r_login_page(req: Request) -> Response:
 
 
 def _user_out(u: Dict[str, Any]) -> Dict[str, Any]:
-    return {"username": u.get("username"), "role": u.get("role")}
+    out = {"username": u.get("username"), "role": u.get("role")}
+    # Per-project overrides ride along when there are any (the plain {username, role} shape stays for everyone else).
+    if u.get("projects"):
+        out["projects"] = dict(u.get("projects") or {})
+    return out
 
 
 def _cookie(req: Request, value: str, max_age: int) -> str:
@@ -726,6 +731,235 @@ def r_user_password(req: Request) -> Response:
     return resp
 
 
+# ---- invites, editing lock, suggestions (phase 2 P2A: FR-USER-11..13, §5.3, §5.16)
+
+_INVITE = r"(?P<invite>inv-[A-Za-z0-9_-]{16,64})"
+_STATUS_TEXT.setdefault(423, "Locked")
+#: ``settings`` keys the lock op itself may touch while a project is locked
+_LOCK_KEYS = ("locked", "locked_by", "locked_at")
+_SUGGEST_FORWARD_TIMEOUT = 5.0
+
+
+def _invite_url(req: Request, token: str) -> str:
+    base = str(os.environ.get("FATHOM_PUBLIC_URL") or req.root_url).rstrip("/")
+    return f"{base}/invite/{quote(token)}"
+
+
+@route("GET", "/api/v2/invites", role="admin", summary="Open invite links", tags=["users"])
+def r_invites(req: Request) -> Response:
+    from .users import list_invites
+
+    return Response.json({"invites": list_invites(), "accept_url": (req.script_root or "") + "/invite/{token}"})
+
+
+@route("POST", "/api/v2/invites", role="admin", summary="Create a one-time invite link ({role, projects, ttl_hours, note})", tags=["users"], body="Invite")
+def r_invites_create(req: Request) -> Response:
+    from .users import UserError, create_invite
+
+    body = req.json()
+    try:
+        inv = create_invite(str(body.get("role") or "editor"), body.get("projects"), created_by=req.username,
+                            ttl_hours=body.get("ttl_hours") if body.get("ttl_hours") is not None else 72, note=str(body.get("note") or ""))
+    except UserError as exc:
+        raise _user_error(exc)
+    inv["url"] = _invite_url(req, inv["token"])
+    return Response.json(inv, 201)
+
+
+@route("DELETE", r"/api/v2/invites/" + _INVITE, role="admin", summary="Revoke an invite link", tags=["users"])
+def r_invite_delete(req: Request) -> Response:
+    from .users import revoke_invite
+
+    if not revoke_invite(req.params["invite"]):
+        raise ApiError(404, "invite not found")
+    return Response.json({"ok": True})
+
+
+@route("GET", r"/invite/" + _INVITE, role="public", summary="Invite page (asks the API whether the token is still valid)", tags=["users"], page="app")
+def r_invite_page(req: Request) -> Response:
+    if req.path.endswith("/"):  # keep the page's relative asset URLs (../static/…) valid
+        return Response(b"", 302, "text/plain; charset=utf-8", {"Location": req.script_root + req.path.rstrip("/")})
+    p = STATIC_DIR / "invite.html"
+    if not p.is_file():
+        raise ApiError(404, "invite page not installed")
+    return Response.text(p.read_text(encoding="utf-8"), "text/html; charset=utf-8", headers={"Cache-Control": "no-cache"})
+
+
+@route("GET", r"/api/v2/invites/" + _INVITE + "/check", role="public", summary="Is this invite still open? ({ok, role, expires, auth_enabled} or 404 invalid_invite)", tags=["users"])
+def r_invite_check(req: Request) -> Response:
+    from .users import auth_enabled, get_invite
+
+    inv = get_invite(req.params["invite"])
+    if inv is None:
+        raise ApiError(404, "this invite link is no longer valid", "invalid_invite")
+    return Response.json({"ok": True, "role": inv.get("role"), "expires": inv.get("expires"), "auth_enabled": auth_enabled()})
+
+
+@route("POST", r"/api/v2/invites/" + _INVITE + "/accept", role="public", summary="Accept an invite ({username, password}): creates the user and signs them in", tags=["users"], body="Login")
+def r_invite_accept(req: Request) -> Response:
+    from .users import UserError, make_session, note_failure, note_success, redeem_invite, throttled
+
+    token = req.params["invite"]
+    ip = req.remote_addr
+    if throttled(ip, token):
+        raise ApiError(429, "too many attempts; try again in a few minutes", "throttled")
+    body = req.json()
+    try:
+        user = redeem_invite(token, str(body.get("username") or ""), str(body.get("password") or ""))
+    except UserError as exc:
+        if exc.code == "not_found":
+            note_failure(ip, token)
+            raise ApiError(404, str(exc), "invalid_invite")
+        raise _user_error(exc)
+    note_success(ip, token)
+    resp = Response.json({"user": _user_out(user)})
+    resp.cookies.append(_cookie(req, make_session(user), 1_209_600))
+    return resp
+
+
+# -- editing lock (settings.locked): /changes and PUT refuse with 423 unless the batch is the unlock itself
+
+
+def _lock_flags(name: str) -> Dict[str, Any]:
+    """``locked`` / ``locked_by`` / ``locked_at`` of a project's settings (for the project list)."""
+    from .project import load_dict
+
+    out: Dict[str, Any] = {"locked": False, "locked_by": "", "locked_at": ""}
+    pf = find_project_file(projects_root() / name)
+    if pf is None:
+        return out
+    try:
+        s = load_dict(pf).get("settings") or {}
+    except Exception:
+        return out
+    if isinstance(s, dict) and s.get("locked") is True:
+        out.update({"locked": True, "locked_by": str(s.get("locked_by") or ""), "locked_at": str(s.get("locked_at") or "")})
+    return out
+
+
+def _locked_error(settings: Dict[str, Any]) -> ApiError:
+    return ApiError(423, "this project is locked for editing", "locked",
+                    {"locked_by": str(settings.get("locked_by") or ""), "locked_at": str(settings.get("locked_at") or "")})
+
+
+def _lock_only_ops(settings: Dict[str, Any], ops: List[Any]) -> bool:
+    """True when every op only touches the lock keys of ``settings`` (a replace counts when nothing else differs)."""
+    for op in ops:
+        if not isinstance(op, dict) or op.get("op") != "root" or op.get("key") != "settings" or not isinstance(op.get("value"), dict):
+            return False
+        value = op["value"]
+        if op.get("replace"):
+            for k in set(settings) | set(value):
+                if k not in _LOCK_KEYS and settings.get(k) != value.get(k):
+                    return False
+        elif any(k not in _LOCK_KEYS for k in value):
+            return False
+    return True
+
+
+def _stamp_lock(req: Request, stored: Dict[str, Any], value: Dict[str, Any], replace: bool) -> None:
+    """Fill ``locked_by`` / ``locked_at`` in a settings patch that flips ``locked`` (clients only send ``locked``)."""
+    from .history import utc_now
+
+    if "locked" not in value and not replace:
+        return
+    was = stored.get("locked") is True
+    now_locked = value.get("locked") is True
+    if now_locked and not was:
+        value["locked_by"] = req.username or "local"
+        value["locked_at"] = utc_now()
+    elif now_locked:
+        value["locked_by"] = str(stored.get("locked_by") or req.username or "local")
+        value["locked_at"] = str(stored.get("locked_at") or utc_now())
+    elif replace:
+        value.pop("locked_by", None)
+        value.pop("locked_at", None)
+    else:
+        value["locked_by"] = None
+        value["locked_at"] = None
+
+
+def _lock_guard_ops(req: Request, doc: Dict[str, Any], ops: List[Any]) -> List[Any]:
+    """423 when the stored doc is locked and the batch is not the unlock; stamps lock ops either way."""
+    settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    if settings.get("locked") is True and not _lock_only_ops(settings, ops):
+        raise _locked_error(settings)
+    out: List[Any] = []
+    for op in ops:
+        if isinstance(op, dict) and op.get("op") == "root" and op.get("key") == "settings" and isinstance(op.get("value"), dict):
+            op = dict(op, value=dict(op["value"]))
+            _stamp_lock(req, settings, op["value"], bool(op.get("replace")))
+        out.append(op)
+    return out
+
+
+def _lock_guard_put(req: Request, stored: Dict[str, Any], doc: Dict[str, Any]) -> None:
+    """PUT counterpart: 423 unless only the lock keys differ; stamps ``locked_by`` / ``locked_at`` in ``doc``."""
+    import copy
+
+    from . import schema
+
+    s_stored = stored.get("settings") if isinstance(stored.get("settings"), dict) else {}
+    if not isinstance(doc.get("settings"), dict):
+        if s_stored.get("locked") is True:
+            raise _locked_error(s_stored)
+        return
+    if s_stored.get("locked") is True:
+        if schema.doc_version(doc) != 2:
+            raise _locked_error(s_stored)
+        a = schema.normalize(copy.deepcopy(stored))
+        b = schema.normalize(copy.deepcopy(doc))
+        for d in (a, b):
+            d.pop("revision", None)
+            for k in _LOCK_KEYS:
+                (d.get("settings") or {}).pop(k, None)
+        if schema.diff_docs(a, b):
+            raise _locked_error(s_stored)
+    if "locked" in doc["settings"] or s_stored.get("locked") is True:
+        _stamp_lock(req, s_stored, doc["settings"], True)
+
+
+# -- "Suggest an improvement": problem reports with kind=suggestion, optionally forwarded
+
+
+def _suggest_url(doc: Dict[str, Any]) -> str:
+    s = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    url = str(s.get("suggest_url") or os.environ.get("FATHOM_SUGGEST_URL") or "").strip()
+    return url if re.match(r"^https?://", url, re.I) else ""
+
+
+def _forward_suggestion(url: str, payload: Dict[str, Any]) -> bool:
+    """POST the suggestion as JSON to ``url``; failures are logged and never fail the report."""
+    import urllib.error
+    import urllib.request
+
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    try:
+        rq = urllib.request.Request(url, data=data, method="POST",
+                                    headers={"Content-Type": "application/json; charset=utf-8", "User-Agent": f"fathom/{__version__}"})
+        with urllib.request.urlopen(rq, timeout=_SUGGEST_FORWARD_TIMEOUT) as resp:
+            return 200 <= int(getattr(resp, "status", 200) or 200) < 300
+    except Exception as exc:  # network / HTTP / bad URL: the report is already stored
+        sys.stderr.write(f"fathom: suggestion forward to {url} failed: {exc}\n")
+        return False
+
+
+@route("GET", "/api/v2/suggestions", role="admin", summary="Improvement suggestions across every project (newest first)", tags=["problems"])
+def r_suggestions(req: Request) -> Response:
+    items: List[Dict[str, Any]] = []
+    for n in list_projects():
+        try:
+            doc, _ = _load(_project_dir(n))
+        except ApiError:
+            continue
+        for r in doc.get("problems") or []:
+            if isinstance(r, dict) and r.get("id") and r.get("kind") == "suggestion":
+                items.append(dict(_problem_view(doc, r, n), project=n))
+    items.reverse()
+    items.sort(key=lambda r: str(r.get("created") or ""), reverse=True)
+    return Response.json({"items": items})
+
+
 # ---- backups
 
 _BACKUP = r"(?P<backup>[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.zip)"
@@ -843,6 +1077,12 @@ def r_meta_v2(req: Request) -> Response:
 
     out: Dict[str, Any] = {"version": __version__, "vocab": _vocab_dict(), "importers": [], "plugins_errors": [], "samples": _samples()}
     try:
+        from .starters import list_starters
+
+        out["user_starters"] = [{"id": s["id"], "label": s.get("label") or s["id"]} for s in list_starters() if s.get("source") == "user"]
+    except Exception:  # a broken starters dir must not take /meta down
+        out["user_starters"] = []
+    try:
         from . import plugins
 
         out["importers"] = [{"kind": i.kind, "label": i.label, "mode": getattr(i, "mode", "live"), "accepts": list(getattr(i, "accepts", ()) or ()),
@@ -873,6 +1113,12 @@ def r_meta_v2(req: Request) -> Response:
     except Exception:
         pass
     out["capabilities"] = caps
+    try:
+        from .vocab import CONDITIONS
+
+        out["conditions"] = list(CONDITIONS)
+    except Exception:  # pragma: no cover
+        out["conditions"] = ["new", "good", "fair", "poor", "broken"]
     out["auth"] = {"enabled": auth_enabled(), "public_view": public_view()}
     out["limits"] = {"max_upload_mb": _max_upload() // (1024 * 1024), "max_json_mb": _max_json() // (1024 * 1024),
                      "max_backup_mb": _max_backup() // (1024 * 1024)}
@@ -1021,8 +1267,99 @@ def r_projects_v2(req: Request) -> Response:
     for n in list_projects():
         info = project_info_v2(n)
         info["role"] = req.role_for(n)
+        info.update(_lock_flags(n))
         rows.append(info)
     return Response.json({"projects": rows})
+
+
+# ---- room starters (phase3 P3C): bundled one-room church samples offered as project templates and as rooms to add
+
+
+@route("GET", "/api/v2/starters", role="viewer", summary="Church room starter templates", tags=["projects"])
+def r_starters(req: Request) -> Response:
+    from .starters import list_starters
+
+    return Response.json({"starters": list_starters()})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/rooms/from-starter", role="editor", summary="Add a room from a starter", tags=["projects"], body="Starter")
+def r_room_from_starter(req: Request) -> Response:
+    from .schema import diff_docs
+    from .starters import StarterError, get_starter, merge_room
+
+    pdir = _project_dir(req.params["name"])
+    body = req.json()
+    starter_id = str(body.get("starter") or "")
+    starter = get_starter(starter_id)
+    if starter is None:
+        raise ApiError(400, f"unknown starter '{starter_id}'", "bad_enum")
+    room_name = str(body.get("name") or "").strip()[:80]
+    doc, _ = _load(pdir)
+    try:
+        merged, info = merge_room(doc, starter_id, room_name or None)
+    except StarterError as exc:
+        raise ApiError(404 if exc.code == "not_found" else 400, str(exc), exc.code)
+    ops = diff_docs(doc, merged)
+    ops = _lock_guard_ops(req, doc, ops)
+    summary = f"Added room {info['name']} from starter {starter['label']}"
+    res = _server_ops(req, pdir, ops, summary, "starter")
+    return Response.json({"room": info["room"], "info": info, "revision": res["revision"], "problems": res.get("problems") or []}, 201,
+                         headers={"ETag": f'"r{res["revision"]}"'})
+
+
+# ---- user starters (phase6 P6A, FR-ROOM-11): save a room as a starter under FATHOM_DATA/starters, read / delete one
+
+_STARTER_ID = r"(?P<starter>[A-Za-z0-9][A-Za-z0-9._-]{0,127})"
+_STARTER_STATUS = {"exists": 409, "bundled": 409, "missing_field": 400, "bad_id": 400, "bad_enum": 400, "not_found": 404}
+
+
+def _starter_error(exc: Any) -> ApiError:
+    code = getattr(exc, "code", "") or "bad_request"
+    return ApiError(_STARTER_STATUS.get(code, 400), str(exc), code)
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + r"/rooms/(?P<room>" + _EID + r")/save-starter", role="editor",
+       summary="Save a room as a user starter ({label, blurb?, tags?, replace?, id?})", tags=["projects"], body="StarterSave", response="StarterInfo")
+def r_room_save_starter(req: Request) -> Response:
+    from .starters import StarterError, save_starter
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    room = _room_or_404(doc, req.params["room"])
+    body = req.json()
+    tags = body.get("tags")
+    if tags is not None and not isinstance(tags, list):
+        raise ApiError(400, "tags must be a list of strings", "bad_type")
+    sid = body.get("id")
+    if sid is not None and not isinstance(sid, str):
+        raise ApiError(400, "id must be a string", "bad_type")
+    try:
+        entry, info = save_starter(doc, room, str(body.get("label") or ""), str(body.get("blurb") or ""), tags,
+                                   replace=bool(body.get("replace")), starter_id=sid or None, author=req.username, source_project=pdir.name)
+    except StarterError as exc:
+        raise _starter_error(exc)
+    return Response.json({"starter": entry, "dropped_cables": info["dropped_cables"], "dropped_files": info["dropped_files"]}, 201)
+
+
+@route("GET", r"/api/v2/starters/" + _STARTER_ID, role="viewer", summary="One starter (bundled or user) with its counts", tags=["projects"], response="StarterInfo")
+def r_starter_get(req: Request) -> Response:
+    from .starters import StarterError, starter_entry
+
+    try:
+        return Response.json({"starter": starter_entry(req.params["starter"])})
+    except StarterError as exc:
+        raise _starter_error(exc)
+
+
+@route("DELETE", r"/api/v2/starters/" + _STARTER_ID, role="admin", summary="Delete a user starter (409 bundled for bundled ids)", tags=["projects"])
+def r_starter_delete(req: Request) -> Response:
+    from .starters import StarterError, delete_starter
+
+    try:
+        delete_starter(req.params["starter"])
+    except StarterError as exc:
+        raise _starter_error(exc)
+    return Response.empty(204)
 
 
 @route("POST", "/api/v2/projects", role="editor", summary="Create a project", tags=["projects"], body="ProjectCreate")
@@ -1034,9 +1371,18 @@ def r_projects_create_v2(req: Request) -> Response:
     if (projects_root() / name).exists():
         raise ApiError(409, f"project '{name}' already exists", "exists")
     template = str(body.get("template") or "blank")
-    if template != "blank" and template not in _samples():
-        raise ApiError(400, f"unknown template '{template}'")
-    pdir = new_project(name, template=template, org=str(body.get("org") or ""))
+    if template.startswith("user-"):
+        from .starters import StarterError, load_starter_doc, new_project_from_starter
+
+        try:
+            load_starter_doc(template)
+        except StarterError:
+            raise ApiError(400, f"unknown template '{template}'")
+        pdir = new_project_from_starter(name, template, org=str(body.get("org") or ""))
+    else:
+        if template != "blank" and template not in _samples():
+            raise ApiError(400, f"unknown template '{template}'")
+        pdir = new_project(name, template=template, org=str(body.get("org") or ""))
     doc, _ = _load(pdir)
     return Response.json({"name": pdir.name, "revision": _rev(doc)}, 201)
 
@@ -1066,6 +1412,7 @@ def r_project_put_v2(req: Request) -> Response:
     doc = body.get("doc")
     if not isinstance(doc, dict):
         raise ApiError(400, "body.doc must be an object")
+    _lock_guard_put(req, _load(pdir)[0], doc)
     res = save_doc(doc, pdir, base_revision=base, author=req.username, summary=str(body.get("summary") or "Saved"), source="put")
     return Response.json({"revision": res["revision"], "rebased": res["rebased"], "problems": res["problems"]}, headers={"ETag": f'"r{res["revision"]}"'})
 
@@ -1081,6 +1428,7 @@ def r_project_changes(req: Request) -> Response:
         raise ApiError(400, "ops must be a list")
     if len(ops) > MAX_OPS:
         raise ApiError(400, f"at most {MAX_OPS} ops per request")
+    ops = _lock_guard_ops(req, _load(pdir)[0], ops)
     res = _changes(req, pdir, ops, _int(body.get("base_revision"), -1), str(body.get("summary") or f"{len(ops)} change{'s' if len(ops) != 1 else ''}"), "changes")
     return Response.json(res, headers={"ETag": f'"r{res["revision"]}"'})
 
@@ -1191,14 +1539,300 @@ def r_device_channels_apply(req: Request) -> Response:
     return Response.json({"revision": revision, "changed": bool(ops), "summary": applied})
 
 
-@route("DELETE", r"/api/v2/projects/" + _NAME, role="admin", summary="Delete a project (?confirm=<name>)", tags=["projects"])
+@route("DELETE", r"/api/v2/projects/" + _NAME, role="admin", summary="Move a project to the trash (?confirm=<name>; &purge=1 deletes it for good)", tags=["projects"])
 def r_project_delete_v2(req: Request) -> Response:
     name = req.params["name"]
     _project_dir(name)
     if req.query.get("confirm") != name:
         raise ApiError(400, "pass ?confirm=<name> to delete a project and its builds")
-    delete_project(name)
+    purge = str(req.query.get("purge") or "").lower() in ("1", "true", "yes")
+    delete_project(name, purge=purge, by=req.username)
+    return Response.json({"ok": True, "trashed": not purge})
+
+
+# ---- trash and short codes (phase 1, FR-INV-07 / FR-INV-09)
+
+_TNAME = r"(?P<tname>[A-Za-z0-9][A-Za-z0-9._-]{0,63})"
+_CODE = r"(?P<code>[A-Za-z0-9]{4}-?[A-Za-z0-9]{4})"
+
+
+@route("GET", r"/api/v2/trash", role="admin", summary="Trashed projects (purges entries past the retention period)", tags=["projects"])
+def r_trash_list(req: Request) -> Response:
+    from .project import TRASH_RETENTION_DAYS, list_trashed
+
+    return Response.json({"items": list_trashed(), "retention_days": TRASH_RETENTION_DAYS})
+
+
+@route("POST", r"/api/v2/trash/" + _TNAME + "/restore", role="admin", summary="Restore a trashed project", tags=["projects"])
+def r_trash_restore(req: Request) -> Response:
+    from .project import ProjectExists, restore_project, trash_info
+
+    info = trash_info(req.params["tname"])
+    if info is None:
+        raise ApiError(404, "nothing in the trash by that name", "not_found")
+    try:
+        restore_project(req.params["tname"])
+    except ProjectExists as exc:
+        raise ApiError(409, str(exc), "exists")
+    except FileNotFoundError:
+        raise ApiError(404, "nothing in the trash by that name", "not_found")
+    return Response.json({"ok": True, "name": info["name"]})
+
+
+@route("DELETE", r"/api/v2/trash/" + _TNAME, role="admin", summary="Delete a trashed project for good", tags=["projects"])
+def r_trash_purge(req: Request) -> Response:
+    from .project import purge_project
+
+    try:
+        purge_project(req.params["tname"])
+    except FileNotFoundError:
+        raise ApiError(404, "nothing in the trash by that name", "not_found")
     return Response.json({"ok": True})
+
+
+@route("GET", r"/api/v2/codes/" + _CODE, role="viewer", summary="Resolve a device short code (XXXX-XXXX) across projects", tags=["devices"])
+def r_code_lookup(req: Request) -> Response:
+    from .project import find_by_short_code
+    from .users import role_at_least
+
+    hit = find_by_short_code(req.params["code"])
+    if hit is None or not role_at_least(req.role_for(hit["project"]), "viewer"):
+        raise ApiError(404, "not_found", "not_found")
+    return Response.json(hit)
+
+
+# ---- scenes (phase 3 P3A, FR-SCN / §4.3.18 / §5.6 "Scenes"): named patch + placement variants
+
+_SID = r"(?P<sid>sc-[0-9a-f]{8}|base)"
+
+
+def _scene_commit(req: Request, pdir: Path, mutate: Callable[[Dict[str, Any]], Tuple[Dict[str, Any], Any, str]]) -> Tuple[Dict[str, Any], Any, Dict[str, Any]]:
+    """Load → ``mutate(doc) -> (new_doc, info, summary)`` → store as one revision (source ``scene``),
+    all under the project lock so the capture and the write see the same state; 423 while the
+    project is locked for editing (FR-USER-12), like ``/changes``."""
+    from .project import project_lock, save_doc
+
+    with project_lock(pdir):
+        doc, _ = _load(pdir)
+        settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+        if settings.get("locked") is True:
+            raise _locked_error(settings)
+        new_doc, info, summary = mutate(doc)
+        res = save_doc(new_doc, pdir, base_revision=None, author=req.username, summary=summary, source="scene")
+    return new_doc, info, res
+
+
+def _scene_or_404(doc: Dict[str, Any], sid: str) -> None:
+    from . import scenes as S
+
+    if S.find(doc, sid) is None and not (sid == S.BASE):
+        raise ApiError(404, f"scene '{sid}' not found", "not_found")
+
+
+def _scene_view(doc: Dict[str, Any], sid: str) -> Dict[str, Any]:
+    """The doc as it looks with scene ``sid`` active (nothing stored). The org eyebrow every viewer
+    page renders gets a "Scene: <name>" caption so the page says which variant it shows (the only
+    hook reachable from here without touching the renderers). 404 for an unknown scene."""
+    from . import scenes as S
+
+    try:
+        data = S.scene_data(doc, sid)
+        name = S.scene_name(doc, sid)
+    except KeyError:
+        raise ApiError(404, f"scene '{sid}' not found", "not_found")
+    out = S.apply(doc, data)
+    meta = out.get("meta") if isinstance(out.get("meta"), dict) else {}
+    out["meta"] = meta
+    org = str(meta.get("org") or "")
+    meta["org"] = f"{org} \u00b7 Scene: {name}" if org else f"Scene: {name}"
+    return out
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/scenes", role="viewer", summary="Scenes (named patch + placement variants) with their diff against Base", tags=["scenes"])
+def r_scenes(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    return Response.json({"scenes": S.summarize(doc), "active": S.active_id(doc), "revision": _rev(doc)})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/scenes", role="editor", summary="Create a scene from the current state ({name, note, copy_from, activate})", tags=["scenes"], body="Scene")
+def r_scene_create(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    body = req.json()
+    name = str(body.get("name") or "").strip()
+    if not name:
+        raise ApiError(400, "name is required", "missing_field")
+    if len(name) > S.MAX_NAME:
+        raise ApiError(400, f"name is longer than {S.MAX_NAME} characters", "bad_enum")
+    note = str(body.get("note") or "")
+    copy_from = str(body.get("copy_from") or "") or None
+    activate = body.get("activate") is True
+
+    def mutate(doc: Dict[str, Any]) -> Tuple[Dict[str, Any], Any, str]:
+        if copy_from:
+            _scene_or_404(doc, copy_from)
+        new, scene = S.create(doc, name, note=note, by=req.username, copy_from=copy_from)
+        if activate:
+            new, _ = S.activate(new, scene["id"], by=req.username)
+        return new, scene["id"], f"Created scene {name}"
+
+    new_doc, sid, res = _scene_commit(req, pdir, mutate)
+    return Response.json({"scene": S.summary_for(new_doc, sid), "revision": res["revision"]}, 201)
+
+
+@route("PATCH", r"/api/v2/projects/" + _NAME + "/scenes/" + _SID, role="editor", summary="Rename a scene / edit its note ({name, note})", tags=["scenes"], body="ScenePatch")
+def r_scene_patch(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    sid = req.params["sid"]
+    body = req.json()
+    name = body.get("name")
+    note = body.get("note")
+    if name is not None:
+        name = str(name).strip()
+        if not name:
+            raise ApiError(400, "name must not be empty", "missing_field")
+        if len(name) > S.MAX_NAME:
+            raise ApiError(400, f"name is longer than {S.MAX_NAME} characters", "bad_enum")
+    if note is not None:
+        note = str(note)
+
+    def mutate(doc: Dict[str, Any]) -> Tuple[Dict[str, Any], Any, str]:
+        if S.find(doc, sid) is None:
+            raise ApiError(404, f"scene '{sid}' not found", "not_found")
+        old = S.scene_name(doc, sid)
+        new = S.rename(doc, sid, name=name, note=note)
+        label = f"Renamed scene {old} to {name}" if name is not None and name != old else f"Edited scene {old}"
+        return new, S.find(new, sid)["id"], label  # type: ignore[index]
+
+    new_doc, real_id, res = _scene_commit(req, pdir, mutate)
+    return Response.json({"scene": S.summary_for(new_doc, real_id), "revision": res["revision"]})
+
+
+@route("DELETE", r"/api/v2/projects/" + _NAME + "/scenes/" + _SID, role="editor", summary="Delete a scene (the active one is left for Base first; Base cannot be deleted)", tags=["scenes"])
+def r_scene_delete(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    sid = req.params["sid"]
+
+    def mutate(doc: Dict[str, Any]) -> Tuple[Dict[str, Any], Any, str]:
+        if S.is_base(doc, sid):
+            raise ApiError(400, "the Base scene cannot be deleted", "bad_request")
+        if S.find(doc, sid) is None:
+            raise ApiError(404, f"scene '{sid}' not found", "not_found")
+        name = S.scene_name(doc, sid)
+        return S.delete(doc, sid), None, f"Deleted scene {name}"
+
+    new_doc, _, res = _scene_commit(req, pdir, mutate)
+    return Response.json({"ok": True, "revision": res["revision"], "active": S.active_id(new_doc)})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/scenes/" + _SID + "/activate", role="editor", summary="Switch to a scene (sid may be 'base'): captures the current state into the scene being left", tags=["scenes"])
+def r_scene_activate(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    sid = req.params["sid"]
+    doc, _ = _load(pdir)
+    if sid != S.BASE and S.find(doc, sid) is None:
+        raise ApiError(404, f"scene '{sid}' not found", "not_found")
+    if S.active_id(doc) == (S.BASE if S.is_base(doc, sid) else sid):
+        empty = S.capture(doc)
+        return Response.json({"active": S.active_id(doc), "from": S.active_id(doc), "diff": S.diff(empty, empty), "revision": _rev(doc)})
+
+    def mutate(d: Dict[str, Any]) -> Tuple[Dict[str, Any], Any, str]:
+        try:
+            new, info = S.activate(d, sid, by=req.username)
+        except KeyError:
+            raise ApiError(404, f"scene '{sid}' not found", "not_found")
+        return new, info, f"Switched to scene {S.scene_name(new, info['to'])} ({info['diff']['text']})"
+
+    new_doc, info, res = _scene_commit(req, pdir, mutate)
+    return Response.json({"active": S.active_id(new_doc), "from": info["from"], "diff": info["diff"], "revision": res["revision"]})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/scenes/" + _SID + "/save", role="editor", summary="Save the current state into a scene (overwrites its stored data)", tags=["scenes"])
+def r_scene_save(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    sid = req.params["sid"]
+
+    def mutate(doc: Dict[str, Any]) -> Tuple[Dict[str, Any], Any, str]:
+        if S.find(doc, sid) is None:
+            raise ApiError(404, f"scene '{sid}' not found", "not_found")
+        new = S.save_current(doc, sid)
+        return new, S.find(new, sid)["id"], f"Saved current state into scene {S.scene_name(new, sid)}"  # type: ignore[index]
+
+    new_doc, real_id, res = _scene_commit(req, pdir, mutate)
+    return Response.json({"scene": S.summary_for(new_doc, real_id), "revision": res["revision"]})
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/scenes/" + _SID + "/diff", role="viewer", summary="Differences of a scene against another (?against=<sid|base>, default base)", tags=["scenes"])
+def r_scene_diff(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    sid = req.params["sid"]
+    against = str(req.query.get("against") or S.BASE)
+    try:
+        out = S.diff(S.scene_data(doc, against), S.scene_data(doc, sid))
+    except KeyError as exc:
+        raise ApiError(404, f"scene '{exc.args[0] if exc.args else sid}' not found", "not_found")
+    out["scene"] = sid
+    out["against"] = against
+    out["revision"] = _rev(doc)
+    return Response.json(out)
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + "/scenes/" + _SID + "/doc", role="viewer", summary="The project as it would look with that scene active (read-only preview, nothing changes)", tags=["scenes"])
+def r_scene_doc(req: Request) -> Response:
+    from . import scenes as S
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    sid = req.params["sid"]
+    try:
+        out = S.apply(doc, S.scene_data(doc, sid))
+    except KeyError:
+        raise ApiError(404, f"scene '{sid}' not found", "not_found")
+    return Response.json({"doc": out, "scene": sid, "revision": _rev(doc)})
+
+
+def _not_found_page(req: Request, title: str, message: str) -> Response:
+    e = html_mod.escape
+    home = (req.script_root or "") + "/"
+    text = (f"<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+            f"<title>{e(title)} · Fathom</title><style>body{{font:17px/1.5 system-ui,sans-serif;margin:0;padding:48px 24px;background:#0b1020;color:#e5e7eb}}"
+            f"main{{max-width:32rem;margin:0 auto}}h1{{font-size:1.5rem;margin:0 0 .5rem}}p{{margin:0 0 1rem;color:#9aa3b5}}"
+            f"a{{display:inline-block;min-height:44px;line-height:44px;padding:0 16px;border-radius:8px;background:#1f2937;color:#e5e7eb;text-decoration:none}}</style></head>"
+            f"<body><main><h1>{e(title)}</h1><p>{e(message)}</p><a href=\"{e(home)}\">Open Fathom</a></main></body></html>")
+    r = _viewer_html(text)
+    r.status = 404
+    return r
+
+
+@route("GET", r"/c/" + _CODE, role="viewer", summary="Short link printed on device labels: redirects to the device (editor → app, viewer → device page)", tags=["viewer"], page="viewer")
+def r_code_redirect(req: Request) -> Response:
+    from .project import find_by_short_code
+    from .users import role_at_least
+
+    hit = find_by_short_code(req.params["code"])
+    if hit is None or not role_at_least(req.role_for(hit["project"]), "viewer"):
+        return _not_found_page(req, "No device has that code", "The label may belong to another Fathom server, or the device was removed.")
+    root = req.script_root or ""
+    if role_at_least(req.role_for(hit["project"]), "editor"):
+        target = f"{root}/#/{quote(hit['project'], safe='')}//devices/{quote(hit['device'], safe='')}"
+    else:
+        target = f"{root}/p/{quote(hit['project'], safe='')}/d/{quote(hit['device'], safe='')}"
+    return Response(b"", 302, "text/plain; charset=utf-8", {"Location": target})
 
 
 @route("GET", r"/api/v2/projects/" + _NAME + r"/doc\.json", role="viewer", summary="Download the doc", tags=["projects"])
@@ -1797,6 +2431,7 @@ def r_sop_bundle(req: Request) -> Response:
 # ---- problem reports (§4.3.16, §5.16): "Report a problem" from any SOP page
 
 _PROBLEM_TEXT_MAX = 2000
+PROBLEM_KINDS = ("problem", "suggestion")
 
 
 def _multipart_form(req: Request) -> Tuple[Dict[str, str], List[Tuple[str, bytes, str]]]:
@@ -1846,9 +2481,12 @@ def _create_problem(req: Request, pdir: Path, via: str) -> Dict[str, Any]:
         photo = next((f for f in files if f[1]), None)
     else:
         body = req.json()
+    kind = str(body.get("kind") or "problem").strip().lower()
+    if kind not in PROBLEM_KINDS:
+        raise ApiError(400, f"kind must be one of {', '.join(PROBLEM_KINDS)}", "bad_enum")
     text = str(body.get("text") or "").strip()
     if not text:
-        raise ApiError(400, "describe the problem", "missing_field")
+        raise ApiError(400, "describe the problem" if kind == "problem" else "describe the suggestion", "missing_field")
     text = text[:_PROBLEM_TEXT_MAX]
     devs = {d.get("id"): d for d in doc.get("devices") or [] if isinstance(d, dict)}
     device = str(body.get("device") or "").strip()
@@ -1863,7 +2501,7 @@ def _create_problem(req: Request, pdir: Path, via: str) -> Dict[str, Any]:
     # counts, the implicit "local" admin of a login-less server does not).
     login = req.username if req.auth_via != "local" else ""
     by = (req.username if via == "app" else (name or login)) or name or "anonymous"
-    ent: Dict[str, Any] = {"id": "pr-" + secrets.token_hex(4), "text": text, "status": "open", "created": now, "by": by, "via": via}
+    ent: Dict[str, Any] = {"id": "pr-" + secrets.token_hex(4), "kind": kind, "text": text, "status": "open", "created": now, "by": by, "via": via}
     if device:
         ent["device"] = device
         if devs[device].get("room"):
@@ -1886,41 +2524,53 @@ def _create_problem(req: Request, pdir: Path, via: str) -> Dict[str, Any]:
     # Reports through public pages / share links only create the problem entry, whoever is logged in.
     if device and via == "app" and req.user is not None and role_at_least(req.role_for(pdir.name), "editor"):
         stamp = now[:16].replace("T", " ")
-        line = f"[{stamp} {by}] Problem: {text}"
+        line = f"[{stamp} {by}] {'Suggestion' if kind == 'suggestion' else 'Problem'}: {text}"
         note = str(devs[device].get("note") or "").rstrip()
         merge: Dict[str, Any] = {"note": (note + "\n" if note else "") + line}
         status = str(body.get("device_status") or "").strip()
-        if status:
+        if status and kind == "problem":  # a suggestion never changes the device status
             if status not in STATUSES:
                 raise ApiError(400, f"device_status must be one of {', '.join(STATUSES)}", "bad_enum")
             merge["status"] = status
         ops.append({"op": "merge", "coll": "devices", "id": device, "value": merge})
         noted = True
-    res = _server_ops(req, pdir, ops, f"Problem reported: {text[:60]}", "problems")
-    return {"problem": ent, "noted": noted, "revision": res["revision"]}
+    res = _server_ops(req, pdir, ops, f"{'Suggestion' if kind == 'suggestion' else 'Problem reported'}: {text[:60]}", "problems")
+    out: Dict[str, Any] = {"problem": ent, "noted": noted, "revision": res["revision"]}
+    if kind == "suggestion":
+        target = _suggest_url(doc)
+        base = _public_base(req, doc)
+        link = (_device_url(base, pdir.name, device) if device
+                else f"{base}/p/{quote(pdir.name)}/sop/{quote(page)}" if page else f"{base}/p/{quote(pdir.name)}")
+        out["forwarded"] = bool(target) and _forward_suggestion(target, {
+            "project": pdir.name, "kind": kind, "text": text, "name": by, "device": device or None, "page": page or None, "url": link})
+    return out
 
 
-@route("POST", r"/api/v2/projects/" + _NAME + "/problems", role="viewer", summary="Report a problem (JSON or multipart with a photo)", tags=["problems"], body="ProblemReport")
+@route("POST", r"/api/v2/projects/" + _NAME + "/problems", role="viewer", summary="Report a problem or suggest an improvement (kind=problem|suggestion; JSON or multipart with a photo)", tags=["problems"], body="ProblemReport")
 def r_problems_create(req: Request) -> Response:
     pdir = _project_dir(req.params["name"])
     return Response.json(_create_problem(req, pdir, "app"), 201)
 
 
-@route("GET", r"/api/v2/projects/" + _NAME + "/problems", role="viewer", summary="Problem reports (?status=, ?device=, ?page=)", tags=["problems"])
+@route("GET", r"/api/v2/projects/" + _NAME + "/problems", role="viewer", summary="Problem reports (?status=, ?device=, ?page=, ?kind=problem|suggestion)", tags=["problems"])
 def r_problems(req: Request) -> Response:
     pdir = _project_dir(req.params["name"])
     doc, _ = _load(pdir)
     status = req.query.get("status") or ""
     device = req.query.get("device") or ""
     page = req.query.get("page") or ""
+    kind = req.query.get("kind") or ""
     items = [r for r in doc.get("problems") or [] if isinstance(r, dict) and r.get("id")
              and (not status or (r.get("status") or "open") == status)
-             and (not device or r.get("device") == device) and (not page or r.get("page") == page)]
+             and (not device or r.get("device") == device) and (not page or r.get("page") == page)
+             and (not kind or (r.get("kind") or "problem") == kind)]
     # newest first; reports filed within the same second keep their insertion order (later entries first)
     items.reverse()
     items.sort(key=lambda r: str(r.get("created") or ""), reverse=True)
+    is_open = [r for r in doc.get("problems") or [] if isinstance(r, dict) and (r.get("status") or "open") == "open"]
     return Response.json({"problems": [_problem_view(doc, r, pdir.name) for r in items],
-                          "open": sum(1 for r in doc.get("problems") or [] if isinstance(r, dict) and (r.get("status") or "open") == "open"),
+                          "open": sum(1 for r in is_open if (r.get("kind") or "problem") == "problem"),
+                          "open_suggestions": sum(1 for r in is_open if r.get("kind") == "suggestion"),
                           "revision": _rev(doc)})
 
 
@@ -2565,17 +3215,97 @@ def r_floorplan_image(req: Request) -> Response:
     return _serve_user_file(path, str(img.get("mime") or _PLAN_MIME.get(str((fp.get("image") or {}).get("kind")), "")), path.name)
 
 
-@route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")\.svg", role="viewer", summary="Floor plan export SVG with markers", tags=["floorplans"], page="file")
+@route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")\.svg", role="viewer", summary="Floor plan export SVG with markers (?runs=1 adds paths and cable runs, ?scene=)", tags=["floorplans"], page="file")
 def r_floorplan_svg(req: Request) -> Response:
-    from .floorplan import plan_svg
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    fid = req.params["fp"]
+    _floorplan(doc, fid)
+    r = Response.text(_plan_svg_text(req, pdir, doc, fid), "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
+    r.csp = FILE_CSP
+    return r
+
+
+# ---- cable runs on floor plans (phase 5 P5A: FR-PLAN-14..17, §5.7, §6.9.9)
+
+
+def _plan_scene(req: Request) -> Optional[str]:
+    sid = str(req.query.get("scene") or "").strip()
+    return sid or None
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")/runs", role="viewer",
+       summary="Cable runs on a floor plan with lengths (?scene=): paths, runs, totals, unplaced", tags=["floorplans"])
+def r_floorplan_runs(req: Request) -> Response:
+    from .runs import plan_runs
 
     pdir = _project_dir(req.params["name"])
     doc, _ = _load(pdir)
     fid = req.params["fp"]
     _floorplan(doc, fid)
-    r = Response.text(plan_svg(doc, fid, pdir), "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
-    r.csp = FILE_CSP
-    return r
+    try:
+        out = plan_runs(doc, fid, _plan_scene(req))
+    except KeyError as exc:
+        raise ApiError(404, f"scene or floor plan {exc} not found", "not_found")
+    out["revision"] = _rev(doc)
+    return Response.json(out)
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")/runs/snap", role="viewer",
+       summary="Nearest point on a shared path ({point: [x, y], max: 0.02}) → {path, point} or {path: null}", tags=["floorplans"], body="RunSnap")
+def r_floorplan_runs_snap(req: Request) -> Response:
+    from .runs import SNAP_DIST, snap
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    fp = _floorplan(doc, req.params["fp"])
+    body = req.json()
+    pt = body.get("point")
+    if not (isinstance(pt, list) and len(pt) == 2 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in pt)):
+        raise ApiError(400, "point must be [x, y] in normalised plan coordinates")
+    mx = body.get("max", SNAP_DIST)
+    if isinstance(mx, bool) or not isinstance(mx, (int, float)) or mx < 0:
+        raise ApiError(400, "max must be a non-negative number (normalised plan units)")
+    hit = snap(fp, pt, float(mx))
+    return Response.json(hit if hit is not None else {"path": None, "point": None})
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")/runs/estimate", role="editor",
+       summary="Write estimated cable lengths from the plan's runs ({cables: [ids] | all: true, base_revision, round_to: 0.5}) as one revision", tags=["floorplans"], body="RunEstimate")
+def r_floorplan_runs_estimate(req: Request) -> Response:
+    from .runs import estimate_plan
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    fp = _floorplan(doc, req.params["fp"])
+    body = req.json()
+    if body.get("base_revision") is None:
+        raise ApiError(428, "base_revision is required", "precondition_required")
+    cables = body.get("cables")
+    if cables is None and body.get("all"):
+        ids: Optional[List[str]] = None
+    elif isinstance(cables, list) and all(isinstance(c, str) for c in cables):
+        ids = cables
+    else:
+        raise ApiError(400, "send cables: [ids] or all: true")
+    round_to = body.get("round_to", 0.5)
+    if isinstance(round_to, bool) or not isinstance(round_to, (int, float)) or round_to < 0:
+        raise ApiError(400, "round_to must be a non-negative number of metres")
+    settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    if settings.get("locked") is True:
+        raise _locked_error(settings)
+    plan = estimate_plan(doc, fp["id"], ids, round_to=float(round_to))
+    base = _int(body.get("base_revision"), -1)
+    out: Dict[str, Any] = {"updated": plan["updated"], "skipped": plan["skipped"]}
+    if not plan["ops"]:  # nothing differs: no revision, nothing to conflict with
+        out["revision"] = _rev(doc)
+        return Response.json(out, headers={"ETag": f'"r{out["revision"]}"'})
+    ops = _lock_guard_ops(req, doc, plan["ops"])
+    n = len(plan["updated"])
+    res = _changes(req, pdir, ops, base, f"Estimated cable lengths from {fp.get('name') or fp['id']} ({n} cable{'s' if n != 1 else ''})", "plan")
+    out["revision"] = res["revision"]
+    out["problems"] = res.get("problems") or []
+    return Response.json(out, headers={"ETag": f'"r{res["revision"]}"'})
 
 
 # ---- schedules, analysis, trace, search, QR
@@ -2787,6 +3517,19 @@ def r_qr_rack(req: Request) -> Response:
     return r
 
 
+# ---- patch canvas and plan exports (phase 5 P5C, §3.23 FR-EXP-06/07, §5.7 / §5.9, §6.9.10)
+
+_RASTER_MIME = {"png": "image/png", "pdf": "application/pdf"}
+_CHROME_MISSING_MSG = "PNG/PDF export needs Google Chrome on the server (SVG export always works)"
+
+
+def _chrome_missing_response() -> Response:
+    """400 ``chrome_missing`` (``error`` carries the code so a HEAD probe and a fetch read the same thing)."""
+    r = Response.json({"error": "chrome_missing", "code": "chrome_missing", "message": _CHROME_MISSING_MSG}, 400)
+    r.csp = FILE_CSP
+    return r
+
+
 @route("GET", r"/api/v2/projects/" + _NAME + r"/racks/(?P<rack>" + _EID + ")/totals", role="viewer",
        summary="Rack totals: U used/free, weight vs max load, power vs limit, device and item counts", tags=["racks"])
 def r_rack_totals(req: Request) -> Response:
@@ -2901,6 +3644,163 @@ def r_library_netbox(req: Request) -> Response:
 
 
 # ---- end racks: Rackula features
+
+
+def _raster_response(req: Request, fmt: str, filename: str, render: Callable[[], str]) -> Response:
+    """Rasterise ``render()`` (an SVG) as ``fmt`` (``png`` | ``pdf``) through :mod:`fathom.raster`.
+
+    ``HEAD`` answers 200 (Chrome present) or 400 ``chrome_missing`` without rendering so the client can grey out
+    menu items; ``?width=`` (PNG, ≤ 6000) and ``?paper=`` / ``?orientation=`` (PDF; default A3, orientation from the
+    drawing's aspect ratio) tune the output; 502 ``chrome_failed`` carries a redacted ``details.detail``."""
+    from . import raster
+
+    if fmt not in _RASTER_MIME:
+        raise ApiError(404, "not found")
+    headers = {"Cache-Control": "no-cache", "Content-Disposition": f'attachment; filename="{_safe_filename(filename)}"'}
+    if not raster.available():
+        return _chrome_missing_response()
+    if req.is_head:
+        r = Response(b"", 200, _RASTER_MIME[fmt], headers)
+        r.csp = FILE_CSP
+        return r
+    svg = render()
+    width = _int(req.query.get("width"), 2000, 200, raster.MAX_PNG_WIDTH)
+    paper = req.query.get("paper") or "A3"
+    if paper not in raster.PAPERS:
+        raise ApiError(400, "paper must be A4, A3, letter or tabloid")
+    orient = req.query.get("orientation") or "auto"
+    if orient not in ("auto", "landscape", "portrait"):
+        raise ApiError(400, "orientation must be auto, landscape or portrait")
+    vw, vh = raster.viewbox_size(svg)
+    landscape = vw >= vh if orient == "auto" else orient == "landscape"
+    try:
+        data = raster.render_bytes(svg, fmt, width=width, paper=paper, landscape=landscape)
+    except raster.RasterError as exc:
+        if exc.code == "chrome_missing":
+            return _chrome_missing_response()
+        raise ApiError(502, "PNG/PDF rendering failed on the server", "chrome_failed", {"detail": exc.detail})
+    r = Response(data, 200, _RASTER_MIME[fmt], headers)
+    r.csp = FILE_CSP
+    return r
+
+
+def _patch_svg_text(req: Request, pdir: Path, doc: Dict[str, Any], room: str) -> str:
+    from .patch_svg import patch_svg
+
+    state = req.query.get("state") or "all"
+    if state not in ("all", "planned", "as_built", "everything"):
+        raise ApiError(400, "state must be all, planned, as_built or everything")
+    sid = str(req.query.get("scene") or "").strip()
+    if sid:
+        _scene_or_404(doc, sid)
+    return patch_svg(doc, room, overlay=_overlay(doc, pdir, strict=False), scene=sid or None, filter={"state": state})
+
+
+def _patch_room(req: Request) -> Tuple[Path, Dict[str, Any], str]:
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    room = req.params["room"]
+    if room not in _room_ids(doc):
+        raise ApiError(404, f"room '{room}' not found")
+    return pdir, doc, room
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/rooms/(?P<room>" + _EID + r")/patch\.svg", role="viewer",
+       summary="Patch canvas of a room as SVG (?scene=<sid>, ?state=as_built|planned|all)", tags=["schedules"], page="file")
+def r_patch_svg(req: Request) -> Response:
+    pdir, doc, room = _patch_room(req)
+    r = Response.text(_patch_svg_text(req, pdir, doc, room), "image/svg+xml; charset=utf-8",
+                      headers={"Cache-Control": "no-cache", "Content-Disposition": f'inline; filename="{_safe_filename(pdir.name + "-" + room + "-patch.svg")}"'})
+    r.csp = FILE_CSP
+    return r
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/rooms/(?P<room>" + _EID + r")/patch\.(?P<fmt>png|pdf)", role="viewer",
+       summary="Patch canvas of a room as PNG (?width= ≤ 6000) or PDF (?paper=, ?orientation=), rendered with Chrome; ?scene=, ?state= as the SVG; "
+               "400 chrome_missing without Chrome; HEAD probes without rendering", tags=["schedules"], page="file")
+def r_patch_raster(req: Request) -> Response:
+    pdir, doc, room = _patch_room(req)
+    fmt = req.params["fmt"]
+    return _raster_response(req, fmt, f"{pdir.name}-{room}-patch.{fmt}", lambda: _patch_svg_text(req, pdir, doc, room))
+
+
+def _plan_svg_text(req: Request, pdir: Path, doc: Dict[str, Any], fid: str) -> str:
+    """``floorplan.plan_svg`` for the route's ``?runs=1``, ``?scene=`` and ``?hide=L1,L2`` (``hide`` overrides the plan's hidden layers)."""
+    from .floorplan import plan_svg
+
+    sid = str(req.query.get("scene") or "").strip()
+    if sid:
+        doc = _scene_view(doc, sid)  # applies the scene (404 when unknown), so plan_svg gets scene=None
+    want_runs = str(req.query.get("runs") or "").strip().lower() in ("1", "true", "yes")
+    hide = [x for x in (req.query.get("hide") or "").split(",") if x]
+    if hide:
+        doc = dict(doc)
+        doc["floorplans"] = [dict(f, hidden_layers=hide) if isinstance(f, dict) and f.get("id") == fid else f for f in doc.get("floorplans") or []]
+    return plan_svg(doc, fid, pdir, runs=want_runs)
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")\.(?P<fmt>png|pdf)", role="viewer",
+       summary="Floor plan export as PNG (?width= ≤ 6000) or PDF (?paper=, ?orientation=) rendered with Chrome; ?runs=1 draws shared paths and cable runs, "
+               "?scene=, ?hide= as the image route; 400 chrome_missing without Chrome; HEAD probes without rendering", tags=["floorplans"], page="file")
+def r_floorplan_raster(req: Request) -> Response:
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    fid = req.params["fp"]
+    _floorplan(doc, fid)
+    fmt = req.params["fmt"]
+    suffix = "-runs" if req.query.get("runs") == "1" else ""
+    return _raster_response(req, fmt, f"{pdir.name}-{fid}{suffix}.{fmt}", lambda: _plan_svg_text(req, pdir, doc, fid))
+
+
+# ---- device labels for the Brady M511 (phase 1 P1B, §3.24 FR-QR-03..05, §5.8)
+
+
+@route("GET", r"/api/v2/labels/presets", role="viewer", summary="Device label presets: Brady M511 cartridge sizes (id, label, width_mm, height_mm, parts, continuous)", tags=["schedules"])
+def r_label_presets(req: Request) -> Response:
+    from .labels import DEFAULT_PRESET, presets
+
+    return Response.json({"presets": presets(), "default": DEFAULT_PRESET})
+
+
+@route("GET", r"/api/v2/projects/" + _NAME + r"/labels/devices", role="viewer",
+       summary="Device labels at true size for the Brady M511 (?preset=, format=html|csv|zip|svg, devices=<id,id>, room=, status=, png=0)", tags=["schedules"])
+def r_device_labels(req: Request) -> Response:
+    from .labels import DEFAULT_PRESET, PRESETS, device_label_svg, label_sheet_html, labels_csv, labels_zip, select_devices
+
+    pdir = _project_dir(req.params["name"])
+    doc, _ = _load(pdir)
+    preset = req.query.get("preset") or DEFAULT_PRESET
+    if preset not in PRESETS:
+        raise ApiError(400, "bad_preset", "bad_preset", {"presets": sorted(PRESETS)})
+    fmt = req.query.get("format") or "html"
+    if fmt not in ("html", "csv", "zip", "svg"):
+        raise ApiError(400, "format must be html, csv, zip or svg")
+    room = req.query.get("room") or None
+    if room and room != "*" and room not in _room_ids(doc):
+        raise ApiError(404, f"room '{room}' not found")
+    status = req.query.get("status") or None
+    devices = select_devices(doc, ids=req.query.get("devices") or None, room=room, state=status)
+    base = _public_base(req, doc)
+    name = pdir.name
+    if fmt == "svg":
+        if len(devices) != 1 or len([s for s in (req.query.get("devices") or "").split(",") if s.strip()]) != 1:
+            raise ApiError(400, "format=svg needs exactly one device id in ?devices=", "one_device")
+        r = Response.text(device_label_svg(doc, devices[0], preset, base_url=base, project=name), "image/svg+xml; charset=utf-8",
+                          headers={"Cache-Control": "no-cache", "Content-Disposition": f'inline; filename="{_safe_filename(devices[0]["id"])}-{preset}.svg"'})
+        r.csp = FILE_CSP
+        return r
+    if fmt == "csv":
+        return Response.text(labels_csv(doc, devices, base_url=base, project=name), "text/csv; charset=utf-8",
+                             headers={"Content-Disposition": 'attachment; filename="device-labels.csv"'})
+    if fmt == "zip":
+        data = labels_zip(doc, devices, preset, base_url=base, project=name, png=req.query.get("png") != "0")
+        r = Response(data, 200, "application/zip", {"Content-Disposition": f'attachment; filename="device-labels-{preset}.zip"', "Cache-Control": "no-cache"})
+        r.csp = FILE_CSP
+        return r
+    title = " · ".join(s for s in ("Device labels", (doc.get("meta") or {}).get("org") or name) if s)
+    r = Response.text(label_sheet_html(doc, devices, preset, base_url=base, title=title, project=name), "text/html; charset=utf-8", headers={"Cache-Control": "no-cache"})
+    r.csp = VIEWER_CSP
+    return r
 
 
 @route("GET", r"/api/v2/projects/" + _NAME + r"/qr/(?P<device>" + _EID + r")\.svg", role="viewer", summary="QR code SVG for a device page", tags=["schedules"], page="file")
@@ -3039,6 +3939,88 @@ def r_search(req: Request) -> Response:
     return Response.json({"hits": hits})
 
 
+# ---- LLM providers and assistant settings (phase4 P4A; SPEC §5.10 "Assistant settings", §6.9.6a)
+
+
+def _llm_upstream(detail: str, extra: Optional[Dict[str, Any]] = None) -> Response:
+    body: Dict[str, Any] = {"error": "upstream", "code": "upstream", "detail": str(detail or "")[:500]}
+    if extra:
+        body.update(extra)
+    return Response.json(body, 502)
+
+
+def _llm_probe(req: Request) -> Any:
+    """Provider instance for the models/test routes: effective config overlaid with unsaved form values (never the key back)."""
+    from .llm import config as lcfg
+    from .llm.providers import make
+
+    body = req.json()
+    try:
+        cfg = lcfg.probe_config(body)
+    except lcfg.ConfigError as exc:
+        raise ApiError(400, str(exc), exc.code)
+    if not cfg.get("provider"):
+        raise ApiError(400, "choose a provider first", "not_configured")
+    if not lcfg.resolved_base_url(cfg):
+        raise ApiError(400, "this provider needs a base URL", "bad_url")
+    return make(cfg), cfg, body
+
+
+@route("GET", r"/api/v2/llm/providers", role="viewer", summary="LLM provider catalog (ids, labels, default base URLs, presets)", tags=["assistant"])
+def r_llm_providers(req: Request) -> Response:
+    from .llm.providers import catalog
+
+    return Response.json({"providers": catalog()})
+
+
+@route("GET", r"/api/v2/llm/settings", role="admin", summary="Assistant LLM settings (the key is reported as api_key_set only)", tags=["assistant"],
+       response="LlmSettings")
+def r_llm_settings(req: Request) -> Response:
+    from .llm import config as lcfg
+
+    return Response.json(lcfg.public())
+
+
+@route("PUT", r"/api/v2/llm/settings", role="admin", summary="Update assistant LLM settings (key goes to llm-secrets.json, never into responses)",
+       tags=["assistant"], body="LlmSettings", response="LlmSettings")
+def r_llm_settings_put(req: Request) -> Response:
+    from .llm import config as lcfg
+
+    body = req.json()
+    try:
+        out = lcfg.save(body, by=req.username)
+    except lcfg.ConfigError as exc:
+        raise ApiError(400, str(exc), exc.code)
+    return Response.json(out)
+
+
+@route("POST", r"/api/v2/llm/models", role="admin", summary="List the models a provider offers (unsaved form values allowed; empty key = stored key)",
+       tags=["assistant"], body="LlmProbe")
+def r_llm_models(req: Request) -> Response:
+    from .llm import LLMError
+
+    prov, cfg, _ = _llm_probe(req)
+    try:
+        models = prov.list_models()
+    except LLMError as exc:
+        if exc.code == "not_supported":
+            raise ApiError(400, str(exc), "not_supported")
+        return _llm_upstream(str(exc), {"status": exc.status})
+    return Response.json({"provider": prov.id, "models": models})
+
+
+@route("POST", r"/api/v2/llm/test", role="admin", summary="Test the LLM connection with a one-token chat (502 with detail on upstream failure)",
+       tags=["assistant"], body="LlmProbe")
+def r_llm_test(req: Request) -> Response:
+    prov, cfg, body = _llm_probe(req)
+    model = str(body.get("model") or cfg.get("model") or "")
+    result = prov.test_connection(model=model, timeout=cfg.get("timeout"))
+    result["provider"] = prov.id
+    if not result.get("ok"):
+        return _llm_upstream(str(result.get("detail") or "connection failed"), result)
+    return Response.json(result)
+
+
 @route("POST", r"/api/v2/projects/" + _NAME + "/assistant", role="viewer", summary="Troubleshooting assistant", tags=["analysis"], body="Question", response="Answer")
 def r_assistant(req: Request) -> Response:
     from .assistant import answer
@@ -3050,10 +4032,60 @@ def r_assistant(req: Request) -> Response:
     if not q:
         raise ApiError(400, "ask a question")
     room = body.get("room") or None
+    mode = str(body.get("mode") or "ask").strip().lower()
+    if mode not in ("ask", "draft"):
+        raise ApiError(400, "mode must be ask or draft")
+    if mode == "draft":
+        # Draft a room (§6.9.5b): the room is required and must exist; everything is added there
+        from .assistant_draft import resolve_room
+
+        room = resolve_room(doc, room) if isinstance(room, str) else None
+        if not room:
+            raise ApiError(400, "draft mode needs the room (id or name) the equipment goes in", "room_required")
     use_llm = bool(body.get("use_llm", True)) and bool(((doc.get("settings") or {}).get("assistant") or {}).get("llm", True))
     hist = body.get("history") if isinstance(body.get("history"), list) else None
-    res = answer(doc, q, room=room, overlay=_overlay(doc, pdir, strict=False), use_llm=use_llm, history=hist, base_revision=_rev(doc))
+    manual = body.get("manual_text")
+    if manual is not None and not isinstance(manual, str):
+        raise ApiError(400, "manual_text must be a string")
+    if manual and len(manual) > 20 * 1024:
+        raise ApiError(400, "manual_text is limited to 20 kB")
+    atts = body.get("attachments")
+    if atts is not None and (not isinstance(atts, list) or not all(isinstance(a, str) for a in atts)):
+        raise ApiError(400, "attachments must be a list of attachment ids")
+    known = {a.get("id") for a in doc.get("attachments") or [] if isinstance(a, dict)}
+    if atts and any(a not in known for a in atts):
+        raise ApiError(404, "attachment not in this project", "not_found", {"attachments": [a for a in atts if a not in known]})
+    ctx = {"pdir": pdir, "project": pdir.name, "username": req.username, "role": req.role_for(pdir.name),
+           "attachments": [a for a in atts or [] if a in known][:10], "manual_text": manual or "", "mode": mode, "room": room}
+    res = answer(doc, q, room=room, overlay=_overlay(doc, pdir, strict=False), use_llm=use_llm, history=hist, base_revision=_rev(doc), ctx=ctx)
     return Response.json(res)
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/assistant/apply", role="editor", summary="Apply an assistant proposal (confirmed edits)", tags=["analysis"], body="ProposalApply")
+def r_assistant_apply(req: Request) -> Response:
+    """Commit a proposal from ``POST …/assistant`` (by ``id`` while cached, or the full ``proposal`` object) as one
+    normal revision (history source ``assistant``), so undo works like any other change. 423 while the project is locked."""
+    from .assistant_edits import check_proposal, get_proposal
+
+    pdir = _project_dir(req.params["name"])
+    body = req.json()
+    raw = body.get("proposal")
+    if raw is None and body.get("id"):
+        raw = get_proposal(str(body.get("id")))
+        if raw is None:
+            raise ApiError(404, "proposal not found or expired; ask again", "not_found")
+    prop, why = check_proposal(raw)
+    if prop is None:
+        raise ApiError(400, why or "proposal is required")
+    doc, _ = _load(pdir)
+    base = body.get("base_revision")
+    base = _rev(doc) if base is None else _int(base, -1)
+    ops = _lock_guard_ops(req, doc, prop["ops"])
+    note = prop.get("note") or (prop["summary"][0] if prop.get("summary") else f"{len(ops)} change{'s' if len(ops) != 1 else ''}")
+    res = _changes(req, pdir, ops, base, f"Assistant: {note}", "assistant")
+    return Response.json({"revision": res["revision"], "applied": len(ops), "summary": list(prop.get("summary") or []),
+                          "rebased": res["rebased"], "problems": res["problems"], "id": prop.get("id") or None},
+                         headers={"ETag": f'"r{res["revision"]}"'})
 
 
 # ---- builds
@@ -3156,9 +4188,18 @@ def r_projects_create(req: Request) -> Response:
     if (projects_root() / name).exists():
         raise ApiError(400, f"project '{name}' already exists")
     template = str(body.get("template") or "blank")
-    if template != "blank" and template not in _samples():
-        raise ApiError(400, f"unknown template '{template}'")
-    pdir = new_project(name, template=template, org=str(body.get("org") or ""))
+    if template.startswith("user-"):
+        from .starters import StarterError, load_starter_doc, new_project_from_starter
+
+        try:
+            load_starter_doc(template)
+        except StarterError:
+            raise ApiError(400, f"unknown template '{template}'")
+        pdir = new_project_from_starter(name, template, org=str(body.get("org") or ""))
+    else:
+        if template != "blank" and template not in _samples():
+            raise ApiError(400, f"unknown template '{template}'")
+        pdir = new_project(name, template=template, org=str(body.get("org") or ""))
     return Response.json({"ok": True, "name": pdir.name}, 201)
 
 
@@ -3346,8 +4387,12 @@ def _render_room_map(req: Request, pdir: Path, doc: Dict[str, Any], room: Option
 
 
 def _viewer_project(req: Request) -> Tuple[Path, Dict[str, Any]]:
+    """Project folder and doc for a viewer page; ``?scene=<sid|base>`` renders that scene (§5.13, 404 unknown)."""
     pdir = _project_dir(req.params["name"])
     doc, _ = _load(pdir)
+    sid = str(req.query.get("scene") or "").strip()
+    if sid:
+        doc = _scene_view(doc, sid)
     return pdir, doc
 
 
@@ -3664,7 +4709,7 @@ def r_api_docs(req: Request) -> Response:
 
 
 _MUTATING = ("POST", "PUT", "PATCH", "DELETE")
-_PUBLIC_VIEW_PREFIXES = ("/p/", "/builds/")
+_PUBLIC_VIEW_PREFIXES = ("/p/", "/builds/", "/c/")
 
 
 def _authenticate(req: Request) -> None:

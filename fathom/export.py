@@ -230,7 +230,7 @@ def write_build(project: Project, project_dir: Path, run_dir: Path, pdf: bool = 
     if doc is not None:
         _write(run_dir / "project.json", json.dumps(_normalized(doc), indent=2, ensure_ascii=False) + "\n")
         try:
-            notes.extend(_write_package(doc, project_dir, run_dir, state=state, rooms=sel, droom=droom, base_url=base_url, discovery=discovery))
+            notes.extend(_write_package(doc, project_dir, run_dir, state=state, rooms=sel, droom=droom, base_url=base_url, discovery=discovery, pdf=pdf))
         except Exception as exc:  # the v0.2 part of the build must survive
             notes.append(f"build package incomplete: {type(exc).__name__}: {exc}")
     else:
@@ -263,12 +263,14 @@ def _nav(doc: Doc, sel: List[str], current: str, prefix: str) -> Dict[str, Any]:
             {"label": "Rooms", "url": f"{prefix}rooms/index.html"},
             {"label": "Patch table", "url": f"{prefix}rooms/{current}/patch.html"},
             {"label": "Cable labels", "url": f"{prefix}cable-labels.html"},
+            {"label": "Device labels", "url": f"{prefix}device-labels.html"},
             {"label": "Report", "url": f"{prefix}report.html"},
         ],
     }
 
 
-def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, rooms: List[str], droom: str, base_url: str, discovery: bool = True) -> List[str]:
+def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, rooms: List[str], droom: str, base_url: str, discovery: bool = True,
+                   pdf: bool = False) -> List[str]:
     from . import bom as bom_mod
     from . import cables as cab_mod
     from . import network as net_mod
@@ -312,6 +314,23 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
         except Exception as exc:
             notes.append(f"room {rid}: patch page failed: {type(exc).__name__}: {exc}")
             _write(rdir / "patch.html", _fallback_patch_page(fdoc, rid))
+        # patch canvas (FR-EXP-06): the room's node editor as a standalone SVG, plus a PDF when asked for and Chrome is there
+        try:
+            from .patch_svg import patch_svg
+
+            svg_text = patch_svg(doc, rid, overlay=overlay, filter={"state": state})
+            _write(rdir / "patch.svg", svg_text)
+            if pdf:
+                from .raster import RasterError, svg_to_pdf, viewbox_size
+
+                try:
+                    vw, vh = viewbox_size(svg_text)
+                    svg_to_pdf(svg_text, rdir / "patch.pdf", paper="A3", landscape=vw >= vh)
+                except RasterError as exc:
+                    notes.append(f"room {rid}: patch.pdf skipped ({exc.code}{': ' + exc.detail if exc.detail else ''})")
+        except Exception as exc:
+            notes.append(f"room {rid}: patch canvas failed: {type(exc).__name__}: {exc}")
+    notes.append("patch canvas: " + ", ".join(f"rooms/{r}/patch.svg" for r in rooms) + (" (+ patch.pdf)" if pdf else ""))
     render_room_index = _optional("render_html", "render_room_index")
     if render_room_index is not None:
         try:
@@ -385,6 +404,12 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
         except Exception as exc:
             notes.append(f"discovered connections: {type(exc).__name__}: {exc}; section skipped")
     _write(run_dir / "cable-labels.html", cab_mod.label_sheet_html(fdoc, qr=False, base_url=base))
+    try:
+        from . import labels as lab_mod
+
+        _write(run_dir / "device-labels.html", lab_mod.label_sheet_html(sdoc, lab_mod.select_devices(sdoc), lab_mod.DEFAULT_PRESET, base_url=base, project=name))
+    except Exception as exc:
+        notes.append(f"device-labels.html: {type(exc).__name__}: {exc}")
     ips = net_mod.ip_schedule(fdoc, overlay)
     _write(run_dir / "ip-schedule.csv", cab_mod.to_csv(ips))
     sections["IP schedule"] = _html_table(ips)
@@ -437,12 +462,18 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
     from .floorplan import plan_svg
 
     plan_parts = []
+    # FR-EXP-07: a second SVG with shared paths and cable runs sits next to the plain one
     for fp in sdoc.get("floorplans") or []:
         try:
-            _write(run_dir / "floorplans" / f"{fp['id']}.svg", plan_svg(fdoc if fdoc.get("floorplans") else sdoc, fp["id"], project_dir))
+            pdoc = fdoc if fdoc.get("floorplans") else sdoc
+            _write(run_dir / "floorplans" / f"{fp['id']}.svg", plan_svg(pdoc, fp["id"], project_dir))
             plan_parts.append(f'<figure><img src="floorplans/{html.escape(fp["id"])}.svg" alt="{html.escape(fp.get("name", fp["id"]))}"><figcaption>{html.escape(fp.get("name", fp["id"]))}</figcaption></figure>')
+            _write(run_dir / "floorplans" / f"{fp['id']}-runs.svg", plan_svg(pdoc, fp["id"], project_dir, runs=True))
+            plan_parts.append(f'<figure><img src="floorplans/{html.escape(fp["id"])}-runs.svg" alt="{html.escape(fp.get("name", fp["id"]))} with cable runs"><figcaption>{html.escape(fp.get("name", fp["id"]))} · cable runs</figcaption></figure>')
         except Exception as exc:
             notes.append(f"floor plan {fp.get('id')}: {type(exc).__name__}: {exc}")
+    if sdoc.get("floorplans") or []:
+        notes.append("floor plan runs: " + ", ".join(f"floorplans/{fp['id']}-runs.svg" for fp in sdoc.get("floorplans") or []))
     if plan_parts:
         sections["Floor plans"] = "".join(plan_parts)
 

@@ -5,7 +5,7 @@
  * own runtime cache, which outlives VERSION bumps. */
 'use strict';
 
-const VERSION = '0.5.0';
+const VERSION = '0.5.1';
 const SHELL_CACHE = 'fathom-shell-' + VERSION;
 const PAGES_CACHE = 'fathom-pages-' + VERSION;
 const IMAGES_CACHE = 'fathom-images-1';
@@ -26,6 +26,7 @@ const PRECACHE = [
   'static/js/home.js', 'static/js/home-core.js', 'static/js/feedback.js', 'static/js/feedback-core.js',
   'static/js/wizard.js', 'static/js/wizard-core.js', 'static/js/page-device.js', 'static/js/page-room.js',
   'static/js/page-rack.js', 'static/js/views-discovery.js', 'static/js/merge-ui.js',
+  'static/js/tour.js', 'static/css/tour.css', 'static/js/improve-ui.js', 'static/js/scenes.js', 'static/css/scenes.css',
   'static/css/explorer.css', 'static/css/entity-header.css', 'static/css/datatable.css', 'static/css/drawer.css',
   'static/css/search.css', 'static/css/home.css', 'static/css/feedback.css', 'static/css/wizard.css',
   'static/css/page-device.css', 'static/css/page-room.css', 'static/css/rack.css', 'static/css/inventory.css',
@@ -34,7 +35,8 @@ const PRECACHE = [
   // Rackula features; install tolerates files that are not there yet (rack-toolbar.css, page-rack.css).
   'static/js/rack-elevation.js', 'static/js/rack-display.js', 'static/js/rack-display-core.js',
   'static/js/rack-palette.js', 'static/js/rack-palette-core.js', 'static/js/rack-export.js', 'static/js/rack-export-core.js',
-  'static/css/rack-toolbar.css', 'static/css/rack-palette.css', 'static/css/rack-export.css', 'static/css/page-rack.css'
+  'static/css/rack-toolbar.css', 'static/css/rack-palette.css', 'static/css/rack-export.css', 'static/css/page-rack.css',
+  'static/js/speech.js', 'static/js/assistant-core.js', 'static/css/assistant.css'
 ];
 
 const SCOPE = new URL(self.registration ? self.registration.scope : self.location.href);

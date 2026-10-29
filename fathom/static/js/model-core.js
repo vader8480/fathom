@@ -2,7 +2,7 @@
 // (§4.4.3), editing helpers, local search, viewport math and the shared store.
 // Pure module: no window / document / fetch / timers. Imports in Node >= 18.
 
-export const COLLECTIONS = ['venues', 'rooms', 'systems', 'locations', 'racks', 'networks', 'devices', 'cables', 'bundles', 'floorplans', 'attachments', 'templates', 'imports', 'pages', 'problems'];
+export const COLLECTIONS = ['venues', 'rooms', 'systems', 'locations', 'racks', 'networks', 'devices', 'cables', 'bundles', 'floorplans', 'attachments', 'templates', 'imports', 'pages', 'problems', 'scenes'];
 export const ROOTS = ['meta', 'settings', 'media'];
 export const NETWORK_MEDIA = ['dante', 'avb', 'aes67', 'aes50', 'madi', 'snake', 'network', 'qlan'];
 export const STATUSES = ['installed', 'planned', 'spare', 'retired'];
@@ -620,6 +620,61 @@ export function applyTemplateToDevice(dev, template, vocab) {
 
 // ------------------------------------------------------------ filtering
 
+// Project lock (settings.locked, FR-UX-17): only an explicit `true` locks; a missing key is unlocked.
+export function isLocked(doc) {
+  return !!(doc && isObject(doc.settings) && doc.settings.locked === true);
+}
+
+// ------------------------------------------------------------ scenes (FR-SCN, P3B)
+// A scene is a named variant of the patch and the gear placement (scenes[] entries, §4.3.18);
+// settings.scene holds the active one, absent/"" = the implicit Base.
+
+const SCENE_PARTS = [
+  ['cables_added', '+', ' cable', ''], ['cables_removed', '\u2212', ' cable', ''],
+  ['cables_changed', '', ' cable', ' changed'], ['devices_moved', '', ' device', ' moved'],
+  ['markers_changed', '', ' marker', ' changed'],
+];
+
+function sceneList(doc) {
+  return doc && Array.isArray(doc.scenes) ? doc.scenes.filter(isObject) : [];
+}
+
+// The id in settings.scene, or 'base' when Base is active (also for a stale id: the shell treats it as Base).
+export function activeSceneId(doc) {
+  const s = doc && isObject(doc.settings) ? doc.settings.scene : '';
+  return typeof s === 'string' && s ? s : 'base';
+}
+
+// scenes[] entry by id; 'base' / '' map to the entry flagged `base: true` (null when none exists yet).
+export function sceneById(doc, id) {
+  const list = sceneList(doc);
+  if (!id || id === 'base') return list.filter(function (s) { return s.base === true; })[0] || null;
+  return list.filter(function (s) { return s.id === id; })[0] || null;
+}
+
+// The active non-base scene entry, or null while Base is active (or settings.scene is dangling).
+export function activeScene(doc) {
+  const id = activeSceneId(doc);
+  if (id === 'base') return null;
+  const s = sceneById(doc, id);
+  return s && s.base !== true ? s : null;
+}
+
+// Diff summary -> "+3 cables · −1 cable · 2 devices moved" (zero parts omitted; "No differences" when empty).
+// Accepts the summary itself or an object holding it under `summary` / `diff`.
+export function sceneDiffText(summary) {
+  let s = summary || {};
+  if (isObject(s.summary)) s = s.summary;
+  else if (isObject(s.diff)) s = s.diff;
+  const parts = [];
+  SCENE_PARTS.forEach(function (p) {
+    const n = Number(s[p[0]]) || 0;
+    if (n <= 0) return;
+    parts.push(p[1] + n + p[2] + (n === 1 ? '' : 's') + p[3]);
+  });
+  return parts.length ? parts.join(' \u00b7 ') : 'No differences';
+}
+
 export function stateIncludes(status, state) {
   const s = status || 'installed';
   const st = state || 'all';
@@ -646,6 +701,35 @@ export function externalDevices(doc, room) {
     if (inRoom[b] && a && !inRoom[a]) ext[a] = true;
   }
   return (doc.devices || []).filter(function (d) { return ext[d.id]; });
+}
+
+// Physical condition vocabulary (FR-INV-10); the server's /api/v2/meta `conditions` wins when present.
+export const CONDITIONS = ['new', 'good', 'fair', 'poor', 'broken'];
+
+export function conditionsOf(vocab, meta) {
+  const pick = function (src) {
+    return src && Array.isArray(src.conditions) ? src.conditions.filter(function (c) { return typeof c === 'string' && c; }) : [];
+  };
+  const v = pick(vocab);
+  if (v.length) return v;
+  const m = pick(meta);
+  return m.length ? m : CONDITIONS.slice();
+}
+
+// Containers (FR-INV-12): devices of kind `container` (a case, rack drawer, crate) hold other
+// devices through `device.container`. Both helpers return the device records themselves.
+export function containerDevices(doc) {
+  return ((doc && doc.devices) || []).filter(function (d) { return d && d.kind === 'container' && !d.auto; });
+}
+
+export function containerContents(doc, containerId) {
+  if (!containerId) return [];
+  return ((doc && doc.devices) || []).filter(function (d) { return d && d.container === containerId && d.id !== containerId; });
+}
+
+// Accessories: devices without ports that are not containers (cables, adapters, stands).
+export function isAccessory(device) {
+  return !!device && device.kind !== 'container' && devicePorts(device).length === 0;
 }
 
 export function filterDevices(doc, filter, vocab) {

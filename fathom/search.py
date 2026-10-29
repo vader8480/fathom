@@ -89,6 +89,15 @@ def _join(*parts: Any) -> str:
     return " · ".join(str(p) for p in parts if p)
 
 
+def _short_code(value: Any) -> str:
+    """``device.short_code`` normalized (``""`` when absent / malformed)."""
+    try:
+        from .schema import parse_short_code
+    except ImportError:  # pragma: no cover
+        return ""
+    return parse_short_code(value) or ""
+
+
 def build_index(doc: Doc, overlay: Optional[Dict[str, Any]] = None) -> SearchIndex:
     from .trace import device_ports, doc_devices, find_port, medium_label, port_label
 
@@ -105,10 +114,14 @@ def build_index(doc: Doc, overlay: Optional[Dict[str, Any]] = None) -> SearchInd
         fields += [("alias", a) for a in d.get("aliases") or []]
         fields += [("manufacturer", d.get("manufacturer")), ("model", d.get("model")), ("sub", d.get("sub")),
                    ("serial", inv.get("serial")), ("asset_tag", inv.get("asset_tag")), ("note", d.get("note"))]
+        code = _short_code(d.get("short_code"))
+        if code:
+            # both spellings so "ABCD-2345" and "abcd2345" are exact (100) matches
+            fields += [("short_code", code), ("short_code", code[:4] + "-" + code[4:])]
         model = f"{d.get('manufacturer') or ''} {d.get('model') or ''}".strip() or d.get("sub") or ""
         rn = room_name(d.get("room") or "") if d.get("room") else "Shared inventory"
-        ix.add("device", d["id"], str(d.get("name") or d["id"]), _join(model, rn), d.get("room") or "", d["id"], None, fields,
-               d.get("status"))
+        ix.add("device", d["id"], str(d.get("name") or d["id"]), _join(model, rn, code[:4] + "-" + code[4:] if code else ""),
+               d.get("room") or "", d["id"], None, fields, d.get("status"))
         for p in device_ports(d):
             ix.add("port", f"{d['id']}:{p['id']}", _join(d.get("name") or d["id"], port_label(p)),
                    _join(p.get("name"), p.get("dir"), medium_label(p.get("medium", ""))), d.get("room") or "", d["id"], p["id"],

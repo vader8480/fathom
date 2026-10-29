@@ -1,0 +1,6509 @@
+{
+  "fathom": 2,
+  "revision": 0,
+  "meta": {
+    "org": "Your church",
+    "system": "Sanctuary",
+    "title": "Sanctuary signal flow",
+    "slug": "church-sanc",
+    "description": "Starter: sanctuary / auditorium for about 300 seats. Digital FOH console with a Dante stage box, four wireless channels, two IEM mixes, DSP and amplified main L/R, subs and front fills, two PTZ cameras into a switcher feeding two projectors and a confidence monitor, a lighting console with a DMX node and eight fixtures, FOH / stage / amp racks and a two-switch Dante network.",
+    "footnote": "Arrows show signal direction. Starter template: replace models and names with what is actually installed."
+  },
+  "settings": {
+    "default_room": "sanc",
+    "units": "metric",
+    "cable_tag_pattern": "{room}-{D}-{n:03}",
+    "currency": "USD",
+    "public_url": "",
+    "autosave": true,
+    "labels": {
+      "cols": 3,
+      "rows": 10,
+      "width_in": 2.625,
+      "height_in": 1.0,
+      "page": "letter"
+    }
+  },
+  "venues": [
+    {
+      "id": "sanc-venue",
+      "name": "Your church",
+      "order": 1
+    }
+  ],
+  "rooms": [
+    {
+      "id": "sanc",
+      "venue": "sanc-venue",
+      "name": "Sanctuary",
+      "code": "SANC",
+      "kind": "sanctuary",
+      "order": 1,
+      "flow": {
+        "columns": [
+          {
+            "id": "sources",
+            "label": "Sources",
+            "side": "left"
+          },
+          {
+            "id": "stage_io",
+            "label": "Stage I/O",
+            "side": "left"
+          },
+          {
+            "id": "dante",
+            "label": "Dante",
+            "side": "spine"
+          },
+          {
+            "id": "mix",
+            "label": "Mix & Dante",
+            "side": "right"
+          },
+          {
+            "id": "amps",
+            "label": "Amps · TX",
+            "side": "right"
+          },
+          {
+            "id": "outputs",
+            "label": "Speakers · IEMs",
+            "side": "right"
+          }
+        ],
+        "groups": [
+          {
+            "id": "A",
+            "label": "Stage inputs",
+            "side": "left"
+          },
+          {
+            "id": "B",
+            "label": "Wireless",
+            "side": "left"
+          },
+          {
+            "id": "C",
+            "label": "Playback · cameras · lighting desk",
+            "side": "left"
+          },
+          {
+            "id": "E",
+            "label": "Mix · video · network",
+            "side": "right"
+          },
+          {
+            "id": "F",
+            "label": "Monitors · IEM",
+            "side": "right"
+          },
+          {
+            "id": "G",
+            "label": "PA",
+            "side": "right"
+          },
+          {
+            "id": "H",
+            "label": "Screens · stream",
+            "side": "right"
+          },
+          {
+            "id": "L",
+            "label": "Lighting",
+            "side": "right"
+          }
+        ],
+        "spine": {
+          "label": "Dante · AV network",
+          "show": true
+        },
+        "options": {
+          "auto_dante_nodes": true,
+          "auto_sources": false,
+          "dante_counts": false,
+          "appendix": true
+        }
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "sanc-audio",
+      "room": "sanc",
+      "discipline": "audio",
+      "name": "Sanctuary audio"
+    },
+    {
+      "id": "sanc-video",
+      "room": "sanc",
+      "discipline": "video",
+      "name": "Sanctuary video"
+    },
+    {
+      "id": "sanc-lighting",
+      "room": "sanc",
+      "discipline": "lighting",
+      "name": "Sanctuary lighting"
+    },
+    {
+      "id": "sanc-network",
+      "room": "sanc",
+      "discipline": "network",
+      "name": "Sanctuary network"
+    }
+  ],
+  "locations": [
+    {
+      "id": "sanc-foh",
+      "name": "FOH booth",
+      "venue": "sanc-venue",
+      "room": "sanc",
+      "kind": "booth"
+    },
+    {
+      "id": "sanc-stage",
+      "name": "Stage",
+      "venue": "sanc-venue",
+      "room": "sanc",
+      "kind": "stage"
+    },
+    {
+      "id": "sanc-amp-room",
+      "name": "Amp room",
+      "venue": "sanc-venue",
+      "room": "sanc",
+      "kind": "rack_room"
+    },
+    {
+      "id": "sanc-catwalk",
+      "name": "Catwalk",
+      "venue": "sanc-venue",
+      "room": "sanc",
+      "kind": "catwalk"
+    }
+  ],
+  "racks": [
+    {
+      "id": "sanc-rk-foh",
+      "name": "FOH rack",
+      "room": "sanc",
+      "location": "sanc-foh",
+      "units": 16,
+      "numbering": "bottom_up",
+      "faces": [
+        "front",
+        "rear"
+      ],
+      "depth_mm": 600,
+      "order": 1,
+      "notes": "Under the FOH desk; lockable front door."
+    },
+    {
+      "id": "sanc-rk-stage",
+      "name": "Stage rack",
+      "room": "sanc",
+      "location": "sanc-stage",
+      "units": 12,
+      "numbering": "bottom_up",
+      "faces": [
+        "front",
+        "rear"
+      ],
+      "depth_mm": 600,
+      "order": 2,
+      "notes": "Stage left, behind the drum shield."
+    },
+    {
+      "id": "sanc-rk-amp",
+      "name": "Amp rack",
+      "room": "sanc",
+      "location": "sanc-amp-room",
+      "units": 20,
+      "numbering": "bottom_up",
+      "faces": [
+        "front",
+        "rear"
+      ],
+      "depth_mm": 800,
+      "order": 3
+    }
+  ],
+  "networks": [
+    {
+      "id": "av-dante",
+      "name": "Dante primary",
+      "vlan": 20,
+      "subnet": "10.20.0.0/24",
+      "gateway": "10.20.0.1",
+      "protocol": "dante"
+    },
+    {
+      "id": "av-ctrl",
+      "name": "AV control",
+      "vlan": 30,
+      "subnet": "10.30.0.0/24",
+      "gateway": "10.30.0.1",
+      "protocol": "control"
+    },
+    {
+      "id": "lx-sacn",
+      "name": "Lighting sACN",
+      "vlan": 40,
+      "subnet": "10.40.0.0/24",
+      "gateway": "10.40.0.1",
+      "protocol": "sacn"
+    }
+  ],
+  "devices": [
+    {
+      "id": "sanc-stage-mics",
+      "name": "Stage mics & DIs",
+      "kind": "mic",
+      "manufacturer": "Mixed",
+      "model": "Drum kit, DIs, vocal mics",
+      "ports": [
+        {
+          "id": "out-1",
+          "name": "Stage input 1",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Stage inputs",
+          "index": 1,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-2",
+          "name": "Stage input 2",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Stage inputs",
+          "index": 2,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-3",
+          "name": "Stage input 3",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Stage inputs",
+          "index": 3,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-4",
+          "name": "Stage input 4",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Stage inputs",
+          "index": 4,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-5",
+          "name": "Stage input 5",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Stage inputs",
+          "index": 5,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-6",
+          "name": "Stage input 6",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Stage inputs",
+          "index": 6,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-7",
+          "name": "Stage input 7",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Stage inputs",
+          "index": 7,
+          "connector": "XLR3M"
+        },
+        {
+          "id": "out-8",
+          "name": "Stage input 8",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Stage inputs",
+          "index": 8,
+          "connector": "XLR3M"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "A",
+        "column": "sources"
+      },
+      "count": 8,
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "sanc-pulpit-mic",
+      "name": "Pulpit mic",
+      "kind": "mic",
+      "manufacturer": "Shure",
+      "model": "MX418",
+      "brand": "shure",
+      "ports": [
+        {
+          "id": "mic-out",
+          "name": "Mic Out",
+          "dir": "out",
+          "medium": "analog",
+          "group": "Mic Out",
+          "index": 1,
+          "connector": "XLR3M"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "A",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "sanc-handhelds",
+      "name": "Wireless handhelds",
+      "kind": "mic",
+      "manufacturer": "Shure",
+      "model": "ULXD2/SM58",
+      "brand": "shure",
+      "template": "shure-ulxd2-sm58",
+      "ports": [
+        {
+          "id": "rf-out",
+          "name": "RF Out",
+          "dir": "out",
+          "medium": "rf",
+          "group": "RF Out",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "B",
+        "column": "sources"
+      },
+      "count": 4,
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "sanc-bodypacks",
+      "name": "Wireless bodypacks",
+      "kind": "mic",
+      "manufacturer": "Shure",
+      "model": "ULXD1 + WL185",
+      "brand": "shure",
+      "ports": [
+        {
+          "id": "rf-out",
+          "name": "RF Out",
+          "dir": "out",
+          "medium": "rf",
+          "group": "RF Out",
+          "index": 1
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "B",
+        "column": "sources"
+      },
+      "count": 4,
+      "inventory": {
+        "condition": "fair",
+        "notes": "Pastor lav + 3 headsets"
+      }
+    },
+    {
+      "id": "sanc-playback",
+      "name": "Lyrics & playback computer",
+      "kind": "computer",
+      "manufacturer": "Apple",
+      "model": "Mac mini + ProPresenter",
+      "brand": "apple",
+      "dante": true,
+      "ports": [
+        {
+          "id": "dante",
+          "name": "Dante Virtual Soundcard",
+          "dir": "io",
+          "medium": "dante",
+          "group": "Dante",
+          "index": 1,
+          "connector": "RJ45",
+          "channels": 8
+        },
+        {
+          "id": "sdi-out",
+          "name": "SDI Out (capture card)",
+          "dir": "out",
+          "medium": "sdi",
+          "group": "Video Out",
+          "index": 1,
+          "connector": "BNC"
+        },
+        {
+          "id": "hdmi-out",
+          "name": "HDMI Out",
+          "dir": "out",
+          "medium": "hdmi",
+          "group": "Video Out",
+          "index": 2,
+          "connector": "HDMI-A"
+        },
+        {
+          "id": "lan",
+          "name": "LAN",
+          "dir": "io",
+          "medium": "network",
+          "group": "LAN",
+          "index": 1,
+          "connector": "RJ45"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-video",
+      "location": "sanc-foh",
+      "flow": {
+        "group": "C",
+        "column": "sources"
+      },
+      "dante_name": "PLAYBACK",
+      "inventory": {
+        "condition": "good",
+        "purchase_date": "2025-08-20"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.20.0.110",
+          "network": "av-dante",
+          "protocol": "dante"
+        }
+      ]
+    },
+    {
+      "id": "sanc-stagebox",
+      "name": "Stage box",
+      "kind": "stage_io",
+      "manufacturer": "Yamaha",
+      "model": "Rio3224-D2",
+      "brand": "yamaha",
+      "template": "yamaha-rio3224-d2",
+      "dante": true,
+      "routing": {
+        "mode": "indexed"
+      },
+      "ports": [
+        {
+          "id": "analog-in-1",
+          "name": "Analog In 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-2",
+          "name": "Analog In 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-3",
+          "name": "Analog In 3",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-4",
+          "name": "Analog In 4",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-5",
+          "name": "Analog In 5",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-6",
+          "name": "Analog In 6",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-7",
+          "name": "Analog In 7",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-8",
+          "name": "Analog In 8",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-9",
+          "name": "Analog In 9",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 9,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-10",
+          "name": "Analog In 10",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 10,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-11",
+          "name": "Analog In 11",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 11,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-12",
+          "name": "Analog In 12",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 12,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-13",
+          "name": "Analog In 13",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 13,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-14",
+          "name": "Analog In 14",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 14,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-15",
+          "name": "Analog In 15",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 15,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-16",
+          "name": "Analog In 16",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 16,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-17",
+          "name": "Analog In 17",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 17,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-18",
+          "name": "Analog In 18",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 18,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-19",
+          "name": "Analog In 19",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 19,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-20",
+          "name": "Analog In 20",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 20,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-21",
+          "name": "Analog In 21",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 21,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-22",
+          "name": "Analog In 22",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 22,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-23",
+          "name": "Analog In 23",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 23,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-24",
+          "name": "Analog In 24",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 24,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-25",
+          "name": "Analog In 25",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 25,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-26",
+          "name": "Analog In 26",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 26,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-27",
+          "name": "Analog In 27",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 27,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-28",
+          "name": "Analog In 28",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 28,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-29",
+          "name": "Analog In 29",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 29,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-30",
+          "name": "Analog In 30",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 30,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-31",
+          "name": "Analog In 31",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 31,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-32",
+          "name": "Analog In 32",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 32,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-1",
+          "name": "Analog Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-2",
+          "name": "Analog Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-3",
+          "name": "Analog Out 3",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-4",
+          "name": "Analog Out 4",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-5",
+          "name": "Analog Out 5",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-6",
+          "name": "Analog Out 6",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-7",
+          "name": "Analog Out 7",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-8",
+          "name": "Analog Out 8",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-9",
+          "name": "Analog Out 9",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 9,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-10",
+          "name": "Analog Out 10",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 10,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-11",
+          "name": "Analog Out 11",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 11,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-12",
+          "name": "Analog Out 12",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 12,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-13",
+          "name": "Analog Out 13",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 13,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-14",
+          "name": "Analog Out 14",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 14,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-15",
+          "name": "Analog Out 15",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 15,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-16",
+          "name": "Analog Out 16",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 16,
+          "origin": "template"
+        },
+        {
+          "id": "aes-out-1-2",
+          "name": "AES Out 1/2",
+          "dir": "out",
+          "medium": "aes3",
+          "connector": "XLR3M",
+          "group": "AES Out",
+          "index": 1,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "aes-out-3-4",
+          "name": "AES Out 3/4",
+          "dir": "out",
+          "medium": "aes3",
+          "connector": "XLR3M",
+          "group": "AES Out",
+          "index": 2,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "aes-out-5-6",
+          "name": "AES Out 5/6",
+          "dir": "out",
+          "medium": "aes3",
+          "connector": "XLR3M",
+          "group": "AES Out",
+          "index": 3,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "aes-out-7-8",
+          "name": "AES Out 7/8",
+          "dir": "out",
+          "medium": "aes3",
+          "connector": "XLR3M",
+          "group": "AES Out",
+          "index": 4,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "dante-primary",
+          "name": "Dante Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "etherCON",
+          "group": "Dante",
+          "index": 1,
+          "channels": 32,
+          "origin": "template"
+        },
+        {
+          "id": "dante-secondary",
+          "name": "Dante Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "etherCON",
+          "group": "Dante",
+          "index": 2,
+          "channels": 32,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "A",
+        "column": "stage_io"
+      },
+      "dante_name": "SANC-RIO",
+      "rack": {
+        "id": "sanc-rk-stage",
+        "u": 1,
+        "height": 5,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "serial": "RIO-SANC-001",
+        "asset_tag": "CH-0001"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.20.0.101",
+          "network": "av-dante",
+          "protocol": "dante",
+          "switch": "sanc-sw-stage",
+          "switch_port": "gbe-poe-1"
+        }
+      ]
+    },
+    {
+      "id": "sanc-wrx-1",
+      "name": "Wireless RX 1",
+      "kind": "wireless_rx",
+      "manufacturer": "Shure",
+      "model": "ULXD4D",
+      "brand": "shure",
+      "template": "shure-ulxd4d",
+      "dante": true,
+      "ports": [
+        {
+          "id": "antenna-a",
+          "name": "Antenna A",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "antenna-b",
+          "name": "Antenna B",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-1",
+          "name": "Analog Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-2",
+          "name": "Analog Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "mix-out",
+          "name": "Mix Out",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Mix Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dante-primary",
+          "name": "Dante Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 1,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "dante-secondary",
+          "name": "Dante Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 2,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-foh",
+      "flow": {
+        "group": "B",
+        "column": "stage_io"
+      },
+      "dante_name": "ULXD4D-1",
+      "rack": {
+        "id": "sanc-rk-foh",
+        "u": 10,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "asset_tag": "CH-0011"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.20.0.111",
+          "network": "av-dante",
+          "protocol": "dante",
+          "switch": "sanc-sw-foh",
+          "switch_port": "gbe-poe-2"
+        }
+      ]
+    },
+    {
+      "id": "sanc-wrx-2",
+      "name": "Wireless RX 2",
+      "kind": "wireless_rx",
+      "manufacturer": "Shure",
+      "model": "ULXD4D",
+      "brand": "shure",
+      "template": "shure-ulxd4d",
+      "dante": true,
+      "ports": [
+        {
+          "id": "antenna-a",
+          "name": "Antenna A",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "antenna-b",
+          "name": "Antenna B",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-1",
+          "name": "Analog Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-2",
+          "name": "Analog Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "mix-out",
+          "name": "Mix Out",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Mix Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dante-primary",
+          "name": "Dante Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 1,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "dante-secondary",
+          "name": "Dante Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 2,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-foh",
+      "flow": {
+        "group": "B",
+        "column": "stage_io"
+      },
+      "dante_name": "ULXD4D-2",
+      "rack": {
+        "id": "sanc-rk-foh",
+        "u": 11,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "asset_tag": "CH-0012"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.20.0.112",
+          "network": "av-dante",
+          "protocol": "dante",
+          "switch": "sanc-sw-foh",
+          "switch_port": "gbe-poe-3"
+        }
+      ]
+    },
+    {
+      "id": "sanc-wrx-3",
+      "name": "Wireless RX 3",
+      "kind": "wireless_rx",
+      "manufacturer": "Shure",
+      "model": "ULXD4D",
+      "brand": "shure",
+      "template": "shure-ulxd4d",
+      "dante": true,
+      "ports": [
+        {
+          "id": "antenna-a",
+          "name": "Antenna A",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "antenna-b",
+          "name": "Antenna B",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-1",
+          "name": "Analog Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-2",
+          "name": "Analog Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "mix-out",
+          "name": "Mix Out",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Mix Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dante-primary",
+          "name": "Dante Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 1,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "dante-secondary",
+          "name": "Dante Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 2,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-foh",
+      "flow": {
+        "group": "B",
+        "column": "stage_io"
+      },
+      "dante_name": "ULXD4D-3",
+      "rack": {
+        "id": "sanc-rk-foh",
+        "u": 12,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "asset_tag": "CH-0013"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.20.0.113",
+          "network": "av-dante",
+          "protocol": "dante",
+          "switch": "sanc-sw-foh",
+          "switch_port": "gbe-poe-4"
+        }
+      ]
+    },
+    {
+      "id": "sanc-wrx-4",
+      "name": "Wireless RX 4",
+      "kind": "wireless_rx",
+      "manufacturer": "Shure",
+      "model": "ULXD4D",
+      "brand": "shure",
+      "template": "shure-ulxd4d",
+      "dante": true,
+      "ports": [
+        {
+          "id": "antenna-a",
+          "name": "Antenna A",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "antenna-b",
+          "name": "Antenna B",
+          "dir": "in",
+          "medium": "rf",
+          "connector": "BNC",
+          "group": "Antenna",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-1",
+          "name": "Analog Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-2",
+          "name": "Analog Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Analog Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "mix-out",
+          "name": "Mix Out",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Mix Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dante-primary",
+          "name": "Dante Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 1,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "dante-secondary",
+          "name": "Dante Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante",
+          "index": 2,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-foh",
+      "flow": {
+        "group": "B",
+        "column": "stage_io"
+      },
+      "dante_name": "ULXD4D-4",
+      "rack": {
+        "id": "sanc-rk-foh",
+        "u": 13,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "asset_tag": "CH-0014"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.20.0.114",
+          "network": "av-dante",
+          "protocol": "dante",
+          "switch": "sanc-sw-foh",
+          "switch_port": "gbe-poe-5"
+        }
+      ]
+    },
+    {
+      "id": "sanc-console",
+      "name": "FOH console",
+      "kind": "console",
+      "manufacturer": "Yamaha",
+      "model": "QL5",
+      "brand": "yamaha",
+      "template": "yamaha-ql5",
+      "dante": true,
+      "ports": [
+        {
+          "id": "analog-in-1",
+          "name": "Analog In 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-2",
+          "name": "Analog In 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-3",
+          "name": "Analog In 3",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-4",
+          "name": "Analog In 4",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-5",
+          "name": "Analog In 5",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-6",
+          "name": "Analog In 6",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-7",
+          "name": "Analog In 7",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-8",
+          "name": "Analog In 8",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-9",
+          "name": "Analog In 9",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 9,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-10",
+          "name": "Analog In 10",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 10,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-11",
+          "name": "Analog In 11",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 11,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-12",
+          "name": "Analog In 12",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 12,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-13",
+          "name": "Analog In 13",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 13,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-14",
+          "name": "Analog In 14",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 14,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-15",
+          "name": "Analog In 15",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 15,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-16",
+          "name": "Analog In 16",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 16,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-17",
+          "name": "Analog In 17",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 17,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-18",
+          "name": "Analog In 18",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 18,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-19",
+          "name": "Analog In 19",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 19,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-20",
+          "name": "Analog In 20",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 20,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-21",
+          "name": "Analog In 21",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 21,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-22",
+          "name": "Analog In 22",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 22,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-23",
+          "name": "Analog In 23",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 23,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-24",
+          "name": "Analog In 24",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 24,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-25",
+          "name": "Analog In 25",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 25,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-26",
+          "name": "Analog In 26",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 26,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-27",
+          "name": "Analog In 27",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 27,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-28",
+          "name": "Analog In 28",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 28,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-29",
+          "name": "Analog In 29",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 29,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-30",
+          "name": "Analog In 30",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 30,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-31",
+          "name": "Analog In 31",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 31,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-32",
+          "name": "Analog In 32",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 32,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-1",
+          "name": "Omni Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-2",
+          "name": "Omni Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-3",
+          "name": "Omni Out 3",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-4",
+          "name": "Omni Out 4",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-5",
+          "name": "Omni Out 5",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-6",
+          "name": "Omni Out 6",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-7",
+          "name": "Omni Out 7",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-8",
+          "name": "Omni Out 8",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-9",
+          "name": "Omni Out 9",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 9,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-10",
+          "name": "Omni Out 10",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 10,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-11",
+          "name": "Omni Out 11",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 11,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-12",
+          "name": "Omni Out 12",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 12,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-13",
+          "name": "Omni Out 13",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 13,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-14",
+          "name": "Omni Out 14",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 14,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-15",
+          "name": "Omni Out 15",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 15,
+          "origin": "template"
+        },
+        {
+          "id": "omni-out-16",
+          "name": "Omni Out 16",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "XLR3M",
+          "group": "Omni Out",
+          "index": 16,
+          "origin": "template"
+        },
+        {
+          "id": "aes-out",
+          "name": "AES Out",
+          "dir": "out",
+          "medium": "aes3",
+          "connector": "XLR3M",
+          "group": "AES Out",
+          "index": 1,
+          "channels": 2,
+          "origin": "template"
+        },
+        {
+          "id": "dante-primary",
+          "name": "Dante Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "etherCON",
+          "group": "Dante",
+          "index": 1,
+          "channels": 64,
+          "origin": "template"
+        },
+        {
+          "id": "dante-secondary",
+          "name": "Dante Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "etherCON",
+          "group": "Dante",
+          "index": 2,
+          "channels": 64,
+          "origin": "template"
+        },
+        {
+          "id": "my-slot-1",
+          "name": "MY Slot 1",
+          "dir": "io",
+          "medium": "other",
+          "group": "MY Slot",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "my-slot-2",
+          "name": "MY Slot 2",
+          "dir": "io",
+          "medium": "other",
+          "group": "MY Slot",
+          "index": 2,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-foh",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "dante_name": "SANC-QL5",
+      "inventory": {
+        "condition": "good",
+        "serial": "QL5-SANC-001",
+        "asset_tag": "CH-0002",
+        "purchase_date": "2023-03-10",
+        "warranty_until": "2026-03-10"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.20.0.100",
+          "network": "av-dante",
+          "protocol": "dante",
+          "switch": "sanc-sw-foh",
+          "switch_port": "gbe-poe-1"
+        },
+        {
+          "id": "control",
+          "role": "control",
+          "ip": "10.30.0.100",
+          "network": "av-ctrl",
+          "protocol": "control"
+        }
+      ]
+    },
+    {
+      "id": "sanc-dsp",
+      "name": "System DSP",
+      "kind": "processor",
+      "manufacturer": "Generic",
+      "model": "DSP processor",
+      "template": "generic-dsp",
+      "dante": true,
+      "ports": [
+        {
+          "id": "analog-in-1",
+          "name": "Analog In 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-2",
+          "name": "Analog In 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-3",
+          "name": "Analog In 3",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog In",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-4",
+          "name": "Analog In 4",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog In",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-5",
+          "name": "Analog In 5",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog In",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-6",
+          "name": "Analog In 6",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog In",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-7",
+          "name": "Analog In 7",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog In",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-8",
+          "name": "Analog In 8",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog In",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-1",
+          "name": "Analog Out 1",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-2",
+          "name": "Analog Out 2",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-3",
+          "name": "Analog Out 3",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog Out",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-4",
+          "name": "Analog Out 4",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog Out",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-5",
+          "name": "Analog Out 5",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog Out",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-6",
+          "name": "Analog Out 6",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog Out",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-7",
+          "name": "Analog Out 7",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog Out",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "analog-out-8",
+          "name": "Analog Out 8",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "Phoenix",
+          "group": "Analog Out",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "dante-primary",
+          "name": "Dante Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante Primary",
+          "index": 1,
+          "channels": 32,
+          "origin": "template"
+        },
+        {
+          "id": "dante-secondary",
+          "name": "Dante Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "Dante Secondary",
+          "index": 1,
+          "channels": 32,
+          "origin": "template"
+        },
+        {
+          "id": "gpio-1",
+          "name": "GPIO 1",
+          "dir": "io",
+          "medium": "gpio",
+          "connector": "Phoenix",
+          "group": "GPIO",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "gpio-2",
+          "name": "GPIO 2",
+          "dir": "io",
+          "medium": "gpio",
+          "connector": "Phoenix",
+          "group": "GPIO",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "gpio-3",
+          "name": "GPIO 3",
+          "dir": "io",
+          "medium": "gpio",
+          "connector": "Phoenix",
+          "group": "GPIO",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "gpio-4",
+          "name": "GPIO 4",
+          "dir": "io",
+          "medium": "gpio",
+          "connector": "Phoenix",
+          "group": "GPIO",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "gpio-5",
+          "name": "GPIO 5",
+          "dir": "io",
+          "medium": "gpio",
+          "connector": "Phoenix",
+          "group": "GPIO",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "gpio-6",
+          "name": "GPIO 6",
+          "dir": "io",
+          "medium": "gpio",
+          "connector": "Phoenix",
+          "group": "GPIO",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "gpio-7",
+          "name": "GPIO 7",
+          "dir": "io",
+          "medium": "gpio",
+          "connector": "Phoenix",
+          "group": "GPIO",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "gpio-8",
+          "name": "GPIO 8",
+          "dir": "io",
+          "medium": "gpio",
+          "connector": "Phoenix",
+          "group": "GPIO",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "control",
+          "name": "Control",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Control",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "mains-in",
+          "name": "Mains In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Mains In",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-amp-room",
+      "flow": {
+        "group": "E",
+        "column": "amps"
+      },
+      "dante_name": "SANC-DSP",
+      "rack": {
+        "id": "sanc-rk-amp",
+        "u": 18,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.20.0.120",
+          "network": "av-dante",
+          "protocol": "dante",
+          "switch": "sanc-sw-stage",
+          "switch_port": "gbe-poe-2"
+        }
+      ]
+    },
+    {
+      "id": "sanc-amp-main",
+      "name": "Main amp",
+      "kind": "amp",
+      "manufacturer": "Powersoft",
+      "model": "X8",
+      "brand": "powersoft",
+      "template": "powersoft-x8",
+      "dante": true,
+      "ports": [
+        {
+          "id": "analog-in-1",
+          "name": "Analog In 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-2",
+          "name": "Analog In 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-3",
+          "name": "Analog In 3",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-4",
+          "name": "Analog In 4",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-5",
+          "name": "Analog In 5",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-6",
+          "name": "Analog In 6",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-7",
+          "name": "Analog In 7",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "analog-in-8",
+          "name": "Analog In 8",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Analog In",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "dante-primary",
+          "name": "Dante Primary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "etherCON",
+          "group": "Dante",
+          "index": 1,
+          "channels": 8,
+          "origin": "template"
+        },
+        {
+          "id": "dante-secondary",
+          "name": "Dante Secondary",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "etherCON",
+          "group": "Dante",
+          "index": 2,
+          "channels": 8,
+          "origin": "template"
+        },
+        {
+          "id": "speaker-out-1",
+          "name": "Speaker Out 1",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Speaker Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "speaker-out-2",
+          "name": "Speaker Out 2",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Speaker Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "speaker-out-3",
+          "name": "Speaker Out 3",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Speaker Out",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "speaker-out-4",
+          "name": "Speaker Out 4",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Speaker Out",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "speaker-out-5",
+          "name": "Speaker Out 5",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Speaker Out",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "speaker-out-6",
+          "name": "Speaker Out 6",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Speaker Out",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "speaker-out-7",
+          "name": "Speaker Out 7",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Speaker Out",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "speaker-out-8",
+          "name": "Speaker Out 8",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Speaker Out",
+          "index": 8,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-amp-room",
+      "flow": {
+        "group": "G",
+        "column": "amps"
+      },
+      "dante_name": "SANC-AMP",
+      "rack": {
+        "id": "sanc-rk-amp",
+        "u": 12,
+        "height": 2,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "asset_tag": "CH-0020"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.20.0.121",
+          "network": "av-dante",
+          "protocol": "dante",
+          "switch": "sanc-sw-stage",
+          "switch_port": "gbe-poe-3"
+        }
+      ]
+    },
+    {
+      "id": "sanc-amp-fill",
+      "name": "Fill amp",
+      "kind": "amp",
+      "manufacturer": "Generic",
+      "model": "Power amplifier",
+      "template": "generic-amplifier",
+      "ports": [
+        {
+          "id": "input-1",
+          "name": "Input 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Input",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "input-2",
+          "name": "Input 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Input",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "input-3",
+          "name": "Input 3",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Input",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "input-4",
+          "name": "Input 4",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Input",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "output-1",
+          "name": "Output 1",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Output",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "output-2",
+          "name": "Output 2",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Output",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "output-3",
+          "name": "Output 3",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Output",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "output-4",
+          "name": "Output 4",
+          "dir": "out",
+          "medium": "speaker",
+          "connector": "NL4",
+          "group": "Output",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "control",
+          "name": "Control",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Control",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "mains-in",
+          "name": "Mains In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Mains In",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-amp-room",
+      "flow": {
+        "group": "G",
+        "column": "amps"
+      },
+      "rack": {
+        "id": "sanc-rk-amp",
+        "u": 9,
+        "height": 2,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "fair"
+      }
+    },
+    {
+      "id": "sanc-iem-1",
+      "name": "IEM TX 1-2",
+      "kind": "iem",
+      "manufacturer": "Shure",
+      "model": "PSM1000 P10T",
+      "brand": "shure",
+      "template": "shure-p10t",
+      "ports": [
+        {
+          "id": "audio-in-ch1-l",
+          "name": "Audio In Ch1 L",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Audio In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-ch1-r",
+          "name": "Audio In Ch1 R",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Audio In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-ch2-l",
+          "name": "Audio In Ch2 L",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Audio In",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-ch2-r",
+          "name": "Audio In Ch2 R",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Audio In",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "loop-out-ch1-l",
+          "name": "Loop Out Ch1 L",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Loop Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "loop-out-ch1-r",
+          "name": "Loop Out Ch1 R",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Loop Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "loop-out-ch2-l",
+          "name": "Loop Out Ch2 L",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Loop Out",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "loop-out-ch2-r",
+          "name": "Loop Out Ch2 R",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Loop Out",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "rf-out-ch1",
+          "name": "RF Out Ch1",
+          "dir": "out",
+          "medium": "iem_wireless",
+          "connector": "BNC",
+          "group": "RF Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "rf-out-ch2",
+          "name": "RF Out Ch2",
+          "dir": "out",
+          "medium": "iem_wireless",
+          "connector": "BNC",
+          "group": "RF Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "F",
+        "column": "amps"
+      },
+      "rack": {
+        "id": "sanc-rk-stage",
+        "u": 8,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "sanc-iem-2",
+      "name": "IEM TX 3-4",
+      "kind": "iem",
+      "manufacturer": "Shure",
+      "model": "PSM1000 P10T",
+      "brand": "shure",
+      "template": "shure-p10t",
+      "ports": [
+        {
+          "id": "audio-in-ch1-l",
+          "name": "Audio In Ch1 L",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Audio In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-ch1-r",
+          "name": "Audio In Ch1 R",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Audio In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-ch2-l",
+          "name": "Audio In Ch2 L",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Audio In",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-ch2-r",
+          "name": "Audio In Ch2 R",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR/TRS combo",
+          "group": "Audio In",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "loop-out-ch1-l",
+          "name": "Loop Out Ch1 L",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Loop Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "loop-out-ch1-r",
+          "name": "Loop Out Ch1 R",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Loop Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "loop-out-ch2-l",
+          "name": "Loop Out Ch2 L",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Loop Out",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "loop-out-ch2-r",
+          "name": "Loop Out Ch2 R",
+          "dir": "out",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Loop Out",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "rf-out-ch1",
+          "name": "RF Out Ch1",
+          "dir": "out",
+          "medium": "iem_wireless",
+          "connector": "BNC",
+          "group": "RF Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "rf-out-ch2",
+          "name": "RF Out Ch2",
+          "dir": "out",
+          "medium": "iem_wireless",
+          "connector": "BNC",
+          "group": "RF Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "F",
+        "column": "amps"
+      },
+      "rack": {
+        "id": "sanc-rk-stage",
+        "u": 9,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "sanc-main-l",
+      "name": "Main L",
+      "kind": "speaker",
+      "manufacturer": "QSC",
+      "model": "WideLine-8 (4-box hang)",
+      "brand": "qsc",
+      "ports": [
+        {
+          "id": "input",
+          "name": "Speaker In",
+          "dir": "in",
+          "medium": "speaker",
+          "group": "Speaker In",
+          "index": 1,
+          "connector": "NL4"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "G",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "sanc-main-r",
+      "name": "Main R",
+      "kind": "speaker",
+      "manufacturer": "QSC",
+      "model": "WideLine-8 (4-box hang)",
+      "brand": "qsc",
+      "ports": [
+        {
+          "id": "input",
+          "name": "Speaker In",
+          "dir": "in",
+          "medium": "speaker",
+          "group": "Speaker In",
+          "index": 1,
+          "connector": "NL4"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "G",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "sanc-subs",
+      "name": "Subs",
+      "kind": "speaker",
+      "manufacturer": "QSC",
+      "model": "KS212C",
+      "brand": "qsc",
+      "ports": [
+        {
+          "id": "input",
+          "name": "Speaker In",
+          "dir": "in",
+          "medium": "speaker",
+          "group": "Speaker In",
+          "index": 1,
+          "connector": "NL4"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "G",
+        "column": "outputs"
+      },
+      "count": 2,
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "sanc-fills",
+      "name": "Front fills",
+      "kind": "speaker",
+      "manufacturer": "QSC",
+      "model": "AD-S8T",
+      "brand": "qsc",
+      "ports": [
+        {
+          "id": "input",
+          "name": "Speaker In",
+          "dir": "in",
+          "medium": "speaker",
+          "group": "Speaker In",
+          "index": 1,
+          "connector": "NL4"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-audio",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "G",
+        "column": "outputs"
+      },
+      "count": 2,
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "sanc-cam-1",
+      "name": "PTZ camera 1 (centre)",
+      "kind": "camera",
+      "manufacturer": "Panasonic",
+      "model": "AW-UE150",
+      "brand": "panasonic",
+      "template": "panasonic-aw-ue150",
+      "ports": [
+        {
+          "id": "sdi-out-12g",
+          "name": "SDI Out 12G",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-3g",
+          "name": "SDI Out 3G",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "hdmi-out",
+          "name": "HDMI Out",
+          "dir": "out",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "genlock-in",
+          "name": "Genlock In",
+          "dir": "in",
+          "medium": "sync",
+          "connector": "BNC",
+          "group": "Genlock In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-1",
+          "name": "Audio In 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Audio In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-2",
+          "name": "Audio In 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Audio In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "rs-422",
+          "name": "RS-422",
+          "dir": "io",
+          "medium": "rs422",
+          "connector": "RJ45",
+          "group": "RS-422",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-video",
+      "location": "sanc-catwalk",
+      "flow": {
+        "group": "C",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "interfaces": [
+        {
+          "id": "control",
+          "role": "control",
+          "ip": "10.30.0.141",
+          "network": "av-ctrl",
+          "protocol": "control",
+          "switch": "sanc-sw-foh",
+          "switch_port": "gbe-poe-7"
+        }
+      ]
+    },
+    {
+      "id": "sanc-cam-2",
+      "name": "PTZ camera 2 (side)",
+      "kind": "camera",
+      "manufacturer": "Panasonic",
+      "model": "AW-UE150",
+      "brand": "panasonic",
+      "template": "panasonic-aw-ue150",
+      "ports": [
+        {
+          "id": "sdi-out-12g",
+          "name": "SDI Out 12G",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-3g",
+          "name": "SDI Out 3G",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "hdmi-out",
+          "name": "HDMI Out",
+          "dir": "out",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "network",
+          "name": "Network",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "genlock-in",
+          "name": "Genlock In",
+          "dir": "in",
+          "medium": "sync",
+          "connector": "BNC",
+          "group": "Genlock In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-1",
+          "name": "Audio In 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Audio In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-2",
+          "name": "Audio In 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "XLR3F",
+          "group": "Audio In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "rs-422",
+          "name": "RS-422",
+          "dir": "io",
+          "medium": "rs422",
+          "connector": "RJ45",
+          "group": "RS-422",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-video",
+      "location": "sanc-catwalk",
+      "flow": {
+        "group": "C",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "interfaces": [
+        {
+          "id": "control",
+          "role": "control",
+          "ip": "10.30.0.142",
+          "network": "av-ctrl",
+          "protocol": "control",
+          "switch": "sanc-sw-foh",
+          "switch_port": "gbe-poe-8"
+        }
+      ]
+    },
+    {
+      "id": "sanc-switcher",
+      "name": "Video switcher",
+      "kind": "video_switcher",
+      "manufacturer": "Blackmagic Design",
+      "model": "ATEM 1 M/E Constellation HD",
+      "brand": "blackmagic",
+      "template": "blackmagic-atem-1me-constellation-hd",
+      "ports": [
+        {
+          "id": "sdi-in-1",
+          "name": "SDI In 1",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-2",
+          "name": "SDI In 2",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-3",
+          "name": "SDI In 3",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-4",
+          "name": "SDI In 4",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-5",
+          "name": "SDI In 5",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-6",
+          "name": "SDI In 6",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-7",
+          "name": "SDI In 7",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-8",
+          "name": "SDI In 8",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-9",
+          "name": "SDI In 9",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 9,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in-10",
+          "name": "SDI In 10",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 10,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-1",
+          "name": "SDI Out 1",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-2",
+          "name": "SDI Out 2",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-3",
+          "name": "SDI Out 3",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-4",
+          "name": "SDI Out 4",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-5",
+          "name": "SDI Out 5",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-6",
+          "name": "SDI Out 6",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "multiview-out",
+          "name": "Multiview Out",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "Multiview Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-1",
+          "name": "Audio In 1",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Audio In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "audio-in-2",
+          "name": "Audio In 2",
+          "dir": "in",
+          "medium": "analog",
+          "connector": "TRS 1/4\"",
+          "group": "Audio In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "talkback",
+          "name": "Talkback",
+          "dir": "io",
+          "medium": "intercom",
+          "connector": "XLR5F",
+          "group": "Talkback",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "reference-in",
+          "name": "Reference In",
+          "dir": "in",
+          "medium": "sync",
+          "connector": "BNC",
+          "group": "Reference In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "ethernet",
+          "name": "Ethernet",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "Ethernet",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "usb-webcam-out",
+          "name": "USB Webcam Out",
+          "dir": "out",
+          "medium": "usb",
+          "connector": "USB-C",
+          "group": "USB Webcam Out",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-video",
+      "location": "sanc-foh",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "rack": {
+        "id": "sanc-rk-foh",
+        "u": 15,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "asset_tag": "CH-0030"
+      },
+      "interfaces": [
+        {
+          "id": "control",
+          "role": "control",
+          "ip": "10.30.0.140",
+          "network": "av-ctrl",
+          "protocol": "control",
+          "switch": "sanc-sw-foh",
+          "switch_port": "gbe-poe-9"
+        }
+      ]
+    },
+    {
+      "id": "sanc-proj-l",
+      "name": "Projector L",
+      "kind": "projector",
+      "manufacturer": "Epson",
+      "model": "EB-PU2010",
+      "brand": "epson",
+      "template": "epson-eb-pu2010",
+      "ports": [
+        {
+          "id": "hdmi-in-1",
+          "name": "HDMI In 1",
+          "dir": "in",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "hdmi-in-2",
+          "name": "HDMI In 2",
+          "dir": "in",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "hdbaset-in",
+          "name": "HDBaseT In",
+          "dir": "in",
+          "medium": "hdbaset",
+          "connector": "RJ45",
+          "group": "HDBaseT In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in",
+          "name": "SDI In",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "rs-232",
+          "name": "RS-232",
+          "dir": "in",
+          "medium": "rs232",
+          "connector": "DB9",
+          "group": "RS-232",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "lan",
+          "name": "LAN",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "LAN",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-video",
+      "location": "sanc-catwalk",
+      "flow": {
+        "group": "H",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good",
+        "notes": "Lamp hours checked quarterly"
+      }
+    },
+    {
+      "id": "sanc-proj-r",
+      "name": "Projector R",
+      "kind": "projector",
+      "manufacturer": "Epson",
+      "model": "EB-PU2010",
+      "brand": "epson",
+      "template": "epson-eb-pu2010",
+      "ports": [
+        {
+          "id": "hdmi-in-1",
+          "name": "HDMI In 1",
+          "dir": "in",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "hdmi-in-2",
+          "name": "HDMI In 2",
+          "dir": "in",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "hdbaset-in",
+          "name": "HDBaseT In",
+          "dir": "in",
+          "medium": "hdbaset",
+          "connector": "RJ45",
+          "group": "HDBaseT In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in",
+          "name": "SDI In",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "rs-232",
+          "name": "RS-232",
+          "dir": "in",
+          "medium": "rs232",
+          "connector": "DB9",
+          "group": "RS-232",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "lan",
+          "name": "LAN",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "LAN",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-video",
+      "location": "sanc-catwalk",
+      "flow": {
+        "group": "H",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "sanc-conf-conv",
+      "name": "SDI→HDMI (confidence)",
+      "kind": "converter",
+      "manufacturer": "Decimator Design",
+      "model": "MD-HX",
+      "brand": "decimator",
+      "template": "decimator-md-hx",
+      "ports": [
+        {
+          "id": "hdmi-in",
+          "name": "HDMI In",
+          "dir": "in",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-in",
+          "name": "SDI In",
+          "dir": "in",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-a",
+          "name": "SDI Out A",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "sdi-out-b",
+          "name": "SDI Out B",
+          "dir": "out",
+          "medium": "sdi",
+          "connector": "BNC",
+          "group": "SDI Out",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "hdmi-out",
+          "name": "HDMI Out",
+          "dir": "out",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI Out",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-video",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "H",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "sanc-confidence",
+      "name": "Confidence monitor",
+      "kind": "display",
+      "manufacturer": "Samsung",
+      "model": "QB65C (QBC series 65\")",
+      "brand": "samsung",
+      "template": "samsung-qb65c",
+      "ports": [
+        {
+          "id": "hdmi-in-1",
+          "name": "HDMI In 1",
+          "dir": "in",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "hdmi-in-2",
+          "name": "HDMI In 2",
+          "dir": "in",
+          "medium": "hdmi",
+          "connector": "HDMI-A",
+          "group": "HDMI In",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "rs-232",
+          "name": "RS-232",
+          "dir": "in",
+          "medium": "rs232",
+          "connector": "TRS 3.5mm",
+          "group": "RS-232",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "lan",
+          "name": "LAN",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "LAN",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "usb",
+          "name": "USB",
+          "dir": "in",
+          "medium": "usb",
+          "connector": "USB-A",
+          "group": "USB",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-video",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "H",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "sanc-lx-console",
+      "name": "Lighting console",
+      "kind": "lighting_console",
+      "manufacturer": "ETC",
+      "model": "ColorSource 20",
+      "brand": "etc",
+      "template": "etc-colorsource-20",
+      "ports": [
+        {
+          "id": "dmx-out",
+          "name": "DMX Out",
+          "dir": "out",
+          "medium": "dmx",
+          "connector": "XLR5F",
+          "group": "DMX Out",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "ethernet",
+          "name": "Ethernet",
+          "dir": "io",
+          "medium": "sacn",
+          "connector": "RJ45",
+          "group": "Ethernet",
+          "index": 1,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-lighting",
+      "location": "sanc-foh",
+      "flow": {
+        "group": "C",
+        "column": "sources"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.40.0.150",
+          "network": "lx-sacn",
+          "protocol": "sacn",
+          "switch": "sanc-sw-foh",
+          "switch_port": "gbe-poe-10"
+        }
+      ]
+    },
+    {
+      "id": "sanc-dmx-node",
+      "name": "DMX node",
+      "kind": "dmx_node",
+      "manufacturer": "Generic",
+      "model": "DMX node",
+      "template": "generic-dmx-node",
+      "ports": [
+        {
+          "id": "network-1",
+          "name": "Network 1",
+          "dir": "io",
+          "medium": "sacn",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "network-2",
+          "name": "Network 2",
+          "dir": "io",
+          "medium": "sacn",
+          "connector": "RJ45",
+          "group": "Network",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "dmx-port-1",
+          "name": "DMX Port 1",
+          "dir": "io",
+          "medium": "dmx",
+          "connector": "XLR5F",
+          "group": "DMX Port",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dmx-port-2",
+          "name": "DMX Port 2",
+          "dir": "io",
+          "medium": "dmx",
+          "connector": "XLR5F",
+          "group": "DMX Port",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "dmx-port-3",
+          "name": "DMX Port 3",
+          "dir": "io",
+          "medium": "dmx",
+          "connector": "XLR5F",
+          "group": "DMX Port",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "dmx-port-4",
+          "name": "DMX Port 4",
+          "dir": "io",
+          "medium": "dmx",
+          "connector": "XLR5F",
+          "group": "DMX Port",
+          "index": 4,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-lighting",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "L",
+        "column": "amps"
+      },
+      "rack": {
+        "id": "sanc-rk-stage",
+        "u": 11,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "interfaces": [
+        {
+          "id": "primary",
+          "role": "primary",
+          "ip": "10.40.0.151",
+          "network": "lx-sacn",
+          "protocol": "sacn",
+          "switch": "sanc-sw-stage",
+          "switch_port": "gbe-poe-10"
+        }
+      ]
+    },
+    {
+      "id": "sanc-lx-1",
+      "name": "Front light 1",
+      "kind": "fixture",
+      "manufacturer": "ETC",
+      "model": "Source Four LED Series 3 Lustr X8",
+      "brand": "etc",
+      "template": "etc-source-four-lustr-x8",
+      "ports": [
+        {
+          "id": "dmx-in",
+          "name": "DMX In",
+          "dir": "in",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dmx-thru",
+          "name": "DMX Thru",
+          "dir": "out",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "power-thru",
+          "name": "Power Thru",
+          "dir": "out",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 2,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-lighting",
+      "location": "sanc-catwalk",
+      "flow": {
+        "group": "L",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "dmx": {
+        "universe": 1,
+        "address": 1,
+        "footprint": 10,
+        "mode": "Direct",
+        "protocol": "dmx"
+      }
+    },
+    {
+      "id": "sanc-lx-2",
+      "name": "Front light 2",
+      "kind": "fixture",
+      "manufacturer": "ETC",
+      "model": "Source Four LED Series 3 Lustr X8",
+      "brand": "etc",
+      "template": "etc-source-four-lustr-x8",
+      "ports": [
+        {
+          "id": "dmx-in",
+          "name": "DMX In",
+          "dir": "in",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dmx-thru",
+          "name": "DMX Thru",
+          "dir": "out",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "power-thru",
+          "name": "Power Thru",
+          "dir": "out",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 2,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-lighting",
+      "location": "sanc-catwalk",
+      "flow": {
+        "group": "L",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "dmx": {
+        "universe": 1,
+        "address": 11,
+        "footprint": 10,
+        "mode": "Direct",
+        "protocol": "dmx"
+      }
+    },
+    {
+      "id": "sanc-lx-3",
+      "name": "Front light 3",
+      "kind": "fixture",
+      "manufacturer": "ETC",
+      "model": "Source Four LED Series 3 Lustr X8",
+      "brand": "etc",
+      "template": "etc-source-four-lustr-x8",
+      "ports": [
+        {
+          "id": "dmx-in",
+          "name": "DMX In",
+          "dir": "in",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dmx-thru",
+          "name": "DMX Thru",
+          "dir": "out",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "power-thru",
+          "name": "Power Thru",
+          "dir": "out",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 2,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-lighting",
+      "location": "sanc-catwalk",
+      "flow": {
+        "group": "L",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "dmx": {
+        "universe": 1,
+        "address": 21,
+        "footprint": 10,
+        "mode": "Direct",
+        "protocol": "dmx"
+      }
+    },
+    {
+      "id": "sanc-lx-4",
+      "name": "Front light 4",
+      "kind": "fixture",
+      "manufacturer": "ETC",
+      "model": "Source Four LED Series 3 Lustr X8",
+      "brand": "etc",
+      "template": "etc-source-four-lustr-x8",
+      "ports": [
+        {
+          "id": "dmx-in",
+          "name": "DMX In",
+          "dir": "in",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dmx-thru",
+          "name": "DMX Thru",
+          "dir": "out",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "power-thru",
+          "name": "Power Thru",
+          "dir": "out",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 2,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-lighting",
+      "location": "sanc-catwalk",
+      "flow": {
+        "group": "L",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "dmx": {
+        "universe": 1,
+        "address": 31,
+        "footprint": 10,
+        "mode": "Direct",
+        "protocol": "dmx"
+      }
+    },
+    {
+      "id": "sanc-lx-5",
+      "name": "Wash 1",
+      "kind": "fixture",
+      "manufacturer": "Martin",
+      "model": "MAC Aura PXL",
+      "brand": "martin",
+      "template": "martin-mac-aura-pxl",
+      "ports": [
+        {
+          "id": "dmx-in",
+          "name": "DMX In",
+          "dir": "in",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dmx-thru",
+          "name": "DMX Thru",
+          "dir": "out",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "power-thru",
+          "name": "Power Thru",
+          "dir": "out",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 2,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-lighting",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "L",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "dmx": {
+        "universe": 2,
+        "address": 1,
+        "footprint": 20,
+        "mode": "Compact",
+        "protocol": "dmx"
+      }
+    },
+    {
+      "id": "sanc-lx-6",
+      "name": "Wash 2",
+      "kind": "fixture",
+      "manufacturer": "Martin",
+      "model": "MAC Aura PXL",
+      "brand": "martin",
+      "template": "martin-mac-aura-pxl",
+      "ports": [
+        {
+          "id": "dmx-in",
+          "name": "DMX In",
+          "dir": "in",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dmx-thru",
+          "name": "DMX Thru",
+          "dir": "out",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "power-thru",
+          "name": "Power Thru",
+          "dir": "out",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 2,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-lighting",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "L",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "dmx": {
+        "universe": 2,
+        "address": 21,
+        "footprint": 20,
+        "mode": "Compact",
+        "protocol": "dmx"
+      }
+    },
+    {
+      "id": "sanc-lx-7",
+      "name": "Wash 3",
+      "kind": "fixture",
+      "manufacturer": "Martin",
+      "model": "MAC Aura PXL",
+      "brand": "martin",
+      "template": "martin-mac-aura-pxl",
+      "ports": [
+        {
+          "id": "dmx-in",
+          "name": "DMX In",
+          "dir": "in",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dmx-thru",
+          "name": "DMX Thru",
+          "dir": "out",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "power-thru",
+          "name": "Power Thru",
+          "dir": "out",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 2,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-lighting",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "L",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "dmx": {
+        "universe": 2,
+        "address": 41,
+        "footprint": 20,
+        "mode": "Compact",
+        "protocol": "dmx"
+      }
+    },
+    {
+      "id": "sanc-lx-8",
+      "name": "Wash 4",
+      "kind": "fixture",
+      "manufacturer": "Martin",
+      "model": "MAC Aura PXL",
+      "brand": "martin",
+      "template": "martin-mac-aura-pxl",
+      "ports": [
+        {
+          "id": "dmx-in",
+          "name": "DMX In",
+          "dir": "in",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "dmx-thru",
+          "name": "DMX Thru",
+          "dir": "out",
+          "medium": "dmx",
+          "connector": "XLR5",
+          "group": "DMX",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "power-thru",
+          "name": "Power Thru",
+          "dir": "out",
+          "medium": "power",
+          "connector": "powerCON TRUE1",
+          "group": "Power",
+          "index": 2,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-lighting",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "L",
+        "column": "outputs"
+      },
+      "inventory": {
+        "condition": "good"
+      },
+      "dmx": {
+        "universe": 2,
+        "address": 61,
+        "footprint": 20,
+        "mode": "Compact",
+        "protocol": "dmx"
+      }
+    },
+    {
+      "id": "sanc-sw-foh",
+      "name": "FOH switch",
+      "kind": "switch",
+      "manufacturer": "NETGEAR",
+      "model": "M4250-26G4F-PoE+",
+      "brand": "netgear",
+      "template": "netgear-m4250-26g4f-poe",
+      "ports": [
+        {
+          "id": "gbe-poe-1",
+          "name": "GbE PoE+ 1",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 1,
+          "origin": "template",
+          "label": "Dante VLAN 20"
+        },
+        {
+          "id": "gbe-poe-2",
+          "name": "GbE PoE+ 2",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 2,
+          "origin": "template",
+          "label": "Dante VLAN 20"
+        },
+        {
+          "id": "gbe-poe-3",
+          "name": "GbE PoE+ 3",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 3,
+          "origin": "template",
+          "label": "Dante VLAN 20"
+        },
+        {
+          "id": "gbe-poe-4",
+          "name": "GbE PoE+ 4",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 4,
+          "origin": "template",
+          "label": "Dante VLAN 20"
+        },
+        {
+          "id": "gbe-poe-5",
+          "name": "GbE PoE+ 5",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 5,
+          "origin": "template",
+          "label": "Dante VLAN 20"
+        },
+        {
+          "id": "gbe-poe-6",
+          "name": "GbE PoE+ 6",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 6,
+          "origin": "template",
+          "label": "Dante VLAN 20"
+        },
+        {
+          "id": "gbe-poe-7",
+          "name": "GbE PoE+ 7",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 7,
+          "origin": "template",
+          "label": "Control VLAN 30"
+        },
+        {
+          "id": "gbe-poe-8",
+          "name": "GbE PoE+ 8",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 8,
+          "origin": "template",
+          "label": "Control VLAN 30"
+        },
+        {
+          "id": "gbe-poe-9",
+          "name": "GbE PoE+ 9",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 9,
+          "origin": "template",
+          "label": "Control VLAN 30"
+        },
+        {
+          "id": "gbe-poe-10",
+          "name": "GbE PoE+ 10",
+          "dir": "io",
+          "medium": "sacn",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 10,
+          "origin": "template",
+          "label": "sACN VLAN 40"
+        },
+        {
+          "id": "gbe-poe-11",
+          "name": "GbE PoE+ 11",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 11,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-12",
+          "name": "GbE PoE+ 12",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 12,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-13",
+          "name": "GbE PoE+ 13",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 13,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-14",
+          "name": "GbE PoE+ 14",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 14,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-15",
+          "name": "GbE PoE+ 15",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 15,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-16",
+          "name": "GbE PoE+ 16",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 16,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-17",
+          "name": "GbE PoE+ 17",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 17,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-18",
+          "name": "GbE PoE+ 18",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 18,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-19",
+          "name": "GbE PoE+ 19",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 19,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-20",
+          "name": "GbE PoE+ 20",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 20,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-21",
+          "name": "GbE PoE+ 21",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 21,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-22",
+          "name": "GbE PoE+ 22",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 22,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-23",
+          "name": "GbE PoE+ 23",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 23,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-24",
+          "name": "GbE PoE+ 24",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 24,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-25",
+          "name": "GbE 25",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE",
+          "index": 25,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-26",
+          "name": "GbE 26",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE",
+          "index": 26,
+          "origin": "template"
+        },
+        {
+          "id": "sfp-1",
+          "name": "SFP 1",
+          "dir": "io",
+          "medium": "fiber",
+          "connector": "SFP",
+          "group": "SFP",
+          "index": 1,
+          "origin": "template",
+          "label": "Trunk to stage"
+        },
+        {
+          "id": "sfp-2",
+          "name": "SFP 2",
+          "dir": "io",
+          "medium": "network",
+          "connector": "SFP",
+          "group": "SFP",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "sfp-3",
+          "name": "SFP 3",
+          "dir": "io",
+          "medium": "network",
+          "connector": "SFP",
+          "group": "SFP",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "sfp-4",
+          "name": "SFP 4",
+          "dir": "io",
+          "medium": "network",
+          "connector": "SFP",
+          "group": "SFP",
+          "index": 4,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-network",
+      "location": "sanc-foh",
+      "flow": {
+        "group": "E",
+        "column": "dante"
+      },
+      "rack": {
+        "id": "sanc-rk-foh",
+        "u": 16,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "asset_tag": "CH-0040"
+      },
+      "interfaces": [
+        {
+          "id": "management",
+          "role": "management",
+          "ip": "10.30.0.2",
+          "network": "av-ctrl",
+          "protocol": "management"
+        }
+      ]
+    },
+    {
+      "id": "sanc-sw-stage",
+      "name": "Stage switch",
+      "kind": "switch",
+      "manufacturer": "NETGEAR",
+      "model": "M4250-26G4F-PoE+",
+      "brand": "netgear",
+      "template": "netgear-m4250-26g4f-poe",
+      "ports": [
+        {
+          "id": "gbe-poe-1",
+          "name": "GbE PoE+ 1",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 1,
+          "origin": "template",
+          "label": "Dante VLAN 20"
+        },
+        {
+          "id": "gbe-poe-2",
+          "name": "GbE PoE+ 2",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 2,
+          "origin": "template",
+          "label": "Dante VLAN 20"
+        },
+        {
+          "id": "gbe-poe-3",
+          "name": "GbE PoE+ 3",
+          "dir": "io",
+          "medium": "dante",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 3,
+          "origin": "template",
+          "label": "Dante VLAN 20"
+        },
+        {
+          "id": "gbe-poe-4",
+          "name": "GbE PoE+ 4",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-5",
+          "name": "GbE PoE+ 5",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-6",
+          "name": "GbE PoE+ 6",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-7",
+          "name": "GbE PoE+ 7",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-8",
+          "name": "GbE PoE+ 8",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 8,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-9",
+          "name": "GbE PoE+ 9",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 9,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-10",
+          "name": "GbE PoE+ 10",
+          "dir": "io",
+          "medium": "sacn",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 10,
+          "origin": "template",
+          "label": "sACN VLAN 40"
+        },
+        {
+          "id": "gbe-poe-11",
+          "name": "GbE PoE+ 11",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 11,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-12",
+          "name": "GbE PoE+ 12",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 12,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-13",
+          "name": "GbE PoE+ 13",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 13,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-14",
+          "name": "GbE PoE+ 14",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 14,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-15",
+          "name": "GbE PoE+ 15",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 15,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-16",
+          "name": "GbE PoE+ 16",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 16,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-17",
+          "name": "GbE PoE+ 17",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 17,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-18",
+          "name": "GbE PoE+ 18",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 18,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-19",
+          "name": "GbE PoE+ 19",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 19,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-20",
+          "name": "GbE PoE+ 20",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 20,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-21",
+          "name": "GbE PoE+ 21",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 21,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-22",
+          "name": "GbE PoE+ 22",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 22,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-23",
+          "name": "GbE PoE+ 23",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 23,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-poe-24",
+          "name": "GbE PoE+ 24",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE PoE+",
+          "index": 24,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-25",
+          "name": "GbE 25",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE",
+          "index": 25,
+          "origin": "template"
+        },
+        {
+          "id": "gbe-26",
+          "name": "GbE 26",
+          "dir": "io",
+          "medium": "network",
+          "connector": "RJ45",
+          "group": "GbE",
+          "index": 26,
+          "origin": "template"
+        },
+        {
+          "id": "sfp-1",
+          "name": "SFP 1",
+          "dir": "io",
+          "medium": "fiber",
+          "connector": "SFP",
+          "group": "SFP",
+          "index": 1,
+          "origin": "template",
+          "label": "Trunk to FOH"
+        },
+        {
+          "id": "sfp-2",
+          "name": "SFP 2",
+          "dir": "io",
+          "medium": "network",
+          "connector": "SFP",
+          "group": "SFP",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "sfp-3",
+          "name": "SFP 3",
+          "dir": "io",
+          "medium": "network",
+          "connector": "SFP",
+          "group": "SFP",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "sfp-4",
+          "name": "SFP 4",
+          "dir": "io",
+          "medium": "network",
+          "connector": "SFP",
+          "group": "SFP",
+          "index": 4,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-network",
+      "location": "sanc-stage",
+      "flow": {
+        "group": "E",
+        "column": "dante"
+      },
+      "rack": {
+        "id": "sanc-rk-stage",
+        "u": 12,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good",
+        "asset_tag": "CH-0041"
+      },
+      "interfaces": [
+        {
+          "id": "management",
+          "role": "management",
+          "ip": "10.30.0.3",
+          "network": "av-ctrl",
+          "protocol": "management"
+        }
+      ]
+    },
+    {
+      "id": "sanc-pdu-foh",
+      "name": "FOH PDU",
+      "kind": "power",
+      "manufacturer": "Generic",
+      "model": "PDU 8-outlet",
+      "template": "generic-pdu-8",
+      "ports": [
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Power In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-1",
+          "name": "Outlet 1",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-2",
+          "name": "Outlet 2",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-3",
+          "name": "Outlet 3",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-4",
+          "name": "Outlet 4",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-5",
+          "name": "Outlet 5",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-6",
+          "name": "Outlet 6",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-7",
+          "name": "Outlet 7",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-8",
+          "name": "Outlet 8",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 8,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-network",
+      "location": "sanc-foh",
+      "flow": {
+        "group": "E",
+        "column": "mix"
+      },
+      "rack": {
+        "id": "sanc-rk-foh",
+        "u": 1,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    },
+    {
+      "id": "sanc-pdu-amp",
+      "name": "Amp room PDU",
+      "kind": "power",
+      "manufacturer": "Generic",
+      "model": "PDU 8-outlet",
+      "template": "generic-pdu-8",
+      "ports": [
+        {
+          "id": "power-in",
+          "name": "Power In",
+          "dir": "in",
+          "medium": "power",
+          "connector": "IEC C14",
+          "group": "Power In",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-1",
+          "name": "Outlet 1",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 1,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-2",
+          "name": "Outlet 2",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 2,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-3",
+          "name": "Outlet 3",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 3,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-4",
+          "name": "Outlet 4",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 4,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-5",
+          "name": "Outlet 5",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 5,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-6",
+          "name": "Outlet 6",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 6,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-7",
+          "name": "Outlet 7",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 7,
+          "origin": "template"
+        },
+        {
+          "id": "outlet-8",
+          "name": "Outlet 8",
+          "dir": "out",
+          "medium": "power",
+          "connector": "IEC C13",
+          "group": "Outlet",
+          "index": 8,
+          "origin": "template"
+        }
+      ],
+      "room": "sanc",
+      "system": "sanc-network",
+      "location": "sanc-amp-room",
+      "flow": {
+        "group": "G",
+        "column": "amps"
+      },
+      "rack": {
+        "id": "sanc-rk-amp",
+        "u": 1,
+        "height": 1,
+        "face": "front"
+      },
+      "inventory": {
+        "condition": "good"
+      }
+    }
+  ],
+  "cables": [
+    {
+      "id": "sanc-c-0001",
+      "from": {
+        "device": "sanc-stage-mics",
+        "port": "out-1"
+      },
+      "to": {
+        "device": "sanc-stagebox",
+        "port": "analog-in-1"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 15.0,
+      "bundle": "sanc-loom-stage",
+      "tag": "SANC-A-001"
+    },
+    {
+      "id": "sanc-c-0002",
+      "from": {
+        "device": "sanc-stage-mics",
+        "port": "out-2"
+      },
+      "to": {
+        "device": "sanc-stagebox",
+        "port": "analog-in-2"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 15.0,
+      "bundle": "sanc-loom-stage",
+      "tag": "SANC-A-002"
+    },
+    {
+      "id": "sanc-c-0003",
+      "from": {
+        "device": "sanc-stage-mics",
+        "port": "out-3"
+      },
+      "to": {
+        "device": "sanc-stagebox",
+        "port": "analog-in-3"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 15.0,
+      "bundle": "sanc-loom-stage",
+      "tag": "SANC-A-003"
+    },
+    {
+      "id": "sanc-c-0004",
+      "from": {
+        "device": "sanc-stage-mics",
+        "port": "out-4"
+      },
+      "to": {
+        "device": "sanc-stagebox",
+        "port": "analog-in-4"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 15.0,
+      "bundle": "sanc-loom-stage",
+      "tag": "SANC-A-004"
+    },
+    {
+      "id": "sanc-c-0005",
+      "from": {
+        "device": "sanc-stage-mics",
+        "port": "out-5"
+      },
+      "to": {
+        "device": "sanc-stagebox",
+        "port": "analog-in-5"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 15.0,
+      "bundle": "sanc-loom-stage",
+      "tag": "SANC-A-005"
+    },
+    {
+      "id": "sanc-c-0006",
+      "from": {
+        "device": "sanc-stage-mics",
+        "port": "out-6"
+      },
+      "to": {
+        "device": "sanc-stagebox",
+        "port": "analog-in-6"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 15.0,
+      "bundle": "sanc-loom-stage",
+      "tag": "SANC-A-006"
+    },
+    {
+      "id": "sanc-c-0007",
+      "from": {
+        "device": "sanc-stage-mics",
+        "port": "out-7"
+      },
+      "to": {
+        "device": "sanc-stagebox",
+        "port": "analog-in-7"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 15.0,
+      "bundle": "sanc-loom-stage",
+      "tag": "SANC-A-007"
+    },
+    {
+      "id": "sanc-c-0008",
+      "from": {
+        "device": "sanc-stage-mics",
+        "port": "out-8"
+      },
+      "to": {
+        "device": "sanc-stagebox",
+        "port": "analog-in-8"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 15.0,
+      "bundle": "sanc-loom-stage",
+      "tag": "SANC-A-008"
+    },
+    {
+      "id": "sanc-c-0009",
+      "from": {
+        "device": "sanc-pulpit-mic",
+        "port": "mic-out"
+      },
+      "to": {
+        "device": "sanc-stagebox",
+        "port": "analog-in-9"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 12.0,
+      "tag": "SANC-A-009"
+    },
+    {
+      "id": "sanc-c-0010",
+      "from": {
+        "device": "sanc-handhelds",
+        "port": "rf-out"
+      },
+      "to": {
+        "device": "sanc-wrx-1",
+        "port": "antenna-a"
+      },
+      "medium": "rf",
+      "label": "RF",
+      "tag": "SANC-A-010"
+    },
+    {
+      "id": "sanc-c-0011",
+      "from": {
+        "device": "sanc-bodypacks",
+        "port": "rf-out"
+      },
+      "to": {
+        "device": "sanc-wrx-3",
+        "port": "antenna-a"
+      },
+      "medium": "rf",
+      "label": "RF",
+      "tag": "SANC-A-011"
+    },
+    {
+      "id": "sanc-c-0012",
+      "from": {
+        "device": "sanc-stagebox",
+        "port": "dante-primary"
+      },
+      "to": {
+        "device": "sanc-sw-stage",
+        "port": "gbe-poe-1"
+      },
+      "medium": "dante",
+      "type": "Cat6 STP",
+      "length_m": 3.0,
+      "signal": "Dante primary",
+      "tag": "SANC-A-012"
+    },
+    {
+      "id": "sanc-c-0013",
+      "from": {
+        "device": "sanc-console",
+        "port": "dante-primary"
+      },
+      "to": {
+        "device": "sanc-sw-foh",
+        "port": "gbe-poe-1"
+      },
+      "medium": "dante",
+      "type": "Cat6 STP",
+      "length_m": 2.0,
+      "signal": "Dante primary",
+      "tag": "SANC-A-013"
+    },
+    {
+      "id": "sanc-c-0014",
+      "from": {
+        "device": "sanc-wrx-1",
+        "port": "dante-primary"
+      },
+      "to": {
+        "device": "sanc-sw-foh",
+        "port": "gbe-poe-2"
+      },
+      "medium": "dante",
+      "type": "Cat6 STP",
+      "length_m": 1.0,
+      "tag": "SANC-A-014"
+    },
+    {
+      "id": "sanc-c-0015",
+      "from": {
+        "device": "sanc-wrx-2",
+        "port": "dante-primary"
+      },
+      "to": {
+        "device": "sanc-sw-foh",
+        "port": "gbe-poe-3"
+      },
+      "medium": "dante",
+      "type": "Cat6 STP",
+      "length_m": 1.0,
+      "tag": "SANC-A-015"
+    },
+    {
+      "id": "sanc-c-0016",
+      "from": {
+        "device": "sanc-wrx-3",
+        "port": "dante-primary"
+      },
+      "to": {
+        "device": "sanc-sw-foh",
+        "port": "gbe-poe-4"
+      },
+      "medium": "dante",
+      "type": "Cat6 STP",
+      "length_m": 1.0,
+      "tag": "SANC-A-016"
+    },
+    {
+      "id": "sanc-c-0017",
+      "from": {
+        "device": "sanc-wrx-4",
+        "port": "dante-primary"
+      },
+      "to": {
+        "device": "sanc-sw-foh",
+        "port": "gbe-poe-5"
+      },
+      "medium": "dante",
+      "type": "Cat6 STP",
+      "length_m": 1.0,
+      "tag": "SANC-A-017"
+    },
+    {
+      "id": "sanc-c-0018",
+      "from": {
+        "device": "sanc-playback",
+        "port": "dante"
+      },
+      "to": {
+        "device": "sanc-sw-foh",
+        "port": "gbe-poe-6"
+      },
+      "medium": "dante",
+      "type": "Cat6",
+      "length_m": 2.0,
+      "signal": "DVS 8×8",
+      "tag": "SANC-A-018"
+    },
+    {
+      "id": "sanc-c-0019",
+      "from": {
+        "device": "sanc-dsp",
+        "port": "dante-primary"
+      },
+      "to": {
+        "device": "sanc-sw-stage",
+        "port": "gbe-poe-2"
+      },
+      "medium": "dante",
+      "type": "Cat6 STP",
+      "length_m": 20.0,
+      "tag": "SANC-A-019"
+    },
+    {
+      "id": "sanc-c-0020",
+      "from": {
+        "device": "sanc-amp-main",
+        "port": "dante-primary"
+      },
+      "to": {
+        "device": "sanc-sw-stage",
+        "port": "gbe-poe-3"
+      },
+      "medium": "dante",
+      "type": "Cat6 STP",
+      "length_m": 20.0,
+      "tag": "SANC-A-020"
+    },
+    {
+      "id": "sanc-c-0021",
+      "from": {
+        "device": "sanc-stagebox",
+        "port": "analog-out-1"
+      },
+      "to": {
+        "device": "sanc-iem-1",
+        "port": "audio-in-ch1-l"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 1.0,
+      "signal": "IEM mix 1",
+      "tag": "SANC-A-021"
+    },
+    {
+      "id": "sanc-c-0022",
+      "from": {
+        "device": "sanc-stagebox",
+        "port": "analog-out-2"
+      },
+      "to": {
+        "device": "sanc-iem-1",
+        "port": "audio-in-ch2-l"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 1.0,
+      "signal": "IEM mix 2",
+      "tag": "SANC-A-022"
+    },
+    {
+      "id": "sanc-c-0023",
+      "from": {
+        "device": "sanc-stagebox",
+        "port": "analog-out-3"
+      },
+      "to": {
+        "device": "sanc-iem-2",
+        "port": "audio-in-ch1-l"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 1.0,
+      "signal": "IEM mix 3",
+      "tag": "SANC-A-023"
+    },
+    {
+      "id": "sanc-c-0024",
+      "from": {
+        "device": "sanc-stagebox",
+        "port": "analog-out-4"
+      },
+      "to": {
+        "device": "sanc-iem-2",
+        "port": "audio-in-ch2-l"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 1.0,
+      "signal": "IEM mix 4",
+      "tag": "SANC-A-024"
+    },
+    {
+      "id": "sanc-c-0025",
+      "from": {
+        "device": "sanc-amp-main",
+        "port": "speaker-out-1"
+      },
+      "to": {
+        "device": "sanc-main-l",
+        "port": "input"
+      },
+      "medium": "speaker",
+      "type": "NL4 4×4 mm²",
+      "length_m": 30.0,
+      "signal": "Main L",
+      "tag": "SANC-A-025"
+    },
+    {
+      "id": "sanc-c-0026",
+      "from": {
+        "device": "sanc-amp-main",
+        "port": "speaker-out-2"
+      },
+      "to": {
+        "device": "sanc-main-r",
+        "port": "input"
+      },
+      "medium": "speaker",
+      "type": "NL4 4×4 mm²",
+      "length_m": 30.0,
+      "signal": "Main R",
+      "tag": "SANC-A-026"
+    },
+    {
+      "id": "sanc-c-0027",
+      "from": {
+        "device": "sanc-amp-main",
+        "port": "speaker-out-3"
+      },
+      "to": {
+        "device": "sanc-subs",
+        "port": "input"
+      },
+      "medium": "speaker",
+      "type": "NL4 4×4 mm²",
+      "length_m": 25.0,
+      "signal": "Subs",
+      "tag": "SANC-A-027"
+    },
+    {
+      "id": "sanc-c-0028",
+      "from": {
+        "device": "sanc-dsp",
+        "port": "analog-out-1"
+      },
+      "to": {
+        "device": "sanc-amp-fill",
+        "port": "input-1"
+      },
+      "medium": "analog",
+      "type": "XLR3 M-F",
+      "length_m": 1.0,
+      "signal": "Front fill",
+      "tag": "SANC-A-028"
+    },
+    {
+      "id": "sanc-c-0029",
+      "from": {
+        "device": "sanc-amp-fill",
+        "port": "output-1"
+      },
+      "to": {
+        "device": "sanc-fills",
+        "port": "input"
+      },
+      "medium": "speaker",
+      "type": "NL4 2×2.5 mm²",
+      "length_m": 25.0,
+      "signal": "Front fills",
+      "tag": "SANC-A-029"
+    },
+    {
+      "id": "sanc-c-0030",
+      "from": {
+        "device": "sanc-cam-1",
+        "port": "sdi-out-3g"
+      },
+      "to": {
+        "device": "sanc-switcher",
+        "port": "sdi-in-1"
+      },
+      "medium": "sdi",
+      "type": "RG6 3G-SDI",
+      "length_m": 40.0,
+      "signal": "CAM 1",
+      "tag": "SANC-V-001"
+    },
+    {
+      "id": "sanc-c-0031",
+      "from": {
+        "device": "sanc-cam-2",
+        "port": "sdi-out-3g"
+      },
+      "to": {
+        "device": "sanc-switcher",
+        "port": "sdi-in-2"
+      },
+      "medium": "sdi",
+      "type": "RG6 3G-SDI",
+      "length_m": 45.0,
+      "signal": "CAM 2",
+      "tag": "SANC-V-002"
+    },
+    {
+      "id": "sanc-c-0032",
+      "from": {
+        "device": "sanc-playback",
+        "port": "sdi-out"
+      },
+      "to": {
+        "device": "sanc-switcher",
+        "port": "sdi-in-3"
+      },
+      "medium": "sdi",
+      "type": "RG59 3G-SDI",
+      "length_m": 2.0,
+      "signal": "Lyrics",
+      "tag": "SANC-V-003"
+    },
+    {
+      "id": "sanc-c-0033",
+      "from": {
+        "device": "sanc-switcher",
+        "port": "sdi-out-1"
+      },
+      "to": {
+        "device": "sanc-proj-l",
+        "port": "sdi-in"
+      },
+      "medium": "sdi",
+      "type": "RG6 3G-SDI",
+      "length_m": 35.0,
+      "signal": "PGM",
+      "tag": "SANC-V-004"
+    },
+    {
+      "id": "sanc-c-0034",
+      "from": {
+        "device": "sanc-switcher",
+        "port": "sdi-out-2"
+      },
+      "to": {
+        "device": "sanc-proj-r",
+        "port": "sdi-in"
+      },
+      "medium": "sdi",
+      "type": "RG6 3G-SDI",
+      "length_m": 35.0,
+      "signal": "PGM",
+      "tag": "SANC-V-005"
+    },
+    {
+      "id": "sanc-c-0035",
+      "from": {
+        "device": "sanc-switcher",
+        "port": "sdi-out-3"
+      },
+      "to": {
+        "device": "sanc-conf-conv",
+        "port": "sdi-in"
+      },
+      "medium": "sdi",
+      "type": "RG6 3G-SDI",
+      "length_m": 30.0,
+      "signal": "AUX 1 (lyrics)",
+      "tag": "SANC-V-006"
+    },
+    {
+      "id": "sanc-c-0036",
+      "from": {
+        "device": "sanc-conf-conv",
+        "port": "hdmi-out"
+      },
+      "to": {
+        "device": "sanc-confidence",
+        "port": "hdmi-in-1"
+      },
+      "medium": "hdmi",
+      "type": "HDMI 2.0",
+      "length_m": 2.0,
+      "tag": "SANC-V-007"
+    },
+    {
+      "id": "sanc-c-0037",
+      "from": {
+        "device": "sanc-cam-1",
+        "port": "network"
+      },
+      "to": {
+        "device": "sanc-sw-foh",
+        "port": "gbe-poe-7"
+      },
+      "medium": "network",
+      "type": "Cat6",
+      "length_m": 40.0,
+      "signal": "PTZ control + PoE",
+      "tag": "SANC-N-001"
+    },
+    {
+      "id": "sanc-c-0038",
+      "from": {
+        "device": "sanc-cam-2",
+        "port": "network"
+      },
+      "to": {
+        "device": "sanc-sw-foh",
+        "port": "gbe-poe-8"
+      },
+      "medium": "network",
+      "type": "Cat6",
+      "length_m": 45.0,
+      "signal": "PTZ control + PoE",
+      "tag": "SANC-N-002"
+    },
+    {
+      "id": "sanc-c-0039",
+      "from": {
+        "device": "sanc-switcher",
+        "port": "ethernet"
+      },
+      "to": {
+        "device": "sanc-sw-foh",
+        "port": "gbe-poe-9"
+      },
+      "medium": "network",
+      "type": "Cat6",
+      "length_m": 1.0,
+      "tag": "SANC-N-003"
+    },
+    {
+      "id": "sanc-c-0040",
+      "from": {
+        "device": "sanc-lx-console",
+        "port": "ethernet"
+      },
+      "to": {
+        "device": "sanc-sw-foh",
+        "port": "gbe-poe-10"
+      },
+      "medium": "sacn",
+      "type": "Cat6",
+      "length_m": 2.0,
+      "signal": "sACN",
+      "tag": "SANC-L-001"
+    },
+    {
+      "id": "sanc-c-0041",
+      "from": {
+        "device": "sanc-dmx-node",
+        "port": "network-1"
+      },
+      "to": {
+        "device": "sanc-sw-stage",
+        "port": "gbe-poe-10"
+      },
+      "medium": "sacn",
+      "type": "Cat6",
+      "length_m": 1.0,
+      "signal": "sACN",
+      "tag": "SANC-L-002"
+    },
+    {
+      "id": "sanc-c-0042",
+      "from": {
+        "device": "sanc-dmx-node",
+        "port": "dmx-port-1"
+      },
+      "to": {
+        "device": "sanc-lx-1",
+        "port": "dmx-in"
+      },
+      "medium": "dmx",
+      "type": "DMX 5-pin",
+      "length_m": 10.0,
+      "tag": "SANC-L-003"
+    },
+    {
+      "id": "sanc-c-0043",
+      "from": {
+        "device": "sanc-lx-1",
+        "port": "dmx-thru"
+      },
+      "to": {
+        "device": "sanc-lx-2",
+        "port": "dmx-in"
+      },
+      "medium": "dmx",
+      "type": "DMX 5-pin",
+      "length_m": 10.0,
+      "tag": "SANC-L-004"
+    },
+    {
+      "id": "sanc-c-0044",
+      "from": {
+        "device": "sanc-lx-2",
+        "port": "dmx-thru"
+      },
+      "to": {
+        "device": "sanc-lx-3",
+        "port": "dmx-in"
+      },
+      "medium": "dmx",
+      "type": "DMX 5-pin",
+      "length_m": 10.0,
+      "tag": "SANC-L-005"
+    },
+    {
+      "id": "sanc-c-0045",
+      "from": {
+        "device": "sanc-lx-3",
+        "port": "dmx-thru"
+      },
+      "to": {
+        "device": "sanc-lx-4",
+        "port": "dmx-in"
+      },
+      "medium": "dmx",
+      "type": "DMX 5-pin",
+      "length_m": 10.0,
+      "tag": "SANC-L-006"
+    },
+    {
+      "id": "sanc-c-0046",
+      "from": {
+        "device": "sanc-dmx-node",
+        "port": "dmx-port-2"
+      },
+      "to": {
+        "device": "sanc-lx-5",
+        "port": "dmx-in"
+      },
+      "medium": "dmx",
+      "type": "DMX 5-pin",
+      "length_m": 10.0,
+      "tag": "SANC-L-007"
+    },
+    {
+      "id": "sanc-c-0047",
+      "from": {
+        "device": "sanc-lx-5",
+        "port": "dmx-thru"
+      },
+      "to": {
+        "device": "sanc-lx-6",
+        "port": "dmx-in"
+      },
+      "medium": "dmx",
+      "type": "DMX 5-pin",
+      "length_m": 10.0,
+      "tag": "SANC-L-008"
+    },
+    {
+      "id": "sanc-c-0048",
+      "from": {
+        "device": "sanc-lx-6",
+        "port": "dmx-thru"
+      },
+      "to": {
+        "device": "sanc-lx-7",
+        "port": "dmx-in"
+      },
+      "medium": "dmx",
+      "type": "DMX 5-pin",
+      "length_m": 10.0,
+      "tag": "SANC-L-009"
+    },
+    {
+      "id": "sanc-c-0049",
+      "from": {
+        "device": "sanc-lx-7",
+        "port": "dmx-thru"
+      },
+      "to": {
+        "device": "sanc-lx-8",
+        "port": "dmx-in"
+      },
+      "medium": "dmx",
+      "type": "DMX 5-pin",
+      "length_m": 10.0,
+      "tag": "SANC-L-010"
+    },
+    {
+      "id": "sanc-c-0050",
+      "from": {
+        "device": "sanc-sw-foh",
+        "port": "sfp-1"
+      },
+      "to": {
+        "device": "sanc-sw-stage",
+        "port": "sfp-1"
+      },
+      "medium": "fiber",
+      "type": "OM3 LC duplex",
+      "length_m": 60.0,
+      "signal": "Trunk (all VLANs)",
+      "tag": "SANC-X-001"
+    },
+    {
+      "id": "sanc-c-0051",
+      "from": {
+        "device": "sanc-pdu-amp",
+        "port": "outlet-1"
+      },
+      "to": {
+        "device": "sanc-dsp",
+        "port": "mains-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 1.0,
+      "tag": "SANC-P-001"
+    },
+    {
+      "id": "sanc-c-0052",
+      "from": {
+        "device": "sanc-pdu-amp",
+        "port": "outlet-2"
+      },
+      "to": {
+        "device": "sanc-amp-fill",
+        "port": "mains-in"
+      },
+      "medium": "power",
+      "type": "IEC C13",
+      "length_m": 1.0,
+      "tag": "SANC-P-002"
+    }
+  ],
+  "bundles": [
+    {
+      "id": "sanc-loom-stage",
+      "kind": "multicore",
+      "type": "8-ch XLR loom",
+      "length_m": 15.0,
+      "medium": "analog",
+      "label": "Stage loom",
+      "tag": "SANC-A-030"
+    }
+  ],
+  "floorplans": [],
+  "attachments": [],
+  "templates": [],
+  "imports": [],
+  "pages": [
+    {
+      "id": "sanc-pg-sunday-power-up",
+      "slug": "sanc-sunday-power-up",
+      "title": "Sunday power-up: Sanctuary",
+      "kind": "sop",
+      "status": "published",
+      "order": 1,
+      "summary": "Bring the sanctuary AVL system up for a service (about 10 minutes). Amps last on, first off.",
+      "tags": [
+        "sunday",
+        "power"
+      ],
+      "rooms": [
+        "sanc"
+      ],
+      "devices": [
+        "sanc-pdu-foh",
+        "sanc-pdu-amp",
+        "sanc-stagebox",
+        "sanc-console",
+        "sanc-dsp",
+        "sanc-amp-main",
+        "sanc-amp-fill",
+        "sanc-switcher",
+        "sanc-proj-l",
+        "sanc-proj-r",
+        "sanc-lx-console"
+      ],
+      "review_due": "2027-09-01",
+      "body": "Follow the steps in order for the [[room:sanc]].\n\n> [!WARNING]\n> Never power the amps while the console is still booting.\n\n## 1. Power and network\n\n- [ ] Switch on [[device:sanc-pdu-foh]] (master switch on the rear of the FOH rack).\n- [ ] Switch on [[device:sanc-pdu-amp]] in the amp room.\n- [ ] Wait until the link lights on [[device:sanc-sw-foh]] and [[device:sanc-sw-stage]] are green.\n\n## 2. Audio\n\n- [ ] Power on [[device:sanc-stagebox]] — the Dante sync LED goes solid green.\n- [ ] Power on [[device:sanc-console]] and recall the scene `SUNDAY AM`.\n- [ ] Check the master fader is at **-inf**.\n- [ ] Power on [[device:sanc-dsp]], then [[device:sanc-amp-main]] and [[device:sanc-amp-fill]].\n- [ ] Switch on the four receivers [[device:sanc-wrx-1]] … [[device:sanc-wrx-4]] and check RF on each handheld.\n\n## 3. Video\n\n- [ ] Power on [[device:sanc-switcher]]; select input **3 (Lyrics)**.\n- [ ] Power on [[device:sanc-proj-l]] and [[device:sanc-proj-r]] with the remote and wait for warm-up.\n- [ ] Confirm lyrics appear on [[device:sanc-confidence]].\n\n## 4. Lighting\n\n- [ ] Power on [[device:sanc-lx-console]] and load the show `Sunday`.\n- [ ] Run cue **1 – House full**.\n\n## Done\n\nPlay a track from [[device:sanc-playback]] at a low level and walk the room.\n",
+      "created": "2026-10-01T09:00:00Z",
+      "updated": "2026-10-01T09:00:00Z",
+      "updated_by": "starter",
+      "owner": "starter"
+    }
+  ],
+  "problems": []
+}
