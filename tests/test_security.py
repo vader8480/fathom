@@ -82,9 +82,14 @@ SPEC_ROLES = {
     ("PATCH", "/api/v2/projects/{}/scenes/{}"): "editor", ("DELETE", "/api/v2/projects/{}/scenes/{}"): "editor",
     ("POST", "/api/v2/projects/{}/scenes/{}/activate"): "editor", ("POST", "/api/v2/projects/{}/scenes/{}/save"): "editor",
     ("GET", "/api/v2/projects/{}/scenes/{}/diff"): "viewer", ("GET", "/api/v2/projects/{}/scenes/{}/doc"): "viewer",
+    # phase4 P4A
+    ("GET", "/api/v2/llm/providers"): "viewer", ("GET", "/api/v2/llm/settings"): "admin", ("PUT", "/api/v2/llm/settings"): "admin",
+    ("POST", "/api/v2/llm/models"): "admin", ("POST", "/api/v2/llm/test"): "admin",
     # phase1 P1B
     ("GET", "/api/v2/labels/presets"): "viewer", ("GET", "/api/v2/projects/{}/labels/devices"): "viewer",
     ("GET", "/api/v2/projects/{}/search"): "viewer", ("POST", "/api/v2/projects/{}/assistant"): "viewer",
+    # phase4 P4B
+    ("POST", "/api/v2/projects/{}/assistant/apply"): "editor",
     ("GET", "/api/v2/projects/{}/pages"): "viewer", ("POST", "/api/v2/projects/{}/pages/preview"): "editor",
     ("GET", "/api/v2/projects/{}/pages/{}"): "viewer", ("PUT", "/api/v2/projects/{}/pages/{}"): "editor",
     ("DELETE", "/api/v2/projects/{}/pages/{}"): "editor", ("POST", "/api/v2/projects/{}/pages/{}/move"): "editor",

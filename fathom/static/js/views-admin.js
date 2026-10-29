@@ -11,7 +11,7 @@ import { openWizard } from './wizard.js';
 import { slug, newId, deepClone } from './model-core.js';
 import { suggestionControl, applyChoice } from './suggest-ui.js';
 
-function msg(e) { return (e && e.message) || String(e); }
+function msg(e) { return (e && e.details && typeof e.details.detail === 'string' && e.details.detail) || (e && e.message) || String(e); }
 function fmtTime(s) {
   if (!s) return '';
   const d = new Date(s);
@@ -917,8 +917,14 @@ function crudTable(ctx, coll, cols, opts) {
 const SETTINGS_TABS = [
   ['project', 'Project'], ['rooms', 'Venues & rooms'], ['systems', 'Systems'], ['locations', 'Locations'], ['networks', 'Networks'],
   ['templates', 'Templates'], ['users', 'Users'], ['invites', 'Invites'], ['backups', 'Backups'], ['sharing', 'Sharing'], ['suggestions', 'Suggestions'],
-  ['offline', 'Offline'], ['trash', 'Trash'],
+  ['assistant', 'Assistant'], ['offline', 'Offline'], ['trash', 'Trash'],
 ];
+// Settings › Assistant (P4C): provider labels in the order the select shows them, env variable names
+// for the "Set by environment" hint, and the local-server presets used when the catalogue has none.
+const LLM_LABELS = { openai: 'OpenAI', anthropic: 'Anthropic', xai: 'xAI Grok', openai_compat: 'Local / OpenAI-compatible server' };
+const LLM_ENV = { base_url: 'FATHOM_LLM_URL', api_key: 'FATHOM_LLM_API_KEY', provider: 'FATHOM_LLM_PROVIDER', model: 'FATHOM_LLM_MODEL', api: 'FATHOM_LLM_API',
+  temperature: 'FATHOM_LLM_TEMPERATURE', max_tokens: 'FATHOM_LLM_MAX_TOKENS', web_lookup: 'FATHOM_LLM_WEB_LOOKUP', daily_cap: 'FATHOM_LLM_DAILY_CAP' };
+const LLM_PRESETS = [['ollama', 'Ollama', 'http://localhost:11434/v1'], ['lmstudio', 'LM Studio', 'http://localhost:1234/v1'], ['vllm', 'vLLM', 'http://localhost:8000/v1'], ['llamacpp', 'llama.cpp', 'http://localhost:8080/v1']];
 const INVITE_TTL = [['24', '24 hours'], ['72', '72 hours'], ['168', '7 days']];
 
 function isoIn(days) {
@@ -1812,6 +1818,245 @@ export function mountSettings(el, ctx) {
     };
   }
 
+  // Settings › Assistant (P4C, admin): the language model behind the Helper. Reads the provider
+  // catalogue and the saved settings from the P4A endpoints; a server without them (404) shows a
+  // note instead of the form. Fields the server marks `source: env` are disabled with a hint.
+  function assistantPanel() {
+    if (!ctx.api || !ctx.api.llmProviders) return needsServer();
+    const host = h('div', { class: 'adm-llm', 'data-card': 'llm-host' });
+    const state = h('div', { class: 'adm-state', 'aria-live': 'polite' });
+    host.appendChild(state);
+    state.appendChild(skeleton('cards', 2));
+    let providers = [];
+    let settings = null;
+    let clearKey = false;
+    let lastDefault = '';
+
+    function providerOf(id) { return providers.filter(function (p) { return p.id === id; })[0] || null; }
+    function labelOf(p) { return p.label || LLM_LABELS[p.id] || p.id; }
+    function fromEnv(field) { return !!(settings && settings.source && settings.source[field] === 'env'); }
+    function envHint(field) { return h('div', { class: 'muted adm-llm-env', 'data-env': field }, 'Set by environment (' + (LLM_ENV[field] || ('FATHOM_LLM_' + field.toUpperCase())) + ')'); }
+    function field(label, input, key, extra) {
+      const wrap = fld(label, h('div', { class: 'adm-llm-field' }, [input].concat(extra || [])));
+      if (key && fromEnv(key)) {
+        input.disabled = true;
+        wrap.classList.add('adm-llm-from-env');
+        wrap.lastChild.appendChild(envHint(key));
+      }
+      return wrap;
+    }
+    function presetsOf(p) {
+      const given = (p && p.presets) || {};
+      return LLM_PRESETS.map(function (x) { return { id: x[0], label: x[1], url: given[x[0]] || x[2] }; });
+    }
+
+    function form() {
+      const s = settings || {};
+      const provSel = h('select', { id: 'adm-llm-provider', 'aria-label': 'Provider' }, providers.map(function (p) { return h('option', { value: p.id, selected: p.id === s.provider ? true : null }, labelOf(p)); }));
+      if (!providerOf(s.provider) && providers.length) provSel.value = providers[0].id;
+      const url = h('input', { id: 'adm-llm-url', type: 'url', inputmode: 'url', autocomplete: 'off', spellcheck: 'false', placeholder: 'https://…', value: s.base_url || '' });
+      const presets = h('div', { class: 'row adm-llm-presets', role: 'group', 'aria-label': 'Local server presets' });
+      const key = h('input', { id: 'adm-llm-key', type: 'password', autocomplete: 'new-password', placeholder: s.api_key_set ? 'Stored' : 'Paste the API key', 'aria-label': 'API key' });
+      const keyClear = h('button', { type: 'button', class: 'small ghost adm-llm-clear-key', 'data-act': 'clear-key' }, 'Clear key');
+      const keyState = h('span', { class: 'muted adm-llm-key-state' }, s.api_key_set ? 'A key is stored; typing replaces it.' : 'No key stored.');
+      const apiSel = h('select', { id: 'adm-llm-api', 'aria-label': 'OpenAI API' }, [['chat', 'Chat Completions'], ['responses', 'Responses']].map(function (o) { return h('option', { value: o[0], selected: (s.api || 'chat') === o[0] ? true : null }, o[1]); }));
+      const model = h('input', { id: 'adm-llm-model', list: 'adm-llm-models', autocomplete: 'off', spellcheck: 'false', placeholder: 'e.g. gpt-4o-mini', value: s.model || '' });
+      const models = h('datalist', { id: 'adm-llm-models' });
+      const fetchBtn = h('button', { type: 'button', class: 'small', 'data-act': 'fetch-models' }, 'Fetch models');
+      const modelsErr = errSlot('adm-llm-models-err');
+      const temp = h('input', { id: 'adm-llm-temp', type: 'number', inputmode: 'decimal', step: '0.1', min: '0', max: '2', value: s.temperature === undefined || s.temperature === null ? '' : String(s.temperature) });
+      const maxTok = h('input', { id: 'adm-llm-max', type: 'number', inputmode: 'numeric', step: '1', min: '1', value: s.max_tokens === undefined || s.max_tokens === null ? '' : String(s.max_tokens) });
+      const testBtn = h('button', { type: 'button', 'data-act': 'test' }, 'Test connection');
+      const testOut = h('span', { class: 'adm-llm-test-out', role: 'status', 'aria-live': 'polite' });
+      const web = h('input', { type: 'checkbox', id: 'adm-llm-web' });
+      web.checked = !!s.web_lookup;
+      const cap = h('input', { id: 'adm-llm-cap', type: 'number', inputmode: 'numeric', step: '1', min: '0', value: s.daily_cap === undefined || s.daily_cap === null ? '' : String(s.daily_cap) });
+      const save = h('button', { type: 'button', class: 'primary', 'data-act': 'save' }, 'Save');
+      const saveErr = errSlot('adm-llm-save-err');
+      const saved = h('span', { class: 'muted adm-llm-saved', role: 'status' });
+
+      const urlField = field('Base URL', url, 'base_url', [presets]);
+      const keyField = field('API key', key, 'api_key', [h('div', { class: 'row adm-llm-key-row' }, [keyState, keyClear])]);
+      const apiField = field('API', apiSel, 'api');
+      const modelField = field('Model', model, 'model', [models, h('div', { class: 'row adm-llm-model-row' }, [fetchBtn]), modelsErr.el]);
+
+      function drawPresets(p) {
+        presets.innerHTML = '';
+        presets.hidden = !p || p.id !== 'openai_compat';
+        if (presets.hidden) return;
+        presetsOf(p).forEach(function (x) {
+          presets.appendChild(h('button', { type: 'button', class: 'chip adm-llm-preset', 'data-preset': x.id, title: x.url, disabled: url.disabled ? true : null, onclick: function () {
+            url.value = x.url;
+            lastDefault = x.url;
+            url.dispatchEvent(new Event('input', { bubbles: true }));
+          } }, x.label));
+        });
+      }
+      function syncProvider(initial) {
+        const p = providerOf(provSel.value);
+        const def = (p && p.default_base_url) || '';
+        if (!url.disabled && (initial ? !url.value : (!url.value.trim() || url.value.trim() === lastDefault))) url.value = def;
+        lastDefault = def;
+        drawPresets(p);
+        apiField.hidden = !p || p.id !== 'openai';
+        const needsKey = !p || p.needs_key !== false;
+        keyField.classList.toggle('adm-llm-optional', !needsKey);
+        key.placeholder = s.api_key_set ? 'Stored' : (needsKey ? 'Paste the API key' : 'Optional for a local server');
+        fetchBtn.disabled = !(p && p.lists_models) || model.disabled;
+        fetchBtn.title = p && p.lists_models ? '' : 'This provider does not list its models; type the model name.';
+        keyClear.hidden = !s.api_key_set || clearKey || key.disabled;
+      }
+      provSel.addEventListener('change', function () { syncProvider(false); testOut.textContent = ''; });
+      keyClear.addEventListener('click', function () {
+        clearKey = true;
+        key.value = '';
+        key.placeholder = 'Paste the API key';
+        keyState.textContent = 'The stored key is removed when you save.';
+        keyClear.hidden = true;
+      });
+      key.addEventListener('input', function () { if (key.value) { clearKey = false; keyState.textContent = 'The new key is saved when you save.'; } });
+      // only a typed key travels; an untouched field keeps the stored one
+      function keyBody() {
+        const out = {};
+        if (fromEnv('api_key')) return out;
+        if (key.value) out.api_key = key.value;
+        else if (clearKey) out.clear_api_key = true;
+        return out;
+      }
+      function connBody() {
+        return Object.assign({ provider: provSel.value, base_url: url.value.trim() }, key.value ? { api_key: key.value } : {});
+      }
+      fetchBtn.addEventListener('click', function () {
+        modelsErr.clear();
+        fetchBtn.disabled = true;
+        fetchBtn.textContent = 'Fetching\u2026';
+        ctx.api.llmModels(connBody()).then(function (r) {
+          const list = (r && r.models) || [];
+          models.innerHTML = '';
+          list.forEach(function (mname) { models.appendChild(h('option', { value: typeof mname === 'string' ? mname : (mname && mname.id) || '' })); });
+          if (!list.length) modelsErr.show({ message: 'The server listed no models.', status: 200 }, null);
+          else if (!model.value) model.value = typeof list[0] === 'string' ? list[0] : (list[0].id || '');
+          model.setAttribute('data-models', String(list.length));
+        }, function (e) {
+          if (!destroyed) modelsErr.show(actErr('Could not fetch the models', e), null);
+        }).then(function () { if (destroyed) return; fetchBtn.disabled = false; fetchBtn.textContent = 'Fetch models'; });
+      });
+      testBtn.addEventListener('click', function () {
+        testBtn.disabled = true;
+        testBtn.setAttribute('aria-busy', 'true');
+        testOut.className = 'adm-llm-test-out';
+        testOut.innerHTML = '';
+        testOut.appendChild(h('span', { class: 'adm-llm-spin', 'aria-hidden': 'true' }));
+        testOut.appendChild(document.createTextNode(' Testing\u2026'));
+        ctx.api.llmTest(Object.assign(connBody(), { model: model.value.trim() })).then(function (r) {
+          if (destroyed) return;
+          r = r || {};
+          const ok = r.ok !== false;
+          testOut.className = 'adm-llm-test-out ' + (ok ? 'ok' : 'warn');
+          testOut.setAttribute('data-ok', ok ? 'true' : 'false');
+          testOut.textContent = ok
+            ? 'OK' + (r.model ? ' \u00b7 ' + r.model : '') + (typeof r.latency_ms === 'number' ? ' \u00b7 ' + Math.round(r.latency_ms) + ' ms' : '')
+            : 'Failed' + (r.detail ? ' \u00b7 ' + r.detail : '');
+        }, function (e) {
+          if (destroyed) return;
+          testOut.className = 'adm-llm-test-out warn';
+          testOut.setAttribute('data-ok', 'false');
+          testOut.textContent = 'Failed \u00b7 ' + msg(e);
+        }).then(function () { if (destroyed) return; testBtn.disabled = false; testBtn.removeAttribute('aria-busy'); });
+      });
+      function num(input, integer) {
+        const v = input.value.trim();
+        if (v === '') return null;
+        const n = Number(v);
+        if (isNaN(n)) return null;
+        return integer ? Math.round(n) : n;
+      }
+      function body() {
+        const out = {};
+        const put = function (k, v) { if (!fromEnv(k)) out[k] = v; };
+        put('provider', provSel.value);
+        put('base_url', url.value.trim());
+        put('model', model.value.trim());
+        if (provSel.value === 'openai') put('api', apiSel.value);
+        put('temperature', num(temp, false));
+        put('max_tokens', num(maxTok, true));
+        put('web_lookup', web.checked);
+        put('daily_cap', num(cap, true));
+        return Object.assign(out, keyBody());
+      }
+      const doSave = function () {
+        saveErr.clear();
+        saved.textContent = '';
+        save.disabled = true;
+        return ctx.api.saveLlmSettings(body()).then(function (r) {
+          if (destroyed) return;
+          settings = r && r.provider ? r : Object.assign({}, settings, body(), { api_key_set: key.value ? true : (clearKey ? false : s.api_key_set) });
+          clearKey = false;
+          key.value = '';
+          s.api_key_set = settings.api_key_set;
+          key.placeholder = s.api_key_set ? 'Stored' : 'Paste the API key';
+          keyState.textContent = s.api_key_set ? 'A key is stored; typing replaces it.' : 'No key stored.';
+          keyClear.hidden = !s.api_key_set;
+          saved.textContent = 'Saved';
+          ctx.toast('Assistant settings saved', 'ok');
+        }, function (e) { if (!destroyed) saveErr.show(actErr('Could not save the assistant settings', e), doSave); }).then(function () { if (!destroyed) save.disabled = false; });
+      };
+      save.addEventListener('click', doSave);
+      syncProvider(true);
+
+      const llmCard = h('section', { class: 'adm-card adm-form adm-llm-card', 'data-card': 'llm' }, [
+        h('h3', null, 'Language model'),
+        h('p', { class: 'muted adm-llm-intro' }, 'The Helper answers from the project data on its own. A model adds plain-language notes and proposals; nothing is applied without a click.'),
+        field('Provider', provSel, 'provider'),
+        urlField,
+        keyField,
+        apiField,
+        modelField,
+        field('Temperature', temp, 'temperature'),
+        field('Max tokens', maxTok, 'max_tokens'),
+        h('div', { class: 'row adm-llm-test-row' }, [testBtn, testOut]),
+      ]);
+      const behaviourCard = h('section', { class: 'adm-card adm-form adm-llm-card', 'data-card': 'behaviour' }, [
+        h('h3', null, 'Behaviour'),
+        field('Web lookup for manuals', h('label', { class: 'chk adm-llm-toggle', for: 'adm-llm-web' }, [web, h('span', null, 'Let the model look up equipment manuals online')]), 'web_lookup',
+          [h('div', { class: 'muted adm-llm-hint' }, 'When off, the assistant never contacts the internet.')]),
+        field('Daily request cap', cap, 'daily_cap', [h('div', { class: 'muted adm-llm-hint' }, 'Model requests per day for this server; 0 or empty means no cap.')]),
+      ]);
+      return [
+        h('div', { class: 'adm-grid adm-llm-grid' }, [llmCard, behaviourCard]),
+        h('div', { class: 'row adm-llm-actions' }, [save, saved]),
+        saveErr.el,
+      ];
+    }
+
+    function load() {
+      state.innerHTML = '';
+      state.appendChild(skeleton('cards', 2));
+      return Promise.all([ctx.api.llmProviders(), ctx.api.llmSettings()]).then(function (r) {
+        if (destroyed) return;
+        providers = ((r[0] && r[0].providers) || []).filter(function (p) { return p && p.id; });
+        settings = r[1] || {};
+        state.innerHTML = '';
+        if (!providers.length) {
+          host.appendChild(h('p', { class: 'muted adm-llm-missing' }, 'This server lists no language-model providers.'));
+          return;
+        }
+        form().forEach(function (n) { host.appendChild(n); });
+      }, function (e) {
+        if (destroyed) return;
+        state.innerHTML = '';
+        if (isMissing(e)) {
+          host.appendChild(h('section', { class: 'adm-card', 'data-card': 'llm-missing' }, [h('h3', null, 'Language model'),
+            h('p', { class: 'muted adm-llm-missing' }, 'This server has no language-model settings yet (it needs a newer Fathom). The Helper keeps answering from the project data; a model can be set with FATHOM_LLM_URL and FATHOM_LLM_MODEL.')]));
+          return;
+        }
+        state.appendChild(inlineError(actErr('Could not load the assistant settings', e), load));
+      });
+    }
+    load();
+    return { nodes: [h('h3', null, 'Assistant'), host], tables: [] };
+  }
+
   function offlinePanel() {
     const secure = window.isSecureContext && 'serviceWorker' in navigator;
     return { nodes: [
@@ -1821,7 +2066,7 @@ export function mountSettings(el, ctx) {
     ], tables: [] };
   }
 
-  const PANELS = { project: projectPanel, rooms: roomsPanel, systems: systemsPanel, locations: locationsPanel, networks: networksPanel, templates: templatesPanel, users: usersPanel, invites: invitesPanel, backups: backupsPanel, sharing: sharingPanel, suggestions: suggestionsPanel, offline: offlinePanel, trash: trashPanel };
+  const PANELS = { project: projectPanel, rooms: roomsPanel, systems: systemsPanel, locations: locationsPanel, networks: networksPanel, templates: templatesPanel, users: usersPanel, invites: invitesPanel, backups: backupsPanel, sharing: sharingPanel, suggestions: suggestionsPanel, assistant: assistantPanel, offline: offlinePanel, trash: trashPanel };
 
   function clearPanel() {
     if (cur) cur.tables.forEach(function (t) { t.destroy(); });

@@ -1,0 +1,28 @@
+{
+  "request": {
+    "model": "gpt-4o-mini",
+    "max_completion_tokens": 5
+  },
+  "status": 200,
+  "response": {
+    "id": "chatcmpl-p4a-1",
+    "object": "chat.completion",
+    "created": 1761670000,
+    "model": "gpt-4o-mini",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "The ATEM"
+        },
+        "finish_reason": "length"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 31,
+      "completion_tokens": 5,
+      "total_tokens": 36
+    }
+  }
+}

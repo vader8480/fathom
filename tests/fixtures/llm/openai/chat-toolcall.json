@@ -1,0 +1,70 @@
+{
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are Fathom's AV/lighting troubleshooting assistant."
+      },
+      {
+        "role": "user",
+        "content": "What feeds the ATEM Mini?"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "trace_device",
+          "description": "Trace the signal paths that end at a device.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "device": {
+                "type": "string",
+                "description": "device id"
+              }
+            },
+            "required": [
+              "device"
+            ]
+          }
+        }
+      }
+    ],
+    "tool_choice": "auto",
+    "stream": false
+  },
+  "status": 200,
+  "response": {
+    "id": "chatcmpl-p4a-1",
+    "object": "chat.completion",
+    "created": 1761670000,
+    "model": "gpt-4o-mini",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "tool_calls": [
+            {
+              "id": "call_p4a_1",
+              "type": "function",
+              "function": {
+                "name": "trace_device",
+                "arguments": "{\"device\": \"atem-mini\"}"
+              }
+            }
+          ]
+        },
+        "finish_reason": "tool_calls"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 58,
+      "completion_tokens": 17,
+      "total_tokens": 75
+    }
+  }
+}

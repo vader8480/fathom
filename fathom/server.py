@@ -93,6 +93,7 @@ SHELL_ASSETS = [
     "static/js/floorplan.js", "static/js/floorplan-core.js", "static/js/rack.js", "static/js/rack-core.js",
     "static/js/schedules.js", "static/js/inventory.js", "static/js/views-admin.js", "static/js/merge-ui.js", "static/js/views-discovery.js", "static/js/suggest-ui.js",
     "static/js/views-sop.js", "static/css/sop.css", "static/icons/icon-192.png", "manifest.webmanifest",
+    "static/js/speech.js", "static/css/assistant.css",
 ]
 SCHEDULE_KINDS = ("patch", "cables", "ip", "dmx", "bom", "inventory", "racks", "labels")
 _STATUS_TEXT = {
@@ -3441,6 +3442,88 @@ def r_search(req: Request) -> Response:
     return Response.json({"hits": hits})
 
 
+# ---- LLM providers and assistant settings (phase4 P4A; SPEC §5.10 "Assistant settings", §6.9.6a)
+
+
+def _llm_upstream(detail: str, extra: Optional[Dict[str, Any]] = None) -> Response:
+    body: Dict[str, Any] = {"error": "upstream", "code": "upstream", "detail": str(detail or "")[:500]}
+    if extra:
+        body.update(extra)
+    return Response.json(body, 502)
+
+
+def _llm_probe(req: Request) -> Any:
+    """Provider instance for the models/test routes: effective config overlaid with unsaved form values (never the key back)."""
+    from .llm import config as lcfg
+    from .llm.providers import make
+
+    body = req.json()
+    try:
+        cfg = lcfg.probe_config(body)
+    except lcfg.ConfigError as exc:
+        raise ApiError(400, str(exc), exc.code)
+    if not cfg.get("provider"):
+        raise ApiError(400, "choose a provider first", "not_configured")
+    if not lcfg.resolved_base_url(cfg):
+        raise ApiError(400, "this provider needs a base URL", "bad_url")
+    return make(cfg), cfg, body
+
+
+@route("GET", r"/api/v2/llm/providers", role="viewer", summary="LLM provider catalog (ids, labels, default base URLs, presets)", tags=["assistant"])
+def r_llm_providers(req: Request) -> Response:
+    from .llm.providers import catalog
+
+    return Response.json({"providers": catalog()})
+
+
+@route("GET", r"/api/v2/llm/settings", role="admin", summary="Assistant LLM settings (the key is reported as api_key_set only)", tags=["assistant"],
+       response="LlmSettings")
+def r_llm_settings(req: Request) -> Response:
+    from .llm import config as lcfg
+
+    return Response.json(lcfg.public())
+
+
+@route("PUT", r"/api/v2/llm/settings", role="admin", summary="Update assistant LLM settings (key goes to llm-secrets.json, never into responses)",
+       tags=["assistant"], body="LlmSettings", response="LlmSettings")
+def r_llm_settings_put(req: Request) -> Response:
+    from .llm import config as lcfg
+
+    body = req.json()
+    try:
+        out = lcfg.save(body, by=req.username)
+    except lcfg.ConfigError as exc:
+        raise ApiError(400, str(exc), exc.code)
+    return Response.json(out)
+
+
+@route("POST", r"/api/v2/llm/models", role="admin", summary="List the models a provider offers (unsaved form values allowed; empty key = stored key)",
+       tags=["assistant"], body="LlmProbe")
+def r_llm_models(req: Request) -> Response:
+    from .llm import LLMError
+
+    prov, cfg, _ = _llm_probe(req)
+    try:
+        models = prov.list_models()
+    except LLMError as exc:
+        if exc.code == "not_supported":
+            raise ApiError(400, str(exc), "not_supported")
+        return _llm_upstream(str(exc), {"status": exc.status})
+    return Response.json({"provider": prov.id, "models": models})
+
+
+@route("POST", r"/api/v2/llm/test", role="admin", summary="Test the LLM connection with a one-token chat (502 with detail on upstream failure)",
+       tags=["assistant"], body="LlmProbe")
+def r_llm_test(req: Request) -> Response:
+    prov, cfg, body = _llm_probe(req)
+    model = str(body.get("model") or cfg.get("model") or "")
+    result = prov.test_connection(model=model, timeout=cfg.get("timeout"))
+    result["provider"] = prov.id
+    if not result.get("ok"):
+        return _llm_upstream(str(result.get("detail") or "connection failed"), result)
+    return Response.json(result)
+
+
 @route("POST", r"/api/v2/projects/" + _NAME + "/assistant", role="viewer", summary="Troubleshooting assistant", tags=["analysis"], body="Question", response="Answer")
 def r_assistant(req: Request) -> Response:
     from .assistant import answer
@@ -3454,8 +3537,48 @@ def r_assistant(req: Request) -> Response:
     room = body.get("room") or None
     use_llm = bool(body.get("use_llm", True)) and bool(((doc.get("settings") or {}).get("assistant") or {}).get("llm", True))
     hist = body.get("history") if isinstance(body.get("history"), list) else None
-    res = answer(doc, q, room=room, overlay=_overlay(doc, pdir, strict=False), use_llm=use_llm, history=hist, base_revision=_rev(doc))
+    manual = body.get("manual_text")
+    if manual is not None and not isinstance(manual, str):
+        raise ApiError(400, "manual_text must be a string")
+    if manual and len(manual) > 20 * 1024:
+        raise ApiError(400, "manual_text is limited to 20 kB")
+    atts = body.get("attachments")
+    if atts is not None and (not isinstance(atts, list) or not all(isinstance(a, str) for a in atts)):
+        raise ApiError(400, "attachments must be a list of attachment ids")
+    known = {a.get("id") for a in doc.get("attachments") or [] if isinstance(a, dict)}
+    if atts and any(a not in known for a in atts):
+        raise ApiError(404, "attachment not in this project", "not_found", {"attachments": [a for a in atts if a not in known]})
+    ctx = {"pdir": pdir, "project": pdir.name, "username": req.username, "role": req.role_for(pdir.name),
+           "attachments": [a for a in atts or [] if a in known][:10], "manual_text": manual or ""}
+    res = answer(doc, q, room=room, overlay=_overlay(doc, pdir, strict=False), use_llm=use_llm, history=hist, base_revision=_rev(doc), ctx=ctx)
     return Response.json(res)
+
+
+@route("POST", r"/api/v2/projects/" + _NAME + "/assistant/apply", role="editor", summary="Apply an assistant proposal (confirmed edits)", tags=["analysis"], body="ProposalApply")
+def r_assistant_apply(req: Request) -> Response:
+    """Commit a proposal from ``POST …/assistant`` (by ``id`` while cached, or the full ``proposal`` object) as one
+    normal revision (history source ``assistant``), so undo works like any other change. 423 while the project is locked."""
+    from .assistant_edits import check_proposal, get_proposal
+
+    pdir = _project_dir(req.params["name"])
+    body = req.json()
+    raw = body.get("proposal")
+    if raw is None and body.get("id"):
+        raw = get_proposal(str(body.get("id")))
+        if raw is None:
+            raise ApiError(404, "proposal not found or expired; ask again", "not_found")
+    prop, why = check_proposal(raw)
+    if prop is None:
+        raise ApiError(400, why or "proposal is required")
+    doc, _ = _load(pdir)
+    base = body.get("base_revision")
+    base = _rev(doc) if base is None else _int(base, -1)
+    ops = _lock_guard_ops(req, doc, prop["ops"])
+    note = prop.get("note") or (prop["summary"][0] if prop.get("summary") else f"{len(ops)} change{'s' if len(ops) != 1 else ''}")
+    res = _changes(req, pdir, ops, base, f"Assistant: {note}", "assistant")
+    return Response.json({"revision": res["revision"], "applied": len(ops), "summary": list(prop.get("summary") or []),
+                          "rebased": res["rebased"], "problems": res["problems"], "id": prop.get("id") or None},
+                         headers={"ETag": f'"r{res["revision"]}"'})
 
 
 # ---- builds

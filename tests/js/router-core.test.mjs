@@ -223,7 +223,10 @@ T('6. SECTIONS, roles: sectionsFor / canSee / sectionOf / sectionRoot', () => {
   assert.equal(rc.SECTIONS.find((s) => s.key === 'home').glyph, '\u2302');
   for (const s of rc.SECTIONS) assert.deepEqual(Object.keys(s), ['key', 'label', 'glyph', 'views', 'nav'], s.key);
   for (const s of rc.SECTIONS) for (const v of s.views) assert.equal(rc.VIEW_ROLES[v], 'viewer', v);
-  assert.deepEqual(rc.TAB_ROLES, { settings: { users: 'admin', invites: 'admin', backups: 'admin', sharing: 'editor', suggestions: 'admin', trash: 'admin' } });
+  assert.deepEqual(rc.TAB_ROLES, { settings: { users: 'admin', invites: 'admin', backups: 'admin', sharing: 'editor', suggestions: 'admin', assistant: 'admin', trash: 'admin' } });
+  assert.equal(canSee('settings', 'editor', 'assistant'), false, 'P4C: Settings › Assistant is admin only');
+  assert.equal(canSee('settings', 'viewer', 'assistant'), false);
+  assert.equal(canSee('settings', 'admin', 'assistant'), true);
   assert.equal(canSee('settings', 'editor', 'invites'), false, 'P2C: invites are admin only');
   assert.equal(canSee('settings', 'editor', 'suggestions'), false, 'P2C: suggestions are admin only');
   assert.equal(canSee('settings', 'admin', 'invites'), true);

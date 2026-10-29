@@ -1,0 +1,21 @@
+event: response.created
+data: {"type": "response.created", "sequence_number": 0, "response": {"id": "resp_p4a_1", "object": "response", "created_at": 1761670000, "model": "gpt-4.1", "status": "in_progress", "error": null, "incomplete_details": null, "output": []}}
+
+event: response.output_item.added
+data: {"type": "response.output_item.added", "sequence_number": 1, "output_index": 0, "item": {"type": "message", "id": "msg_p4a_1", "status": "in_progress", "role": "assistant", "content": []}}
+
+event: response.output_text.delta
+data: {"type": "response.output_text.delta", "sequence_number": 2, "item_id": "msg_p4a_1", "output_index": 0, "content_index": 0, "delta": "The ATEM Mini is fed by "}
+
+event: response.output_text.delta
+data: {"type": "response.output_text.delta", "sequence_number": 3, "item_id": "msg_p4a_1", "output_index": 0, "content_index": 0, "delta": "Audio Rack 1 on its "}
+
+event: response.output_text.delta
+data: {"type": "response.output_text.delta", "sequence_number": 4, "item_id": "msg_p4a_1", "output_index": 0, "content_index": 0, "delta": "Stream input."}
+
+event: response.output_text.done
+data: {"type": "response.output_text.done", "sequence_number": 5, "item_id": "msg_p4a_1", "output_index": 0, "content_index": 0, "text": "The ATEM Mini is fed by Audio Rack 1 on its Stream input."}
+
+event: response.completed
+data: {"type": "response.completed", "sequence_number": 6, "response": {"id": "resp_p4a_1", "object": "response", "created_at": 1761670000, "model": "gpt-4.1", "status": "completed", "error": null, "incomplete_details": null, "output": [{"type": "message", "id": "msg_p4a_1", "status": "completed", "role": "assistant", "content": [{"type": "output_text", "text": "The ATEM Mini is fed by Audio Rack 1 on its Stream input.", "annotations": []}]}], "usage": {"input_tokens": 31, "output_tokens": 14, "total_tokens": 45}}}
+

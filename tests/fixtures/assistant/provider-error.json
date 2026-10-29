@@ -1,0 +1,8 @@
+{
+  "name": "scripted: the provider fails on the second round",
+  "model": "fake-tools",
+  "steps": [
+    {"tool_calls": [{"id": "e1", "name": "list_rooms", "arguments": {}}]},
+    {"error": "LLM endpoint returned HTTP 502"}
+  ]
+}

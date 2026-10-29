@@ -104,8 +104,39 @@
 .adm-sug-resolved-note{font-size:11.5px;margin-top:2px}
 .adm .dt-table tr.adm-sug-resolved td[data-col=text]{color:var(--muted)}
 
+/* ---- Settings › Assistant (language model, P4C) */
+.adm-llm{min-width:0}
+.adm-llm-grid{margin-top:4px}
+.adm-llm-intro{margin:0 0 8px;font-size:12px}
+.adm-llm-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.adm-llm-field>input,.adm-llm-field>select{width:100%}
+.adm-llm-field [hidden],.adm-llm-card [hidden],.adm-llm-presets[hidden]{display:none!important}
+.adm-llm-presets{gap:6px}
+.adm-llm-preset{cursor:pointer;font:inherit;font-size:12px;min-height:32px;padding:4px 12px;color:var(--text)}
+.adm-llm-preset:hover{border-color:var(--border-2);background:rgba(142,162,255,.14)}
+.adm-llm-preset:disabled{cursor:default;opacity:.6}
+.adm-llm-env,.adm-llm-hint,.adm-llm-key-state,.adm-llm-saved{font-size:12px}
+.adm-llm-from-env>label{opacity:.75}
+.adm-llm-key-row,.adm-llm-model-row{gap:8px}
+.adm-llm-clear-key{min-height:32px;padding:2px 8px}
+.adm-llm-optional>label::after{content:" (optional)";color:var(--muted)}
+.adm-llm-test-row{margin-top:10px;gap:10px}
+.adm-llm-test-out{font-size:13px;min-height:20px;display:inline-flex;align-items:center;gap:6px}
+.adm-llm-test-out.ok{color:var(--ok)}
+.adm-llm-test-out.warn{color:var(--warn)}
+.adm-llm-spin{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid var(--border-2);border-top-color:var(--accent);animation:adm-llm-spin .8s linear infinite}
+@keyframes adm-llm-spin{to{transform:rotate(360deg)}}
+.adm-llm-toggle{display:inline-flex;align-items:center;gap:8px;min-height:40px;cursor:pointer;font-size:13px}
+.adm-llm-toggle input{width:auto;flex:none;margin:0}
+.adm-llm-actions{margin-top:12px;gap:10px}
+.adm-llm-missing{margin:0;font-size:13px}
+
 @media (max-width:699px){
   .adm{padding-left:12px;padding-right:12px}
+  .adm-llm-actions button{width:100%}
+  .adm-llm-test-row{flex-direction:column;align-items:stretch}
+  .adm-llm-test-row button{width:100%}
+  .adm-llm-preset{min-height:40px}
   .adm-pr-row{flex-wrap:wrap}
   .adm-pr-proj{flex:1 1 100%}
   .adm-pr-role{flex:1 1 0}
@@ -129,6 +160,7 @@
   .adm :is(button,select,a.btn,a.chip,.adm-tab,input:not([type=checkbox]):not([type=radio]):not([type=file])){min-height:44px}
   .adm-radio{min-height:44px}
   .adm-pr :is(button,select){min-height:44px}
+  .adm-llm-preset,.adm-llm-clear-key,.adm-llm-toggle{min-height:44px}
 }
 
 @media (prefers-reduced-motion:reduce){

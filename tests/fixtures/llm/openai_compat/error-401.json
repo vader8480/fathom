@@ -1,0 +1,14 @@
+{
+  "request": {
+    "model": "llama3.1:latest"
+  },
+  "status": 401,
+  "response": {
+    "error": {
+      "message": "Invalid API key",
+      "type": "invalid_request_error",
+      "param": null,
+      "code": "invalid_api_key"
+    }
+  }
+}
