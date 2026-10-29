@@ -31,14 +31,22 @@ components) and §6.14 (storage keys).
   `fathom/static/css/<name>.css` with its prefix (`ex-`, `eh-`, `dt-`, `dr-`,
   `sr-`, `hm-`, `fb-`, `wz-`); a harness in `fathom/static/dev/<name>.html`.
   Build views from them; do not re-implement a list, drawer or state.
-- **Rack components** (SPEC §4.4.7, §6.7, §6.13.11): `rack-core.js`
+- **Rack components** (SPEC §4.4.7, §6.7–6.7.3, §6.13.11): `rack-core.js`
   (placement, items, shelves, totals, ops; pure), `rack-elevation.js` (the
-  drawn racks, `rk-` in `rack.css`), `rack-display.js` (+
+  drawn racks, `rk-` in `rack.css`; the landing and the rack page build on
+  `createElevation`, and the library drops in through `beginExternalDrag` /
+  `onExternalDrop`), `rack.js` (the racks landing, `rkt-` in
+  `rack-toolbar.css`), `page-rack.js` (the rack page, `rp-` in
+  `page-rack.css`), `rack-display.js` (+
   `rack-display-core.js`: block colours, images, annotations, template info),
   `rack-palette.js` (+ `rack-palette-core.js`, `rpal-`, harness
   `dev/rack-palette.html`) and `rack-export.js` (+ `rack-export-core.js`,
   `rx-`, harness `dev/rack-export.html`). Rack rules mirror `fathom/racks.py`
   and are pinned for both languages by `tests/fixtures/rack_contract.json`.
+  UI suites: `test_ui_rk` (the original elevation contract), `test_ui_rk_elev`
+  (elevation), `test_ui_rk_landing` (landing), `test_ui_rk_page` (rack page),
+  `test_ui_rk_regress` (cross-app regressions), `test_ui_rack_palette`,
+  `test_ui_rack_export`.
 - **DOM helpers:** `h(tag, attrs, children)`, `esc(s)` and `on(target, type,
   fn)` → `off()` from `dom.js`.
 - **Routes:** `#/<project>/<room>/<view>[/<seg4>[/<seg5>[/<seg6>]]][?<query>]`,
