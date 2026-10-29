@@ -344,7 +344,10 @@ export function createElevation(el, ctx, opts) {
     root.style.setProperty('--rk-ru', (RU_PX * S.k) + 'px');
     renderRacks();
     if (S.menu) refreshMenu();
-    if (typeof o.onChange === 'function') o.onChange(getState(), api);
+    if (typeof o.onChange === 'function') {
+      o.onChange(getState(), api);
+      fitWidth();
+    }
   }
 
   function renderRacks() {
@@ -389,7 +392,8 @@ export function createElevation(el, ctx, opts) {
 
   // Shrink the rack drawings to the viewport (never wider than RACK_W per 19");
   // blocks are positioned in % of their slot width, so only --rk-w changes.
-  // --rk-w lives on .rk-root because the print sheet overrides it there.
+  // --rk-w lives on .rk-root because the print sheet overrides it there. Only drawn
+  // racks count: a host may hide some in onChange (the sm pager), so render refits after it.
   function fitWidth() {
     if (!root.isConnected) return;
     const rackEls = racksEl.querySelectorAll('.rk-rack');
@@ -400,6 +404,7 @@ export function createElevation(el, ctx, opts) {
     let best = RACK_W;
     let found = false;
     Array.prototype.forEach.call(rackEls, function (r) {
+      if (!r.getClientRects().length) return;
       const figs = r.querySelectorAll('.rk-face');
       const slots = r.querySelectorAll('.rk-slots');
       if (!slots.length) return;
