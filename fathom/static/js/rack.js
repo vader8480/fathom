@@ -289,7 +289,7 @@ function mountLanding(el, ctx) {
   // ---------------------------------------------------------- rendering
   function sync(state, api) {
     if (!elev) elev = api;
-    if (L.face !== 'both' && (state.face === 'front' || state.face === 'rear') && state.face !== L.face) L.face = state.face;
+    if ((state.face === 'front' || state.face === 'rear' || state.face === 'both') && state.face !== L.face) L.face = state.face;
     renderToolbar(state);
     renderList();
     decorateRacks(state);
@@ -733,6 +733,7 @@ function mountLanding(el, ctx) {
       po.height = ru >= 1 ? ru : 1;
       if (template.width === 'half') po.side = 'left';
       if (template.full_depth === false) po.depth = 'half';
+      if (at && at.force) po.force = true;
       const u = at && at.u ? at.u : firstFit(tmp, rackId, res.id, po);
       place = u ? placeOps(tmp, res.id, rackId, u, po) : [];
     }
@@ -747,12 +748,22 @@ function mountLanding(el, ctx) {
     return res.id;
   }
 
-  // Palette rows drag onto the elevation through its external-drop API when it has one;
-  // without it the drag does nothing and Add stays the way in.
+  // A palette row dragged onto a rack goes through the elevation's external drop; the full
+  // template is fetched on drop. The md overlay and the sm sheet fade and let the pointer
+  // through while the drag runs so the racks under them stay reachable.
   function onPaletteDrag(entry, ev) {
     if (!elev || readOnly() || typeof elev.beginExternalDrag !== 'function') return;
-    const t = entry.template || {id: entry.id, name: entry.name, manufacturer: entry.manufacturer, model: entry.model, kind: entry.kind, ru: entry.ru};
-    elev.beginExternalDrag({kind: 'template', entry: entry, template: t}, ev);
+    const t = entry.template || {id: entry.id, name: entry.name, manufacturer: entry.manufacturer, model: entry.model, kind: entry.kind,
+      ru: entry.ru, width: entry.width, full_depth: entry.full_depth};
+    if (!elev.beginExternalDrag({kind: 'template', entry: entry, template: t}, ev) || layout() === 'lg') return;
+    root.classList.add('rkt-lib-dragging');
+    const offs2 = [];
+    function done() {
+      root.classList.remove('rkt-lib-dragging');
+      offs2.splice(0).forEach(function (off) { off(); });
+    }
+    ['pointerup', 'pointercancel'].forEach(function (type) { offs2.push(on(document, type, done, true)); });
+    offs2.push(on(document, 'keydown', function (e) { if (e.key === 'Escape') done(); }, true));
   }
 
   function onExternalDrop(payload, at) {
@@ -761,6 +772,7 @@ function mountLanding(el, ctx) {
       const spec = {type: payload.type};
       if (at.u) spec.u = at.u;
       if (at.face) spec.face = at.face;
+      if (at.force) spec.force = true;
       const r = addItemOps(doc(), at.rackId, spec);
       if (!r.ops.length) { ctx.toast(typeLabel(payload.type) + ' does not fit there.', 'warn'); return; }
       commit(r.ops, 'Add ' + typeLabel(payload.type) + ' to ' + rackName(at.rackId));
@@ -889,6 +901,12 @@ function mountLanding(el, ctx) {
     });
   }
 
+  // The server files imported racks in this room; without one (all rooms) it uses the first room.
+  function importRoom() {
+    const r = room();
+    return r && r !== '*' ? {room: r} : {};
+  }
+
   // A share link (http… or a bare encoded string) goes as `url`, anything else as `text`.
   function pastedPayload(s) {
     const t = s.trim();
@@ -941,7 +959,7 @@ function mountLanding(el, ctx) {
       status.textContent = 'Reading the layout\u2026';
       source().then(function (p) {
         payload = p;
-        return ctx.api.request('POST', projPath('/racks/import'), Object.assign({room: room() === '*' ? '' : room()}, p));
+        return ctx.api.request('POST', projPath('/racks/import'), Object.assign(importRoom(), p));
       }).then(function (r) {
         busy = false;
         preview = r.data || {};
@@ -1011,10 +1029,9 @@ function mountLanding(el, ctx) {
     }).then(function (v) {
       if (v !== 'apply' || !preview || !payload) return;
       const p = preview;
-      serverPost('/racks/import', Object.assign({apply: true, room: room() === '*' ? '' : room()}, payload)).then(function (res) {
+      serverPost('/racks/import', Object.assign({apply: true}, importRoom(), payload)).then(function (res) {
         return reloadDoc().then(function () {
           if (destroyed) return;
-          adoptImported(p);
           const n = (p.racks || []).length;
           const w = (res && res.warnings) || [];
           ctx.toast('Imported ' + n + (n === 1 ? ' rack' : ' racks') + ' and ' + (p.devices || []).length + ' devices from Rackula'
@@ -1023,24 +1040,6 @@ function mountLanding(el, ctx) {
         });
       }, function (e) { ctx.toast('Could not import: ' + errText(e), 'err'); });
     });
-  }
-
-  // The server files imported racks under the project's first room; move them (and their new
-  // devices) into the room on screen so they show up here.
-  function adoptImported(p) {
-    const r = room();
-    if (!r || r === '*') return;
-    const ops = [];
-    (p.racks || []).forEach(function (x) {
-      const k = findRack(doc(), x.id);
-      if (k && (k.room || '') !== r) ops.push({op: 'merge', coll: 'racks', id: k.id, value: {room: r}});
-    });
-    if (!ops.length) return;
-    (p.devices || []).forEach(function (x) {
-      const d = x.new !== false ? deviceById(doc(), x.id) : null;
-      if (d && (d.room || '') !== r) ops.push({op: 'merge', coll: 'devices', id: d.id, value: {room: r}});
-    });
-    commit(ops, 'Move imported racks to ' + roomName());
   }
 
   function openDuplicateDialog() {
