@@ -124,11 +124,10 @@ with `pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
  changes need only a reload. The editor UI is at `/` (there is no `/ui`).
 - **Backend tests:**
   `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -q`
-  (1140 tests, about 16 min, most of it the `test_ui_*.py` Chrome suites; all
-  pass with 10 skips when the `discovery` extra is installed, as in CI: the
-  six `fits` cases of `test_rack_contract` (fit checks are JS only), two
-  `sw.js` precache entries in `test_ui_rk_regress` whose CSS lands with the
-  rack UI, the catalog regeneration check in `test_rack_catalog` (needs a
+  (1179 tests, about 19 min, most of it the `test_ui_*.py` Chrome suites; all
+  pass with 8 skips when the `discovery` extra is installed, as in CI: the
+  six `fits` cases of `test_rack_contract` (fit checks are JS only), the
+  catalog regeneration check in `test_rack_catalog` (needs a
   Rackula checkout in `/tmp/rackula`) and the report PDF render in
   `test_exports` (set `FATHOM_T1_CHROME=1`)). This
   VM installs only `.[dev,serve]`, so two discovery tests skip and
@@ -143,7 +142,7 @@ with `pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
   `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -p test_backup.py -v`
   (not `python -m unittest tests.test_backup`: the `discovery` extra installs
   `x690`, whose stray top-level `tests` package shadows ours).
-- **Frontend tests:** `node --test tests/js/*.test.mjs` (731 tests; pass the
+- **Frontend tests:** `node --test tests/js/*.test.mjs` (735 tests; pass the
   files, the bare directory form fails on recent Node).
 - **End-to-end check:** `.venv/bin/fathom selftest`.
 - **Calling the API with curl:** mutating requests need `X-Fathom: 1`
