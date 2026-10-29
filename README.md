@@ -170,12 +170,16 @@ shows what changes.
   collide like devices; devices can stand on a shelf cell. Each rack totals
   its U used and free, weight against the max load and power against the
   circuit limit, and warns when it is over. A catalog of 711 rack-mountable
-  device types with front and rear images (`?source=catalog` on the library,
+  device types, 155 of them with a front image (`?source=catalog` on the library,
   never mixed into the default list), five starter rack templates, a public
   rack page with a QR code (`/p/<project>/rk/<rack>`), SVG/PNG/print export,
-  and import of Rackula layouts and NetBox device-type YAML. The editor's
-  rack toolbar, palette and rack-page wiring for these is still being built;
-  the API, viewer page and builds have them now. These features
+  and import of Rackula layouts and NetBox device-type YAML. In the editor,
+  the racks view shows front, rear or both faces with device images and an
+  annotation column, groups racks into bays (one rack at a time on a phone),
+  drags devices in from a library palette, adds accessories from a menu or
+  per-block menu and keys (`?` lists them), creates racks from a template
+  or a Rackula import, and opens a rack page with totals cards, an
+  accessories tab, export, a QR code and duplicate. These features
   are adapted from [Rackula](https://github.com/RackulaLives/Rackula) (MIT),
   whose device data comes from the NetBox devicetype-library (CC0) and whose
   images mostly come from vastoholic/draw-io; see `THIRD_PARTY_NOTICES.md`.
@@ -411,9 +415,13 @@ Frontend module map (`fathom/static/`, contract in `docs/SPEC.md` §6; each
 | `js/home.js`, `js/home-core.js`, `css/home.css` | Home view (launchpad) |
 | `js/feedback.js`, `js/feedback-core.js`, `css/feedback.css` | skeleton, empty, error, confirm, stale and review states; bell notices |
 | `js/wizard.js`, `js/wizard-core.js`, `css/wizard.css` | step dialogs and bulk add from pasted rows |
-| `js/page-device.js`, `js/page-room.js`, `js/page-rack.js`, `css/page-device.css`, `css/page-room.css`, `css/rack.css` | device, room and rack pages |
+| `js/page-device.js`, `js/page-room.js`, `css/page-device.css`, `css/page-room.css` | device and room pages |
+| `js/page-rack.js`, `css/page-rack.css` | rack page: totals cards, elevation with faces / display / annotation, accessories table, export, QR, duplicate (prefix `rp-`) |
 | `js/patchview*.js`, `js/patchtable*.js`, `css/patchview.css`, `css/patchtable.css` | patch view and patch table |
-| `js/floorplan*.js`, `js/rack.js`, `js/rack-core.js`, `js/rack-elevation.js`, `css/plan.css` | floor plans; rack landing, rack geometry, accessories, shelves, totals and ops; the rack elevation |
+| `js/floorplan*.js`, `css/plan.css` | floor plans |
+| `js/rack-core.js` | rack geometry, accessories, shelves, totals and ops (pure) |
+| `js/rack-elevation.js`, `css/rack.css` | rack elevation: faces, images, annotations, accessories and shelf cells, drag and external drop, keys, block menu (prefix `rk-`) |
+| `js/rack.js`, `css/rack-toolbar.css` | racks landing: toolbar, library panel, accessories, bays and phone pager, rack form, New rack from template, Rackula import, duplicate (prefix `rkt-`) |
 | `js/rack-display.js`, `js/rack-display-core.js` | rack block colours, device images, annotations, airflow glyphs; template info from the library |
 | `js/rack-palette.js`, `js/rack-palette-core.js`, `css/rack-palette.css` | rack library palette (search, categories, favourites, recents; prefix `rpal-`) |
 | `js/rack-export.js`, `js/rack-export-core.js`, `css/rack-export.css` | rack export dialog: SVG, PNG 2×, print (prefix `rx-`) |
@@ -432,7 +440,7 @@ suites `tests/test_ui_*.py` on the shared helper `tests/_ui.py`: `shell`,
 `router` (the helper itself), `explorer`, `entity`, `datatable`, `drawer`,
 `search`, `home`, `feedback`, `wizard`, the views (`pv`, `pt`, `fp`, `rk`,
 `sch`, `inv`, `pdev`, `proom`, `ins`, `adm`, `disc`, `sop`, `rack_palette`,
-`rack_export`, `rk_regress`) and the
+`rack_export`, `rk_elev`, `rk_landing`, `rk_page`, `rk_regress`) and the
 loading / empty / error states (`states_shell`, `states_entity`,
 `states_lists`, `states_canvas`, `states_admin`). UI suites skip without
 Chrome (`FATHOM_CHROME`); `FATHOM_UI_SHOTS=<dir>` saves screenshots.
