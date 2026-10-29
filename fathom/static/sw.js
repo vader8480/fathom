@@ -3,7 +3,7 @@
  * stale-while-revalidate for /static/, network only for everything else. */
 'use strict';
 
-const VERSION = '0.4.0';
+const VERSION = '0.4.1';
 const SHELL_CACHE = 'fathom-shell-' + VERSION;
 const PAGES_CACHE = 'fathom-pages-' + VERSION;
 const NETWORK_TIMEOUT_MS = 3000;
@@ -29,7 +29,7 @@ const PRECACHE = [
   'static/css/page-device.css', 'static/css/page-room.css', 'static/css/rack.css', 'static/css/inventory.css',
   'static/css/schedules.css', 'static/css/admin.css', 'static/css/discovery.css', 'static/css/inspector.css',
   'static/css/patchtable.css',
-  'static/js/speech.js', 'static/css/assistant.css'
+  'static/js/speech.js', 'static/js/assistant-core.js', 'static/css/assistant.css'
 ];
 
 const SCOPE = new URL(self.registration ? self.registration.scope : self.location.href);

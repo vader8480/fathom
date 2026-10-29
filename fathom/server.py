@@ -93,7 +93,7 @@ SHELL_ASSETS = [
     "static/js/floorplan.js", "static/js/floorplan-core.js", "static/js/rack.js", "static/js/rack-core.js",
     "static/js/schedules.js", "static/js/inventory.js", "static/js/views-admin.js", "static/js/merge-ui.js", "static/js/views-discovery.js", "static/js/suggest-ui.js",
     "static/js/views-sop.js", "static/css/sop.css", "static/icons/icon-192.png", "manifest.webmanifest",
-    "static/js/speech.js", "static/css/assistant.css",
+    "static/js/speech.js", "static/js/assistant-core.js", "static/css/assistant.css",
 ]
 SCHEDULE_KINDS = ("patch", "cables", "ip", "dmx", "bom", "inventory", "racks", "labels")
 _STATUS_TEXT = {

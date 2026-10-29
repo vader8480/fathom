@@ -108,6 +108,11 @@ export function mount(el, ctx) {
     return !!(store && store.readOnly) || ctx.role === 'viewer';
   }
 
+  // Helper "Draft a room" (FR-AST-15): app.js loads assistant-ui.js on this event when it is not mounted yet.
+  function describeRoom(roomId) {
+    document.dispatchEvent(new CustomEvent('fathom:assistant-open', { detail: { mode: 'draft', room: roomId || '' } }));
+  }
+
   function href(partial) {
     return typeof ctx.routeHref === 'function' ? ctx.routeHref(partial) : '#';
   }
@@ -682,6 +687,8 @@ export function mount(el, ctx) {
     const actions = h('div', { class: 'pr-landing-actions' });
     if (!readOnly() && ctx.api && typeof ctx.openDialog === 'function') {
       actions.appendChild(h('button', { type: 'button', class: 'pr-add-starter', 'data-action': 'add-starter', onclick: openStarterDialog }, 'Add room from starter\u2026'));
+      actions.appendChild(h('button', { type: 'button', class: 'pr-add-starter', 'data-action': 'describe-room', title: 'Describe the room and let the Helper draft its devices and patch',
+        onclick: function () { describeRoom(''); } }, 'Describe a room\u2026'));
     }
     root.appendChild(h('div', { class: 'pr-landing' }, [
       h('div', { class: 'pr-landing-head' }, [h('h1', { class: 'pr-title' }, [h('span', { class: 'pr-glyph', 'aria-hidden': 'true' }, GLYPH), 'Rooms']), lede, actions]),
@@ -807,6 +814,8 @@ export function mount(el, ctx) {
     if (!readOnly() && ctx.project && ctx.api && typeof ctx.openDialog === 'function') {
       overflow.push({ key: 'save-starter', label: 'Save as starter\u2026', title: 'Keep this room as a starter for other projects',
         run: function () { openSaveStarterDialog(S.room || room); } });
+      overflow.push({ key: 'describe-room', label: 'Describe a room\u2026', title: 'Let the Helper draft devices and patch for this room from a description',
+        run: function () { describeRoom(id); } });
     }
     const title = room.name || id;
     const kindLabel = cap(room.kind);

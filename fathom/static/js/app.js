@@ -1986,6 +1986,15 @@ function registerSW() {
 
 // ---- assistant panel
 
+// Views ask for the Helper with `fathom:assistant-open` {detail: {mode, room}} (page-room.js "Describe a room…").
+// assistant-ui.js handles the event itself once loaded; before that, load it here and hand the detail over.
+document.addEventListener('fathom:assistant-open', function (e) {
+  if (A.assistant || !A.ctx) return;
+  const detail = e && e.detail;
+  toggleAssistant(true);
+  A.assistantOpenDetail = detail;
+});
+
 function toggleAssistant(force) {
   const el = $('app-assistant');
   if (!el || !A.ctx) return;
@@ -1998,6 +2007,7 @@ function toggleAssistant(force) {
     importModule('./assistant-ui.js').then(function (m) {
       el.innerHTML = '';
       A.assistant = m.mountAssistant(el, Object.assign({}, A.ctx, { closePanel: function () { toggleAssistant(false); } })) || { destroy: function () {} };
+      if (A.assistantOpenDetail && m.openAssistant) { m.openAssistant(A.assistantOpenDetail); A.assistantOpenDetail = null; }
       if (A.assistant.focus) A.assistant.focus();
     }, function (e) {
       el.innerHTML = '';

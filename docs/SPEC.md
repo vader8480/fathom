@@ -2130,7 +2130,7 @@ Pure functions over a doc (no I/O; `floorplan-core.js` re-implements the same ge
 
 ### 6.10 Service worker & manifest (W1 files, W5 registration)
 
-`sw.js` (W1, SHELL): `const VERSION = '0.4.0'`, cache names `fathom-shell-<VERSION>`, `fathom-pages-<VERSION>`. `VERSION` is bumped whenever the precache list or a precached file's contract changes, so `activate` drops the old caches; it is no longer equal to `fathom.__version__` (`0.3.0`). The server still replaces a `__FATHOM_VERSION__` placeholder when serving `/sw.js`, but the file holds a literal version. Precache list (exact; relative to the SW scope; `const PRECACHE` in `sw.js`):
+`sw.js` (W1, SHELL): `const VERSION = '0.4.1'`, cache names `fathom-shell-<VERSION>`, `fathom-pages-<VERSION>`. `VERSION` is bumped whenever the precache list or a precached file's contract changes, so `activate` drops the old caches; it is no longer equal to `fathom.__version__` (`0.3.0`). The server still replaces a `__FATHOM_VERSION__` placeholder when serving `/sw.js`, but the file holds a literal version. Precache list (exact; relative to the SW scope; `const PRECACHE` in `sw.js`):
 
 ```text
 ./  static/app.html  static/login.html  static/css/app.css  static/css/patchview.css  static/css/plan.css
@@ -2151,6 +2151,8 @@ static/css/search.css  static/css/home.css  static/css/feedback.css  static/css/
 static/css/page-device.css  static/css/page-room.css  static/css/rack.css  static/css/inventory.css
 static/css/schedules.css  static/css/admin.css  static/css/discovery.css  static/css/inspector.css
 static/css/patchtable.css
+static/js/tour.js  static/css/tour.css  static/js/improve-ui.js  static/js/scenes.js  static/css/scenes.css
+static/js/speech.js  static/js/assistant-core.js  static/css/assistant.css
 ```
 
 Every file under `static/js/` (except `package.json`) and `static/css/` is precached, so every view works offline once the shell has loaded online.
