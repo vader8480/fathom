@@ -3135,15 +3135,11 @@ def r_floorplan_image(req: Request) -> Response:
 
 @route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")\.svg", role="viewer", summary="Floor plan export SVG with markers (?runs=1 adds paths and cable runs, ?scene=)", tags=["floorplans"], page="file")
 def r_floorplan_svg(req: Request) -> Response:
-    from .floorplan import plan_svg
-
     pdir = _project_dir(req.params["name"])
     doc, _ = _load(pdir)
     fid = req.params["fp"]
     _floorplan(doc, fid)
-    want_runs = str(req.query.get("runs") or "").strip().lower() in ("1", "true", "yes")
-    sid = str(req.query.get("scene") or "").strip() or None
-    r = Response.text(plan_svg(doc, fid, pdir, runs=want_runs, scene=sid), "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
+    r = Response.text(_plan_svg_text(req, pdir, doc, fid), "image/svg+xml; charset=utf-8", headers={"Cache-Control": "no-cache"})
     r.csp = FILE_CSP
     return r
 
@@ -3434,20 +3430,15 @@ def _plan_svg_text(req: Request, pdir: Path, doc: Dict[str, Any], fid: str) -> s
     """``floorplan.plan_svg`` for the route's ``?runs=1``, ``?scene=`` and ``?hide=L1,L2`` (``hide`` overrides the plan's hidden layers)."""
     from .floorplan import plan_svg
 
-    params = inspect.signature(plan_svg).parameters
-    kw: Dict[str, Any] = {}
     sid = str(req.query.get("scene") or "").strip()
     if sid:
-        doc = _scene_view(doc, sid)
-        if "scene" in params:
-            kw["scene"] = sid
-    if req.query.get("runs") == "1" and "runs" in params:  # P5A's keyword; the guard goes at integration
-        kw["runs"] = True
+        doc = _scene_view(doc, sid)  # applies the scene (404 when unknown), so plan_svg gets scene=None
+    want_runs = str(req.query.get("runs") or "").strip().lower() in ("1", "true", "yes")
     hide = [x for x in (req.query.get("hide") or "").split(",") if x]
     if hide:
         doc = dict(doc)
         doc["floorplans"] = [dict(f, hidden_layers=hide) if isinstance(f, dict) and f.get("id") == fid else f for f in doc.get("floorplans") or []]
-    return plan_svg(doc, fid, pdir, **kw)
+    return plan_svg(doc, fid, pdir, runs=want_runs)
 
 
 @route("GET", r"/api/v2/projects/" + _NAME + r"/floorplans/(?P<fp>" + _EID + r")\.(?P<fmt>png|pdf)", role="viewer",

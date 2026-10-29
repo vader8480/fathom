@@ -457,21 +457,17 @@ def _write_package(doc: Doc, project_dir: Path, run_dir: Path, *, state: str, ro
     from .floorplan import plan_svg
 
     plan_parts = []
-    # FR-EXP-07: when plan_svg knows ``runs`` (P5A) a second SVG with shared paths and cable runs sits next to the plain one
-    plan_runs = "runs" in inspect.signature(plan_svg).parameters
-    if not plan_runs:
-        notes.append("floor plan runs SVGs skipped: floorplan.plan_svg has no runs= (cable runs not available)")
+    # FR-EXP-07: a second SVG with shared paths and cable runs sits next to the plain one
     for fp in sdoc.get("floorplans") or []:
         try:
             pdoc = fdoc if fdoc.get("floorplans") else sdoc
             _write(run_dir / "floorplans" / f"{fp['id']}.svg", plan_svg(pdoc, fp["id"], project_dir))
             plan_parts.append(f'<figure><img src="floorplans/{html.escape(fp["id"])}.svg" alt="{html.escape(fp.get("name", fp["id"]))}"><figcaption>{html.escape(fp.get("name", fp["id"]))}</figcaption></figure>')
-            if plan_runs:
-                _write(run_dir / "floorplans" / f"{fp['id']}-runs.svg", plan_svg(pdoc, fp["id"], project_dir, runs=True))
-                plan_parts.append(f'<figure><img src="floorplans/{html.escape(fp["id"])}-runs.svg" alt="{html.escape(fp.get("name", fp["id"]))} with cable runs"><figcaption>{html.escape(fp.get("name", fp["id"]))} · cable runs</figcaption></figure>')
+            _write(run_dir / "floorplans" / f"{fp['id']}-runs.svg", plan_svg(pdoc, fp["id"], project_dir, runs=True))
+            plan_parts.append(f'<figure><img src="floorplans/{html.escape(fp["id"])}-runs.svg" alt="{html.escape(fp.get("name", fp["id"]))} with cable runs"><figcaption>{html.escape(fp.get("name", fp["id"]))} · cable runs</figcaption></figure>')
         except Exception as exc:
             notes.append(f"floor plan {fp.get('id')}: {type(exc).__name__}: {exc}")
-    if plan_runs and (sdoc.get("floorplans") or []):
+    if sdoc.get("floorplans") or []:
         notes.append("floor plan runs: " + ", ".join(f"floorplans/{fp['id']}-runs.svg" for fp in sdoc.get("floorplans") or []))
     if plan_parts:
         sections["Floor plans"] = "".join(plan_parts)
