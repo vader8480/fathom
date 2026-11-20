@@ -1,0 +1,251 @@
+# Fathom Helm chart values. Chart README: deploy/helm/fathom/README.md.
+#
+# Fathom keeps everything (projects, history, users, backups) as files under
+# one data directory, so the chart always runs ONE pod with the `Recreate`
+# strategy: the data volume is ReadWriteOnce and two pods must never write the
+# same directory. Neither is configurable; an upgrade stops the old pod before
+# the new one starts (a few seconds of downtime).
+
+image:
+  repository: ghcr.io/vader8480/fathom
+  # Defaults to the chart's appVersion. `main` follows the main branch;
+  # `sha-<short>` pins one commit.
+  tag: ""
+  # Pin by digest instead of tag (sha256:...); wins over `tag`.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+# Needed while the GHCR package is private (chart README, "Private image").
+imagePullSecrets: []
+#  - name: ghcr-pull
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  # Defaults to the release's full name when created, `default` otherwise.
+  name: ""
+  annotations: {}
+  # Fathom never talks to the Kubernetes API.
+  automountServiceAccountToken: false
+
+# gunicorn, the same server the image and the systemd unit run.
+server:
+  # Bind address and container port. With discovery.hostNetwork the port is
+  # opened on the node itself.
+  host: "0.0.0.0"
+  port: 8080
+  # Each worker is a separate Python process (about 45 MB resident once it has
+  # served a project); threads share it. Writes are serialized per project by a file lock, so more
+  # workers only help with concurrent reads and renders.
+  workers: 2
+  threads: 4
+  # Seconds before a silent worker is restarted; builds and backups can take a while on a Pi.
+  timeout: 180
+  accessLog: true
+  # Extra gunicorn arguments, e.g. ["--forwarded-allow-ips", "*"].
+  extraArgs: []
+
+# Non-secret FATHOM_* settings, passed to the container as environment
+# variables. Keys are the variable names from the main README ("Settings");
+# empty values are left out. FATHOM_DATA is set by the chart. Anything secret
+# (FATHOM_AUTH, *_API_KEY, *_PASSWORD, SNMP community / keys) is refused here:
+# put it under `secrets`.
+config:
+  # Base URL in device QR codes, no trailing slash. Left empty with the Ingress
+  # enabled it becomes http(s)://<first ingress host>.
+  FATHOM_PUBLIC_URL: ""
+  # "1" keeps the read-only viewer (/p/*) and build downloads public while the editor needs a login.
+  FATHOM_PUBLIC_VIEW: ""
+  # Request size caps in MB (app defaults 50 / 20 / 4096). An Ingress
+  # controller's own body limit must be at least as large.
+  FATHOM_MAX_UPLOAD_MB: ""
+  FATHOM_MAX_JSON_MB: ""
+  FATHOM_MAX_BACKUP_MB: ""
+  # Optional language model for the assistant (also editable in Settings › Assistant):
+  # FATHOM_LLM_PROVIDER: "openai"        # openai | anthropic | xai | any OpenAI-compatible server
+  # FATHOM_LLM_URL: "http://ollama.ai.svc.cluster.local:11434/v1"
+  # FATHOM_LLM_MODEL: "llama3.2"
+  # FATHOM_LLM_TIMEOUT: "20"
+  # FATHOM_LLM_MAX_CONTEXT: "24000"
+  # Extension directories on the data volume:
+  # FATHOM_PLUGINS: "/data/plugins"
+  # FATHOM_LIBRARY: "/data/library-ext"
+  # FATHOM_CHECKLISTS: "/data/checklists"
+  # Server-wide discovery defaults (per-project settings in Discovery › Sources win):
+  # FATHOM_UNIFI_URL: "https://10.0.0.1"
+  # FATHOM_UNIFI_SITE: "default"
+  # FATHOM_DISCOVERY_INTERFACE: "eth0"
+
+# Secret settings. Every key of the Secret becomes an environment variable, so
+# name the keys after the variables: FATHOM_LLM_API_KEY, FATHOM_AUTH,
+# FATHOM_UNIFI_API_KEY, FATHOM_UNIFI_PASSWORD, FATHOM_SNMP_COMMUNITY, ...
+secrets:
+  # A Secret you manage (kubectl create secret generic fathom-env --from-literal=FATHOM_LLM_API_KEY=...).
+  existingSecret: ""
+  # Or let the chart create one from these values. Pass them at install time
+  # (--set-string secrets.values.FATHOM_LLM_API_KEY=...) or from a values file
+  # you keep out of version control; they end up in the Helm release history.
+  values: {}
+
+# First admin user. Without any user (and without FATHOM_AUTH) Fathom needs no
+# login and every visitor is an admin, which is rarely what you want behind an
+# Ingress. An init container runs `fathom user add <username> --role admin
+# --password-stdin` when that user does not exist yet; an existing user is left
+# alone, so a password changed in the app survives restarts and upgrades.
+admin:
+  enabled: true
+  username: admin
+  # Secret holding the password under `passwordKey`. Recommended for GitOps.
+  existingSecret: ""
+  passwordKey: password
+  # Without existingSecret the chart creates the Secret "<release>-admin":
+  # from this value, or with a random 24-character password when it is empty
+  # (kept across upgrades; NOTES.txt prints how to read it). At least 8 characters.
+  password: ""
+  # true: set the password (and the admin role) from the Secret on every pod
+  # start, which also signs that user out. Use it to recover a lost password,
+  # then switch it off again.
+  resetPassword: false
+
+# Network discovery (README › Network discovery). In an ordinary pod the
+# passive probes only see the pod network: mDNS / Dante browsing and the ARP
+# table need layer-2 reach to the AV VLANs, and the LLDP / CDP listener needs
+# a raw socket. Both switches are off by default; the UniFi, SNMP and console
+# probes are plain unicast and work without them. Trade-offs: chart README.
+discovery:
+  # Share the node's network namespace: the pod sees every interface and VLAN
+  # the node has, `server.port` is opened on the node, and the namespace must
+  # allow it (Pod Security "privileged"). Pin the pod to the node that is
+  # wired to the AV networks with `nodeSelector`.
+  hostNetwork: false
+  # Give the server CAP_NET_RAW for the LLDP / CDP listener. The pod stays
+  # non-root: gunicorn is started through the image's `python-netraw`
+  # interpreter (file capability) and NET_RAW is the only capability added.
+  rawSockets: false
+
+service:
+  type: ClusterIP
+  port: 8080
+  # Fixed node port for type NodePort (30000-32767); empty lets Kubernetes pick.
+  nodePort: ""
+  annotations: {}
+
+ingress:
+  enabled: false
+  # k3s ships Traefik (`traefik`); ingress-nginx is `nginx`. Empty uses the cluster default.
+  className: ""
+  annotations: {}
+  #  cert-manager.io/cluster-issuer: letsencrypt
+  #  nginx.ingress.kubernetes.io/proxy-body-size: 4096m   # nginx only: uploads and backup restores
+  hosts:
+    - host: fathom.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: fathom-tls
+  #    hosts:
+  #      - fathom.local
+
+# The data directory (/data): projects, history, users.json, secret.key, backups, builds.
+persistence:
+  enabled: true
+  # Use a PersistentVolumeClaim you created (restores, pre-provisioned volumes).
+  existingClaim: ""
+  # "" uses the cluster's default StorageClass (`local-path` on k3s, which
+  # keeps the data on the node the pod first ran on). "-" requests no class,
+  # for binding to a pre-created PersistentVolume.
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+  # Bind to one specific PersistentVolume.
+  volumeName: ""
+  # Mount a sub-directory of the volume instead of its root.
+  subPath: ""
+  annotations: {}
+  # Keep the claim (and with it the data) when the release is uninstalled.
+  # Delete it yourself with `kubectl delete pvc` once you are sure.
+  retainOnUninstall: true
+
+# Scratch space mounted at /tmp (uploads being converted, floor-plan renders).
+# `medium: Memory` counts against the memory limit; a `sizeLimit` evicts the
+# pod when exceeded.
+tmp:
+  medium: ""
+  sizeLimit: ""
+
+# Sized for a Raspberry Pi 4 / 5. The pod measured about 55 MiB idle and 80 MiB
+# after building the sample project with the default two workers; rendering PDF
+# floor plans and building large projects is what needs the headroom.
+resources:
+  requests:
+    cpu: 100m
+    memory: 160Mi
+  limits:
+    cpu: "1"
+    memory: 768Mi
+
+# The image runs as uid/gid 10001. fsGroup makes volumes that support it
+# group-writable for that user.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# All three probes GET /healthz. The startup probe allows a slow first start
+# (150 s by default) before liveness takes over.
+probes:
+  path: /healthz
+  startup:
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 30
+  liveness:
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Extra environment for the server container, in Kubernetes syntax.
+extraEnv: []
+#  - name: TZ
+#    value: America/Denver
+extraEnvFrom: []
+#  - configMapRef:
+#      name: fathom-extra
+
+# Extra volumes and mounts, e.g. a CA bundle or importer plugins.
+extraVolumes: []
+extraVolumeMounts: []
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+terminationGracePeriodSeconds: 30
+revisionHistoryLimit: 3
+
+# Overrides the pod's dnsPolicy. Empty picks ClusterFirst, or
+# ClusterFirstWithHostNet under discovery.hostNetwork so in-cluster names
+# (an Ollama Service, say) still resolve.
+dnsPolicy: ""
+dnsConfig: {}

@@ -1,0 +1,230 @@
+{{- $fullname := include "fathom.fullname" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "fathom.labels" . | nindent 4 }}
+spec:
+  # One pod, replaced rather than rolled: the data directory is a set of files
+  # on a ReadWriteOnce volume and must only ever have one writer.
+  replicas: 1
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "fathom.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "fathom.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/secrets: {{ toJson .Values.secrets | sha256sum }}
+        checksum/admin: {{ toJson (omit .Values.admin "password") | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "fathom.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      # Service links would inject FATHOM_PORT=tcp://<cluster ip>:<port> for a
+      # Service named "fathom", which the app reads as its own port setting.
+      enableServiceLinks: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.discovery.hostNetwork }}
+      hostNetwork: true
+      {{- end }}
+      dnsPolicy: {{ include "fathom.dnsPolicy" . }}
+      {{- with .Values.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- if .Values.admin.enabled }}
+      initContainers:
+        - name: admin-bootstrap
+          image: {{ include "fathom.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -ec
+            - |
+              user="$FATHOM_ADMIN_USERNAME"
+              if fathom user list | cut -f1 | grep -Fxq -- "$user"; then
+                if [ "$FATHOM_ADMIN_RESET" = "true" ]; then
+                  printf '%s\n' "$FATHOM_ADMIN_PASSWORD" | fathom user passwd "$user" --password-stdin
+                  fathom user role "$user" admin
+                  fathom user enable "$user"
+                else
+                  echo "ok: user $user already exists; left as it is"
+                fi
+              else
+                printf '%s\n' "$FATHOM_ADMIN_PASSWORD" | fathom user add "$user" --role admin --password-stdin
+              fi
+          env:
+            - name: FATHOM_DATA
+              value: /data
+            - name: FATHOM_ADMIN_USERNAME
+              value: {{ .Values.admin.username | quote }}
+            - name: FATHOM_ADMIN_RESET
+              value: {{ .Values.admin.resetPassword | quote }}
+            - name: FATHOM_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "fathom.adminSecretName" . }}
+                  key: {{ .Values.admin.passwordKey }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+              {{- with .Values.persistence.subPath }}
+              subPath: {{ . }}
+              {{- end }}
+            - name: tmp
+              mountPath: /tmp
+      {{- end }}
+      containers:
+        - name: fathom
+          image: {{ include "fathom.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            {{- if .Values.discovery.rawSockets }}
+            - python-netraw
+            - -m
+            {{- end }}
+            - gunicorn
+          args:
+            - --bind
+            - {{ printf "%s:%v" .Values.server.host .Values.server.port | quote }}
+            - --workers
+            - {{ .Values.server.workers | quote }}
+            - --threads
+            - {{ .Values.server.threads | quote }}
+            - --timeout
+            - {{ .Values.server.timeout | quote }}
+            - --worker-tmp-dir
+            - /dev/shm
+            {{- if .Values.server.accessLog }}
+            - --access-logfile
+            - "-"
+            {{- end }}
+            {{- range .Values.server.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+            - fathom.server:app
+          env:
+            - name: FATHOM_DATA
+              value: /data
+            {{- with include "fathom.configEnv" . | trim }}
+            {{- . | nindent 12 }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.secrets.values .Values.secrets.existingSecret .Values.extraEnvFrom }}
+          envFrom:
+            {{- if .Values.secrets.values }}
+            - secretRef:
+                name: {{ include "fathom.envSecretName" . }}
+            {{- end }}
+            {{- with .Values.secrets.existingSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.server.port }}
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: {{ .Values.probes.path }}
+              port: http
+            {{- toYaml .Values.probes.startup | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.path }}
+              port: http
+            {{- toYaml .Values.probes.liveness | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.path }}
+              port: http
+            {{- toYaml .Values.probes.readiness | nindent 12 }}
+          securityContext:
+            {{- include "fathom.serverSecurityContext" . | nindent 12 }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+              {{- with .Values.persistence.subPath }}
+              subPath: {{ . }}
+              {{- end }}
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "fathom.claimName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          {{- if or .Values.tmp.medium .Values.tmp.sizeLimit }}
+          emptyDir:
+            {{- with .Values.tmp.medium }}
+            medium: {{ . }}
+            {{- end }}
+            {{- with .Values.tmp.sizeLimit }}
+            sizeLimit: {{ . }}
+            {{- end }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -89,7 +89,27 @@ sudo systemd-run --uid=fathom --gid=fathom -p AmbientCapabilities=CAP_NET_RAW -t
 
 Docker is optional: `docker compose up -d` builds the same app on :8080
 with data in a volume (see `docker-compose.yml`); the passive probes then
-only see the container's network unless you give it the host's.
+only see the container's network unless you give it the host's. The image
+runs as a non-root user (uid 10001); the `Dockerfile` header covers the one
+`chown` an older root-owned volume needs.
+
+### Kubernetes (Helm)
+
+Kubernetes is an additional target, for example a k3s cluster on Raspberry
+Pis. The Helm chart in `deploy/helm/fathom` runs one pod with the data
+directory on a persistent volume, creates the first admin user, and has
+opt-in switches for an Ingress and for the layer-2 reach network discovery
+needs:
+
+```bash
+helm install fathom oci://ghcr.io/vader8480/charts/fathom --namespace fathom --create-namespace
+```
+
+Its [README](deploy/helm/fathom/README.md) has the k3s-on-Pi quick start,
+the values, upgrade, and backup and restore. `.github/workflows/publish.yml`
+publishes the image `ghcr.io/vader8480/fathom` (`linux/arm64`, `linux/amd64`,
+`linux/arm/v7`; tags `main` and `sha-<short sha>` from the main branch,
+`X.Y.Z` and `latest` from `vX.Y.Z` tags) and, for each `vX.Y.Z` tag, the chart.
 
 ### Locally
 
