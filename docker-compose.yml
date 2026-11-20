@@ -12,8 +12,10 @@ services:
       - "8080:8080"
     # Optional. The reference deployment is a plain Ubuntu VM with deploy/fathom.service
     # (see README › Running on Ubuntu); in a container the passive discovery probes only
-    # see the container's own network unless it shares the host's (network_mode: host,
-    # plus cap_add: [NET_RAW] for the LLDP listener).
+    # see the container's own network unless it shares the host's (network_mode: host).
+    # The server runs as uid 10001, so the LLDP listener additionally needs the image's
+    # python-netraw interpreter as the command (Dockerfile header). A data volume written
+    # by an image from before the non-root user needs one chown (Dockerfile header).
     volumes:
       - fathom-data:/data
     environment:

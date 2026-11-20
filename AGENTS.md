@@ -21,6 +21,15 @@ Python WSGI server (`fathom/server.py`) plus a no-build ES-module frontend in
  `DELETE /api/v2/projects/<n>` moves a project to `<data>/trash/` (30-day
  retention; `fathom trash list|restore|purge`); `?purge=1` deletes for good.
  Devices get an 8-char `short_code` on save (`/c/<code>` resolves it).
+- **Container and Helm chart.** The `Dockerfile` image runs as uid/gid 10001
+  and the chart mounts its root filesystem read-only, so the server may only
+  write under `FATHOM_DATA` and the temp dir. The chart is
+  `deploy/helm/fathom` (one replica, `Recreate`, data on a PVC; its
+  `README.md` is the operator guide). `Chart.yaml` `version` and `appVersion`
+  equal `fathom.__version__`: bump all three together
+  (`tests/test_helm_chart.py` and the publish workflow check it). A new
+  `FATHOM_*` variable that carries a credential also goes into
+  `fathom.secretVariables` in the chart's `templates/_helpers.tpl`.
 
 ## Frontend conventions
 
@@ -98,6 +107,16 @@ an artifact when a step fails. The `Tests` job installs `.[serve,discovery]` whe
 - A PR only gets a run once the workflow file is in its base branch (GitHub
   reads workflows from the PR merge commit); push a commit or close/reopen
   an older PR to start its first run.
+- **Publish** (`.github/workflows/publish.yml`) builds the multi-arch image
+  (`linux/amd64`, `linux/arm64`, `linux/arm/v7`) and pushes
+  `ghcr.io/vader8480/fathom` as `main` + `sha-<short sha>` from `main`, and
+  as `X.Y.Z`, `X.Y`, `latest` from a `vX.Y.Z` tag, which also pushes the
+  chart to `oci://ghcr.io/vader8480/charts`. The tag must equal
+  `v` + `fathom.__version__`. Because workflow-token merges start no `push`
+  run, it also runs after every green pull-request CI run (`workflow_run`)
+  and publishes `main` when the image for its head commit is missing; it
+  adds no check to pull requests. The `Tests` job covers the chart through
+  `tests/test_helm_chart.py` with the runner's preinstalled `helm`.
 
 ## Application server
 
@@ -127,16 +146,20 @@ with `pip install -e '.[dev,serve]'`, installs `poppler-utils`, and seeds a
  changes need only a reload. The editor UI is at `/` (there is no `/ui`).
 - **Backend tests:**
   `FATHOM_CHROME=/usr/bin/google-chrome-stable .venv/bin/python -m unittest discover -s tests -q`
-  (1481 tests, about 24 min, most of it the `test_ui_*.py` Chrome suites; all
-  pass with 8 skips when the `discovery` extra is installed, as in CI: the
+  (1493 tests, about 24 min, most of it the `test_ui_*.py` Chrome suites; all
+  pass with 9 skips when the `discovery` extra is installed, as in CI: the
   six `fits` cases of `test_rack_contract` (fit checks are JS only), the
   catalog regeneration check in `test_rack_catalog` (needs a
-  Rackula checkout in `/tmp/rackula`) and the report PDF render in
-  `test_exports` (set `FATHOM_T1_CHROME=1`)). This
+  Rackula checkout in `/tmp/rackula`), the report PDF render in
+  `test_exports` (set `FATHOM_T1_CHROME=1`) and the kubeconform schema check
+  in `test_helm_chart` (no `kubeconform` on the runner; the publish workflow
+  runs it)). This
   VM installs only `.[dev,serve]`, so two discovery tests skip and
   `test_discovery.ActiveGuard.test_snmp_pacer_counts_and_pauses` errors (no
   `puresnmp`); `.venv/bin/pip install -e '.[dev,serve,discovery]'` matches
-  CI. Without `FATHOM_CHROME`
+  CI. It has no `helm` either, so the seven render tests of
+  `test_helm_chart` skip here (they fail instead of skipping on GitHub
+  Actions); install Helm to run them. Without `FATHOM_CHROME`
   the headless-Chrome smoke suite picks up `/usr/local/bin/google-chrome`, a
   desktop wrapper that pins `--remote-debugging-port=9222`; its parallel runs
   then time out (~57 failures, 15 min). To leave out the `test_ui_*.py`

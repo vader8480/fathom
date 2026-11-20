@@ -1,0 +1,21 @@
+apiVersion: v2
+name: fathom
+description: >-
+  Fathom, the AVL (audio, video, lighting) documentation web app: one pod with
+  its data directory on a persistent volume.
+type: application
+# version and appVersion both follow fathom.__version__ (fathom/__init__.py):
+# tests/test_helm_chart.py fails when they drift, and the publish workflow
+# refuses a v* tag that does not match.
+version: 0.3.0
+appVersion: "0.3.0"
+kubeVersion: ">=1.23.0-0"
+home: https://github.com/vader8480/fathom
+sources:
+  - https://github.com/vader8480/fathom
+keywords:
+  - audio
+  - video
+  - lighting
+  - avl
+  - documentation

@@ -1,0 +1,121 @@
+# Every optional feature switched on, for `helm lint` / `helm template` /
+# kubeconform (tests/test_helm_chart.py, the publish workflow). Not a
+# recommended configuration, and the credentials are placeholders.
+image:
+  tag: main
+  pullPolicy: Always
+imagePullSecrets:
+  - name: ghcr-pull
+serviceAccount:
+  annotations:
+    example.org/owner: av-team
+server:
+  port: 8081
+  workers: 3
+  threads: 2
+  timeout: 240
+  accessLog: false
+  extraArgs: ["--forwarded-allow-ips", "*"]
+config:
+  FATHOM_PUBLIC_VIEW: "1"
+  FATHOM_MAX_UPLOAD_MB: 100
+  FATHOM_LLM_PROVIDER: openai
+  FATHOM_LLM_MODEL: gpt-4o-mini
+  FATHOM_UNIFI_URL: https://10.0.0.1
+  FATHOM_DISCOVERY_INTERFACE: eth0
+secrets:
+  existingSecret: fathom-existing-env
+  values:
+    FATHOM_LLM_API_KEY: placeholder-not-a-key
+    FATHOM_UNIFI_API_KEY: placeholder-not-a-key
+admin:
+  enabled: true
+  username: avadmin
+  existingSecret: fathom-admin-login
+  passwordKey: admin-password
+  resetPassword: true
+discovery:
+  hostNetwork: true
+  rawSockets: true
+service:
+  type: NodePort
+  port: 80
+  nodePort: 30880
+  annotations:
+    example.org/note: full
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+  hosts:
+    - host: fathom.example.org
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: av.example.org
+  tls:
+    - secretName: fathom-tls
+      hosts:
+        - fathom.example.org
+        - av.example.org
+persistence:
+  storageClass: longhorn
+  size: 20Gi
+  subPath: fathom
+  annotations:
+    example.org/backup: daily
+  retainOnUninstall: false
+tmp:
+  medium: Memory
+  sizeLimit: 256Mi
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "2"
+    memory: 1Gi
+extraEnv:
+  - name: TZ
+    value: America/Denver
+extraEnvFrom:
+  - configMapRef:
+      name: fathom-extra
+      optional: true
+extraVolumes:
+  - name: plugins
+    configMap:
+      name: fathom-plugins
+      optional: true
+extraVolumeMounts:
+  - name: plugins
+    mountPath: /plugins
+    readOnly: true
+podAnnotations:
+  example.org/scrape: "false"
+podLabels:
+  example.org/tier: tools
+nodeSelector:
+  kubernetes.io/arch: arm64
+  fathom.example.org/av-network: "true"
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 1
+        preference:
+          matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: ["pi-av-1"]
+priorityClassName: system-cluster-critical
+terminationGracePeriodSeconds: 45
+revisionHistoryLimit: 2
+dnsConfig:
+  options:
+    - name: ndots
+      value: "2"

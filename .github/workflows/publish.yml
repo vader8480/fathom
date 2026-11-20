@@ -1,0 +1,285 @@
+# Fathom publish: the multi-arch container image and, on releases, the Helm chart.
+#
+#   main      ghcr.io/vader8480/fathom:main and :sha-<short sha>
+#   tag vX.Y.Z   ghcr.io/vader8480/fathom:X.Y.Z, :X.Y, :latest (and :X from 1.0 on),
+#                then the chart as oci://ghcr.io/vader8480/charts/fathom, version X.Y.Z
+#
+# A release tag must equal "v" + fathom.__version__, and the chart's version and
+# appVersion must equal it too; the Plan job fails otherwise, before anything
+# is pushed. Releasing is: bump fathom/__init__.py and deploy/helm/fathom/Chart.yaml
+# in one PR, then push the tag.
+#
+# Why `workflow_run`: worker PRs are squash-merged by the CI workflow's own
+# token (ci.yml, "Auto-merge worker PR"), and a push made with GITHUB_TOKEN
+# never starts a `push` run. So this workflow also wakes up when a CI run for a
+# pull request finishes and publishes `main` if the image for its current
+# commit is not in the registry yet. It reads ci.yml's result and nothing else:
+# it adds no check to pull requests and does not touch the approve / auto-merge
+# jobs. `workflow_dispatch` on main (Actions → Publish → Run workflow) does the
+# same by hand.
+#
+# New GHCR packages start out private. Either make `fathom` and `charts/fathom`
+# public (github.com/users/vader8480/packages → Package settings → Change
+# visibility) or give the cluster a pull secret (deploy/helm/fathom/README.md).
+
+name: Publish
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.event_name == 'workflow_run' && format('refs/heads/{0}', github.event.repository.default_branch) || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # linux/arm/v7 (32-bit Raspberry Pi OS) builds from binary wheels only; drop
+  # it here if a dependency ever stops shipping armv7 wheels.
+  PLATFORMS: linux/amd64,linux/arm64,linux/arm/v7
+  CHART_DIR: deploy/helm/fathom
+  KUBECONFORM_VERSION: v0.8.0
+  KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+
+jobs:
+  plan:
+    name: Plan
+    # A finished CI run only matters when it was a green pull-request run
+    # (the one that may just have merged the PR).
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'pull_request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+      release: ${{ steps.plan.outputs.release }}
+      sha: ${{ steps.plan.outputs.sha }}
+      version: ${{ steps.plan.outputs.version }}
+      image: ${{ steps.plan.outputs.image }}
+      tags: ${{ steps.plan.outputs.tags }}
+      charts: ${{ steps.plan.outputs.charts }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.repository.default_branch || github.ref }}
+          persist-credentials: false
+
+      - name: Decide what to publish
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          charts="oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts"
+          sha="$(git rev-parse HEAD)"
+          short="${sha:0:7}"
+          version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' fathom/__init__.py)"
+          if [ -z "${version}" ]; then
+            echo "::error::could not read __version__ from fathom/__init__.py"
+            exit 1
+          fi
+          ref="${GITHUB_REF}"
+          if [ "${EVENT}" = "workflow_run" ]; then
+            ref="refs/heads/${DEFAULT_BRANCH}"
+          fi
+
+          publish=true
+          release=false
+          case "${ref}" in
+            refs/tags/v*)
+              tag="${ref#refs/tags/}"
+              if [ "${tag}" != "v${version}" ]; then
+                echo "::error::tag ${tag} does not match fathom.__version__ (${version}); bump fathom/__init__.py and ${CHART_DIR}/Chart.yaml first"
+                exit 1
+              fi
+              chart_version="$(sed -n 's/^version: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' "${CHART_DIR}/Chart.yaml")"
+              chart_app="$(sed -n 's/^appVersion: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' "${CHART_DIR}/Chart.yaml")"
+              if [ "${chart_version}" != "${version}" ] || [ "${chart_app}" != "${version}" ]; then
+                echo "::error::${CHART_DIR}/Chart.yaml has version ${chart_version} / appVersion ${chart_app}; both must be ${version}"
+                exit 1
+              fi
+              release=true
+              tags="${image}:${version}"
+              if [[ "${version}" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+$ ]]; then
+                tags="${tags},${image}:${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+                if [ "${BASH_REMATCH[1]}" != "0" ]; then
+                  tags="${tags},${image}:${BASH_REMATCH[1]}"
+                fi
+                tags="${tags},${image}:latest"
+              fi
+              ;;
+            "refs/heads/${DEFAULT_BRANCH}")
+              tags="${image}:${DEFAULT_BRANCH},${image}:sha-${short}"
+              if [ "${EVENT}" = "workflow_run" ]; then
+                echo "${REGISTRY_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin \
+                  || echo "::warning::could not log in to ghcr.io to look for an existing image; publishing"
+                if docker buildx imagetools inspect "${image}:sha-${short}" > /dev/null 2>&1; then
+                  publish=false
+                  echo "::notice::${image}:sha-${short} is already published; nothing to do."
+                fi
+              fi
+              ;;
+            *)
+              echo "::error::Publish runs for ${DEFAULT_BRANCH} and v* tags only (got ${ref})"
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "publish=${publish}"
+            echo "release=${release}"
+            echo "sha=${sha}"
+            echo "version=${version}"
+            echo "image=${image}"
+            echo "tags=${tags}"
+            echo "charts=${charts}"
+          } >> "${GITHUB_OUTPUT}"
+          {
+            echo "### Publish plan"
+            echo
+            echo "- commit: \`${sha}\` (${ref}, fathom ${version})"
+            echo "- publish: ${publish}; release: ${release}"
+            echo "- image tags: \`${tags//,/\`, \`}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  chart-validate:
+    name: Validate chart
+    needs: plan
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+
+      - name: Install kubeconform
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/kubeconform.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  /tmp/kubeconform.tar.gz" | sha256sum -c -
+          mkdir -p "${RUNNER_TEMP}/bin"
+          tar -xzf /tmp/kubeconform.tar.gz -C "${RUNNER_TEMP}/bin" kubeconform
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+
+      - name: helm lint
+        run: |
+          set -euo pipefail
+          helm version --short
+          helm lint "${CHART_DIR}"
+          helm lint "${CHART_DIR}" -f "${CHART_DIR}/ci/full-values.yaml"
+
+      - name: helm template | kubeconform
+        run: |
+          set -euo pipefail
+          helm template fathom "${CHART_DIR}" > /tmp/default.yaml
+          helm template fathom "${CHART_DIR}" -f "${CHART_DIR}/ci/full-values.yaml" > /tmp/full.yaml
+          for k8s in 1.25.0 1.30.0 1.37.0; do
+            kubeconform -strict -summary -kubernetes-version "${k8s}" /tmp/default.yaml /tmp/full.yaml
+          done
+
+  image:
+    name: Image (multi-arch)
+    needs: [plan, chart-validate]
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64,arm
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          provenance: false
+          tags: ${{ needs.plan.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=Fathom
+            org.opencontainers.image.description=Fathom, the AVL (audio, video, lighting) documentation web app
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.plan.outputs.sha }}
+            org.opencontainers.image.version=${{ needs.plan.outputs.version }}
+            org.opencontainers.image.licenses=MIT
+          annotations: |
+            index:org.opencontainers.image.description=Fathom, the AVL (audio, video, lighting) documentation web app
+            index:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            index:org.opencontainers.image.revision=${{ needs.plan.outputs.sha }}
+            index:org.opencontainers.image.version=${{ needs.plan.outputs.version }}
+            index:org.opencontainers.image.licenses=MIT
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Show the pushed manifest
+        env:
+          TAGS: ${{ needs.plan.outputs.tags }}
+        run: docker buildx imagetools inspect "${TAGS%%,*}"
+
+  chart:
+    name: Chart (OCI)
+    needs: [plan, image]
+    if: needs.plan.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      CHARTS: ${{ needs.plan.outputs.charts }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          helm package "${CHART_DIR}" --version "${VERSION}" --app-version "${VERSION}" --destination dist
+          ls -l dist
+
+      - name: Push to GHCR
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "${REGISTRY_TOKEN}" | helm registry login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+          helm push "dist/fathom-${VERSION}.tgz" "${CHARTS}"
+          echo "Pushed ${CHARTS}/fathom:${VERSION}" >> "${GITHUB_STEP_SUMMARY}"

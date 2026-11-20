@@ -1,0 +1,50 @@
+Fathom {{ .Chart.AppVersion }} is starting as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "fathom.fullname" . }}
+
+Open it:
+{{- if .Values.ingress.enabled }}
+{{- $scheme := ternary "https" "http" (not (empty .Values.ingress.tls)) }}
+{{- range .Values.ingress.hosts }}
+  {{ $scheme }}://{{ .host }}/
+{{- end }}
+{{- else if eq .Values.service.type "LoadBalancer" }}
+  kubectl -n {{ .Release.Namespace }} get service {{ include "fathom.fullname" . }}     # EXTERNAL-IP, port {{ .Values.service.port }}
+{{- else if eq .Values.service.type "NodePort" }}
+  http://<any node address>:{{ default "<node port>" .Values.service.nodePort }}/
+  kubectl -n {{ .Release.Namespace }} get service {{ include "fathom.fullname" . }}     # shows the node port
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward service/{{ include "fathom.fullname" . }} 8080:{{ .Values.service.port }}
+  http://127.0.0.1:8080/
+{{- end }}
+{{- if .Values.discovery.hostNetwork }}
+  The pod uses the node's network: http://<node address>:{{ .Values.server.port }}/ answers as well.
+{{- end }}
+
+{{ if .Values.admin.enabled -}}
+Sign in as "{{ .Values.admin.username }}". The password is in the Secret "{{ include "fathom.adminSecretName" . }}":
+
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "fathom.adminSecretName" . }} -o jsonpath='{.data.{{ .Values.admin.passwordKey }}}' | base64 -d; echo
+
+The user is created once. Change the password in the app afterwards (the
+Secret then no longer matches), and add people under Settings › Users.
+{{- else -}}
+No admin user is created (admin.enabled=false). Unless FATHOM_AUTH is set or
+users.json already has users, Fathom needs no login and every visitor is an
+admin. Add a user at any time:
+
+  kubectl -n {{ .Release.Namespace }} exec -it deployment/{{ include "fathom.fullname" . }} -- fathom user add <name> --role admin
+{{- end }}
+{{- if not .Values.persistence.enabled }}
+
+WARNING: persistence.enabled=false. The data directory is an emptyDir and is
+lost whenever the pod is replaced.
+{{- else if and .Values.persistence.retainOnUninstall (not .Values.persistence.existingClaim) }}
+
+The data volume claim "{{ include "fathom.claimName" . }}" is kept when this release is uninstalled.
+{{- end }}
+{{- if or .Values.discovery.hostNetwork .Values.discovery.rawSockets }}
+
+Network discovery: check what the pod can see with
+  kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "fathom.fullname" . }} -- {{ ternary "python-netraw" "python" .Values.discovery.rawSockets }} -m fathom discovery doctor
+{{- end }}
